@@ -1,5 +1,6 @@
 module GPUArrays
 
-# package code goes here
+include("arrays.jl")
+include(joinpath("backends", "backends.jl"))
 
 end # module
