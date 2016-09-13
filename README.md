@@ -17,6 +17,8 @@ end
 ```
 
 #### Scope
+Planned backends: OpenGL, OpenCL, Vulkan and CUDA
+
 To be implemented for all backends:
 ```Julia
 map(f, ::GPUArray...)
