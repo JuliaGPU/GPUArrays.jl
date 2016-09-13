@@ -47,7 +47,7 @@ end
 
 ```
 Currently, the compilation of the Julia function `f` is done for CUDA by CUDAnative.jl
-and for OpenCL and OpenGL a simple transpiler is used so far.
+and for OpenCL and OpenGL a simple transpiler will be used.
 In the further future it's planned to replace the transpiler by the same approach
 CUDAnative.jl is doing.
 
