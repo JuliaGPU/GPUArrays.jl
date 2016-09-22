@@ -1,7 +1,7 @@
 type GPUArray{T, N, B, C} <: DenseArray{T, N}
-  buffer::B
-  size::NTuple{N, Int}
-  context::C
+    buffer::B
+    size::NTuple{N, Int}
+    context::C
 end
 
 #=
@@ -20,41 +20,55 @@ Base.eltype{T}(::GPUArray{T}) = T
 Base.size(A::GPUArray) = A.size
 Base.size(A::GPUArray, i::Int) = A.size[i]
 
-function Base.show(io::IO, A::GPUArray)
-    ctxname = typeof(context(A)).name.name
-    println(io, "GPUArray with ctx: $(context(A)): ")
-    show(io, Array(A))
-end
-function Base.showarray(io::IO, A::GPUArray)
-    ctxname = typeof(context(A)).name.name
-    println(io, "GPUArray with ctx: $(context(A)): ")
-    show(io, Array(A))
-end
-function Base.showarray(io::IO, mt::MIME"text/plain", A::GPUArray)
+function Base.show(io::IO, mt::MIME"text/plain", A::GPUArray)
     ctxname = typeof(context(A)).name.name
     println(io, "GPUArray with ctx: $(context(A)): ")
     show(io, mt, Array(A))
 end
-function Base.display(A::GPUArray)
-    display("text/plain", "GPUArray($(context(A)))")
-    display(Array(A))
+function Base.showcompact(io::IO, mt::MIME"text/plain", A::GPUArray)
+    showcompact(io, mt, Array(A))
 end
+
+function Base.similar(x::GPUArray)
+    simbuff = similar(buffer(x))
+    GPUArray(simbuff, size(x), context=context(x))
+end
+
 #=
 Host to Device data transfers
 =#
 
 # don't want to jump straight into refactor hell, so don't force GPU packges to inherit from GPUBuffer
-function GPUArray(buffer#=::GPUBuffer=#, sz::Tuple, ctx::Context=current_context())
+function GPUArray(
+        buffer#=::GPUBuffer=#, sz::Tuple;
+        context::Context=current_context()
+    )
     b, T, N = buffer, eltype(buffer), length(sz)
-    GPUArray{T, N, typeof(b), typeof(ctx)}(buffer, sz, ctx)
+    GPUArray{T, N, typeof(b), typeof(context)}(buffer, sz, context)
+end
+function GPUArray{T, N}(
+        ::Type{T}, sz::Vararg{Int, N};
+        kw_args...
+    )
+    GPUArray(T, sz; kw_args...)
+end
+function GPUArray{T}(
+        ::Type{T}, sz::Tuple;
+        context::Context=current_context(), kw_args...
+    )
+    b = create_buffer(context, T, sz; kw_args...)
+    GPUArray(b, sz, context=context)
 end
 
-function GPUArray{T, N}(host_array::AbstractArray{T, N}, ctx::Context=current_context(); kw_args...)
-    concrete_ha = convert(Array, host_array)
-    b = create_buffer(ctx, concrete_ha; kw_args...)
-    GPUArray{T, N, typeof(b), typeof(ctx)}(
-        b, size(concrete_ha), ctx
+function GPUArray{T, N}(
+        host_array::AbstractArray{T, N};
+        context::Context=current_context(), kw_args...
     )
+    concrete_ha = convert(Array, host_array)
+    gpu_array = GPUArray(T, size(concrete_ha), context=context)
+    println(typeof(gpu_array))
+    unsafe_copy!(gpu_array, concrete_ha)
+    gpu_array
 end
 
 #=

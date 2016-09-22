@@ -28,14 +28,18 @@ let contexts = GLContext[]
     all_contexts() = copy(contexts)::Vector{GLContext}
     current_context() = last(contexts)::GLContext
     function init(; ctx=any_context())
+        init(ctx)
+    end
+    init(ctx::GLWindow.Screen) = init(GLContext(GLWindow.nativewindow(ctx)))
+    function init(ctx::GLContext)
         GPUArrays.make_current(ctx)
         push!(contexts, ctx)
         ctx
     end
 end
 
-function create_buffer(ctx::GLContext, A::AbstractArray; kw_args...)
-    gl.GLBuffer(vec(A); kw_args...)
+function create_buffer{T,N}(ctx::GLContext, ::Type{T}, sz::NTuple{N, Int}; kw_args...)
+    gl.GLBuffer(T, prod(sz); kw_args...)
 end
 
 function glTexSubImage{N}(tex, offset::NTuple{N, Int}, width::NTuple{N, Int}, data)

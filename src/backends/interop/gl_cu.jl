@@ -40,6 +40,7 @@ function cu_map(f, buff::GPUArray)
     cu_unmap(buff)
     nothing
 end
+
 function cu_map{T, N}(A::GLBackend.GLArrayBuff{T, N}, graphics_ref=cu_register(A), ctx=CUBackend.current_context())
     cu.cudaGraphicsMapResources(1, graphics_ref, C_NULL)
     # Get a cuda device pointer to the opengl buffer memory location
@@ -52,7 +53,7 @@ function cu_map{T, N}(A::GLBackend.GLArrayBuff{T, N}, graphics_ref=cu_register(A
     cudevptr = Base.unsafe_convert(CUDAdrv.DevicePtr{T}, Ptr{T}(cubuff[]))
     sz = size(A)
     cuarr = CUDAdrv.CuArray{T}(sz, cudevptr)
-    GPUArray(cuarr, sz, ctx)
+    GPUArray(cuarr, sz, context=ctx)
 end
 
 function cu_map{T, N}(A::GLBackend.GLArrayTex{T, N}, graphics_ref=cu_register(A), ctx=CUBackend.current_context())
@@ -66,7 +67,7 @@ function cu_map{T, N}(A::GLBackend.GLArrayTex{T, N}, graphics_ref=cu_register(A)
     cudevptr = Base.unsafe_convert(CUDAdrv.DevicePtr{T}, Ptr{T}(cubuff[]))
     sz = size(A)
     cuarr = CUDAdrv.CuArray{T}(sz, cudevptr)
-    GPUArray(cuarr, sz, ctx)
+    GPUArray(cuarr, sz, context=ctx)
 end
 
 function cu_unmap{T, N}(A::GLBackend.GLArray{T, N}, graphics_ref=cu_register(A))
