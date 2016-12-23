@@ -1,67 +1,65 @@
-using GPUArrays, BenchmarkTools
-using GPUArrays.JLBackend
+using GPUArrays
 using Base.Test
-import GPUArrays.JLBackend: JLArray, map_idx!
+import GPUArrays: JLBackend
+import JLBackend: JLArray
 JLBackend.init()
 
-t = zeros(100, 100, 100)
-a = rand(100, 100, 100)
-b = rand(100, 100, 100)
 
-tc = JLArray(copy(t))
-ac = JLArray(a)
-bc = JLArray(b)
-
-res1 = map!(+, t, a, b);
-res2 = map!(+, tc, ac, bc);
-@test buffer(res2) == res1
-
-b1 = @benchmark map!($+, $t, $a, $b)
-b2 = @benchmark map!($+, $tc, $ac, $bc)
-
-judge(minimum(b1), minimum(b2))
-
-tc .= (*).(ac, bc);
-t .= (*).(a, b);
-fft(tc);
-fft!(tc);
-
-using GeometryTypes
-
-@inline function inner_velocity_one_form(i, velocity, idx_psi_hbar)
-    idx2, psi, hbar = idx_psi_hbar
-    i2 = (idx2[1][i[1]], idx2[2][i[2]], idx2[3][i[3]])
-    @inbounds begin
-        psi12  = psi[i[1],  i[2],  i[3]]
-        psix12 = psi[i2[1], i[2],  i[3]]
-        psiy12 = psi[i[1],  i2[2] ,i[3]]
-        psiz12 = psi[i[1],  i[2],  i2[3]]
-    end
-    psi1n = Vec(psix12[1], psiy12[1], psiz12[1])
-    psi2n = Vec(psix12[2], psiy12[2], psiz12[2])
-    angle.(
-        conj(psi12[1]) .* psi1n .+
-        conj(psi12[2]) .* psi2n
-    ) * hbar
-end
-function velocity_one_form!(velocity, psi)
-    dims = size(psi)
-    idx = ntuple(3) do i
-        mod(1:dims[i], dims[i]) + 1
-    end
-    arg = (idx, psi, 1f0)
-    map_idx!(inner_velocity_one_form, velocity, arg)
+function jltest(a, b)
+    x = sqrt(sin(a) * b) / 10
+    y = 33x + cos(b)
+    y*10
 end
 
-dims = (64, 32, 32)
-psi1, psi2 = rand(Complex64, dims), rand(Complex64, dims);
-psi = JLArray(map(identity, zip(psi1, psi2)));
-velocity = JLArray(zeros(Vec3f0, dims));
-v1 = velocity_one_form!(velocity, psi);
+@testset "broadcast Float32" begin
+    A = JLArray(rand(Float32, 40, 40))
 
-using BenchmarkTools
-t1 = @benchmark velocity_one_form!($velocity, $psi);
-t1
-isa(velocity, JLArray{Vec3f0, 3})
+    A .= identity.(10f0)
+    @test all(x-> x == 10, Array(A))
 
-methods(map_idx!)
+    A .= identity.(0.5f0)
+    B = jltest.(A, 10f0)
+    @test all(x-> x == jltest(0.5f0, 10f0), Array(B))
+    A .= identity.(2f0)
+    C = A .* 10f0
+    @test all(x-> x == 20, Array(C))
+    D = A .* B
+    @test all(x-> x == jltest(0.5f0, 10f0) * 2, Array(D))
+    D .= A .* B .+ 10f0
+    @test all(x-> x == jltest(0.5f0, 10f0) * 2 + 10f0, Array(D))
+end
+
+@testset "broadcast Complex64" begin
+    A = JLArray(fill(10f0*im, 40, 40))
+
+    A .= identity.(10f0*im)
+    @test all(x-> x == 10f0*im, Array(A))
+
+    B = angle.(A)
+    @test all(x-> x == angle(10f0*im), Array(B))
+    A .= identity.(2f0*im)
+    C = A .* (2f0*im)
+    @test all(x-> x == 2f0*im * 2f0*im, Array(C))
+    D = A .* B
+    @test all(x-> x == angle(10f0*im) * 2f0*im, Array(D))
+    D .= A .* B .+ (0.5f0*im)
+    @test all(x-> x == (2f0*im * angle(10f0*im) + (0.5f0*im)), Array(D))
+end
+
+
+
+
+# @testset "fft Complex64" begin
+#     A = rand(Float32, 7,6)
+#     # Move data to GPU
+#     B = JLArray(A)
+#     # Allocate space for the output (transformed array)
+#     # Compute the FFT
+#     fft!(B)
+#     # Copy the result to main memory
+#     # Compare against Julia's rfft
+#     @test_approx_eq rfft(A) Array(B)
+#     # Now compute the inverse transform
+#     ifft!(B)
+#     @test_approx_eq A Array(B)
+# end

@@ -17,7 +17,7 @@ function create_buffer(ctx, array) end
 
 #include("opencl/opencl.jl")
 include("opengl.jl")
-#include("cuda/cuda.jl")
+include("cuda/cuda.jl")
 include("julia/julia.jl")
 #include(joinpath("interop", "gl_cu.jl"))
 

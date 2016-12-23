@@ -6,6 +6,13 @@ type GPUArray{T, N, B, C} <: AbstractAccArray{T, N}
     context::C
 end
 
+function Base.similar{T <: GPUArray, ET, N}(
+        ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
+        context::Context = current_context(), kw_args...
+    )
+    b = create_buffer(context, ET, sz; kw_args...)
+    GPUArray{ET, N, typeof(b), typeof(context)}(b, sz, context)
+end
 #=
 context interface
 =#
@@ -30,57 +37,41 @@ function Base.showcompact(io::IO, mt::MIME"text/plain", A::AbstractAccArray)
 end
 
 function Base.similar{T <: AbstractAccArray}(x::T)
-    simbuff = similar(buffer(x))
-    T(simbuff, size(x), context = context(x))
+    similar(x, eltype(x), size(x))
+end
+function Base.similar{T <: AbstractAccArray, ET}(x::T, ::Type{ET})
+    similar(x, ET, size(x))
+end
+function Base.similar{T <: AbstractAccArray, N}(x::T, dims::NTuple{N, Int})
+    similar(x, eltype(x), dims)
+end
+function Base.similar{T <: AbstractAccArray, N, ET}(x::T, ::Type{ET}, dims::NTuple{N, Int})
+    out = similar(buffer(x), ET, dims)
+    T(out)
 end
 
 #=
 Host to Device data transfers
 =#
-
-# don't want to jump straight into refactor hell, so don't force GPU packges to inherit from GPUBuffer
-function GPUArray(
-        buffer#=::GPUBuffer=#, sz::Tuple;
-        context::Context = current_context()
-    )
-    b, T, N = buffer, eltype(buffer), length(sz)
-    GPUArray{T, N, typeof(b), typeof(context)}(buffer, sz, context)
+function (::Type{A}){A <: AbstractAccArray}(x::AbstractArray)
+    A(collect(x))
 end
-function GPUArray{T, N}(
-        ::Type{T}, sz::Vararg{Int, N};
-        kw_args...
-    )
-    GPUArray(T, sz; kw_args...)
-end
-function GPUArray{T}(
-        ::Type{T}, sz::Tuple;
-        context::Context=current_context(), kw_args...
-    )
-    b = create_buffer(context, T, sz; kw_args...)
-    GPUArray(b, sz, context=context)
-end
-
-function GPUArray{T, N}(
-        host_array::AbstractArray{T, N};
-        context::Context = current_context(), kw_args...
-    )
-    concrete_ha = convert(Array, host_array)
-    gpu_array = GPUArray(T, size(concrete_ha), context=context)
-    unsafe_copy!(gpu_array, concrete_ha)
-    gpu_array
+function (::Type{A}){A <: AbstractAccArray}(x::Array)
+    out = similar(A, eltype(x), size(x))
+    unsafe_copy!(out, x)
+    out
 end
 
 #=
 Device to host data transfers
 =#
-
-function (::Type{Array}){T, N}(device_array::GPUArray{T, N})
+function (::Type{Array}){T, N}(device_array::AbstractAccArray{T, N})
     Array{T, N}(device_array)
 end
-function (AT::Type{Array{T, N}}){T, N}(device_array::GPUArray)
+function (AT::Type{Array{T, N}}){T, N}(device_array::AbstractAccArray)
     convert(AT, Array(device_array))
 end
-function (AT::Type{Array{T, N}}){T, N}(device_array::GPUArray{T, N})
+function (AT::Type{Array{T, N}}){T, N}(device_array::AbstractAccArray{T, N})
     hostarray = similar(AT, size(device_array))
     unsafe_copy!(hostarray, device_array)
     hostarray
@@ -91,40 +82,102 @@ end
 Copying
 =#
 
-function Base.unsafe_copy!{T, N}(dest::Array{T, N}, source::GPUArray{T, N})
+function Base.unsafe_copy!{T, N}(dest::Array{T, N}, source::AbstractAccArray{T, N})
     Base.unsafe_copy!(dest, buffer(source))
 end
-function Base.unsafe_copy!{T, N}(dest::GPUArray{T, N}, source::Array{T, N})
+function Base.unsafe_copy!{T, N}(dest::AbstractAccArray{T, N}, source::Array{T, N})
     Base.unsafe_copy!(buffer(dest), source)
 end
 
-export buffer, context
 
 
-# Helpers for lazy arrays, which can be used for e.g. indices
-using StaticArrays, BenchmarkTools
-immutable Grid{T, N, RT} <: AbstractArray{T, N}
-    grid::NTuple{N, RT}
+######################################
+# Broadcast
+
+# helper
+
+#Broadcast
+@generated function broadcast_index{T, N}(arg::AbstractArray{T, N}, shape, idx)
+    idx = ntuple(i->:(ifelse(s[$i] < shape[$i], 1, idx[$i])), N)
+    expr = quote
+        s = size(arg)::NTuple{N, Int}
+        @inbounds i = CartesianIndex{N}(($(idx...),)::NTuple{N, Int})
+        @inbounds return arg[i]::T
+    end
 end
-Base.size(p::Grid) = map(length, p.grid)
-Base.@propagate_inbounds function Base.getindex{T, N, RT, ID <: Integer}(g::Grid{T, N, RT}, idx::Vararg{ID, N})
-    T(ntuple(Val{N}) do i
-        g.grid[i][idx[i]]
-    end)
+function broadcast_index{T}(arg::T, shape, idx)
+    arg::T
 end
-Base.@propagate_inbounds function Base.getindex{T, RT}(g::Grid{T, 3, RT}, x, y, z)
-    T((
-        g.grid[1][x],
-        g.grid[2][y],
-        g.grid[3][z],
-    ))
+
+
+
+# It is kinda hard to overwrite map/broadcast, which is why we lift it to our
+# our own broadcast function.
+# It has the signature:
+# f::Function, Context, Main/Out::AccArray, args::NTuple{N}
+# All arrays are already lifted and shape checked
+function acc_broadcast! end
+
+# seems to be needed for ambiguities
+function Base.broadcast!(f::typeof(identity), A::AbstractAccArray, args::Number)
+    acc_broadcast!(f, A, (args,))
 end
-function Grid{N, T}(ranges::Vararg{T, N})
-    Grid(NTuple{N, eltype(first(ranges))}, ranges)
+function Base.broadcast!(f::Function, A::AbstractAccArray)
+    acc_broadcast!(f, A, ())
 end
-function Grid{N, ET, T <: AbstractVector}(::Type{ET}, ranges::NTuple{N, T})
-    Grid{ET, N, T}(ranges)
+# Base.Broadcast.check_broadcast_shape(size(A), As...)
+function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray)
+    acc_broadcast!(f, A, (B,))
 end
-function Grid{N, ET, T <: AbstractVector}(::Type{ET}, ranges::Vararg{T, N})
-    Grid{ET, N, T}(ranges)
+function Base.broadcast!(f::Function, A::AbstractAccArray, B::Number)
+    acc_broadcast!(f, A, (B,))
 end
+# Base.Broadcast.check_broadcast_shape(size(A), As...)
+function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, args::AbstractAccArray...)
+    acc_broadcast!(f, A, (B, args...))
+end
+function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, args::Number)
+    acc_broadcast!(f, A, (B, args...))
+end
+
+function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D::Number)
+    acc_broadcast!(f, A, (B, C, D))
+end
+
+function Base.broadcast(f::Function, A::AbstractAccArray)
+    out = similar(A)
+    acc_broadcast!(f, out, (A,))
+    out
+end
+function Base.broadcast(f::Function, A::AbstractAccArray, B::Number)
+    out = similar(A)
+    acc_broadcast!(f, out, (A, B,))
+    out
+end
+
+function Base.broadcast(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
+    out = similar(A)
+    acc_broadcast!(f, out, (A, args...))
+    out
+end
+
+# TODO check size
+function Base.map!(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
+    acc_broadcast!(f, A, (args...))
+end
+function Base.map(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
+    broadcast(f, A, (args...))
+end
+
+
+
+############################################
+# Constructor
+
+function Base.fill!{N, T}(A::AbstractAccArray{N, T}, val)
+    A .= identity.(T(val))
+end
+#
+# function Base.rand{T <: AbstractAccArray, ET}(::Type{T}, ET, size...)
+#     T(rand(ET, size...))
+# end
