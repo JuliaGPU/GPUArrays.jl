@@ -31,7 +31,15 @@ end
 
 function Base.similar(x::GPUArray)
     simbuff = similar(buffer(x))
-    GPUArray(simbuff, size(x), context=context(x))
+    GPUArray(simbuff, size(x), context = context(x))
+end
+function Base.similar{T}(x::GPUArray, ::Type{T})
+    simbuff = similar(buffer(x), T)
+    GPUArray(simbuff, size(x), context = context(x))
+end
+function Base.similar{T, N}(x::GPUArray, ::Type{T}, sz::NTuple{N, Int})
+    simbuff = similar(buffer(x), T, sz)
+    GPUArray(simbuff, size(x), context = context(x))
 end
 
 #=
@@ -66,7 +74,6 @@ function GPUArray{T, N}(
     )
     concrete_ha = convert(Array, host_array)
     gpu_array = GPUArray(T, size(concrete_ha), context=context)
-    println(typeof(gpu_array))
     unsafe_copy!(gpu_array, concrete_ha)
     gpu_array
 end

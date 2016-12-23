@@ -1,10 +1,11 @@
+
 module CUBackend
 
-using ..GPUArrays
+using ..GPUArrays, CUDAnative
+
+import CUDAdrv, CUDArt #, CUFFT
+
 import GPUArrays: buffer, create_buffer, Context, GPUArray, context
-using CUDArt, CUDAnative
-import CUDAdrv
-const cu = CUDArt.rt
 
 immutable GraphicsResource{T}
     glbuffer::T
@@ -16,6 +17,7 @@ immutable CUContext <: Context
     ctx::CUDAdrv.CuContext
     device::CUDAdrv.CuDevice
 end
+
 Base.show(io::IO, ctx::CUContext) = print(io, "CUContext")
 
 function any_context()
@@ -41,7 +43,7 @@ let contexts = CUContext[]
 end
 
 function create_buffer{T, N}(ctx::CUContext, ::Type{T}, sz::NTuple{N, Int}; kw_args...)
-    CUDAdrv.CuArray(T, sz; kw_args...)
+    CUDAdrv.CuArray{T}(sz)
 end
 function Base.unsafe_copy!{T,N}(dest::Array{T,N}, source::CUArray{T,N})
     copy!(dest, buffer(source))
@@ -49,12 +51,11 @@ end
 function Base.unsafe_copy!{T,N}(dest::CUArray{T,N}, source::Array{T,N})
     copy!(buffer(dest), source)
 end
-function Base.similar{T,N}(A::CUDAdrv.CuArray{T,N})
-    CUDAdrv.CuArray(T, size(A))
-end
+
 function thread_blocks_heuristic(A::AbstractArray)
     thread_blocks_heuristic(size(A))
 end
+
 function thread_blocks_heuristic{N}(s::NTuple{N, Int})
     len = prod(s)
     threads = min(len, 1024)
@@ -62,10 +63,10 @@ function thread_blocks_heuristic{N}(s::NTuple{N, Int})
     blocks, threads
 end
 
-@inline @target ptx function linear_index()
+@inline function linear_index()
     (blockIdx().x-1) * blockDim().x + threadIdx().x
 end
-@inline @target ptx function map_eachindex_kernel{N}(A, f, args::Vararg{N})
+@inline function map_eachindex_kernel{N}(A, f, args::Vararg{N})
     i = (blockIdx().x-1) * blockDim().x + threadIdx().x
     if length(A) >= i
         f(CartesianIndex(ind2sub(size(A), Int(i))), A, args...)
@@ -87,22 +88,28 @@ end
 function map_eachindex(f, A::CUArray, rest...)
     call_cuda(map_eachindex_kernel, A, f, rest...)
 end
-
-@target ptx function map_kernel(a, f, b)
+function map_kernel(a, f)
+    i = linear_index()
+    if length(a) >= i
+        @inbounds a[i] = f()
+    end
+    nothing
+end
+function map_kernel(a, f, b)
     i = linear_index()
     if length(a) >= i
         @inbounds a[i] = f(b[i])
     end
     nothing
 end
-@target ptx function map_kernel(a, f, b, c)
+function map_kernel(a, f, b, c)
     i = linear_index()
     if length(a) >= i
         @inbounds a[i] = f(b[i], c[i])
     end
     nothing
 end
-@target ptx function map_kernel(a, f, b, c, d)
+function map_kernel(a, f, b, c, d)
     i = linear_index()
     if length(a) >= i
         @inbounds a[i] = f(b[i], c[i], d[i])
@@ -131,7 +138,7 @@ function Base.broadcast(f::Function, A::CUArray, rest::Union{CUArray, Number}...
 end
 
 
-@target ptx @generated function broadcast_index{T, N}(arg::AbstractArray{T,N}, shape, idx)
+@generated function broadcast_index{T, N}(arg::AbstractArray{T,N}, shape, idx)
     idx = ntuple(i->:(ifelse(s[$i] < shape[$i], 1, idx[$i])), N)
     expr = quote
         s = size(arg)::NTuple{N, Int}
@@ -139,7 +146,7 @@ end
         @inbounds return arg[i]::T
     end
 end
-@target ptx function broadcast_index{T}(arg::T, shape, idx)
+function broadcast_index{T}(arg::T, shape, idx)
     arg::T
 end
 
@@ -147,8 +154,8 @@ end
 for i=0:6
     args = ntuple(x-> Symbol("arg_", x), i)
     fargs = ntuple(x-> :(broadcast_index($(args[x]), sz, idx)), i)
-    expr = quote
-        @target ptx function broadcast_kernel(A, f, $(args...))
+    @eval begin
+        function broadcast_kernel(A, f, $(args...))
             i = Int((blockIdx().x-1) * blockDim().x + threadIdx().x)
             @inbounds if i <= length(A)
                 sz = size(A)
@@ -158,12 +165,14 @@ for i=0:6
             nothing
         end
     end
-    eval(expr)
 end
 
 
 function Base.broadcast!(f::Function, A::CUArray)
     cu_broadcast!(f, A)
+end
+function Base.broadcast!(f::typeof(identity), A::CUArray, B::Number)
+    cu_broadcast!(f, A, B)
 end
 function Base.broadcast!(f::Function, A::CUArray, B::Number)
     cu_broadcast!(f, A, B)
@@ -177,6 +186,9 @@ end
 function Base.broadcast!(f::Function, A::CUArray, B::CUArray, C::Number)
     cu_broadcast!(f, A, B, C)
 end
+function Base.broadcast!(f::Function, A::CUArray, B::CUArray, C::CUArray, D::Number)
+    cu_broadcast!(f, A, B, C, D)
+end
 function Base.broadcast!(f::Function, A::CUArray, B::AbstractArray, C::AbstractArray, D::AbstractArray, E::Number, F::Number)
     cu_broadcast!(f, A, B, C, D, E, F)
 end
@@ -185,8 +197,7 @@ function Base.broadcast!(f::Function, A::CUArray, B::AbstractArray, C::AbstractA
 end
 function cu_broadcast!{N}(f::Function, A::CUArray, As::Vararg{Any, N})
     N > 6 && error("Does only work for maximum for args atm.")
-    shape = indices(A)
-    Base.Broadcast.check_broadcast_shape(shape, As...)
+    #Base.Broadcast.check_broadcast_shape(size(A), As...)
     call_cuda(broadcast_kernel, A, f, As...)
 end
 
@@ -194,106 +205,99 @@ end
 
 
 
-
-
 # reduction
-@target ptx function reduce_warp{T,F<:Function}(val::T, op::F)
-    offset = Int(warpsize) ÷ 2
+function reduce_warp{T,F<:Function}(val::T, op::F)
+    offset = CUDAnative.warpsize() ÷ 2
     while offset > 0
-        val = op(val, shfl_down(val, offset))::T
+        val = op(val, shfl_down(val, offset))
         offset ÷= 2
     end
-    return val::T
+    return val
 end
 
-@target ptx function reduce_block{T,F<:Function}(val::T, op::F)
+function reduce_block{T, F <: Function}(val::T, op::F, v0::T)
     shared = @cuStaticSharedMem(T, 32)
-
-    wid, lane = fldmod1(threadIdx().x, warpsize)
-
-    val = reduce_warp(val, op)::T
-
+    wid, lane = fldmod1(threadIdx().x, CUDAnative.warpsize())
+    val = reduce_warp(val, op)
     if lane == 1
-        @inbounds shared[Int(wid)] = val
+        @inbounds shared[wid] = val
     end
-
     sync_threads()
-
     # read from shared memory only if that warp existed
-    @inbounds val = ((threadIdx().x <= fld(blockDim().x, warpsize)) ? shared[Int(lane)] : zero(T))::T
-
+    @inbounds begin
+        val = (threadIdx().x <= fld(blockDim().x, CUDAnative.warpsize())) ? shared[lane] : v0
+    end
     if wid == 1
         # final reduce within first warp
-        val = reduce_warp(val, op)::T
+        val = reduce_warp(val, op)
     end
-
-    return val::T
+    return val
 end
-@target ptx function reduce_kernel{F<:Function,OP<:Function,T1,T2,N}(
-        A::AbstractArray{T1,N}, out::AbstractArray{T2,1}, f::F, op::OP
+function reduce_kernel{F <: Function, OP <: Function,T1, T2, N}(
+        A::AbstractArray{T1, N}, out::AbstractArray{T2,1}, f::F, op::OP, v0::T2
     )
-    result = zero(T2)
     #reduce multiple elements per thread
+
     i = Int((blockIdx().x-Int32(1)) * blockDim().x + threadIdx().x)
+    step = blockDim().x * gridDim().x
+    result = v0
     while i <= length(A)
-       @inbounds result = op(result, f(A[i]))
-       i += blockDim().x * gridDim().x
+        @inbounds result = op(result, f(A[i]))
+        i += step
     end
-    result = reduce_block(result, op)
+    result = reduce_block(result, op, v0)
     if (threadIdx().x == 1)
-        @inbounds out[Int(blockIdx().x)] = result;
+        @inbounds out[blockIdx().x] = result;
     end
-    nothing
+    return
 end
 
-
-function Base.mapreduce{T,N}(f::Function, op::Function, A::CUArray{T,N})
+# horrible hack to get around of fetching the first element of the GPUArray
+# as a startvalue, which is a bit complicated with the current reduce implementation
+function startvalue(op, T)
+    error("Please supply a starting value for mapreduce. E.g: mapreduce($f, $op, 1, A)")
+end
+startvalue(::typeof(+), T) = zero(T)
+startvalue(::typeof(*), T) = one(T)
+startvalue(::typeof(Base.scalarmin), T) = typemax(T)
+startvalue(::typeof(Base.scalarmax), T) = typemin(T)
+function Base.mapreduce{T,N}(f::Function, op::Function, A::CUArray{T, N})
+    OT = Base.r_promote_type(op, T)
+    v0 = startvalue(op, OT) # TODO do this better
+    mapreduce(f, op, v0, A)
+end
+function Base.mapreduce{T, OT, N}(f::Function, op::Function, v0::OT, A::CUArray{T,N})
+    dev = context(A).device
+    @assert(CUDAdrv.capability(dev) >= v"3.0", "Current CUDA reduce implementation requires a newer GPU")
     threads = 512
     blocks = min((length(A) + threads - 1) ÷ threads, 1024)
-    out = CUDAdrv.CuArray(Base.r_promote_type(op, T), (blocks,))
-    @cuda (blocks, threads) reduce_kernel(buffer(A), out, f, op)
-    mapreduce(f, op, Array(out)) # for this size it doesn't seem beneficial to run on gpu?!
+    out = similar(buffer(A), OT, (blocks,))
+    # TODO MAKE THIS WORK FOR ALL FUNCTIONS .... v0 is really unfit for parallel reduction
+    # since every thread basically needs its own v0
+    @cuda (blocks, threads) reduce_kernel(buffer(A), out, f, op, v0)
+    # for this size it doesn't seem beneficial to run on gpu?!
+    # TODO actually benchmark this theory
+    mapreduce(f, op, Array(out))
 end
 
-# @target ptx funtion reduce_kernel{F<:Function, T, N, BlockSize}(
-#         op::F, g_idata::AbstractArray{T,N}, g_odata::AbstractArray{T,N},
-#         n, Val{BlockSize}
-#     )
-#     #extern __shared__ int sdata[];
-#     sdata = @cuStaticSharedMem(T, BlockSize)
-#     tid = threadIdx().x;
-#     i = blockIdx().x*(blockSize*2) + tid;
-#     gridSize = blockSize*2*gridDim().x;
-#     sdata[tid] = 0;
-#     while (i < n)
-#         sdata[tid] = op(sdata[tid], op(g_idata[i], g_idata[i+blockSize]))
-#         i += gridSize
-#     end
-#     sync_threads()
-#     if (blockSize >= 512
-#         (tid < 256) && (sdata[tid] = op(sdata[tid], sdata[tid + 256]))
-#         sync_threads()
-#     end
-#     if (blockSize >= 256
-#         (tid < 128) && (sdata[tid] = op(sdata[tid], sdata[tid + 128]))
-#         sync_threads()
-#     end
-#     if (blockSize >= 128
-#         (tid < 64) && (sdata[tid] = op(sdata[tid], sdata[tid + 64]))
-#         sync_threads()
-#     end
-#     if tid < 32
-#         (blockSize >= 64) && (sdata[tid] = op(sdata[tid], sdata[tid + 32]))
-#         (blockSize >= 32) && (sdata[tid] = op(sdata[tid], sdata[tid + 16]))
-#         (blockSize >= 16) && (sdata[tid] = op(sdata[tid], sdata[tid + 8]))
-#         (blockSize >= 8) && (sdata[tid] = op(sdata[tid], sdata[tid + 4]))
-#         (blockSize >= 4) && (sdata[tid] = op(sdata[tid], sdata[tid + 2]))
-#         (blockSize >= 2) && (sdata[tid] = op(sdata[tid], sdata[tid + 1]))
-#     end
-#     (tid == 0) && (g_odata[blockIdx.x] = sdata[0])
-#     nothing
+
+#GFFT = GPUArray(Complex64, div(size(G,1),2)+1, size(G,2))
+#  TODO figure out how interact with CUDArt and CUDAdr
+# function Base.fft!(A::CUArray)
+#     G, GFFT = CUFFT.RCpair(A)
+#     fft!(G, GFFT)
+# end
+# function Base.fft!(out::CUArray, A::CUArray)
+#     plan(out, A)(out, A, true)
 # end
 #
+# function Base.ifft!(A::CUArray)
+#     G, GFFT = CUFFT.RCpair(A)
+#     ifft!(G, GFFT)
+# end
+# function Base.ifft!(out::CUArray, A::CUArray)
+#     plan(out, A)(out, A, false)
+# end
 
 
 end
