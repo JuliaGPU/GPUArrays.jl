@@ -1,11 +1,11 @@
-
 module CUBackend
 
 using ..GPUArrays, CUDAnative
 
 import CUDAdrv, CUDArt #, CUFFT
 
-import GPUArrays: buffer, create_buffer, Context, GPUArray, context
+import GPUArrays: buffer, create_buffer, acc_broadcast!
+import GPUArrays: Context, GPUArray, context, broadcast_index
 
 immutable GraphicsResource{T}
     glbuffer::T
@@ -35,7 +35,7 @@ global init, all_contexts, current_context
 let contexts = CUContext[]
     all_contexts() = copy(contexts)::Vector{CUContext}
     current_context() = last(contexts)::CUContext
-    function init(;ctx=any_context())
+    function init(;ctx = any_context())
         GPUArrays.make_current(ctx)
         push!(contexts, ctx)
         ctx
@@ -85,73 +85,13 @@ unpack_cu_array{T,N}(x::CUArray{T,N}) = buffer(x)
     @cuda (blocks, thread) kernel(buffer(A), args...)
 end
 
-function map_eachindex(f, A::CUArray, rest...)
-    call_cuda(map_eachindex_kernel, A, f, rest...)
-end
-function map_kernel(a, f)
-    i = linear_index()
-    if length(a) >= i
-        @inbounds a[i] = f()
-    end
-    nothing
-end
-function map_kernel(a, f, b)
-    i = linear_index()
-    if length(a) >= i
-        @inbounds a[i] = f(b[i])
-    end
-    nothing
-end
-function map_kernel(a, f, b, c)
-    i = linear_index()
-    if length(a) >= i
-        @inbounds a[i] = f(b[i], c[i])
-    end
-    nothing
-end
-function map_kernel(a, f, b, c, d)
-    i = linear_index()
-    if length(a) >= i
-        @inbounds a[i] = f(b[i], c[i], d[i])
-    end
-    nothing
-end
 
-function Base.map!(f::Function, A::CUArray, rest::CUArray...)
-    call_cuda(map_kernel, A, f, rest...)
-    A
-end
+#####################################
+# The problem is, that I can't pass Tuple{CuArray} as a type, so I can't
+# write a @generated function to unrole the arguments.
+# And without unroling of the arguments, GPU codegen will cry!
 
-function Base.map(f, A::CUArray, rest::CUArray...)
-    B = similar(A)
-    map!(f, A, B, rest...)
-    B
-end
-
-
-#Broadcast
-
-function Base.broadcast(f::Function, A::CUArray, rest::Union{CUArray, Number}...)
-    result = similar(A)
-    broadcast!(f, result, A, rest...)
-    result
-end
-
-
-@generated function broadcast_index{T, N}(arg::AbstractArray{T,N}, shape, idx)
-    idx = ntuple(i->:(ifelse(s[$i] < shape[$i], 1, idx[$i])), N)
-    expr = quote
-        s = size(arg)::NTuple{N, Int}
-        @inbounds i = CartesianIndex{N}(($(idx...),)::NTuple{N, Int})
-        @inbounds return arg[i]::T
-    end
-end
-function broadcast_index{T}(arg::T, shape, idx)
-    arg::T
-end
-
-# Crude workaround for splat not working all the time right now
-for i=0:6
+for i=0:10
     args = ntuple(x-> Symbol("arg_", x), i)
     fargs = ntuple(x-> :(broadcast_index($(args[x]), sz, idx)), i)
     @eval begin
@@ -167,45 +107,13 @@ for i=0:6
     end
 end
 
-
-function Base.broadcast!(f::Function, A::CUArray)
-    cu_broadcast!(f, A)
-end
-function Base.broadcast!(f::typeof(identity), A::CUArray, B::Number)
-    cu_broadcast!(f, A, B)
-end
-function Base.broadcast!(f::Function, A::CUArray, B::Number)
-    cu_broadcast!(f, A, B)
-end
-function Base.broadcast!(f::Function, A::CUArray, B::AbstractArray)
-    cu_broadcast!(f, A, B)
-end
-function Base.broadcast!(f::Function, A::CUArray, B::CUArray, C::CUArray)
-    cu_broadcast!(f, A, B, C)
-end
-function Base.broadcast!(f::Function, A::CUArray, B::CUArray, C::Number)
-    cu_broadcast!(f, A, B, C)
-end
-function Base.broadcast!(f::Function, A::CUArray, B::CUArray, C::CUArray, D::Number)
-    cu_broadcast!(f, A, B, C, D)
-end
-function Base.broadcast!(f::Function, A::CUArray, B::AbstractArray, C::AbstractArray, D::AbstractArray, E::Number, F::Number)
-    cu_broadcast!(f, A, B, C, D, E, F)
-end
-function Base.broadcast!(f::Function, A::CUArray, B::AbstractArray, C::AbstractArray, D::AbstractArray)
-    cu_broadcast!(f, A, B, C, D)
-end
-function cu_broadcast!{N}(f::Function, A::CUArray, As::Vararg{Any, N})
-    N > 6 && error("Does only work for maximum for args atm.")
-    #Base.Broadcast.check_broadcast_shape(size(A), As...)
-    call_cuda(broadcast_kernel, A, f, As...)
+function acc_broadcast!{F <: Function, N}(f::F, A::CUArray, args::NTuple{N})
+    call_cuda(broadcast_kernel, A, f, args...)
 end
 
+#################################
+# Reduction
 
-
-
-
-# reduction
 function reduce_warp{T,F<:Function}(val::T, op::F)
     offset = CUDAnative.warpsize() ÷ 2
     while offset > 0
@@ -261,6 +169,7 @@ startvalue(::typeof(+), T) = zero(T)
 startvalue(::typeof(*), T) = one(T)
 startvalue(::typeof(Base.scalarmin), T) = typemax(T)
 startvalue(::typeof(Base.scalarmax), T) = typemin(T)
+
 function Base.mapreduce{T,N}(f::Function, op::Function, A::CUArray{T, N})
     OT = Base.r_promote_type(op, T)
     v0 = startvalue(op, OT) # TODO do this better
@@ -281,8 +190,8 @@ function Base.mapreduce{T, OT, N}(f::Function, op::Function, v0::OT, A::CUArray{
 end
 
 
-#GFFT = GPUArray(Complex64, div(size(G,1),2)+1, size(G,2))
 #  TODO figure out how interact with CUDArt and CUDAdr
+#GFFT = GPUArray(Complex64, div(size(G,1),2)+1, size(G,2))
 # function Base.fft!(A::CUArray)
 #     G, GFFT = CUFFT.RCpair(A)
 #     fft!(G, GFFT)
