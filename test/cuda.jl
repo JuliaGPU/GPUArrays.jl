@@ -3,21 +3,14 @@ using Base.Test
 import GPUArrays: GPUArray, CUBackend
 cuctx = CUBackend.init()
 const cu = CUDAnative
-A = GPUArray(rand(Float32, 40, 40))
-A .= identity.(10f0)
 
-B = (-).(A)
 # more complex function for broadcast
 function cutest(a, b)
     x = cu.sqrt(cu.sin(a) * b) / 10
     y = 33x + cu.cos(b)
     y*10
 end
-function jltest(a, b)
-    x = sqrt(sin(a) * b) / 10
-    y = 33x + cos(b)
-    y*10
-end
+
 
 @testset "broadcast Float32" begin
     A = GPUArray(rand(Float32, 40, 40))

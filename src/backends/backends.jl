@@ -1,5 +1,3 @@
-
-
 global current_context, make_current
 let compute_contexts = Context[]
     current_context() = last(compute_contexts)
@@ -15,10 +13,4 @@ end
 #interface
 function create_buffer(ctx, array) end
 
-#include("opencl/opencl.jl")
-include("opengl.jl")
-include("cuda/cuda.jl")
-include("julia/julia.jl")
-#include(joinpath("interop", "gl_cu.jl"))
-
-const supported_backends = (:opengl, :opencl, :cuda, :julia)
+include("supported_backends.jl")

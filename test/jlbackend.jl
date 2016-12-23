@@ -5,12 +5,6 @@ import JLBackend: JLArray
 JLBackend.init()
 
 
-function jltest(a, b)
-    x = sqrt(sin(a) * b) / 10
-    y = 33x + cos(b)
-    y*10
-end
-
 @testset "broadcast Float32" begin
     A = JLArray(rand(Float32, 40, 40))
 
