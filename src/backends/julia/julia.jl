@@ -17,7 +17,6 @@ Base.@propagate_inbounds Base.getindex(A::JLArray, i::Integer) = A.buffer[i]
 Base.@propagate_inbounds Base.setindex!(A::JLArray, val, i::Integer) = (A.buffer[i] = val)
 Base.linearindexing{T <: JLArray}(::Type{T}) = Base.LinearFast
 Base.size(x::JLArray) = size(buffer(x))
-Base.size(x::JLArray, i::Integer) = size(buffer(x), i)
 
 global current_context, make_current, init
 let contexts = JLContext[]
@@ -44,17 +43,6 @@ function (AT::Type{Array{T, N}}){T, N}(A::JLArray)
     convert(AT, buffer(A))
 end
 
-# Map idx!
-#TODO implement for args..., but just using a tuple here is simpler for now
-# (`args...`` quickly gets you into a type inf and boxing mess)
-function map_idx!{F, T <: Tuple}(f::F, A::JLArray, args::T)
-    n = length(A); dims = size(A)
-    @threads for i = 1:n
-        idx = Vec{3, Int}(ind2sub(dims, i))
-        @inbounds A[i] = f(idx, A, args)
-    end
-    A
-end
 @inline function Base.map!{F}(f::F, A::JLArray, args...)
     map!(f, A, args)
 end
@@ -62,6 +50,7 @@ end
     out = similar(A)
     map!(f, out, (A, args...))
 end
+
 @generated function Base.map!{F, N}(f::F, A::JLArray, args::NTuple{N})
     arg_expr = [:(args[$i]) for i=1:N]
     quote

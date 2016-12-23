@@ -17,7 +17,6 @@ context(A::AbstractAccArray) = A.context
 AbstractArray interface
 =#
 
-Base.eltype{B, T, N, C}(::Type{GPUArray{T, N, B, C}}) = T
 Base.eltype{T}(::AbstractAccArray{T}) = T
 Base.size(A::AbstractAccArray) = A.size
 Base.size(A::AbstractAccArray, i::Int) = A.size[i]
@@ -63,7 +62,7 @@ end
 
 function GPUArray{T, N}(
         host_array::AbstractArray{T, N};
-        context::Context=current_context(), kw_args...
+        context::Context = current_context(), kw_args...
     )
     concrete_ha = convert(Array, host_array)
     gpu_array = GPUArray(T, size(concrete_ha), context=context)
