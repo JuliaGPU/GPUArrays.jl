@@ -33,7 +33,7 @@ global init, all_contexts, current_context
 let contexts = CUContext[]
     all_contexts() = copy(contexts)::Vector{CUContext}
     current_context() = last(contexts)::CUContext
-    function init(;ctx=any_context())
+    function init(;ctx = any_context())
         GPUArrays.make_current(ctx)
         push!(contexts, ctx)
         ctx

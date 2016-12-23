@@ -15,9 +15,10 @@ end
 #interface
 function create_buffer(ctx, array) end
 
-include("opencl/opencl.jl")
+#include("opencl/opencl.jl")
 include("opengl.jl")
-include("cuda/cuda.jl")
-include(joinpath("interop", "gl_cu.jl"))
+#include("cuda/cuda.jl")
+include("julia/julia.jl")
+#include(joinpath("interop", "gl_cu.jl"))
 
-const supported_backends = (:opengl, :opencl, :cuda)
+const supported_backends = (:opengl, :opencl, :cuda, :julia)
