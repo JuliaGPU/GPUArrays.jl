@@ -1,7 +1,6 @@
 module JLBackend
 
 using ..GPUArrays
-using OpenCL
 
 import GPUArrays: buffer, create_buffer, Context, AbstractAccArray
 import GPUArrays: broadcast_index, acc_broadcast!

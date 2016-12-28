@@ -122,6 +122,9 @@ function acc_broadcast! end
 function Base.broadcast!(f::typeof(identity), A::AbstractAccArray, args::Number)
     acc_broadcast!(f, A, (args,))
 end
+function Base.broadcast!(f::typeof(identity), A::AbstractAccArray, B::AbstractAccArray)
+    acc_broadcast!(f, A, (B,))
+end
 function Base.broadcast!(f::Function, A::AbstractAccArray)
     acc_broadcast!(f, A, ())
 end
