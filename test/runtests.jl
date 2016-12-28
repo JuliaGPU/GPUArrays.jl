@@ -7,10 +7,13 @@ function jltest(a, b)
     y*10
 end
 
-@testset "CUDAnative backend" begin
-    include("cuda.jl")
+if is_backend_supported(:cudanative)
+    @testset "CUDAnative backend" begin
+        include("cuda.jl")
+    end
 end
-
-@testset "Threaded Julia backend" begin
-    include("jlbackend.jl")
+if is_backend_supported(:julia)
+    @testset "Threaded Julia backend" begin
+        include("jlbackend.jl")
+    end
 end

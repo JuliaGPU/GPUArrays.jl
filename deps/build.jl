@@ -56,7 +56,7 @@ end
 file = joinpath(dirname(@__FILE__), "..", "src", "backends", "supported_backends.jl")
 open(file, "w") do io
     backendstr = join(map(s-> string(":", s), supported_backends), ", ")
-    println(io, "supported_backends() = ($backendstr)")
+    println(io, "supported_backends() = ($backendstr,)")
     for elem in supported_backends
         str = string(elem)
         path = joinpath(str, str*".jl")
