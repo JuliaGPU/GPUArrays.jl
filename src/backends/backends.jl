@@ -14,3 +14,5 @@ end
 function create_buffer(ctx, array) end
 
 include("supported_backends.jl")
+
+is_backend_supported(sym::Symbol) = sym in supported_backends()
