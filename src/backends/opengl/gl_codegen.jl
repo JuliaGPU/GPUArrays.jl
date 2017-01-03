@@ -2,154 +2,138 @@
 using Sugar
 
 import Base: indent_width, quoted_syms, uni_ops, expr_infix_wide, expr_infix_any
-import Base: all_ops, expr_calls, expr_parens, ExprNode, show_unquoted, show_block
+import Base: all_ops, expr_calls, expr_parens, ExprNode, show_block
 import Base: show_list, show_enclosed_list, operator_precedence, is_linenumber
 import Base: is_quoted, is_expr, TypedSlot, ismodulecall, is_intrinsic_expr
-import Base: show_generator, show_call
+import Base: show_generator, show_call, show_unquoted
+import Sugar: ssavalue_name
 
+include("intrinsics.jl")
+import GLSLIntrinsics
+import GLSLIntrinsics: GLArray
+using GeometryTypes
 
-module GLSLIntrinsics
-    # GLSL heavily relies on fixed size vector operation, which is why a lot of
-    # intrinsics need fixed size vectors.
-    using GeometryTypes
-
-    # very simple way to generate a function name, which should be hygienic.
-    const hidden_root = gensym()
-    hashfunc(sym) = Symbol(string(hidden_root, sym))
-
-    ############################################################################
-    # Dict interface to the intrinsic module, to add types and functions
-
-    function hasfunc(f::Symbol, types::ANY)
-        isdefined(GLSLIntrinsics, f) || return false
-        func = eval(GLSLIntrinsics, f)
-        # is there some other function like applicable working with types and not values?
-        # could als be a try catch, I suppose
-        !isempty(code_lowered(func, types))
+"""
+Simple function to determine if an array of types matches any signature
+in `signatures`. Since the cases are simple, it should be fine to return first match
+"""
+function matches_signature(types, signatures)
+    for (sig, glsl) in signatures
+        (types <: sig) && return true, glsl
     end
+    false, :nomatch
+end
 
-    function insertfunc!(expr::Expr)
-        eval(GLSLIntrinsics, expr)
+function is_glslintrinsic(f::Expr, types::ANY)
+    if haskey(pirate_loot, f)
+        return true, pirate_loot[f][1][2]
     end
+    return false, f
+end
 
-    function insertfunc!(name::Symbol, args::ANY, body, return_expr = Any)
-        n = length(args)
-        argnames = ntuple(n) do i
-            Symbol("arg_$i")
+function is_glslintrinsic(f::Symbol, types::ANY)
+    if haskey(pirate_loot, f)
+        pf = pirate_loot[f]
+        if isa(pf, Vector)
+            matches, glsl = matches_signature(Tuple{types...}, pf)
+            matches && return true, glsl
+            return false, f
+        else isa(pf, Symbol)
+            return true, pf
         end
-        arg_sig = ntuple(n) do i
-            Expr(:(::), argnames[i], args[i])
-        end
-        staticparams = ntuple(n) do i
-            :($(argnames[i]) <: $(args[i]))
-        end
-        type_sig = ntuple(n) do i
-            :(::Type{$(argnames[i])})
-        end
-        hashname = hashfunc(name)
-        body_expr = if isa(return_expr, DataType)
-            # We don't have a real value, but we need to return something of type returntype for inference
-            :(unsafe_load(Ptr{$return_expr}(C_NULL)))
-        else
-            return_expr
-        end
-        eval(GLSLIntrinsics, quote
-            # no inline, since this function is not doing anything anyways
-            @noinline function $name($(arg_sig...))
-                $body_expr
-            end
-            function $hashname{$(staticparams...)}($(type_sig...))
-                $body
-            end
-        end)
     end
-    function get!(f, name::Symbol, args::ANY)
-        if hasfunc(name, args)
-            func1 = eval(GLSLIntrinsics, name)
-            x = methods(func1, args)
-            if isempty(x) # Lol?
-                error("No method found for $f $args")
-            end
-            m = first(x)
-            more_special = any(zip(args, (m.sig.parameters[2:end]...))) do t1_t2
-                t1, t2 = t1_t2
-                t1 <: t2 && t1 != t2
-            end
-            if !more_special # we want to replace a more specific function
-                hashname = hashfunc(name)
-                func2 = eval(GLSLIntrinsics, hashname)
-                return func2(args...) # if not more special, return content of func
-            end
-        end
-        body = f()
-        insertfunc!(name, args, body)
-        body
-    end
-    ############################################################################
-    # GLSL intrinsics
-
-    immutable GLArray{T, N}
-        x::Array{T, N}
-    end
-
-    @glsl_intrinsic function gl_setindex!{T}(x::GLArray{T, 1}, i::Integer, val::Vec{4, T})::Void
-        :imageStore
-    end
-
-    function Base.setindex!{T}(x::GLArray{T, 1}, val::T, i::Integer)
-        gl_setindex!(x, i, Vec(val, val, val, val))
-    end
-    function Base.setindex!{T}(x::GLArray{T, 1}, val::Vec{4, T}, i::Integer)
-        gl_setindex!(x, i, val)
-    end
-
-    @glsl_intrinsic function Base.getindex{T}(x::GLArray{T, 1}, i::Integer)::Vec{4, T}
-        :imageLoad
-    end
-    @glsl_intrinsic function Base.getindex{T, I <: Integer}(x::GLArray{T, 2}, i::Vec{2, I})::Vec{4, T}
-        :imageLoad
-    end
-
-    @glsl_intrinsic function Base.getindex{T}(x::GLArray{T, 1}, i::Integer)::T
-        val = gl_getindex(x, i)
-        convert(T, val)
-    end
-    @glsl_intrinsic function Base.getindex{T}(x::GLArray{T, 1}, i::Integer, j::Integer)::T
-        val = gl_getindex(x, Vec(i, j))
-        convert(T, val)
-    end
-
-
-    @glsl_intrinsic function cos{T <: AbstractFloat}(x::T)::T
-        :cos
-    end
-    @glsl_intrinsic function sin{T <: AbstractFloat}(x::T)::T
-        :sin
-    end
-    @glsl_intrinsic function sqrt{T <: AbstractFloat}(x::T)::T
-        :sqrt
-    end
-
-    function Base.getindex{T}(x::GLArray{T, 2}, i::Integer, j::Integer)
-        getindex(x, Vec(i, j))
-    end
-
+    isdefined(GLSLIntrinsics, f) || return false, f
+    func = eval(GLSLIntrinsics, f)
+    # is there some other function like applicable working with types and not values?
+    # could als be a try catch, I suppose
+    !isempty(code_lowered(func, types)), f
 end
 
 
-immutable GLSLIO{T <: IO} <: AstIO
+
+function Base.getindex{T}(x::GLArray{T, 1}, i::Integer)
+    GLSLIntrinsics.imageLoad(x, i)
+end
+function Base.getindex{T}(x::GLArray{T, 2}, i::Integer, j::Integer)
+    getindex(x, Vec(i, j))
+end
+function Base.getindex{T <: Number}(x::GLArray{T, 2}, idx::Vec{2, Int})
+    GLSLIntrinsics.imageLoad(x, idx)[1]
+end
+function Base.setindex!{T}(x::GLArray{T, 1}, val::T, i::Integer)
+    GLSLIntrinsics.imageStore(x, i, Vec(val, val, val, val))
+end
+function Base.setindex!{T}(x::GLArray{T, 2}, val::T, i::Integer, j::Integer)
+    setindex!(x, Vec(val, val, val, val), Vec(i, j))
+end
+function Base.setindex!{T}(x::GLArray{T, 2}, val::T, idx::Vec{2, Int})
+    setindex!(x, Vec(val, val, val, val), idx)
+end
+function Base.setindex!{T}(x::GLArray{T, 2}, val::Vec{4, T}, idx::Vec{2, Int})
+    GLSLIntrinsics.imageStore(x, idx, val)
+end
+function Base.setindex!{T}(x::GLArray{T, 1}, val::Vec{4, T}, i::Integer)
+    GLSLIntrinsics.imageStore(x, i, val)
+end
+
+
+import Sugar: ASTIO, get_slottypename, get_type
+
+if !isdefined(:GLSLIO)
+immutable GLSLIO{T <: IO} <: ASTIO
     io::T
+    vardecl
     lambdainfo::LambdaInfo
     slotnames
+    dependencies::Vector{String}
+end
 end
 
+function GLSLIO(io, lambdainfo, slotnames)
+    GLSLIO(io, Dict(), lambdainfo, slotnames, String[])
+end
 
 show_linenumber(io::GLSLIO, line)       = print(io, " // line ", line,':')
 show_linenumber(io::GLSLIO, line, file) = print(io, " // ", file, ", line ", line, ':')
 
 function Base.show_unquoted(io::GLSLIO, newvar::NewvarNode, ::Int, ::Int)
     typ, name = get_slottypename(io, newvar.slot)
-    print(io, typ, " ", name)
+    show_name(io, typ)
+    print(io, ' ')
+    show_name(io, name)
+end
+# show a normal (non-operator) function call, e.g. f(x,y) or A[z]
+function Base.show_call(io::GLSLIO, head, func, func_args, indent)
+    op, cl = expr_calls[head]
+    if isa(func, Symbol) || (isa(func, Expr) &&
+            (func.head == :. || func.head == :curly))
+        show_name(io, func)
+    else
+        show_name(io, func)
+    end
+    if head == :(.)
+        print(io, '.')
+    end
+    if !isempty(func_args) && isa(func_args[1], Expr) && func_args[1].head === :parameters
+        print(io, op)
+        show_list(io, func_args[2:end], ',', indent)
+        print(io, "; ")
+        show_list(io, func_args[1].args, ',', indent)
+        print(io, cl)
+    else
+        show_enclosed_list(io, op, func_args, ",", cl, indent)
+    end
+end
+
+function Base.show_unquoted(io::GLSLIO, ssa::SSAValue, ::Int, ::Int)
+    # if not already declared, type the declaration location
+    # TODO this quite likely won't work for all situations
+    if !get(io.vardecl, ssa, false)
+        io.vardecl[ssa] = true
+        show_name(io, get_type(io, ssa))
+        print(io, ' ')
+    end
+    print(io, Sugar.ssavalue_name(ssa))
 end
 
 # show a block, e g if/for/etc
@@ -172,11 +156,66 @@ function show_block(io::GLSLIO, head, args::Vector, body, indent::Int)
     print(io, ";\n", " "^indent)
 end
 
-
 function show_unquoted(io::GLSLIO, slot::Slot, ::Int, ::Int)
     typ, name = get_slottypename(io, slot)
     print(io, name)
 end
+function resolve_funcname(io, f::GlobalRef)
+    eval(f), f.name
+end
+function resolve_funcname(io, f::Symbol)
+    eval(f), f
+end
+
+function typename(T)
+    str = if isa(T, Expr) && T.head == :curly
+        string(T, "_", join(T.args, "_"))
+    elseif isa(T, Symbol)
+        T
+    elseif isa(T, Type)
+        str = string(T.name.name)
+        if !isempty(T.parameters)
+            str *= string("_", join(T.parameters, "_"))
+        end
+        str
+    else
+        error("Not a type $T")
+    end
+    return glsl_hygiene(str)
+end
+function resolve_funcname(io, slot::Slot)
+    typ, name = get_slottypename(io, slot)
+    f = typ.instance
+    f, Symbol(f)
+end
+function resolve_funcname(io, f::Expr)
+    if f.head == :curly
+        # TODO figure out what can go wrong here, since this seems fragile
+        T = eval(f)
+        if haskey(pirate_loot, T)
+            return T, pirate_loot[T][1][2]
+        else
+            return T, typename(f)
+        end
+    end
+    error("$f not a func")
+end
+
+function resolve_function(io, f, typs)
+    func, fname = resolve_funcname(io, f)
+    intrinsic, intrfun = is_glslintrinsic(fname, typs)
+    if !intrinsic
+        if isa(func, Core.IntrinsicFunction)
+            warn("$f is intrinsic. Lets hope its intrinsic in OpenGL as well")
+        else
+            transpile(func, typs, io)
+        end
+    else
+        fname = intrfun
+    end
+    return fname
+end
+
 
 function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
     line_number = 0 # TODO include line numbers
@@ -223,62 +262,79 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
     # function call
     elseif head === :call && nargs >= 1
         func = args[1]
-        fname = isa(func, GlobalRef) ? func.name : func
-        func_prec = operator_precedence(fname)
-        if func_prec > 0 || fname in uni_ops
+
+        typs = map(x-> get_type(io, x), args[2:end])
+        fname = resolve_function(io, func, typs)
+
+        # sadly we need to special case some type pirated special cases
+        # TODO do this for all fixed vectors
+        if fname == :getindex && nargs == 3 && first(typs) <: Vec
+            show_unquoted(io, args[2]) # vec to be accessed
+            if isa(args[3], Integer) # special case for statically inferable
+                field = (:x, :y, :z, :w)[args[3]]
+                print(io, ".$field")
+            else
+                print(io, '[')
+                show_unquoted(io, args[3])
+                print(io, ']')
+            end
+        else
+            # TODO handle getfield
+            func_prec = operator_precedence(fname)
+            # TODO do this correctly
+            if func_prec > 0 || fname in uni_ops
+                func = fname
+            end
             func = fname
-        end
-        func_args = args[2:end]
+            func_args = args[2:end]
 
-        if (in(ex.args[1], (GlobalRef(Base, :box), :throw)) ||
-            ismodulecall(ex) ||
-            (ex.typ === Any && is_intrinsic_expr(ex.args[1])))
-        end
-
-        # scalar multiplication (i.e. "100x")
-        if (func === :* &&
-            length(func_args) == 2 && isa(func_args[1], Real) && isa(func_args[2], Symbol))
-            if func_prec <= prec
-                show_enclosed_list(io, '(', func_args, "", ')', indent, func_prec)
-            else
-                show_list(io, func_args, "", indent, func_prec)
+            if (in(ex.args[1], (GlobalRef(Base, :box), :throw)) ||
+                ismodulecall(ex) ||
+                (ex.typ === Any && is_intrinsic_expr(ex.args[1])))
             end
 
-        # unary operator (i.e. "!z")
-        elseif isa(func,Symbol) && func in uni_ops && length(func_args) == 1
-            show_unquoted(io, func, indent)
-            if isa(func_args[1], Expr) || func_args[1] in all_ops
-                show_enclosed_list(io, '(', func_args, ",", ')', indent, func_prec)
-            else
-                show_unquoted(io, func_args[1])
-            end
-
-        # binary operator (i.e. "x + y")
-        elseif func_prec > 0 # is a binary operator
-            na = length(func_args)
-            if (na == 2 || (na > 2 && func in (:+, :++, :*))) && all(!isa(a, Expr) || a.head !== :... for a in func_args)
-                sep = " $func "
+            # scalar multiplication (i.e. "100x")
+            if (func === :* &&
+                length(func_args) == 2 && isa(func_args[1], Real) && isa(func_args[2], Symbol))
                 if func_prec <= prec
-                    show_enclosed_list(io, '(', func_args, sep, ')', indent, func_prec, true)
+                    show_enclosed_list(io, '(', func_args, "", ')', indent, func_prec)
                 else
-                    show_list(io, func_args, sep, indent, func_prec, true)
+                    show_list(io, func_args, "", indent, func_prec)
                 end
-            elseif na == 1
-                # 1-argument call to normally-binary operator
-                op, cl = expr_calls[head]
-                print(io, "(")
+
+            # unary operator (i.e. "!z")
+            elseif isa(func, Symbol) && func in uni_ops && length(func_args) == 1
                 show_unquoted(io, func, indent)
-                print(io, ")")
-                show_enclosed_list(io, op, func_args, ",", cl, indent)
+                if isa(func_args[1], Expr) || func_args[1] in all_ops
+                    show_enclosed_list(io, '(', func_args, ",", ')', indent, func_prec)
+                else
+                    show_unquoted(io, func_args[1])
+                end
+
+            # binary operator (i.e. "x + y")
+            elseif func_prec > 0 # is a binary operator
+                na = length(func_args)
+                if (na == 2 || (na > 2 && func in (:+, :++, :*))) && all(!isa(a, Expr) || a.head !== :... for a in func_args)
+                    sep = " $func "
+                    if func_prec <= prec
+                        show_enclosed_list(io, '(', func_args, sep, ')', indent, func_prec, true)
+                    else
+                        show_list(io, func_args, sep, indent, func_prec, true)
+                    end
+                elseif na == 1
+                    # 1-argument call to normally-binary operator
+                    op, cl = expr_calls[head]
+                    show_unquoted(io, func, indent)
+                    show_enclosed_list(io, op, func_args, ",", cl, indent)
+                else
+                    show_call(io, head, func, func_args, indent)
+                end
+
+            # normal function (i.e. "f(x,y)")
             else
                 show_call(io, head, func, func_args, indent)
             end
-
-        # normal function (i.e. "f(x,y)")
-        else
-            show_call(io, head, func, func_args, indent)
         end
-
     # other call-like expressions ("A[1,2]", "T{X,Y}", "f.(X,Y)")
     elseif haskey(expr_calls, head) && nargs >= 1  # :ref/:curly/:calldecl/:(.)
         funcargslike = head == :(.) ? ex.args[2].args : ex.args[2:end]
@@ -396,7 +452,7 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
         unsupported_expr("let", line_number)
 
     elseif is(head, :block) || is(head, :body)
-        show_block(io, "{", ex, indent); print(io, "}")
+        show_block(io, "", ex, indent); print(io, "}")
 
     elseif is(head, :quote) && nargs == 1 && isa(args[1],Symbol)
         unsupported_expr("Quoted expression", line_number)
@@ -434,7 +490,16 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
     elseif is(head, :meta)
         # TODO, just ignore this? Log this? We definitely don't need it in GLSL
 
+    elseif is(head, :return)
+        if length(args) == 1# ignore return if no args
+            print(io, "return ")
+            show_unquoted(io, args[1])
+        elseif isempty(args) # ignore
+        else
+            error("What dis return? $ex")
+        end
     else
+        println(ex)
         unsupported_expr(string(ex), line_number)
     end
     nothing

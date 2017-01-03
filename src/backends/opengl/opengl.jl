@@ -27,7 +27,7 @@ global all_contexts, current_context, init
 let contexts = GLContext[]
     all_contexts() = copy(contexts)::Vector{GLContext}
     current_context() = last(contexts)::GLContext
-    function init(; ctx=any_context())
+    function init(; ctx = any_context())
         init(ctx)
     end
     init(ctx::GLWindow.Screen) = init(GLContext(GLWindow.nativewindow(ctx)))
@@ -77,23 +77,6 @@ function Base.convert{ET, ND}(
     texB
 end
 
-function Base.broadcast!{T}(f::Function, A::GLArray{T, 1}, B::GLArray{T, 1})
-    ast = Sugar.sugared(f, (T,), code_typed)
-    li = get_lambda(code_typed, f, (T,))
-    slotnames = Base.lambdainfo_slotnames(li)
-    glslio = GLSLIO(STDOUT, li, slotnames)
-    show_unquoted(glslio, body, 2, 0)
-end
-
-function test(b)
-    x = sqrt(sin(b*2.0) * b) / 10
-    y = 33x + cos(b)
-    y*10
-end
-A = GLArray(rand(10))
-B = GLArray(rand(10))
-
-A .= test.(B)
 
 
 end
