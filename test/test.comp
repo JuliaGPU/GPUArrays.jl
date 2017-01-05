@@ -1,0 +1,48 @@
+#version 430
+layout (local_size_x = 16, local_size_y = 16) in;
+
+struct _test{
+bool empty;
+};
+
+
+uvec3 GlobalInvocationID(){
+    return gl_GlobalInvocationID;
+}
+
+float test(float b){
+    float x;
+    float y;
+    x = sqrt(sin(b * 2.0) * b) / 10.0;
+    y = 33.0 * x + cos(b);
+    if(y == 77.0){
+        y = 0.0;
+    };
+    return y * 10.0;
+}
+
+float getindex(image2D1x32_bindless x, ivec2 idx){
+    return imageLoad(x,idx).x;
+}
+
+void setindex_bang(image2D1x32_bindless x, vec4 val, ivec2 idx){
+    imageStore(x,idx,val);
+}
+
+void setindex_bang(image2D1x32_bindless x, float val, ivec2 idx){
+    setindex_bang(x,vec4(val,val,val,val),idx);
+}
+
+void broadcastkernel(const _test f, image2D1x32_bindless _out, image2D1x32_bindless A){
+    ivec2 idx;
+    idx = ivec2(GlobalInvocationID());
+    float _ssavalue_0 = test(getindex(A,idx));
+    setindex_bang(_out,_ssavalue_0,idx);
+    ;
+}
+const _test globalvar_f = _test(false);
+layout (r32f, binding  = 2) uniform image2D globalvar_out;
+layout (r32f, binding  = 3) uniform image2D globalvar_A;
+void main(){
+    broadcastkernel(globalvar_f, globalvar_out, globalvar_A);
+}

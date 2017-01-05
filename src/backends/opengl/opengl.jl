@@ -1,11 +1,15 @@
 module GLBackend
 
 using ..GPUArrays
-import GPUArrays: buffer, create_buffer, Context, GPUArray, context
+
+import GPUArrays: buffer, create_buffer, acc_broadcast!
+import GPUArrays: Context, GPUArray, context, broadcast_index
 
 import GLAbstraction, GLWindow, GLFW
 using ModernGL
 const gl = GLAbstraction
+
+include("compilation.jl")
 
 immutable GLContext <: Context
     window::GLFW.Window
@@ -39,14 +43,20 @@ let contexts = GLContext[]
 end
 
 function create_buffer{T,N}(ctx::GLContext, ::Type{T}, sz::NTuple{N, Int}; kw_args...)
-    gl.GLBuffer(T, prod(sz); kw_args...)
+    gl.Texture(T, sz; kw_args...)
 end
 
 function glTexSubImage{N}(tex, offset::NTuple{N, Int}, width::NTuple{N, Int}, data)
     glfun = N == 1 ? glTexSubImage1D : N == 2 ? glTexSubImage2D : N==3 ? glTexSubImage3D : error("Dim $N not supported")
     glfun(tex.texturetype, 0, offset..., width..., tex.format, tex.pixeltype, data)
 end
-
+function Base.unsafe_copy!{ET, ND}(
+        dest::gl.Texture{ET, ND},
+        source::Array{ET, ND}
+    )
+    gl.update!(dest, source)
+    nothing
+end
 function Base.unsafe_copy!{ET, ND}(
         dest::gl.Texture{ET, ND},
         source::gl.GLBuffer{ET},
@@ -77,6 +87,79 @@ function Base.convert{ET, ND}(
     texB
 end
 
+
+################################################################################
+# Broadcast
+
+#Broadcast
+function broadcast_index{T, N}(arg::gli.GLArray{T, N}, shape, idx)
+    sz = size(arg)
+    i = Vec{N, Int}((sz .<= Vec{N, Int}(shape))) .* Vec{N, Int}(idx)
+    return arg[i]
+end
+broadcast_index(arg, shape, idx) = arg
+
+
+for N = 1:3
+    for i=0:6
+        args = ntuple(x-> Symbol("arg_", x), i)
+        fargs = ntuple(x-> :(broadcast_index($(args[x]), sz, idx)), i)
+        @eval begin
+            function broadcast_kernel{T}(A::gli.GLArray{T, $N}, f, $(args...))
+                idx = Vec{$N, Int}(GlobalInvocationID())
+                sz  = size(A)
+                A[idx] = f($(fargs...))
+                return
+            end
+        end
+    end
+end
+
+
+size3d{T}(A::GLArrayTex{T, 1}) = (size(A, 1), 1, 1)
+size3d{T}(A::GLArrayTex{T, 2}) = (size(A)..., 1)
+size3d{T}(A::GLArrayTex{T, 3}) = size(A)
+
+function acc_broadcast!{F <: Function, T, N}(f::F, A::GLArrayTex{T, N}, args::Tuple)
+    glfunc = ComputeProgram(broadcast_kernel, (A, f, args...))
+    glfunc((A, f, args...), size3d(A))
+end
+
+
+# TODO We tread Float64 as the default and map it to Float32 in glsl. HACK ALERT
+# We mainly do this, because of 1.0 being Float64 as default
+to_glsl_types(::Type{Float32}) = Float64
+to_glsl_types{T}(arg::T) = to_glsl_types(T)
+to_glsl_types{T}(::Type{T}) = T
+function to_glsl_types{T <: GPUArrays.AbstractAccArray}(arg::T)
+    if isa(buffer(arg), gl.Texture)
+        et = to_glsl_types(eltype(arg))
+        return gli.GLArray{et, ndims(arg)}
+    else
+        error("Not implemented yet: $T")
+        return typeof(arg)
+    end
+end
+function to_glsl_types(args::Union{Vector, Tuple})
+    map(to_glsl_types, args)
+end
+
+function bindlocation{T, N}(A::GLArrayTex{T, N}, i)
+    t = buffer(A)
+    glBindImageTexture(i, t.id, 0, GL_FALSE, 0, GL_READ_WRITE, t.internalformat)
+end
+
+# TODO integrate buffers
+# function bind(t::GLBuffer, i)
+#     glBindImageTexture(i, t.id, 0, GL_FALSE, 0, GL_READ_WRITE, t.internalformat)
+# end
+
+function bindlocation(t, i)
+    gluniform(i, t)
+end
+#Functions will be declared in the shader as a constant, so we don't need to bind them
+function bindlocation(t::Function, i)
+end
 
 
 end

@@ -1,17 +1,15 @@
 # TODO move this in own package or some transpiler package
-using Sugar
+using Sugar, GLAbstraction, GeometryTypes
 
 import Base: indent_width, quoted_syms, uni_ops, expr_infix_wide, expr_infix_any
 import Base: all_ops, expr_calls, expr_parens, ExprNode, show_block
 import Base: show_list, show_enclosed_list, operator_precedence, is_linenumber
 import Base: is_quoted, is_expr, TypedSlot, ismodulecall, is_intrinsic_expr
 import Base: show_generator, show_call, show_unquoted
-import Sugar: ssavalue_name
+import Sugar: ssavalue_name, ASTIO, get_slottypename, get_type
 
 include("intrinsics.jl")
-import GLSLIntrinsics
-import GLSLIntrinsics: GLArray
-using GeometryTypes
+
 
 """
 Simple function to determine if an array of types matches any signature
@@ -25,13 +23,30 @@ function matches_signature(types, signatures)
 end
 
 function is_glslintrinsic(f::Expr, types::ANY)
+    #is_glslintrinsic(eval(f), types)
     if haskey(pirate_loot, f)
-        return true, pirate_loot[f][1][2]
+        for (sig, funcname) in pirate_loot[f]
+            if matches_signature(sug, Tuple{types...})
+                return true, funcname
+            end
+        end
+        return false, f
+    else
+        is_glslintrinsic(eval(f), types)
     end
-    return false, f
 end
 
+function is_glslintrinsic{N, T}(f::Type{Vec{N, T}}, types::ANY)
+    true, Symbol(vecname(f))
+end
+function is_glslintrinsic(f::Function, types::ANY)
+    false, glsl_name(f)
+end
 function is_glslintrinsic(f::Symbol, types::ANY)
+    if f == :Vec
+        T = Sugar.return_type(Vec, types)
+        return true, glsl_name(T)
+    end
     if haskey(pirate_loot, f)
         pf = pirate_loot[f]
         if isa(pf, Vector)
@@ -42,51 +57,25 @@ function is_glslintrinsic(f::Symbol, types::ANY)
             return true, pf
         end
     end
+
     isdefined(GLSLIntrinsics, f) || return false, f
     func = eval(GLSLIntrinsics, f)
     # is there some other function like applicable working with types and not values?
     # could als be a try catch, I suppose
-    !isempty(code_lowered(func, types)), f
+    !isempty(code_lowered(func, types)), glsl_name(func)
 end
 
 
 
-function Base.getindex{T}(x::GLArray{T, 1}, i::Integer)
-    GLSLIntrinsics.imageLoad(x, i)
-end
-function Base.getindex{T}(x::GLArray{T, 2}, i::Integer, j::Integer)
-    getindex(x, Vec(i, j))
-end
-function Base.getindex{T <: Number}(x::GLArray{T, 2}, idx::Vec{2, Int})
-    GLSLIntrinsics.imageLoad(x, idx)[1]
-end
-function Base.setindex!{T}(x::GLArray{T, 1}, val::T, i::Integer)
-    GLSLIntrinsics.imageStore(x, i, Vec(val, val, val, val))
-end
-function Base.setindex!{T}(x::GLArray{T, 2}, val::T, i::Integer, j::Integer)
-    setindex!(x, Vec(val, val, val, val), Vec(i, j))
-end
-function Base.setindex!{T}(x::GLArray{T, 2}, val::T, idx::Vec{2, Int})
-    setindex!(x, Vec(val, val, val, val), idx)
-end
-function Base.setindex!{T}(x::GLArray{T, 2}, val::Vec{4, T}, idx::Vec{2, Int})
-    GLSLIntrinsics.imageStore(x, idx, val)
-end
-function Base.setindex!{T}(x::GLArray{T, 1}, val::Vec{4, T}, i::Integer)
-    GLSLIntrinsics.imageStore(x, i, val)
-end
 
 
-import Sugar: ASTIO, get_slottypename, get_type
 
-if !isdefined(:GLSLIO)
 immutable GLSLIO{T <: IO} <: ASTIO
     io::T
     vardecl
     lambdainfo::LambdaInfo
     slotnames
     dependencies::Vector{String}
-end
 end
 
 function GLSLIO(io, lambdainfo, slotnames)
@@ -98,9 +87,28 @@ show_linenumber(io::GLSLIO, line, file) = print(io, " // ", file, ", line ", lin
 
 function Base.show_unquoted(io::GLSLIO, newvar::NewvarNode, ::Int, ::Int)
     typ, name = get_slottypename(io, newvar.slot)
-    show_name(io, typ)
-    print(io, ' ')
-    show_name(io, name)
+    try
+        show_name(io, typ)
+        print(io, ' ')
+        show_name(io, name)
+    catch e
+        @show newvar typ name
+        rethrow(e)
+    end
+end
+
+# don't print f0 TODO Float32 hack
+function Base.show(io::GLSLIO, x::Float32)
+    print(io, Float64(x))
+end
+
+function show_unquoted(io::GLSLIO, ex::GlobalRef, ::Int, ::Int)
+    # TODO Why is Base.x suddenly == GPUArrays.GLBackend.x
+    if ex.mod == GLSLIntrinsics || ex.mod == GPUArrays.GLBackend
+        print(io, ex.name)
+    else
+        error("No non Intrinsic GlobalRef's for now!: $ex")
+    end
 end
 # show a normal (non-operator) function call, e.g. f(x,y) or A[z]
 function Base.show_call(io::GLSLIO, head, func, func_args, indent)
@@ -158,45 +166,49 @@ end
 
 function show_unquoted(io::GLSLIO, slot::Slot, ::Int, ::Int)
     typ, name = get_slottypename(io, slot)
-    print(io, name)
-end
-function resolve_funcname(io, f::GlobalRef)
-    eval(f), f.name
-end
-function resolve_funcname(io, f::Symbol)
-    eval(f), f
+    show_name(io, name)
 end
 
-function typename(T)
-    str = if isa(T, Expr) && T.head == :curly
-        string(T, "_", join(T.args, "_"))
-    elseif isa(T, Symbol)
-        T
-    elseif isa(T, Type)
-        str = string(T.name.name)
-        if !isempty(T.parameters)
-            str *= string("_", join(T.parameters, "_"))
-        end
-        str
-    else
-        error("Not a type $T")
-    end
-    return glsl_hygiene(str)
+
+
+function resolve_funcname(io, f::GlobalRef)
+    _f = eval(f)
+    _f, f.name
 end
+function resolve_funcname(io, f::Symbol)
+    _f = eval(f)
+    _f, f
+end
+
 function resolve_funcname(io, slot::Slot)
     typ, name = get_slottypename(io, slot)
     f = typ.instance
     f, Symbol(f)
 end
+
 function resolve_funcname(io, f::Expr)
-    if f.head == :curly
-        # TODO figure out what can go wrong here, since this seems fragile
-        T = eval(f)
-        if haskey(pirate_loot, T)
-            return T, pirate_loot[T][1][2]
-        else
-            return T, typename(f)
+    try
+        if f.head == :curly
+            # TODO figure out what can go wrong here, since this seems fragile
+            expr = Sugar.similar_expr(f)
+            expr.args = map(f.args) do arg
+                # TODO, can other static parameters beside literal values escape with code_typed, optimization = false?
+                if isa(arg, Expr) && arg.head == :static_parameter
+                    arg.args[1]
+                else
+                    arg
+                end
+            end
+            T = eval(expr)
+            if haskey(pirate_loot, T)
+                return T, pirate_loot[T][1][2]
+            else
+                return T, Symbol(T)
+            end
         end
+    catch e
+        println("Couldn't resolve $f")
+        rethrow(e)
     end
     error("$f not a func")
 end
@@ -204,16 +216,23 @@ end
 function resolve_function(io, f, typs)
     func, fname = resolve_funcname(io, f)
     intrinsic, intrfun = is_glslintrinsic(fname, typs)
+    @show func fname intrinsic intrfun
     if !intrinsic
         if isa(func, Core.IntrinsicFunction)
             warn("$f is intrinsic. Lets hope its intrinsic in OpenGL as well")
         else
-            transpile(func, typs, io)
+            try
+                transpile(func, typs, io, false)
+            catch e
+                @show f typs
+                rethrow(e)
+            end
         end
+        fname = glsl_name(func)
     else
         fname = intrfun
     end
-    return fname
+    return func, fname
 end
 
 
@@ -264,8 +283,7 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
         func = args[1]
 
         typs = map(x-> get_type(io, x), args[2:end])
-        fname = resolve_function(io, func, typs)
-
+        func_inst, fname = resolve_function(io, func, typs)
         # sadly we need to special case some type pirated special cases
         # TODO do this for all fixed vectors
         if fname == :getindex && nargs == 3 && first(typs) <: Vec
@@ -304,7 +322,7 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
 
             # unary operator (i.e. "!z")
             elseif isa(func, Symbol) && func in uni_ops && length(func_args) == 1
-                show_unquoted(io, func, indent)
+                show_unquoted(io, fname, indent)
                 if isa(func_args[1], Expr) || func_args[1] in all_ops
                     show_enclosed_list(io, '(', func_args, ",", ')', indent, func_prec)
                 else
@@ -315,7 +333,7 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
             elseif func_prec > 0 # is a binary operator
                 na = length(func_args)
                 if (na == 2 || (na > 2 && func in (:+, :++, :*))) && all(!isa(a, Expr) || a.head !== :... for a in func_args)
-                    sep = " $func "
+                    sep = " $fname "
                     if func_prec <= prec
                         show_enclosed_list(io, '(', func_args, sep, ')', indent, func_prec, true)
                     else
@@ -324,15 +342,15 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
                 elseif na == 1
                     # 1-argument call to normally-binary operator
                     op, cl = expr_calls[head]
-                    show_unquoted(io, func, indent)
+                    show_unquoted(io, fname, indent)
                     show_enclosed_list(io, op, func_args, ",", cl, indent)
                 else
-                    show_call(io, head, func, func_args, indent)
+                    show_call(io, head, fname, func_args, indent)
                 end
 
             # normal function (i.e. "f(x,y)")
             else
-                show_call(io, head, func, func_args, indent)
+                show_call(io, head, fname, func_args, indent)
             end
         end
     # other call-like expressions ("A[1,2]", "T{X,Y}", "f.(X,Y)")
@@ -408,7 +426,7 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
 
     # empty return (i.e. "function f() return end")
     elseif is(head, :return) && nargs == 1 && is(args[1], nothing)
-        print(io, head)
+        # ignore empty return
 
     # type annotation (i.e. "::Int")
     elseif is(head, Symbol("::")) && nargs == 1
@@ -424,7 +442,7 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
     elseif (nargs == 0 && head in (:break, :continue))
         print(io, head)
 
-    elseif (nargs == 1 && head in (:return, :abstract, :const)) ||
+    elseif (nargs == 1 && head in (:abstract, :const)) ||
                           head in (:local,  :global, :export)
         print(io, head, ' ')
         show_list(io, args, ", ", indent)
@@ -491,10 +509,14 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
         # TODO, just ignore this? Log this? We definitely don't need it in GLSL
 
     elseif is(head, :return)
-        if length(args) == 1# ignore return if no args
-            print(io, "return ")
+        if length(args) == 1
+            # return Void must not return anything in GLSL
+            if get_type(io, args[1]) != Void
+                print(io, "return ")
+            end
             show_unquoted(io, args[1])
-        elseif isempty(args) # ignore
+        elseif isempty(args)
+            # ignore return if no args or void
         else
             error("What dis return? $ex")
         end
@@ -503,4 +525,258 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
         unsupported_expr(string(ex), line_number)
     end
     nothing
+end
+
+
+prescripts = Dict(
+    Float32 => "",
+    Float64 => "",
+    Int => "i",
+    Int32 => "i",
+    UInt => "u",
+    Bool => "b"
+)
+function glsl_hygiene(sym)
+    # TODO unicode
+    # TODO figure out what other things are not allowed
+    # TODO startswith gl_, but allow variables that are actually valid inbuilds
+    x = string(sym)
+    x = replace(x, "#", "__")
+    x = replace(x, "!", "_bang")
+    if x == "out"
+        x = "_out"
+    end
+    if x == "in"
+        x = "_in"
+    end
+    x
+end
+glsl_sizeof(T) = sizeof(T) * 8
+# for now we disallow Float64 and map it to Float32 -> super hack alert!!!!
+glsl_sizeof(::Type{Float64}) = 32
+glsl_length{T <: Number}(::Type{T}) = 1
+glsl_length(T) = length(T)
+
+glsl_name(x) = Symbol(glsl_hygiene(_glsl_name(x)))
+
+function _glsl_name(T)
+    str = if isa(T, Expr) && T.head == :curly
+        string(T, "_", join(T.args, "_"))
+    elseif isa(T, Symbol)
+        T
+    elseif isa(T, Type)
+        str = string(T.name.name)
+        if !isempty(T.parameters)
+            str *= string("_", join(T.parameters, "_"))
+        end
+        str
+    else
+        error("Not a type $T")
+    end
+    return str
+end
+
+function _glsl_name{T, N}(x::Type{gli.GLArray{T, N}})
+    if !(N in (1, 2, 3))
+        # TODO, fake ND arrays with 1D array
+        error("GPUArray can't have more than 3 dimensions for now")
+    end
+    sz = glsl_sizeof(T)
+    len = glsl_length(T)
+    "image$(N)D$(len)x$(sz)_bindless"
+end
+function _glsl_name{N, T}(::Type{Vec{N, T}})
+    string(prescripts[T], "vec", N)
+end
+
+function _glsl_name(x::Union{AbstractString, Symbol})
+    x
+end
+_glsl_name(x::Type{Void}) = "void"
+_glsl_name(x::Type{Float64}) = "float"
+_glsl_name(x::Type{Bool}) = "bool"
+
+# TODO this will be annoying on 0.6
+_glsl_name(x::typeof(gli.:(.*))) = "*"
+_glsl_name(x::typeof(gli.:(.<=))) = "lessThanEqual"
+_glsl_name(x::typeof(gli.:(.+))) = "+"
+
+function _glsl_name(f::Function)
+    # Taken from base... #TODO make this more stable
+    _glsl_name(typeof(f).name.mt.name)
+end
+
+function show_name{T, N}(io::GLSLIO, x::Type{gli.GLArray{T, N}})
+    print(io, glsl_name(x))
+end
+function show_name{N, T}(io::GLSLIO, x::Type{Vec{N, T}})
+    print(io, glsl_name(x))
+end
+
+show_name(io::GLSLIO, x::Type{Void}) = print(io, glsl_name(x))
+show_name(io::GLSLIO, x::Type{Float64}) = print(io, glsl_name(x))
+show_name(io::GLSLIO, x::Type{Bool}) = print(io, glsl_name(x))
+
+
+function show_name(io::GLSLIO, f::Function)
+    show_name(io, glsl_name(f))
+end
+function show_name(io::GLSLIO, x::Union{AbstractString, Symbol})
+    print(io, glsl_name(x))
+end
+
+function declare_type(T)
+    tname = glsl_name(T)
+    sprint() do io
+        print(io, "struct ", tname, "{\n")
+        fnames = fieldnames(T)
+        if isempty(fnames) # structs can't be empty
+            # we use bool as a short placeholder type.
+            # TODO, are there corner cases where bool is no good?
+            println(io, "bool empty;")
+        else
+            for name in fieldnames(T)
+                FT = fieldtype(T, name)
+                print(io, "    ", glsl_name(FT))
+                print(io, ' ')
+                print(io, name)
+                println(io, ';')
+            end
+        end
+        println(io, "};")
+    end
+end
+function show_name(io::GLSLIO, T::DataType)
+    tname = glsl_name(T)
+    if !get(io.vardecl, T, false)
+        push!(io.dependencies, declare_type(T))
+        io.vardecl[T] = true
+    end
+    print(io, tname)
+end
+
+
+function materialize_io(x::GLSLIO)
+    result_str = ""
+    for str in x.dependencies
+        result_str *= str * "\n"
+    end
+    string(result_str, '\n', takebuf_string(x.io))
+end
+
+const global_identifier = "globalvar_"
+
+function transpile(f, typs, parentio = nothing, main = true)
+    # make sure that not already transpiled
+    # if parentio != nothing && get(parentio.vardecl, (f, typs), false)
+    #     return
+    # end
+
+    local ast;
+    try
+        ast = Sugar.sugared(f, typs, code_typed)
+    catch e
+        println("Failed to get code for $f $typs")
+        rethrow(e)
+    end
+    li = Sugar.get_lambda(code_typed, f, typs)
+    slotnames = Base.lambdainfo_slotnames(li)
+    ret_type = Sugar.return_type(f, typs)
+    glslio = GLSLIO(IOBuffer(), li, slotnames)
+
+    vars = Sugar.slot_vector(li)
+    funcargs = vars[2:li.nargs]
+
+    show_name(glslio, ret_type)
+    print(glslio, ' ')
+    show_name(glslio, f)
+    print(glslio, '(')
+
+    for (i, (slot, (name, T))) in enumerate(funcargs)
+        glslio.vardecl[slot] = true
+        if T <: Function
+            print(glslio, "const ")
+        end
+        show_name(glslio, T)
+        print(glslio, ' ')
+        show_name(glslio, name)
+        i != (li.nargs - 1) && print(glslio, ", ")
+    end
+    print(glslio, ')')
+    slots = filter(vars[(li.nargs+1):end]) do decl
+        var = decl[1]
+        if isa(var, Slot)
+            glslio.vardecl[var] = true
+            true
+        else
+            false
+        end
+    end
+
+    body = Expr(:body, map(x->NewvarNode(x[1]), slots)..., ast.args...);
+    show_unquoted(glslio, body, 0, 0)
+    # pio = parentio == nothing ? glslio : parentio
+    # pio.vardecl[(f, typs)] = true
+
+
+    typed_args = map(typs) do T
+        Expr(:(::), T)
+    end
+    ft = typeof(f)
+    fname = Symbol(ft.name.mt.name)
+    expr = quote
+        $(fname)($(typed_args...)) = ret($ret_type)
+    end
+    @show expr
+    # TODO, how horrible is it do just eval defined functions into the intrinsics??
+    eval(gli, expr)
+    if parentio != nothing
+        push!(parentio.dependencies, materialize_io(glslio))
+    else
+        println(glslio)
+        if main
+            declare_global(glslio, funcargs)
+            varnames = map(x-> string(global_identifier, x[2][1]), funcargs)
+            print(glslio, "void main(){\n    ")
+            show_name(glslio, f)
+            print(glslio, "(", join(varnames, ", "), ");\n}")
+        end
+        return materialize_io(glslio)
+    end
+end
+
+
+function image_format{T, N}(x::Type{gli.GLArray{T, N}})
+    "r32f"
+end
+function declare_global(io::GLSLIO, vars::Vector)
+    for (i, (slot, (name, typ))) in enumerate(vars)
+        if typ <: Function # special casing functions
+            print(io, "const ")
+            show_name(io, typ)
+            print(io, ' ', global_identifier)
+            show_name(io, name)
+            print(io, " = ")
+            show_name(io, typ)
+            println(io, "(false);")
+            continue
+        end
+        qualifiers = String[]
+        bindingloc = typ <: gli.GLArray ? "binding " : "location "
+        if typ <: gli.GLArray
+            push!(qualifiers, image_format(typ))
+        end
+        push!(qualifiers, string(bindingloc, " = ", i - 1))
+
+        print(io, "layout (", join(qualifiers, ", "), ") ")
+        tname = if typ <: gli.GLArray
+            "uniform image2D"
+        else
+            utyp = typ <: GLBuffer ? "in " : "uniform "
+            utyp * glsl_name(typ)
+        end
+        print(io, tname, ' ')
+        show_name(io, global_identifier*name)
+        println(io, ';')
+    end
 end

@@ -1,6 +1,14 @@
 global current_context, make_current
 let compute_contexts = Context[]
-    current_context() = last(compute_contexts)
+    function current_context()
+        if isempty(compute_contexts)
+            error("
+                Please initialize your favorite Backend. E.g.: JLBackend.init().
+                Available backends: $(supported_backends())
+            ")
+        end
+        last(compute_contexts)
+    end
     all_contexts() = copy(compute_contexts)
     function make_current(ctx)
         idx = findfirst(compute_contexts, ctx)

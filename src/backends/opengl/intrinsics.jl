@@ -1,5 +1,3 @@
-
-
 # Pirate a type or function. This is needed, when an existing function/type
 # needs to be overwritten as an GLSL intrinsic. This only works if the
 # function has exactly the same signature.
@@ -17,36 +15,15 @@ pirate_loot = Dict{Any, Any}(
     :Int32 => :int,
     :Int64 => :int,
     :^ => [(Number, Number) => :pow],
-    Vec{2, Int} => [Tuple{Vec{3, Int}} => :ivec2],
-    Vec{2, Int} => [Tuple{Vec{3, UInt}} => :ivec2],
+    Vec{2, Int} => [
+        Tuple{Vec{3, Int}} => :ivec2,
+        Tuple{Vec{2, Bool}} => :ivec2,
+    ],
+    GlobalRef(Main, :Vec) => [Tuple{Float64, Float64, Float64, Float64} => :vec4],
     :getindex => [Tuple{Vec, Integer} => :getindex]
     #:(Vec{2, Int}) => :ivec2
 )
 
-
-macro pirate(target, glsl)
-    if isa(target, Symbol)
-        pirate_loot[target] = glsl
-    elseif isa(target, Expr)
-        if target.head == :call
-            fun = target.args[1]
-            args = target.args[2:end]
-            typs = map(args) do arg
-                arg.args[1]
-            end
-            loot = get!(pirate_loot, fun, [])
-            push!(loot, typs => glsl)
-        elseif target.head == :curly
-            T = target.args[1]
-            args = target.args[2:end]
-            loot = pirate_loot[fun]
-            push!(loot, args => glsl)
-        else
-            error("$target not supported")
-        end
-    end
-    nothing
-end
 
 
 baremodule GLSLIntrinsics
@@ -70,8 +47,6 @@ const Numbers = Union{Floats, Ints}
     unsafe_load(Ptr{T}(C_NULL))
 end
 
-cos{T <: Floats}(x::T) = ret(T)
-
 immutable GLArray{T, N} end
 
 
@@ -85,9 +60,20 @@ cos{T <: Floats}(x::T) = ret(T)
 sin{T <: Floats}(x::T) = ret(T)
 sqrt{T <: Floats}(x::T) = ret(T)
 
+imageSize{T, N}(x::GLArray{T, N}) = ret(Vec{N, Int})
+
+(.<=){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, T}) = ret(Vec{N, Bool})
+(.*){N, T <: Numbers}(x::Vec{N, Bool}, y::Vec{N, T}) = ret(Vec{N, T})
+(.*){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, Bool}) = ret(Vec{N, T})
+(.*){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, T}) = ret(Vec{N, T})
+(.+){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, T}) = ret(Vec{N, T})
+
+
+=={T <: Numbers}(x::T, y::T) = false
 +{T <: Numbers}(x::T, y::T) = ret(T)
 *{T <: Numbers}(x::T, y::T) = ret(T)
 /{T <: Numbers}(x::T, y::T) = ret(Base.promote_op(/, T, T))
+
 
 #######################################
 # type constructors
@@ -100,14 +86,50 @@ for n in (2,3,4), (T, ps) in ((Float64, ""), (Int, "i"))
 end
 ivec2(x::Vec{3, Int}) = ret(Vec{2, Int})
 ivec2(x::Vec{3, UInt}) = ret(Vec{2, Int})
+ivec2(x::Vec{2, Int}) = ret(Vec{2, Int})
+ivec2(x::Vec{2, UInt}) = ret(Vec{2, Int})
+ivec2(x::Vec{2, Bool}) = ret(Vec{2, Int})
+
 
 #######################################
 # globals
 
 const gl_GlobalInvocationID = Vec{3, UInt}(0,0,0)
-function GlobalInvocationID()::Vec{3, UInt}
-    gl_GlobalInvocationID
-end
-
 
 end # end GLSLIntrinsics
+
+import .GLSLIntrinsics
+
+const gli = GLSLIntrinsics
+
+function GlobalInvocationID()
+    gli.gl_GlobalInvocationID
+end
+
+function Base.size{T, N}(x::gli.GLArray{T, N})
+    gli.imageSize(x)
+end
+function Base.getindex{T}(x::gli.GLArray{T, 1}, i::Integer)
+    gli.imageLoad(x, i)
+end
+function Base.getindex{T}(x::gli.GLArray{T, 2}, i::Integer, j::Integer)
+    getindex(x, Vec(i, j))
+end
+function Base.getindex{T <: Number}(x::gli.GLArray{T, 2}, idx::Vec{2, Int})
+    gli.imageLoad(x, idx)[1]
+end
+function Base.setindex!{T}(x::gli.GLArray{T, 1}, val::T, i::Integer)
+    gli.imageStore(x, i, Vec(val, val, val, val))
+end
+function Base.setindex!{T}(x::gli.GLArray{T, 2}, val::T, i::Integer, j::Integer)
+    setindex!(x, Vec(val, val, val, val), Vec(i, j))
+end
+function Base.setindex!{T}(x::gli.GLArray{T, 2}, val::T, idx::Vec{2, Int})
+    setindex!(x, Vec(val, val, val, val), idx)
+end
+function Base.setindex!{T}(x::gli.GLArray{T, 2}, val::Vec{4, T}, idx::Vec{2, Int})
+    gli.imageStore(x, idx, val)
+end
+function Base.setindex!{T}(x::gli.GLArray{T, 1}, val::Vec{4, T}, i::Integer)
+    gli.imageStore(x, i, val)
+end

@@ -74,3 +74,29 @@ macro glsl_intrinsic(func)
     end
     esc(expr)
 end
+
+
+
+macro pirate(target, glsl)
+    if isa(target, Symbol)
+        pirate_loot[target] = glsl
+    elseif isa(target, Expr)
+        if target.head == :call
+            fun = target.args[1]
+            args = target.args[2:end]
+            typs = map(args) do arg
+                arg.args[1]
+            end
+            loot = get!(pirate_loot, fun, [])
+            push!(loot, typs => glsl)
+        elseif target.head == :curly
+            T = target.args[1]
+            args = target.args[2:end]
+            loot = pirate_loot[fun]
+            push!(loot, args => glsl)
+        else
+            error("$target not supported")
+        end
+    end
+    nothing
+end
