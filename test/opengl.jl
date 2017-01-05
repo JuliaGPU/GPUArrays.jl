@@ -20,4 +20,6 @@ function test2(b)
 end
 A = GLArray(rand(Float32, 512, 512));
 out = GLArray(rand(Float32, 512, 512));
+# TODO make already compiled functions percistant in modules
+# TODO reuse those modules
 out .= (+).(A, 2.0)
