@@ -97,7 +97,7 @@ function Base.show_unquoted(io::GLSLIO, newvar::NewvarNode, ::Int, ::Int)
     end
 end
 
-# don't print f0 TODO Float32 hack
+# don't print f0 TODO this is a Float32 hack
 function Base.show(io::GLSLIO, x::Float32)
     print(io, Float64(x))
 end
@@ -216,7 +216,6 @@ end
 function resolve_function(io, f, typs)
     func, fname = resolve_funcname(io, f)
     intrinsic, intrfun = is_glslintrinsic(fname, typs)
-    @show func fname intrinsic intrfun
     if !intrinsic
         if isa(func, Core.IntrinsicFunction)
             warn("$f is intrinsic. Lets hope its intrinsic in OpenGL as well")
@@ -665,83 +664,98 @@ function materialize_io(x::GLSLIO)
 end
 
 const global_identifier = "globalvar_"
+const shader_program_dir = joinpath(dirname(@__FILE__), "shaders")
+
+const _module_cache = Dict{Module, Tuple{Set{Any}, String}}()
+function to_globalref(f, typs)
+    mlist = methods(f, typs)
+    if length(mlist) != 1
+        error("$f and $typs ambigious")
+    end
+    m = first(mlist)
+    GlobalRef(m.module, m.name)
+end
+function get_module_cache(f, typs)
+    mod = to_globalref(f, typs).mod
+    path, func_cache = get!(_module_cache, mod, Dict{Any, String}()) do
+        path = joinpath(shader_program_dir, string(mod, ".comp"))
+        path, Set()
+    end
+    path, func_cache
+end
+
 
 function transpile(f, typs, parentio = nothing, main = true)
     # make sure that not already transpiled
     # if parentio != nothing && get(parentio.vardecl, (f, typs), false)
     #     return
     # end
-
-    local ast;
-    try
-        ast = Sugar.sugared(f, typs, code_typed)
-    catch e
-        println("Failed to get code for $f $typs")
-        rethrow(e)
-    end
-    li = Sugar.get_lambda(code_typed, f, typs)
-    slotnames = Base.lambdainfo_slotnames(li)
-    ret_type = Sugar.return_type(f, typs)
-    glslio = GLSLIO(IOBuffer(), li, slotnames)
-
-    vars = Sugar.slot_vector(li)
-    funcargs = vars[2:li.nargs]
-
-    show_name(glslio, ret_type)
-    print(glslio, ' ')
-    show_name(glslio, f)
-    print(glslio, '(')
-
-    for (i, (slot, (name, T))) in enumerate(funcargs)
-        glslio.vardecl[slot] = true
-        if T <: Function
-            print(glslio, "const ")
+    path, cache = get_module_cache(f, typs)
+    if !((f, typs) in cache) # add to module
+        local ast;
+        try
+            ast = Sugar.sugared(f, typs, code_typed)
+        catch e
+            println("Failed to get code for $f $typs")
+            rethrow(e)
         end
-        show_name(glslio, T)
+        li = Sugar.get_lambda(code_typed, f, typs)
+        slotnames = Base.lambdainfo_slotnames(li)
+        ret_type = Sugar.return_type(f, typs)
+        glslio = GLSLIO(open(path, "a"), li, slotnames)
+
+        vars = Sugar.slot_vector(li)
+        funcargs = vars[2:li.nargs]
+
+        show_name(glslio, ret_type)
         print(glslio, ' ')
-        show_name(glslio, name)
-        i != (li.nargs - 1) && print(glslio, ", ")
-    end
-    print(glslio, ')')
-    slots = filter(vars[(li.nargs+1):end]) do decl
-        var = decl[1]
-        if isa(var, Slot)
-            glslio.vardecl[var] = true
-            true
+        show_name(glslio, f)
+        print(glslio, '(')
+
+        for (i, (slot, (name, T))) in enumerate(funcargs)
+            glslio.vardecl[slot] = true
+            if T <: Function
+                print(glslio, "const ")
+            end
+            show_name(glslio, T)
+            print(glslio, ' ')
+            show_name(glslio, name)
+            i != (li.nargs - 1) && print(glslio, ", ")
+        end
+        print(glslio, ')')
+        slots = filter(vars[(li.nargs+1):end]) do decl
+            var = decl[1]
+            if isa(var, Slot)
+                glslio.vardecl[var] = true
+                true
+            else
+                false
+            end
+        end
+
+        body = Expr(:body, map(x->NewvarNode(x[1]), slots)..., ast.args...);
+        show_unquoted(glslio, body, 0, 0)
+        # pio = parentio == nothing ? glslio : parentio
+        # pio.vardecl[(f, typs)] = true
+
+
+        typed_args = map(typs) do T
+            Expr(:(::), T)
+        end
+        ft = typeof(f)
+        fname = Symbol(ft.name.mt.name)
+        expr = quote
+            $(fname)($(typed_args...)) = ret($ret_type)
+        end
+        @show expr
+        # TODO, how horrible is it do just eval defined functions into the intrinsics??
+        eval(gli, expr) # now that we use "modules", pretty horrible I guess!
+        if parentio != nothing
+            push!(parentio.dependencies, path)
         else
-            false
+
+            return materialize_io(glslio)
         end
-    end
-
-    body = Expr(:body, map(x->NewvarNode(x[1]), slots)..., ast.args...);
-    show_unquoted(glslio, body, 0, 0)
-    # pio = parentio == nothing ? glslio : parentio
-    # pio.vardecl[(f, typs)] = true
-
-
-    typed_args = map(typs) do T
-        Expr(:(::), T)
-    end
-    ft = typeof(f)
-    fname = Symbol(ft.name.mt.name)
-    expr = quote
-        $(fname)($(typed_args...)) = ret($ret_type)
-    end
-    @show expr
-    # TODO, how horrible is it do just eval defined functions into the intrinsics??
-    eval(gli, expr)
-    if parentio != nothing
-        push!(parentio.dependencies, materialize_io(glslio))
-    else
-        println(glslio)
-        if main
-            declare_global(glslio, funcargs)
-            varnames = map(x-> string(global_identifier, x[2][1]), funcargs)
-            print(glslio, "void main(){\n    ")
-            show_name(glslio, f)
-            print(glslio, "(", join(varnames, ", "), ");\n}")
-        end
-        return materialize_io(glslio)
     end
 end
 
