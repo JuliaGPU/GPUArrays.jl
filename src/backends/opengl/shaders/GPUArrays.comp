@@ -1,2 +1,0 @@
-float broadcast_index(float arg, ivec2 shape, ivec2 idx){
-    return 

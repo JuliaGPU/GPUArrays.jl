@@ -70,16 +70,17 @@ end
 
 
 
-immutable GLSLIO{T <: IO} <: ASTIO
-    io::T
+type GLSLIO <: ASTIO
+    io
     vardecl
     lambdainfo::LambdaInfo
     slotnames
-    dependencies::Vector{String}
+    dependencies::Vector
+    types::Vector{String}
 end
 
 function GLSLIO(io, lambdainfo, slotnames)
-    GLSLIO(io, Dict(), lambdainfo, slotnames, String[])
+    GLSLIO(io, Dict(), lambdainfo, slotnames, [], String[])
 end
 
 show_linenumber(io::GLSLIO, line)       = print(io, " // line ", line,':')
@@ -648,7 +649,7 @@ end
 function show_name(io::GLSLIO, T::DataType)
     tname = glsl_name(T)
     if !get(io.vardecl, T, false)
-        push!(io.dependencies, declare_type(T))
+        push!(io.types, declare_type(T))
         io.vardecl[T] = true
     end
     print(io, tname)
@@ -666,7 +667,7 @@ end
 const global_identifier = "globalvar_"
 const shader_program_dir = joinpath(dirname(@__FILE__), "shaders")
 
-const _module_cache = Dict{Module, Tuple{String, Set{Any}}}()
+const _module_cache = Dict()
 function to_globalref(f, typs)
     mlist = methods(f, typs)
     if length(mlist) != 1
@@ -675,13 +676,8 @@ function to_globalref(f, typs)
     m = first(mlist)
     GlobalRef(m.module, m.name)
 end
-function get_module_cache(f, typs)
-    mod = to_globalref(f, typs).mod
-    path, func_cache = get!(_module_cache, mod) do
-        path = joinpath(shader_program_dir, string(mod, ".comp"))
-        path, Set()
-    end
-    path, func_cache
+function get_module_cache()
+    _module_cache
 end
 
 
@@ -690,8 +686,18 @@ function transpile(f, typs, parentio = nothing, main = true)
     # if parentio != nothing && get(parentio.vardecl, (f, typs), false)
     #     return
     # end
-    path, cache = get_module_cache(f, typs)
-    if !((f, typs) in cache) # add to module
+    cache = get_module_cache()
+    if haskey(cache, (f, typs)) # add to module
+        if parentio != nothing
+            str, deps = cache[(f, typs)]
+            push!(parentio.dependencies, (f, typs))
+            for dep in deps
+                if !(dep in parentio.dependencies)
+                    push!(parentio.dependencies, dep)
+                end
+            end
+        end
+    else
         local ast;
         try
             ast = Sugar.sugared(f, typs, code_typed)
@@ -702,8 +708,9 @@ function transpile(f, typs, parentio = nothing, main = true)
         li = Sugar.get_lambda(code_typed, f, typs)
         slotnames = Base.lambdainfo_slotnames(li)
         ret_type = Sugar.return_type(f, typs)
-        glslio = GLSLIO(open(path, "a"), li, slotnames)
-        println(glslio, "// $f$(join(typs, ", "))"
+        io = IOBuffer()
+        glslio = GLSLIO(io, li, slotnames)
+        #println(glslio, "\n// $f$(join(typs, ", "))\n")
         vars = Sugar.slot_vector(li)
         funcargs = vars[2:li.nargs]
 
@@ -747,13 +754,19 @@ function transpile(f, typs, parentio = nothing, main = true)
         expr = quote
             $(fname)($(typed_args...)) = ret($ret_type)
         end
-        # TODO, how horrible is it do just eval defined functions into the intrinsics??
-        eval(gli, expr) # now that we use "modules", pretty horrible I guess!
-        close(glslio.io)
+        str = takebuf_string(io)
+        close(io)
         if parentio != nothing
-            push!(parentio.dependencies, path)
+            for dep in glslio.dependencies
+                if !(dep in parentio.dependencies)
+                    push!(parentio.dependencies, dep)
+                end
+            end
+            push!(parentio.dependencies, (f, typs))
         end
-        return glslio, funcargs
+        cache[(f, typs)] = (str, glslio.dependencies)
+        return glslio, funcargs, str
+
     end
 end
 
