@@ -1,0 +1,5 @@
+float __3(float __temp__){
+    return __temp__ + 2.0;
+}float __1(float __temp__){
+    return __temp__ + 2.0;
+}

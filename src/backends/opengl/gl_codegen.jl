@@ -666,7 +666,7 @@ end
 const global_identifier = "globalvar_"
 const shader_program_dir = joinpath(dirname(@__FILE__), "shaders")
 
-const _module_cache = Dict{Module, Tuple{Set{Any}, String}}()
+const _module_cache = Dict{Module, Tuple{String, Set{Any}}}()
 function to_globalref(f, typs)
     mlist = methods(f, typs)
     if length(mlist) != 1
@@ -677,7 +677,7 @@ function to_globalref(f, typs)
 end
 function get_module_cache(f, typs)
     mod = to_globalref(f, typs).mod
-    path, func_cache = get!(_module_cache, mod, Dict{Any, String}()) do
+    path, func_cache = get!(_module_cache, mod) do
         path = joinpath(shader_program_dir, string(mod, ".comp"))
         path, Set()
     end
@@ -703,7 +703,7 @@ function transpile(f, typs, parentio = nothing, main = true)
         slotnames = Base.lambdainfo_slotnames(li)
         ret_type = Sugar.return_type(f, typs)
         glslio = GLSLIO(open(path, "a"), li, slotnames)
-
+        println(glslio, "// $f$(join(typs, ", "))"
         vars = Sugar.slot_vector(li)
         funcargs = vars[2:li.nargs]
 
@@ -747,15 +747,13 @@ function transpile(f, typs, parentio = nothing, main = true)
         expr = quote
             $(fname)($(typed_args...)) = ret($ret_type)
         end
-        @show expr
         # TODO, how horrible is it do just eval defined functions into the intrinsics??
         eval(gli, expr) # now that we use "modules", pretty horrible I guess!
+        close(glslio.io)
         if parentio != nothing
             push!(parentio.dependencies, path)
-        else
-
-            return materialize_io(glslio)
         end
+        return glslio, funcargs
     end
 end
 

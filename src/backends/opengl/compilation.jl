@@ -13,20 +13,21 @@ const compiled_functions = Dict{Any, ComputeProgram}()
 function ComputeProgram{T}(f::Function, args::T)
     gltypes = to_glsl_types(args)
     get!(compiled_functions, (f, gltypes)) do # TODO make this faster
-        f_string = transpile(f, gltypes)
+        glslio,  = transpile(f, gltypes)
         local_size = (16, 16, 1)
         # add compute program dependant infos
-        f_string = string(
+        io = IOBuffer()
+        print(io,
             "#version 430\n", # hardcode version for now #TODO don't hardcode :P
             "layout (local_size_x = 16, local_size_y = 16) in;\n", # same here
             f_string
         )
-        declare_global(glslio, funcargs)
+        declare_global(io, funcargs)
         varnames = map(x-> string(global_identifier, x[2][1]), funcargs)
-        print(glslio, "void main(){\n    ")
-        show_name(glslio, f)
-        print(glslio, "(", join(varnames, ", "), ");\n}")
-        shader = Shader(Symbol(f), Vector{UInt8}(f_string), GL_COMPUTE_SHADER)
+        print(io, "void main(){\n    ")
+        show_name(io, f)
+        print(io, "(", join(varnames, ", "), ");\n}")
+        shader = Shader(Symbol(f), takebuf_array(io), GL_COMPUTE_SHADER)
         program = GLAbstraction.compile_program([shader], [])
         ComputeProgram{T}(program, local_size)
     end::ComputeProgram{T}
