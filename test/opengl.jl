@@ -39,3 +39,14 @@ a = @benchmark bench($A, $out)
 b = @benchmark bench($_A, $_out)
 judge(minimum(b), minimum(a))
 minimum(a)
+
+a = rand(10, 10)
+@which a*a
+out = rand(10, 10)
+@which A_mul_B!(out, a, a)
+Base.BLAS.gemm_wrapper!
+C = out
+A = a
+B = a
+@which Base.LinAlg.gemm_wrapper!(out, 'N', 'N', a, a)
+BLAS.gemm!

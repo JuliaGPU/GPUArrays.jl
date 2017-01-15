@@ -210,4 +210,13 @@ end
 # end
 
 
+########################################
+# CUBLAS
+
+
+function Base.BLAS.gemm!{T, N}(transA::Char, transB::Char, alpha::T, A::CUArray{T, N}, B::CUArray{T, N}, beta::T, C::CUArray{T, N})
+    CUBLAS.gemm!(transA, transB, alpha, A, B, beta, C)
+end
+
+
 end
