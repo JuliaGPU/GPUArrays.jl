@@ -10,6 +10,11 @@ function cutest(a, b)
     y = 33x + cu.cos(b)
     y*10
 end
+function test2(b)
+    x = cu.sqrt(cu.sin(b*2.0) * b) / 10.0
+    y = 33.0*x + cu.cos(b)
+    y*87.0
+end
 
 
 @testset "broadcast Float32" begin
