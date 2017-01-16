@@ -12,7 +12,6 @@ function test(a, b)
 end
 A = GLArray(rand(Float32, 40, 40))
 B = test.(A, 10.0)
-GPUArrays.GLBackend._module_cache
 
 @testset "broadcast Float32" begin
     A = GLArray(rand(Float32, 40, 40))
