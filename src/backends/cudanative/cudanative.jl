@@ -212,11 +212,25 @@ end
 
 ########################################
 # CUBLAS
+using CUBLAS
+import CUDArt
 
-
-function Base.BLAS.gemm!{T, N}(transA::Char, transB::Char, alpha::T, A::CUArray{T, N}, B::CUArray{T, N}, beta::T, C::CUArray{T, N})
-    CUBLAS.gemm!(transA, transB, alpha, A, B, beta, C)
+function blasbuffer(ctx::CUContext, A)
+    buff = buffer(A)
+    devptr = pointer(buff)
+    device = CUDAdrv.device(devptr.ctx).handle
+    CUDArt.CudaArray(CUDArt.CudaPtr(devptr.ptr), size(A), Int(device))
 end
+
+function convert{T <: CUArray}(t::T, A::CUDArt.CudaArray)
+    ctx = context(t)
+    ptr = DevicePtr(context(t))
+    device = CUDAdrv.device(devptr.ctx).handle
+    CUDArt.CudaArray(CUDArt.CudaPtr(devptr.ptr), size(A), Int(device))
+    CuArray(size(A))
+end
+
+
 
 
 end
