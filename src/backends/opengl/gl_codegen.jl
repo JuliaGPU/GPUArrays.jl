@@ -62,7 +62,12 @@ function is_glslintrinsic(f::Symbol, types::ANY)
     func = eval(GLSLIntrinsics, f)
     # is there some other function like applicable working with types and not values?
     # could als be a try catch, I suppose
-    !isempty(code_lowered(func, types)), glsl_name(func)
+    try
+        return !isempty(code_lowered(func, types)), glsl_name(func)
+    catch e
+        println(STDERR, "failed to lower $func $types")
+        rethrow(e)
+    end
 end
 
 
@@ -73,7 +78,7 @@ end
 type GLSLIO <: ASTIO
     io
     vardecl
-    lambdainfo::LambdaInfo
+    lambdainfo
     slotnames
     dependencies::Vector
     types::Vector{String}
@@ -102,10 +107,11 @@ end
 function Base.show(io::GLSLIO, x::Float32)
     print(io, Float64(x))
 end
+using FixedSizeArrays
 
 function show_unquoted(io::GLSLIO, ex::GlobalRef, ::Int, ::Int)
     # TODO Why is Base.x suddenly == GPUArrays.GLBackend.x
-    if ex.mod == GLSLIntrinsics || ex.mod == GPUArrays.GLBackend
+    if ex.mod == GLSLIntrinsics || ex.mod == GPUArrays.GLBackend || ex.mod == FixedSizeArrays
         print(io, ex.name)
     else
         error("No non Intrinsic GlobalRef's for now!: $ex")
@@ -171,7 +177,9 @@ function show_unquoted(io::GLSLIO, slot::Slot, ::Int, ::Int)
 end
 
 
-
+function resolve_funcname{T <: Vec}(io::GLSLIO, ::Type{T})
+    T, glsl_name(T)
+end
 function resolve_funcname(io, f::GlobalRef)
     _f = eval(f)
     _f, f.name
@@ -283,7 +291,12 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
         func = args[1]
 
         typs = map(x-> get_type(io, x), args[2:end])
-        func_inst, fname = resolve_function(io, func, typs)
+        try
+            func_inst, fname = resolve_function(io, func, typs)
+        catch e
+            println(STDERR, "Failed to resolve $func $typs")
+            rethrow(e)
+        end
         # sadly we need to special case some type pirated special cases
         # TODO do this for all fixed vectors
         if fname == :getindex && nargs == 3 && first(typs) <: Vec
@@ -520,6 +533,7 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
         else
             error("What dis return? $ex")
         end
+    elseif head == :inbounds # ignore
     else
         println(ex)
         unsupported_expr(string(ex), line_number)
@@ -597,9 +611,9 @@ _glsl_name(x::Type{Float64}) = "float"
 _glsl_name(x::Type{Bool}) = "bool"
 
 # TODO this will be annoying on 0.6
-_glsl_name(x::typeof(gli.:(.*))) = "*"
-_glsl_name(x::typeof(gli.:(.<=))) = "lessThanEqual"
-_glsl_name(x::typeof(gli.:(.+))) = "+"
+_glsl_name(x::typeof(gli.:(*))) = "*"
+_glsl_name(x::typeof(gli.:(<=))) = "lessThanEqual"
+_glsl_name(x::typeof(gli.:(+))) = "+"
 
 function _glsl_name(f::Function)
     # Taken from base... #TODO make this more stable
@@ -706,13 +720,16 @@ function transpile(f, typs, parentio = nothing, main = true)
             rethrow(e)
         end
         li = Sugar.get_lambda(code_typed, f, typs)
-        slotnames = Base.lambdainfo_slotnames(li)
+        m = Sugar.get_method(f, typs)
+        nargs = m.nargs
+        slotnames = Base.sourceinfo_slotnames(li) # TODO make 0.5 compatible
         ret_type = Sugar.return_type(f, typs)
         io = IOBuffer()
         glslio = GLSLIO(io, li, slotnames)
         #println(glslio, "\n// $f$(join(typs, ", "))\n")
         vars = Sugar.slot_vector(li)
-        funcargs = vars[2:li.nargs]
+
+        funcargs = vars[2:nargs]
 
         show_name(glslio, ret_type)
         print(glslio, ' ')
@@ -727,10 +744,10 @@ function transpile(f, typs, parentio = nothing, main = true)
             show_name(glslio, T)
             print(glslio, ' ')
             show_name(glslio, name)
-            i != (li.nargs - 1) && print(glslio, ", ")
+            i != (nargs - 1) && print(glslio, ", ")
         end
         print(glslio, ')')
-        slots = filter(vars[(li.nargs+1):end]) do decl
+        slots = filter(vars[(nargs+1):end]) do decl
             var = decl[1]
             if isa(var, Slot)
                 glslio.vardecl[var] = true

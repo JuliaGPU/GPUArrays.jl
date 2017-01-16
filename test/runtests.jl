@@ -21,3 +21,10 @@ if is_backend_supported(:julia)
 else
     info("not testing julia backend")
 end
+if is_backend_supported(:opengl)
+    @testset "OpenGL backend" begin
+        include("opengl.jl")
+    end
+else
+    info("not testing opengl backend")
+end

@@ -10,6 +10,9 @@ function test(a, b)
     y = 33.0x + cos(b)
     y*10.0
 end
+A = GLArray(rand(Float32, 40, 40))
+B = test.(A, 10.0)
+GPUArrays.GLBackend._module_cache
 
 @testset "broadcast Float32" begin
     A = GLArray(rand(Float32, 40, 40))
@@ -22,13 +25,12 @@ end
     C = (*).(A, 10.0)
     @test all(x-> x == 20, Array(C))
 
-    #
-    # C = A .* 10f0
-    # @test all(x-> x == 20, Array(C))
-    # D = A .* B
-    # @test all(x-> x == jltest(0.5f0, 10f0) * 2, Array(D))
-    # D .= A .* B .+ 10f0
-    # @test all(x-> x == jltest(0.5f0, 10f0) * 2 + 10f0, Array(D))
+    C = A .* 10f0
+    @test all(x-> x == 20, Array(C))
+    D = A .* B
+    @test all(x-> x == jltest(0.5f0, 10f0) * 2, Array(D))
+    D .= A .* B .+ 10f0
+    @test all(x-> x == jltest(0.5f0, 10f0) * 2 + 10f0, Array(D))
 end
 #
 # function cu_angle(z)

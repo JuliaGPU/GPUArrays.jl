@@ -29,6 +29,7 @@ pirate_loot = Dict{Any, Any}(
 baremodule GLSLIntrinsics
 # GLSL heavily relies on fixed size vector operation, which is why a lot of
 # intrinsics need fixed size vectors.
+import Base
 import GeometryTypes
 import GeometryTypes: Vec
 import Base: Symbol, string, @noinline, Ptr, C_NULL, unsafe_load, @eval
@@ -62,11 +63,11 @@ sqrt{T <: Floats}(x::T) = ret(T)
 
 imageSize{T, N}(x::GLArray{T, N}) = ret(Vec{N, Int})
 
-(.<=){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, T}) = ret(Vec{N, Bool})
-(.*){N, T <: Numbers}(x::Vec{N, Bool}, y::Vec{N, T}) = ret(Vec{N, T})
-(.*){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, Bool}) = ret(Vec{N, T})
-(.*){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, T}) = ret(Vec{N, T})
-(.+){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, T}) = ret(Vec{N, T})
+(<=){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, T}) = ret(Vec{N, Bool})
+(*){N, T <: Numbers}(x::Vec{N, Bool}, y::Vec{N, T}) = ret(Vec{N, T})
+(*){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, Bool}) = ret(Vec{N, T})
+(*){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, T}) = ret(Vec{N, T})
+(+){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, T}) = ret(Vec{N, T})
 
 
 =={T <: Numbers}(x::T, y::T) = false
