@@ -59,7 +59,7 @@ function (p::ComputeProgram{Args}){Args}(args::Args, size::NTuple{3})
         bindlocation(args[i], i-1)
     end
     size = ntuple(Val{3}) do i
-        div(size[i], p.local_size[i])
+        ceil(Int, size[i] / p.local_size[i])
     end
     glDispatchCompute(size[1], size[2], size[3])
     return

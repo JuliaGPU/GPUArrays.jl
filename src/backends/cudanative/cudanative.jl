@@ -213,9 +213,14 @@ end
 ########################################
 # CUBLAS
 
+typealias CUVecOrMat{T} Union{CUArrayBuff{T, 1}, CUArrayBuff{T, 2}}
 
-function Base.BLAS.gemm!{T, N}(transA::Char, transB::Char, alpha::T, A::CUArray{T, N}, B::CUArray{T, N}, beta::T, C::CUArray{T, N})
-    CUBLAS.gemm!(transA, transB, alpha, A, B, beta, C)
+function Base.BLAS.gemm!(
+        transA::Char, transB::Char, alpha::Float32,
+        A::CUVecOrMat{Float32}, B::CUVecOrMat{Float32},
+        beta::Float32, C::CUVecOrMat{Float32}
+    )
+    CUBLAS.gemm!(transA, transB, alpha, buffer(A), buffer(B), beta, buffer(C))
 end
 
 
