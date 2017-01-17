@@ -201,14 +201,7 @@ function resolve_funcname(io, f::Expr)
         if f.head == :curly
             # TODO figure out what can go wrong here, since this seems fragile
             expr = Sugar.similar_expr(f)
-            expr.args = map(f.args) do arg
-                # TODO, can other static parameters beside literal values escape with code_typed, optimization = false?
-                if isa(arg, Expr) && arg.head == :static_parameter
-                    arg.args[1]
-                else
-                    arg
-                end
-            end
+            expr.args = f.args
             T = eval(expr)
             if haskey(pirate_loot, T)
                 return T, pirate_loot[T][1][2]
