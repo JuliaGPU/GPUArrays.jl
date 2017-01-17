@@ -50,6 +50,8 @@ end
 
 immutable GLArray{T, N} end
 
+# intrinsic fixed size Vector
+#immutable Vec{T <: Numbers, N} end
 
 imageStore{T}(x::GLArray{T, 1}, i::Integer, val::Vec{4, T}) = nothing
 imageStore{T, I <: Integer}(x::GLArray{T, 2}, i::Vec{2, I}, val::Vec{4, T}) = nothing
@@ -90,6 +92,7 @@ ivec2(x::Vec{3, UInt}) = ret(Vec{2, Int})
 ivec2(x::Vec{2, Int}) = ret(Vec{2, Int})
 ivec2(x::Vec{2, UInt}) = ret(Vec{2, Int})
 ivec2(x::Vec{2, Bool}) = ret(Vec{2, Int})
+ivec2(x::NTuple{2, Int}) = ret(Vec{2, Int})
 
 
 #######################################

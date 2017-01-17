@@ -140,6 +140,7 @@ function Base.show_call(io::GLSLIO, head, func, func_args, indent)
     end
 end
 
+
 function Base.show_unquoted(io::GLSLIO, ssa::SSAValue, ::Int, ::Int)
     # if not already declared, type the declaration location
     # TODO this quite likely won't work for all situations
@@ -161,7 +162,7 @@ function show_block(io::GLSLIO, head, args::Vector, body, indent::Int)
         print(io, "){")
     end
 
-    ind = is(head, :module) || is(head, :baremodule) ? indent : indent + indent_width
+    ind = head === :module || head === :baremodule ? indent : indent + indent_width
     exs = (is_expr(body, :block) || is_expr(body, :body)) ? body.args : Any[body]
     for (i, ex) in enumerate(exs)
         sep = i == 1 ? "" : ";"
@@ -248,7 +249,7 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
     line_number = 0 # TODO include line numbers
     head, args, nargs = ex.head, ex.args, length(ex.args)
     # dot (i.e. "x.y"), but not compact broadcast exps
-    if is(head, :(.)) && !is_expr(args[2], :tuple)
+    if head == :(.) && !is_expr(args[2], :tuple)
         show_unquoted(io, args[1], indent + indent_width)
         print(io, '.')
         if is_quoted(args[2])
@@ -260,7 +261,7 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
         end
 
     # infix (i.e. "x<:y" or "x = y")
-    elseif (head in expr_infix_any && nargs == 2) || (is(head, :(:)) && nargs == 3)
+    elseif (head in expr_infix_any && (nargs == 2) || (head == :(:)) && nargs == 3)
         func_prec = operator_precedence(head)
         head_ = head in expr_infix_wide ? " $head " : head
         if func_prec <= prec
@@ -291,12 +292,16 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
         func = args[1]
 
         typs = map(x-> get_type(io, x), args[2:end])
+        @show any(x-> x <: Vec, typs) typs
+        @show func typs
+        println("####################")
         try
             func_inst, fname = resolve_function(io, func, typs)
         catch e
             println(STDERR, "Failed to resolve $func $typs")
             rethrow(e)
         end
+
         # sadly we need to special case some type pirated special cases
         # TODO do this for all fixed vectors
         if fname == :getindex && nargs == 3 && first(typs) <: Vec
@@ -309,6 +314,13 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
                 show_unquoted(io, args[3])
                 print(io, ']')
             end
+            # special case broadcast to directly map to Vec intrinsics
+        elseif fname == :broadcast
+            @show any(x-> x <: Vec, typs) typs
+            f = args[2]
+            println("####################")
+            @show f
+            println("Broadcastfun: ", typs)
         else
             # TODO handle getfield
             func_prec = operator_precedence(fname)
@@ -396,11 +408,11 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
         print(io, " if ")
         show_unquoted(io, args[1], indent)
 
-    elseif is(head, :ccall)
+    elseif (head == :ccall)
         unsupported_expr("ccall", line_number)
 
     # comparison (i.e. "x < y < z")
-    elseif is(head, :comparison) && nargs >= 3 && (nargs & 1==1)
+elseif (head == :comparison) && nargs >= 3 && (nargs & 1==1)
         comp_prec = minimum(operator_precedence, args[2:2:end])
         if comp_prec <= prec
             show_enclosed_list(io, '(', args, " ", ')', indent, comp_prec)
@@ -424,12 +436,12 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
         show_block(io, head, args[1], args[2], indent)
         print(io, "}")
 
-    elseif is(head, :module) && nargs==3 && isa(args[1],Bool)
+    elseif (head == :module) && nargs==3 && isa(args[1],Bool)
         show_block(io, args[1] ? :module : :baremodule, args[2], args[3], indent)
         print(io, "}")
 
     # type declaration
-    elseif is(head, :type) && nargs==3
+elseif (head == :type) && nargs==3
         # TODO struct
         show_block(io, args[1] ? :type : :immutable, args[2], args[3], indent)
         print(io, "}")
@@ -675,7 +687,7 @@ function materialize_io(x::GLSLIO)
     for str in x.dependencies
         result_str *= str * "\n"
     end
-    string(result_str, '\n', takebuf_string(x.io))
+    string(result_str, '\n', String(take!(x.io)))
 end
 
 const global_identifier = "globalvar_"
@@ -771,7 +783,7 @@ function transpile(f, typs, parentio = nothing, main = true)
         expr = quote
             $(fname)($(typed_args...)) = ret($ret_type)
         end
-        str = takebuf_string(io)
+        str = String(take!(io))
         close(io)
         if parentio != nothing
             for dep in glslio.dependencies
