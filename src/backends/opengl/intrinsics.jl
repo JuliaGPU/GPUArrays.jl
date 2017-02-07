@@ -1,110 +1,163 @@
-# Pirate a type or function. This is needed, when an existing function/type
-# needs to be overwritten as an GLSL intrinsic. This only works if the
-# function has exactly the same signature.
-# usage: @pirate TargetType glsl_type or function
-# this will trigger the transpiler to replace that function type with the corresponding intrinsic
-# The results will be placed in pirate loot, which resolves a name to it's signatures
-# and from the signature to the glsl couterpart
-pirate_loot = Dict{Any, Any}(
-# TODO figure out if we should always use Float32 and default literals like 1.0 to 32bit
-# this seems to be annoying though, since it'll make it hard to use Float64
-    :Float32 => :float,
-    :Float64 => :double,
-    # We only ever translate to int32 in OpenGL, since 64 seem to be non existant
-    # TODO does it really have to be like this?
-    :Int32 => :int,
-    :Int64 => :int,
-    :^ => [(Number, Number) => :pow],
-    Vec{2, Int} => [
-        Tuple{Vec{3, Int}} => :ivec2,
-        Tuple{Vec{2, Bool}} => :ivec2,
-    ],
-    GlobalRef(Main, :Vec) => [Tuple{Float64, Float64, Float64, Float64} => :vec4],
-    :getindex => [Tuple{Vec, Integer} => :getindex]
-    #:(Vec{2, Int}) => :ivec2
+module GLSLIntrinsics
+
+prescripts = Dict(
+    Float32 => "",
+    Float64 => "d",
+    Int => "i",
+    Int32 => "i",
+    UInt => "u",
+    Bool => "b"
 )
 
 
+immutable GLArray{T, N} end
 
-baremodule GLSLIntrinsics
-# GLSL heavily relies on fixed size vector operation, which is why a lot of
-# intrinsics need fixed size vectors.
-import Base
-import GeometryTypes
-import GeometryTypes: Vec
-import Base: Symbol, string, @noinline, Ptr, C_NULL, unsafe_load, @eval
+function glsl_hygiene(sym)
+    # TODO unicode
+    # TODO figure out what other things are not allowed
+    # TODO startswith gl_, but allow variables that are actually valid inbuilds
+    x = string(sym)
+    x = replace(x, "#", "__")
+    x = replace(x, "!", "_bang")
+    if x == "out"
+        x = "_out"
+    end
+    if x == "in"
+        x = "_in"
+    end
+    x
+end
+
+glsl_name(x) = Symbol(glsl_hygiene(_glsl_name(x)))
+
+function _glsl_name(T)
+    str = if isa(T, Expr) && T.head == :curly
+        string(T, "_", join(T.args, "_"))
+    elseif isa(T, Symbol)
+        string(T)
+    elseif isa(T, Type)
+        str = string(T.name.name)
+        if !isempty(T.parameters)
+            str *= string("_", join(T.parameters, "_"))
+        end
+        str
+    else
+        error("Not transpilable: $(typeof(T))")
+    end
+    return str
+end
+
+function _glsl_name{T, N}(x::Type{GLArray{T, N}})
+    if !(N in (1, 2, 3))
+        # TODO, fake ND arrays with 1D array
+        error("GPUArray can't have more than 3 dimensions for now")
+    end
+    sz = glsl_sizeof(T)
+    len = glsl_length(T)
+    "image$(N)D$(len)x$(sz)_bindless"
+end
+function _glsl_name{N, T}(::Type{NTuple{N, T}})
+    string(prescripts[T], "vec", N)
+end
+function _glsl_name(::typeof(^))
+    "pow"
+end
+
+
+function _glsl_name(x::Union{AbstractString, Symbol})
+    x
+end
+_glsl_name(x::Type{Void}) = "void"
+_glsl_name(x::Type{Float64}) = "float"
+_glsl_name(x::Type{UInt}) = "uint"
+_glsl_name(x::Type{Bool}) = "bool"
+
+# TODO this will be annoying on 0.6
+# _glsl_name(x::typeof(gli.:(*))) = "*"
+# _glsl_name(x::typeof(gli.:(<=))) = "lessThanEqual"
+# _glsl_name(x::typeof(gli.:(+))) = "+"
+
+function _glsl_name{F <: Function}(f::Union{F, Type{F}})
+    # Taken from base... #TODO make this more stable
+    _glsl_name(F.name.mt.name)
+end
+
+
 
 # Number types
-import Base: Float64, Float32, Int64, Int32
 # Abstract types
-const Floats = Union{Float64, Float32}
-const Ints = Union{Int64, Int32}
-const Numbers = Union{Floats, Ints}
+# for now we use Int, more accurate would be Int32. But to make things simpler
+# we rewrite Int to Int32 implicitely like this!
+typealias int Int
+# same goes for float
+typealias float Float64
 
+typealias uint UInt
 
-# helper functions to trick inference into believing
-# ret is returning a value of type T. Must obviously not be called!
+const ints = (int, Int32, uint)
+const floats = (Float32, float)
+const numbers = (ints..., floats..., Bool)
+
+const Ints = Union{ints...}
+const Floats = Union{floats...}
+const Numbers = Union{numbers...}
+
+const functions = (
+    +, -, *, /, ^,
+    sin, tan, sqrt
+)
+
+const Functions = Union{map(typeof, functions)...}
+
+_vecs = []
+for i = 2:4, T in numbers
+    nvec = NTuple{i, T}
+    name = glsl_name(nvec)
+    push!(_vecs, nvec)
+    if !isdefined(name)
+        @eval typealias $name $nvec
+    end
+end
+
+const vecs = (_vecs...)
+const Vecs = Union{vecs...}
+const Types = Union{vecs..., numbers..., GLArray}
+
 @noinline function ret{T}(::Type{T})::T
     unsafe_load(Ptr{T}(C_NULL))
 end
 
-immutable GLArray{T, N} end
-
-# intrinsic fixed size Vector
-#immutable Vec{T <: Numbers, N} end
-
-imageStore{T}(x::GLArray{T, 1}, i::Integer, val::Vec{4, T}) = nothing
-imageStore{T, I <: Integer}(x::GLArray{T, 2}, i::Vec{2, I}, val::Vec{4, T}) = nothing
-
-imageLoad{T}(x::GLArray{T, 1}, i::Integer) = ret(Vec{4, T})
-imageLoad{T, I <: Integer}(x::GLArray{T, 2}, i::Vec{2, I}) = ret(Vec{4, T})
-
-cos{T <: Floats}(x::T) = ret(T)
-sin{T <: Floats}(x::T) = ret(T)
-sqrt{T <: Floats}(x::T) = ret(T)
-
-imageSize{T, N}(x::GLArray{T, N}) = ret(Vec{N, Int})
-
-(<=){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, T}) = ret(Vec{N, Bool})
-(*){N, T <: Numbers}(x::Vec{N, Bool}, y::Vec{N, T}) = ret(Vec{N, T})
-(*){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, Bool}) = ret(Vec{N, T})
-(*){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, T}) = ret(Vec{N, T})
-(+){N, T <: Numbers}(x::Vec{N, T}, y::Vec{N, T}) = ret(Vec{N, T})
-
-
-=={T <: Numbers}(x::T, y::T) = false
-+{T <: Numbers}(x::T, y::T) = ret(T)
-*{T <: Numbers}(x::T, y::T) = ret(T)
-/{T <: Numbers}(x::T, y::T) = ret(Base.promote_op(/, T, T))
-
-
-#######################################
-# type constructors
-
-# vecs
-for n in (2,3,4), (T, ps) in ((Float64, ""), (Int, "i"))
-    name = Symbol(string(ps, "vec", n))
-    @eval $name(x::$T, y::$T) = ret(Vec{$n, $T})
-
+# intrinsics not defined in Base need a function stub:
+for i = 2:4
+    @eval begin
+        function (::Type{NTuple{$i, T}}){T <: Numbers, N, T2 <: Numbers}(x::NTuple{N, T2})
+            ntuple(i-> T(x[i]), Val{$i})
+        end
+    end
 end
-ivec2(x::Vec{3, Int}) = ret(Vec{2, Int})
-ivec2(x::Vec{3, UInt}) = ret(Vec{2, Int})
-ivec2(x::Vec{2, Int}) = ret(Vec{2, Int})
-ivec2(x::Vec{2, UInt}) = ret(Vec{2, Int})
-ivec2(x::Vec{2, Bool}) = ret(Vec{2, Int})
-ivec2(x::NTuple{2, Int}) = ret(Vec{2, Int})
 
+imageStore{T}(x::GLArray{T, 1}, i::int, val::NTuple{4, T}) = nothing
+imageStore{T}(x::GLArray{T, 2}, i::ivec2, val::NTuple{4, T}) = nothing
+
+imageLoad{T}(x::GLArray{T, 1}, i::int) = ret(NTuple{4, T})
+imageLoad{T}(x::GLArray{T, 2}, i::ivec2) = ret(NTuple{4, T})
+imageSize{T, N}(x::GLArray{T, N}) = ret(NTuple{N, int})
+
+function is_intrinsic{F <: Function}(f::F, types)
+    t = (types.parameters...)
+    F <: Functions && all(T-> T <: Types, t) ||
+    isdefined(Symbol(f)) && length(methods(f, types)) == 1 # if any funtion stub matches
+end
 
 #######################################
 # globals
-
-const gl_GlobalInvocationID = Vec{3, UInt}(0,0,0)
+const gl_GlobalInvocationID = uvec3((0,0,0))
 
 end # end GLSLIntrinsics
 
-import .GLSLIntrinsics
-
+if !isdefined(:gli)
 const gli = GLSLIntrinsics
+end
 
 function GlobalInvocationID()
     gli.gl_GlobalInvocationID
@@ -117,23 +170,23 @@ function Base.getindex{T}(x::gli.GLArray{T, 1}, i::Integer)
     gli.imageLoad(x, i)
 end
 function Base.getindex{T}(x::gli.GLArray{T, 2}, i::Integer, j::Integer)
-    getindex(x, Vec(i, j))
+    getindex(x, (i, j))
 end
-function Base.getindex{T <: Number}(x::gli.GLArray{T, 2}, idx::Vec{2, Int})
+function Base.getindex{T <: Number}(x::gli.GLArray{T, 2}, idx::gli.ivec2)
     gli.imageLoad(x, idx)[1]
 end
 function Base.setindex!{T}(x::gli.GLArray{T, 1}, val::T, i::Integer)
-    gli.imageStore(x, i, Vec(val, val, val, val))
+    gli.imageStore(x, i, (val, val, val, val))
 end
 function Base.setindex!{T}(x::gli.GLArray{T, 2}, val::T, i::Integer, j::Integer)
-    setindex!(x, Vec(val, val, val, val), Vec(i, j))
+    setindex!(x, (val, val, val, val), (i, j))
 end
-function Base.setindex!{T}(x::gli.GLArray{T, 2}, val::T, idx::Vec{2, Int})
-    setindex!(x, Vec(val, val, val, val), idx)
+function Base.setindex!{T}(x::gli.GLArray{T, 2}, val::T, idx::gli.ivec2)
+    setindex!(x, (val, val, val, val), idx)
 end
-function Base.setindex!{T}(x::gli.GLArray{T, 2}, val::Vec{4, T}, idx::Vec{2, Int})
+function Base.setindex!{T}(x::gli.GLArray{T, 2}, val::NTuple{4, T}, idx::gli.ivec2)
     gli.imageStore(x, idx, val)
 end
-function Base.setindex!{T}(x::gli.GLArray{T, 1}, val::Vec{4, T}, i::Integer)
+function Base.setindex!{T}(x::gli.GLArray{T, 1}, val::NTuple{4, T}, i::Integer)
     gli.imageStore(x, i, val)
 end

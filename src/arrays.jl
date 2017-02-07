@@ -169,7 +169,9 @@ function Base.map!(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
     acc_broadcast!(f, A, (args...))
 end
 function Base.map(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
-    broadcast(f, A, (args...))
+    out = similar(typeof(A), typeof(f(map(x-> first(x), (A, args...))...)), size(A))
+    acc_broadcast!(f, out, (A, args...))
+    out
 end
 
 

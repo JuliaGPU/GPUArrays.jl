@@ -1,5 +1,5 @@
 # TODO move this in own package or some transpiler package
-using Sugar, GLAbstraction, GeometryTypes
+using Sugar
 
 import Base: indent_width, quoted_syms, uni_ops, expr_infix_wide, expr_infix_any
 import Base: all_ops, expr_calls, expr_parens, ExprNode, show_block
@@ -8,110 +8,23 @@ import Base: is_quoted, is_expr, TypedSlot, ismodulecall, is_intrinsic_expr
 import Base: show_generator, show_call, show_unquoted
 import Sugar: ssavalue_name, ASTIO, get_slottypename, get_type
 
-include("intrinsics.jl")
-
-
-"""
-Simple function to determine if an array of types matches any signature
-in `signatures`. Since the cases are simple, it should be fine to return first match
-"""
-function matches_signature(types, signatures)
-    for (sig, glsl) in signatures
-        (types <: sig) && return true, glsl
-    end
-    false, :nomatch
-end
-
-function is_glslintrinsic(f::Expr, types::ANY)
-    #is_glslintrinsic(eval(f), types)
-    if haskey(pirate_loot, f)
-        for (sig, funcname) in pirate_loot[f]
-            if matches_signature(sug, Tuple{types...})
-                return true, funcname
-            end
-        end
-        return false, f
-    else
-        is_glslintrinsic(eval(f), types)
-    end
-end
-
-function is_glslintrinsic{N, T}(f::Type{Vec{N, T}}, types::ANY)
-    true, Symbol(vecname(f))
-end
-function is_glslintrinsic(f::Function, types::ANY)
-    false, glsl_name(f)
-end
-function is_glslintrinsic(f::Symbol, types::ANY)
-    if f == :Vec
-        T = Sugar.return_type(Vec, types)
-        return true, glsl_name(T)
-    end
-    if haskey(pirate_loot, f)
-        pf = pirate_loot[f]
-        if isa(pf, Vector)
-            matches, glsl = matches_signature(Tuple{types...}, pf)
-            matches && return true, glsl
-            return false, f
-        else isa(pf, Symbol)
-            return true, pf
-        end
-    end
-
-    isdefined(GLSLIntrinsics, f) || return false, f
-    func = eval(GLSLIntrinsics, f)
-    # is there some other function like applicable working with types and not values?
-    # could als be a try catch, I suppose
-    try
-        return !isempty(code_lowered(func, types)), glsl_name(func)
-    catch e
-        println(STDERR, "failed to lower $func $types")
-        rethrow(e)
-    end
-end
-
-
-
-
-
-
-type GLSLIO <: ASTIO
-    io
-    vardecl
-    lambdainfo
-    slotnames
-    dependencies::Vector
-    types::Vector{String}
-end
-
-function GLSLIO(io, lambdainfo, slotnames)
-    GLSLIO(io, Dict(), lambdainfo, slotnames, [], String[])
+type GLSLIO{T <: IO} <: ASTIO
+    io::T
 end
 
 show_linenumber(io::GLSLIO, line)       = print(io, " // line ", line,':')
 show_linenumber(io::GLSLIO, line, file) = print(io, " // ", file, ", line ", line, ':')
 
-function Base.show_unquoted(io::GLSLIO, newvar::NewvarNode, ::Int, ::Int)
-    typ, name = get_slottypename(io, newvar.slot)
-    try
-        show_name(io, typ)
-        print(io, ' ')
-        show_name(io, name)
-    catch e
-        @show newvar typ name
-        rethrow(e)
-    end
-end
+
 
 # don't print f0 TODO this is a Float32 hack
 function Base.show(io::GLSLIO, x::Float32)
     print(io, Float64(x))
 end
-using FixedSizeArrays
 
 function show_unquoted(io::GLSLIO, ex::GlobalRef, ::Int, ::Int)
     # TODO Why is Base.x suddenly == GPUArrays.GLBackend.x
-    if ex.mod == GLSLIntrinsics || ex.mod == GPUArrays.GLBackend || ex.mod == FixedSizeArrays
+    if ex.mod == GLSLIntrinsics || ex.mod == GPUArrays.GLBackend
         print(io, ex.name)
     else
         error("No non Intrinsic GlobalRef's for now!: $ex")
@@ -129,7 +42,7 @@ function Base.show_call(io::GLSLIO, head, func, func_args, indent)
     if head == :(.)
         print(io, '.')
     end
-    if !isempty(func_args) && isa(func_args[1], Expr) && func_args[1].head === :parameters
+    if !isempty(func_args) && isa(func_args[1], Expr) && func_args[1].head == :parameters
         print(io, op)
         show_list(io, func_args[2:end], ',', indent)
         print(io, "; ")
@@ -142,13 +55,6 @@ end
 
 
 function Base.show_unquoted(io::GLSLIO, ssa::SSAValue, ::Int, ::Int)
-    # if not already declared, type the declaration location
-    # TODO this quite likely won't work for all situations
-    if !get(io.vardecl, ssa, false)
-        io.vardecl[ssa] = true
-        show_name(io, get_type(io, ssa))
-        print(io, ' ')
-    end
     print(io, Sugar.ssavalue_name(ssa))
 end
 
@@ -178,66 +84,6 @@ function show_unquoted(io::GLSLIO, slot::Slot, ::Int, ::Int)
 end
 
 
-function resolve_funcname{T <: Vec}(io::GLSLIO, ::Type{T})
-    T, glsl_name(T)
-end
-function resolve_funcname(io, f::GlobalRef)
-    _f = eval(f)
-    _f, f.name
-end
-function resolve_funcname(io, f::Symbol)
-    _f = eval(f)
-    _f, f
-end
-
-function resolve_funcname(io, slot::Slot)
-    typ, name = get_slottypename(io, slot)
-    f = typ.instance
-    f, Symbol(f)
-end
-
-function resolve_funcname(io, f::Expr)
-    try
-        if f.head == :curly
-            # TODO figure out what can go wrong here, since this seems fragile
-            expr = Sugar.similar_expr(f)
-            expr.args = f.args
-            T = eval(expr)
-            if haskey(pirate_loot, T)
-                return T, pirate_loot[T][1][2]
-            else
-                return T, Symbol(T)
-            end
-        end
-    catch e
-        println("Couldn't resolve $f")
-        rethrow(e)
-    end
-    error("$f not a func")
-end
-
-function resolve_function(io, f, typs)
-    func, fname = resolve_funcname(io, f)
-    intrinsic, intrfun = is_glslintrinsic(fname, typs)
-    if !intrinsic
-        if isa(func, Core.IntrinsicFunction)
-            warn("$f is intrinsic. Lets hope its intrinsic in OpenGL as well")
-        else
-            try
-                transpile(func, typs, io, false)
-            catch e
-                @show f typs
-                rethrow(e)
-            end
-        end
-        fname = glsl_name(func)
-    else
-        fname = intrfun
-    end
-    return func, fname
-end
-
-
 function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
     line_number = 0 # TODO include line numbers
     head, args, nargs = ex.head, ex.args, length(ex.args)
@@ -253,7 +99,13 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
             print(io, ')')
         end
 
+    # variable declaration TODO might this occure in normal code?
+    elseif head == :(::) && nargs == 2
+        show_name(io, args[2])
+        print(io, ' ')
+        show_name(io, args[1])
     # infix (i.e. "x<:y" or "x = y")
+
     elseif (head in expr_infix_any && (nargs == 2) || (head == :(:)) && nargs == 3)
         func_prec = operator_precedence(head)
         head_ = head in expr_infix_wide ? " $head " : head
@@ -282,38 +134,12 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
 
     # function call
     elseif head === :call && nargs >= 1
-        func = args[1]
-
-        typs = map(x-> get_type(io, x), args[2:end])
-        @show any(x-> x <: Vec, typs) typs
-        @show func typs
-        println("####################")
-        try
-            func_inst, fname = resolve_function(io, func, typs)
-        catch e
-            println(STDERR, "Failed to resolve $func $typs")
-            rethrow(e)
-        end
-
-        # sadly we need to special case some type pirated special cases
-        # TODO do this for all fixed vectors
-        if fname == :getindex && nargs == 3 && first(typs) <: Vec
-            show_unquoted(io, args[2]) # vec to be accessed
-            if isa(args[3], Integer) # special case for statically inferable
-                field = (:x, :y, :z, :w)[args[3]]
-                print(io, ".$field")
-            else
-                print(io, '[')
-                show_unquoted(io, args[3])
-                print(io, ']')
-            end
-            # special case broadcast to directly map to Vec intrinsics
-        elseif fname == :broadcast
-            @show any(x-> x <: Vec, typs) typs
-            f = args[2]
-            println("####################")
-            @show f
-            println("Broadcastfun: ", typs)
+        f = first(args)
+        fname = Symbol(f)
+        if fname == :getfield && nargs == 3
+            show_name(io, args[2]) # type to be accessed
+            print(io, '.')
+            show_name(io, args[3])
         else
             # TODO handle getfield
             func_prec = operator_precedence(fname)
@@ -375,37 +201,8 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
     elseif haskey(expr_calls, head) && nargs >= 1  # :ref/:curly/:calldecl/:(.)
         funcargslike = head == :(.) ? ex.args[2].args : ex.args[2:end]
         show_call(io, head, ex.args[1], funcargslike, indent)
-
-    # comprehensions
-    elseif (head === :typed_comprehension || head === :typed_dict_comprehension) && length(args) == 2
-        isdict = (head === :typed_dict_comprehension)
-        isdict && print(io, '(')
-        show_unquoted(io, args[1], indent)
-        isdict && print(io, ')')
-        print(io, '[')
-        show_generator(io, args[2], indent)
-        print(io, ']')
-
-    elseif (head === :comprehension || head === :dict_comprehension) && length(args) == 1
-        print(io, '[')
-        show_generator(io, args[1], indent)
-        print(io, ']')
-
-    elseif (head === :generator && length(args) >= 2) || (head === :flatten && length(args) == 1)
-        print(io, '(')
-        show_generator(io, ex, indent)
-        print(io, ')')
-
-    elseif head === :filter && length(args) == 2
-        show_unquoted(io, args[2], indent)
-        print(io, " if ")
-        show_unquoted(io, args[1], indent)
-
-    elseif (head == :ccall)
-        unsupported_expr("ccall", line_number)
-
     # comparison (i.e. "x < y < z")
-elseif (head == :comparison) && nargs >= 3 && (nargs & 1==1)
+    elseif (head == :comparison) && nargs >= 3 && (nargs & 1==1)
         comp_prec = minimum(operator_precedence, args[2:2:end])
         if comp_prec <= prec
             show_enclosed_list(io, '(', args, " ", ')', indent, comp_prec)
@@ -434,26 +231,26 @@ elseif (head == :comparison) && nargs >= 3 && (nargs & 1==1)
         print(io, "}")
 
     # type declaration
-elseif (head == :type) && nargs==3
+    elseif (head == :type) && nargs==3
         # TODO struct
         show_block(io, args[1] ? :type : :immutable, args[2], args[3], indent)
         print(io, "}")
 
-    elseif is(head, :bitstype) && nargs == 2
+    elseif head == :bitstype && nargs == 2
         unsupported_expr("Bitstype", line_number)
 
     # empty return (i.e. "function f() return end")
-    elseif is(head, :return) && nargs == 1 && is(args[1], nothing)
+    elseif head == :return && nargs == 1 && (args[1] === nothing)
         # ignore empty return
 
     # type annotation (i.e. "::Int")
-    elseif is(head, Symbol("::")) && nargs == 1
-        print(io, "::")
-        show_unquoted(io, args[1], indent)
+    elseif head == :(::) && nargs == 1
+        print(io, ' ')
+        show_name(io, args[1])
 
     # var-arg declaration or expansion
     # (i.e. "function f(L...) end" or "f(B...)")
-    elseif is(head, :(...)) && nargs == 1
+    elseif (head === :(...)) && nargs == 1
         show_unquoted(io, args[1], indent)
         print(io, "...")
 
@@ -465,50 +262,30 @@ elseif (head == :type) && nargs==3
         print(io, head, ' ')
         show_list(io, args, ", ", indent)
 
-    elseif is(head, :macrocall) && nargs >= 1
+    elseif (head === :macrocall) && nargs >= 1
         # Use the functional syntax unless specifically designated with prec=-1
         show_unquoted(io, expand(ex), indent)
 
-    elseif is(head, :typealias) && nargs == 2
+    elseif (head === :typealias) && nargs == 2
         print(io, "typealias ")
         show_list(io, args, ' ', indent)
 
-    elseif is(head, :line) && 1 <= nargs <= 2
+    elseif (head === :line) && 1 <= nargs <= 2
         show_linenumber(io, args...)
 
-    elseif is(head, :if) && nargs == 3     # if/else
+    elseif (head === :if) && nargs == 3     # if/else
         show_block(io, "if",   args[1], args[2], indent)
         show_block(io, "else", args[3], indent)
         print(io, "}")
 
-    elseif is(head, :try) && 3 <= nargs <= 4
-        unsupported_expr("try catch", line_number)
-
-    elseif is(head, :let) && nargs >= 1
+    elseif (head === :let) && nargs >= 1
         unsupported_expr("let", line_number)
 
-    elseif is(head, :block) || is(head, :body)
+    elseif (head === :block) || (head === :body)
         show_block(io, "", ex, indent); print(io, "}")
 
-    elseif is(head, :quote) && nargs == 1 && isa(args[1],Symbol)
-        unsupported_expr("Quoted expression", line_number)
 
-    elseif is(head, :gotoifnot) && nargs == 2
-        unsupported_expr("Gotoifnot", line_number)
-
-    elseif is(head, :string) && nargs == 1 && isa(args[1], AbstractString)
-        unsupported_expr("String type", line_number)
-
-    elseif is(head, :null)
-        print(io, "nothing")
-
-    elseif is(head, :kw) && length(args)==2
-        unsupported_expr("Keyword arguments", line_number)
-
-    elseif is(head, :string)
-        unsupported_expr("String", line_number)
-
-    elseif (is(head, :&)#= || is(head, :$)=#) && length(args) == 1
+    elseif ((head === :&)#= || (head === :$)=#) && length(args) == 1
         print(io, head)
         a1 = args[1]
         parens = (isa(a1, Expr) && a1.head !== :tuple) || (isa(a1,Symbol) && isoperator(a1))
@@ -516,17 +293,11 @@ elseif (head == :type) && nargs==3
         show_unquoted(io, a1)
         parens && print(io, ")")
 
-    # transpose
-    elseif (head === Symbol('\'') || head === Symbol(".'")) && length(args) == 1
-        unsupported_expr("Transpose", line_number)
 
-    elseif is(head, :import) || is(head, :importall) || is(head, :using)
-        unsupported_expr("imports", line_number)
-
-    elseif is(head, :meta)
+    elseif (head === :meta)
         # TODO, just ignore this? Log this? We definitely don't need it in GLSL
 
-    elseif is(head, :return)
+    elseif (head === :return)
         if length(args) == 1
             # return Void must not return anything in GLSL
             if get_type(io, args[1]) != Void
@@ -547,133 +318,17 @@ elseif (head == :type) && nargs==3
 end
 
 
-prescripts = Dict(
-    Float32 => "",
-    Float64 => "",
-    Int => "i",
-    Int32 => "i",
-    UInt => "u",
-    Bool => "b"
-)
-function glsl_hygiene(sym)
-    # TODO unicode
-    # TODO figure out what other things are not allowed
-    # TODO startswith gl_, but allow variables that are actually valid inbuilds
-    x = string(sym)
-    x = replace(x, "#", "__")
-    x = replace(x, "!", "_bang")
-    if x == "out"
-        x = "_out"
-    end
-    if x == "in"
-        x = "_in"
-    end
-    x
-end
+
+
 glsl_sizeof(T) = sizeof(T) * 8
 # for now we disallow Float64 and map it to Float32 -> super hack alert!!!!
 glsl_sizeof(::Type{Float64}) = 32
 glsl_length{T <: Number}(::Type{T}) = 1
 glsl_length(T) = length(T)
 
-glsl_name(x) = Symbol(glsl_hygiene(_glsl_name(x)))
-
-function _glsl_name(T)
-    str = if isa(T, Expr) && T.head == :curly
-        string(T, "_", join(T.args, "_"))
-    elseif isa(T, Symbol)
-        T
-    elseif isa(T, Type)
-        str = string(T.name.name)
-        if !isempty(T.parameters)
-            str *= string("_", join(T.parameters, "_"))
-        end
-        str
-    else
-        error("Not a type $T")
-    end
-    return str
-end
-
-function _glsl_name{T, N}(x::Type{gli.GLArray{T, N}})
-    if !(N in (1, 2, 3))
-        # TODO, fake ND arrays with 1D array
-        error("GPUArray can't have more than 3 dimensions for now")
-    end
-    sz = glsl_sizeof(T)
-    len = glsl_length(T)
-    "image$(N)D$(len)x$(sz)_bindless"
-end
-function _glsl_name{N, T}(::Type{Vec{N, T}})
-    string(prescripts[T], "vec", N)
-end
-
-function _glsl_name(x::Union{AbstractString, Symbol})
-    x
-end
-_glsl_name(x::Type{Void}) = "void"
-_glsl_name(x::Type{Float64}) = "float"
-_glsl_name(x::Type{Bool}) = "bool"
-
-# TODO this will be annoying on 0.6
-_glsl_name(x::typeof(gli.:(*))) = "*"
-_glsl_name(x::typeof(gli.:(<=))) = "lessThanEqual"
-_glsl_name(x::typeof(gli.:(+))) = "+"
-
-function _glsl_name(f::Function)
-    # Taken from base... #TODO make this more stable
-    _glsl_name(typeof(f).name.mt.name)
-end
-
-function show_name{T, N}(io::GLSLIO, x::Type{gli.GLArray{T, N}})
+function show_name(io::GLSLIO, x)
     print(io, glsl_name(x))
 end
-function show_name{N, T}(io::GLSLIO, x::Type{Vec{N, T}})
-    print(io, glsl_name(x))
-end
-
-show_name(io::GLSLIO, x::Type{Void}) = print(io, glsl_name(x))
-show_name(io::GLSLIO, x::Type{Float64}) = print(io, glsl_name(x))
-show_name(io::GLSLIO, x::Type{Bool}) = print(io, glsl_name(x))
-
-
-function show_name(io::GLSLIO, f::Function)
-    show_name(io, glsl_name(f))
-end
-function show_name(io::GLSLIO, x::Union{AbstractString, Symbol})
-    print(io, glsl_name(x))
-end
-
-function declare_type(T)
-    tname = glsl_name(T)
-    sprint() do io
-        print(io, "struct ", tname, "{\n")
-        fnames = fieldnames(T)
-        if isempty(fnames) # structs can't be empty
-            # we use bool as a short placeholder type.
-            # TODO, are there corner cases where bool is no good?
-            println(io, "bool empty;")
-        else
-            for name in fieldnames(T)
-                FT = fieldtype(T, name)
-                print(io, "    ", glsl_name(FT))
-                print(io, ' ')
-                print(io, name)
-                println(io, ';')
-            end
-        end
-        println(io, "};")
-    end
-end
-function show_name(io::GLSLIO, T::DataType)
-    tname = glsl_name(T)
-    if !get(io.vardecl, T, false)
-        push!(io.types, declare_type(T))
-        io.vardecl[T] = true
-    end
-    print(io, tname)
-end
-
 
 function materialize_io(x::GLSLIO)
     result_str = ""
@@ -717,9 +372,8 @@ function transpile(f, typs, parentio = nothing, main = true)
             end
         end
     else
-        local ast;
-        try
-            ast = Sugar.sugared(f, typs, code_typed)
+        ast = try
+            Sugar.sugared(f, typs, code_typed)
         catch e
             println("Failed to get code for $f $typs")
             rethrow(e)
