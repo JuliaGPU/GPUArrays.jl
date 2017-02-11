@@ -169,6 +169,13 @@ end
     end
 end
 
+
+###################
+# Blase interface
+
+blas_module(::CLContext) = CLBLAS
+
+
 end #CLBackend
 
 

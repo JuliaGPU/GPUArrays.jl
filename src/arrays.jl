@@ -6,6 +6,8 @@ type GPUArray{T, N, B, C} <: AbstractAccArray{T, N}
     context::C
 end
 
+
+
 function Base.similar{T <: GPUArray, ET, N}(
         ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
         context::Context = current_context(), kw_args...
@@ -26,7 +28,6 @@ AbstractArray interface
 
 Base.eltype{T}(::AbstractAccArray{T}) = T
 Base.size(A::AbstractAccArray) = A.size
-Base.size(A::AbstractAccArray, i::Int) = A.size[i]
 
 function Base.show(io::IO, mt::MIME"text/plain", A::AbstractAccArray)
     println(io, "GPUArray with ctx: $(context(A)): ")
@@ -98,16 +99,14 @@ end
 
 #Broadcast
 @generated function broadcast_index{T, N}(arg::AbstractArray{T, N}, shape, idx)
-    idx = ntuple(i->:(ifelse(s[$i] < shape[$i], 1, idx[$i])), N)
+    idx = ntuple(i->:(ifelse(s[$i] < shape[$i], 1, idx[$i])), Val{N})
     expr = quote
-        s = size(arg)::NTuple{N, Int}
-        @inbounds i = CartesianIndex{N}(($(idx...),)::NTuple{N, Int})
+        s = size(arg)
+        @inbounds i = CartesianIndex{N}(($(idx...),))
         @inbounds return arg[i]::T
     end
 end
-function broadcast_index{T}(arg::T, shape, idx)
-    arg::T
-end
+broadcast_index(arg, shape, idx) = arg
 
 
 
@@ -117,6 +116,20 @@ end
 # f::Function, Context, Main/Out::AccArray, args::NTuple{N}
 # All arrays are already lifted and shape checked
 function acc_broadcast! end
+
+if !isdefined(Base.Broadcast, :_broadcast_eltype)
+    eltypestuple(a) = (Base.@_pure_meta; Tuple{eltype(a)})
+    eltypestuple(T::Type) = (Base.@_pure_meta; Tuple{Type{T}})
+    eltypestuple(a, b...) = (Base.@_pure_meta; Tuple{eltypestuple(a).types..., eltypestuple(b...).types...})
+    _broadcast_eltype(f, A, Bs...) = Sugar.return_type(f, eltypestuple(A, Bs...))
+else
+    import Base.Broadcast._broadcast_eltype
+end
+
+function broadcast_similar(f, A, args)
+    T = _broadcast_eltype(f, A, args...)
+    similar(A, T)
+end
 
 # seems to be needed for ambiguities
 function Base.broadcast!(f::typeof(identity), A::AbstractAccArray, args::Number)
@@ -148,18 +161,18 @@ function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, 
 end
 
 function Base.broadcast(f::Function, A::AbstractAccArray)
-    out = similar(A)
+    out = broadcast_similar(f, A, ())
     acc_broadcast!(f, out, (A,))
     out
 end
 function Base.broadcast(f::Function, A::AbstractAccArray, B::Number)
-    out = similar(A)
+    out = broadcast_similar(f, A, B)
     acc_broadcast!(f, out, (A, B,))
     out
 end
 
 function Base.broadcast(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
-    out = similar(A)
+    out = broadcast_similar(f, A, args)
     acc_broadcast!(f, out, (A, args...))
     out
 end
@@ -169,11 +182,21 @@ function Base.map!(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
     acc_broadcast!(f, A, (args...))
 end
 function Base.map(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
-    out = similar(typeof(A), typeof(f(map(x-> first(x), (A, args...))...)), size(A))
+    out = broadcast_similar(f, A, args)
     acc_broadcast!(f, out, (A, args...))
     out
 end
 
+
+#############################
+# reduce
+
+function Base.mapreduce(f, op, v0, A::AbstractAccArray, B::AbstractAccArray, C::Number)
+    acc_mapreduce(f, op, v0, (A, B, C))
+end
+function Base.mapreduce(f, op, v0, A::AbstractAccArray, B::AbstractAccArray)
+    acc_mapreduce(f, op, v0, (A, B))
+end
 
 
 ############################################
@@ -186,3 +209,8 @@ end
 # function Base.rand{T <: AbstractAccArray, ET}(::Type{T}, ET, size...)
 #     T(rand(ET, size...))
 # end
+
+
+#################################
+# BLAS support
+include("blas.jl")

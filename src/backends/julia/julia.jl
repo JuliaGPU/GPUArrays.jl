@@ -3,7 +3,7 @@ module JLBackend
 using ..GPUArrays
 
 import GPUArrays: buffer, create_buffer, Context, AbstractAccArray
-import GPUArrays: broadcast_index, acc_broadcast!
+import GPUArrays: broadcast_index, acc_broadcast!, blas_module, blasbuffer
 
 import Base.Threads: @threads
 
@@ -34,6 +34,11 @@ let contexts = JLContext[]
 end
 Base.show(io::IO, ctx::JLContext) = print(io, "JLContext")
 
+# Implement BLAS interface
+function blasbuffer(ctx::JLContext, A)
+    Array(A)
+end
+blas_module(::JLContext) = Base.BLAS
 
 function (::Type{JLArray}){T, N}(A::Array{T, N})
     JLArray{T, N}(A, current_context())
@@ -57,7 +62,7 @@ for i = 0:7
     fargs = ntuple(x-> :(broadcast_index(args[$x], sz, idx)), i)
     fidxargs = ntuple(x-> :(args[$x]), i)
     @eval begin
-        function acc_broadcast!{F}(f::F, A::JLArray, args::NTuple{$i})
+        function acc_broadcast!{F}(f::F, A::JLArray, args::NTuple{$i, Any})
             n = length(A)
             sz = size(A)
             @threads for i = 1:n
@@ -66,47 +71,29 @@ for i = 0:7
             end
             return
         end
-        function mapidx{F}(f::F, data::JLArray, args::NTuple{$i})
+
+        function mapidx{F}(f::F, data::JLArray, args::NTuple{$i, Any})
             @threads for idx in eachindex(data)
                 f(idx, data, $(fidxargs...))
             end
         end
-    end
-end
-
-
-function Base.mapreduce(f, op, v0, A::JLArray, B::JLArray, C::Number)
-    n = Base.Threads.nthreads()
-    arr = Vector{typeof(op(v0, v0))}(n)
-    slice = ceil(Int, length(A) / n)
-    a, b = buffer(A), buffer(B)
-    @threads for i = 1:n
-        low = ((i-1) * slice) + 1
-        high = min(length(A), i * slice)
-        r = v0
-        for idx in low:high
-            r = op(r, f(a[idx], b[idx], C))
-        end
-        arr[i] = r
-    end
-    reduce(op, arr)
-end
-
-function Base.mapreduce(f, op, v0, A::JLArray, B::JLArray)
-    n = max(Base.Threads.nthreads(), 1)
-    arr = Vector{typeof(op(v0, v0))}(n)
-    slice = ceil(Int, length(A) / n)
-    a, b = buffer(A), buffer(B)
-    @threads for i = 1:n
-        low = ((i-1) * slice) + 1
-        high = min(length(A), i * slice)
-        arr[i] = mapreduce(op, v0, low:high) do idx
-            f(a[idx], b[idx])
+        function acc_mapreduce(f, op, v0, args::NTuple{$i, Any})
+            n = Base.Threads.nthreads()
+            arr = Vector{typeof(op(v0, v0))}(n)
+            slice = ceil(Int, length(A) / n)
+            @threads for i = 1:n
+                low = ((i-1) * slice) + 1
+                high = min(length(A), i * slice)
+                r = v0
+                for idx in low:high
+                    r = op(r, f($(fargs...)))
+                end
+                arr[i] = r
+            end
+            reduce(op, arr)
         end
     end
-    reduce(op, arr)
 end
-
 
 include("liftbase.jl")
 

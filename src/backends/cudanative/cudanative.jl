@@ -215,6 +215,8 @@ end
 using CUBLAS
 import CUDArt
 
+# implement blas interface
+blas_module(::CUContext) = CUBLAS
 function blasbuffer(ctx::CUContext, A)
     buff = buffer(A)
     devptr = pointer(buff)

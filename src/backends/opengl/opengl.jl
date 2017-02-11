@@ -162,4 +162,17 @@ function bindlocation(t::Function, i)
 end
 
 
+# implement BLAS backend
+
+function blas_module(A::GLContext)
+    if blas_supported(CLContext)
+        CUBLAS
+    elseif blas_supported(CUContext)
+        CUBLAS
+    else
+        BLAS # performance error ?!
+    end
+end
+
+
 end

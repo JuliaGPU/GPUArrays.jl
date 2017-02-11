@@ -4,10 +4,28 @@ import GPUArrays: JLBackend
 import JLBackend: JLArray
 JLBackend.init()
 
+A = JLArray(rand(33, 33))
+B = JLArray(rand(33, 33))
+C = A * B
+c = Array(C)
+@test c == Array(A) * Array(B)
+
+@testset "mapreduce" begin
+    @testset "inbuilds using mapreduce (sum maximum minimum prod)" begin
+        for dims in ((4048,), (1024,1024), (77,), (1923,209))
+            for T in (Float32, Int32)
+                A = JLArray(rand(T, dims))
+                @test sum(A) ≈ sum(Array(A))
+                @test maximum(A) ≈ maximum(Array(A))
+                @test minimum(A) ≈ minimum(Array(A))
+                @test prod(A) ≈ prod(Array(A))
+            end
+        end
+    end
+end
 
 @testset "broadcast Float32" begin
     A = JLArray(rand(Float32, 40, 40))
-
     A .= identity.(10f0)
     @test all(x-> x == 10, Array(A))
 

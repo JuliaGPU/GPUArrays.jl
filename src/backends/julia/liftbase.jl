@@ -36,6 +36,8 @@
 #         end
 #     end
 # end
+
+
 single_arg = (:fft, :fft!, :ifft, :ifft!)
 for f in single_arg
     # TODO, could we just be fine with being AbstractArray?

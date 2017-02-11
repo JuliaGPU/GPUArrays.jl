@@ -1,6 +1,7 @@
 module GPUArrays
 
 abstract Context
+using Sugar
 
 include("arrays.jl")
 export buffer, context
