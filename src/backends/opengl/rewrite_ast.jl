@@ -4,11 +4,14 @@
 # invalid julia AST. The idea is to remove more logick from the actual printing
 # to glsl string
 
-using Sugar, DataStructures
+using Sugar, DataStructures, GPUArrays
+import GPUArrays: GLBackend
 import Sugar: similar_expr, instance
 cd(Pkg.dir("GPUArrays", "src", "backends", "opengl"))
 include("intrinsics.jl")
+if !isdefined(:GLSLIO)
 include("gl_codegen.jl")
+end
 
 import gli: glsl_name
 
@@ -41,6 +44,7 @@ function rewrite_function(li, f::typeof(tuple), types::ANY, expr)
     expr.args[1] = glsl_name(expr.typ) # use returntype
     true, expr
 end
+
 
 function rewrite_function{F <: Function}(li, f::F, types::ANY, expr)
     intrinsic = gli.is_intrinsic(f, types)
@@ -129,6 +133,7 @@ function glsl_rewrite_pass(li, expr)
                     rethrow(e)
                 end
                 intrinsic, result = rewrite_function(li, f, types, similar_expr(expr, args))
+                @show intrinsic result
                 if !intrinsic
                     push!(li, (f, types))
                 end
@@ -143,7 +148,7 @@ function glsl_rewrite_pass(li, expr)
     first(list)
 end
 
-
+if !isdefined(:Transpiler)
 type Transpiler
     cache
     Transpiler() = new(Dict())
@@ -160,6 +165,7 @@ type Decl
     source::String
 
     Decl(signature, transpiler) = new(signature, transpiler, OrderedSet(), OrderedSet{Decl}())
+end
 end
 
 function Base.push!(decl::Decl, signature)
@@ -181,6 +187,7 @@ function getcodeinfo!(x::Decl)
     x.li
 end
 
+
 function getast!(x::Decl)
     if !isdefined(x, :ast)
         li = getcodeinfo!(x) # make sure codeinfo is present
@@ -193,20 +200,45 @@ function getast!(x::Decl)
     end
     x.ast
 end
+typename{T}(::Type{T}) = glsl_name(T)
+global operator_replacement
+let _operator_id = 0
+    const operator_replace_dict = Dict{Char, String}()
 
+    function operator_replacement(char)
+        get!(operator_replace_dict, char) do
+            _operator_id += 1
+            string("op", _operator_id)
+        end
+    end
+end
+function typename{T <: Function}(::Type{T})
+    x = string(T)
+    x = replace(x, ".", "_")
+    x = sprint() do io
+        for char in x
+            if Base.isoperator(Symbol(char))
+                print(io, operator_replacement(char))
+            else
+                print(io, char)
+            end
+        end
+    end
+    glsl_name(x)
+end
 function declare_type(T)
-    tname = glsl_name(T)
+    tname = typename(T)
     sprint() do io
         print(io, "struct ", tname, "{\n")
         fnames = fieldnames(T)
         if isempty(fnames) # structs can't be empty
             # we use bool as a short placeholder type.
-            # TODO, are there corner cases where bool is no good?
+            # TODO, are there cases where bool is no good?
             println(io, "bool empty;")
         else
             for name in fieldnames(T)
                 FT = fieldtype(T, name)
-                print(io, "    ", glsl_name(FT))
+                print(io, "    ", typename(FT))
                 print(io, ' ')
                 print(io, name)
                 println(io, ';')
@@ -270,3 +302,6 @@ decl = Decl((f, types), Transpiler())
 #ast = getsource!(decl)
 ast = getast!(decl)
 println(getsource!(decl))
+for elem in decl.dependencies
+    println(getsource!(elem))
+end

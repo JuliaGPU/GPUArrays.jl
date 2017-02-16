@@ -24,7 +24,7 @@ end
 
 function show_unquoted(io::GLSLIO, ex::GlobalRef, ::Int, ::Int)
     # TODO Why is Base.x suddenly == GPUArrays.GLBackend.x
-    if ex.mod == GLSLIntrinsics || ex.mod == GPUArrays.GLBackend
+    if ex.mod == GLSLIntrinsics# || ex.mod == GPUArrays.GLBackend
         print(io, ex.name)
     else
         error("No non Intrinsic GlobalRef's for now!: $ex")

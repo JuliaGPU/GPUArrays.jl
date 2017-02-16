@@ -12,11 +12,16 @@ prescripts = Dict(
 
 immutable GLArray{T, N} end
 
+
 function glsl_hygiene(sym)
     # TODO unicode
     # TODO figure out what other things are not allowed
     # TODO startswith gl_, but allow variables that are actually valid inbuilds
     x = string(sym)
+    # this seems pretty hacky! #TODO don't just ignore dots!!!!
+    # this is only fine right now, because most opengl intrinsics broadcast anyways
+    # but i'm sure this won't hold in general
+    x = replace(x, ".", "")
     x = replace(x, "#", "__")
     x = replace(x, "!", "_bang")
     if x == "out"
@@ -146,7 +151,7 @@ imageSize{T, N}(x::GLArray{T, N}) = ret(NTuple{N, int})
 function is_intrinsic{F <: Function}(f::F, types)
     t = (types.parameters...)
     F <: Functions && all(T-> T <: Types, t) ||
-    isdefined(Symbol(f)) && length(methods(f, types)) == 1 # if any funtion stub matches
+    (isdefined(GLSLIntrinsics, Symbol(f)) && length(methods(f, types)) == 1) # if any funtion stub matches
 end
 
 #######################################
@@ -189,4 +194,16 @@ function Base.setindex!{T}(x::gli.GLArray{T, 2}, val::NTuple{4, T}, idx::gli.ive
 end
 function Base.setindex!{T}(x::gli.GLArray{T, 1}, val::NTuple{4, T}, i::Integer)
     gli.imageStore(x, i, val)
+end
+
+####################################
+# Be a type pirate on 0.5!
+# We shall turn this package into 0.6 only, but 0.6 is broken right now
+# so that's why we need pirating!
+if VERSION < v"0.6"
+    Base.broadcast{N}(f, a::NTuple{N, Any}, b::NTuple{N, Any}) = map(f, a, b)
+    Base.broadcast{N}(f, a::NTuple{N, Any}) = map(f, a)
+    Base.:(.<=){N}(a::NTuple{N, Any}, b::NTuple{N, Any}) = map(<=, a, b)
+    Base.:(.*){N}(a::NTuple{N, Any}, b::NTuple{N, Any}) = map(*, a, b)
+    Base.:(.+){N}(a::NTuple{N, Any}, b::NTuple{N, Any}) = map(+, a, b)
 end
