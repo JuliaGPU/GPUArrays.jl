@@ -101,7 +101,7 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
 
     # variable declaration TODO might this occure in normal code?
     elseif head == :(::) && nargs == 2
-        show_name(io, args[2])
+        print(io, typename(args[2]))
         print(io, ' ')
         show_name(io, args[1])
     # infix (i.e. "x<:y" or "x = y")
@@ -320,11 +320,6 @@ end
 
 
 
-glsl_sizeof(T) = sizeof(T) * 8
-# for now we disallow Float64 and map it to Float32 -> super hack alert!!!!
-glsl_sizeof(::Type{Float64}) = 32
-glsl_length{T <: Number}(::Type{T}) = 1
-glsl_length(T) = length(T)
 
 function show_name(io::GLSLIO, x)
     print(io, glsl_name(x))
@@ -450,15 +445,16 @@ end
 function image_format{T, N}(x::Type{gli.GLArray{T, N}})
     "r32f"
 end
-function declare_global(io::GLSLIO, vars::Vector)
-    for (i, (slot, (name, typ))) in enumerate(vars)
+function declare_global(io::GLSLIO, vars::Expr)
+    for (i, expr) in enumerate(vars.args)
+        name, typ = expr.args
         if typ <: Function # special casing functions
             print(io, "const ")
-            show_name(io, typ)
+            print(io, typename(typ))
             print(io, ' ', global_identifier)
             show_name(io, name)
             print(io, " = ")
-            show_name(io, typ)
+            show_name(io, typename(typ))
             println(io, "(false);")
             continue
         end
@@ -474,10 +470,10 @@ function declare_global(io::GLSLIO, vars::Vector)
             "uniform image2D"
         else
             utyp = typ <: GLBuffer ? "in " : "uniform "
-            utyp * glsl_name(typ)
+            string(utyp, typename(typ))
         end
         print(io, tname, ' ')
-        show_name(io, global_identifier*name)
+        show_name(io, string(global_identifier, name))
         println(io, ';')
     end
 end

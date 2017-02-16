@@ -94,7 +94,7 @@ end
 #Broadcast
 function broadcast_index{T, N}(arg::gli.GLArray{T, N}, shape, idx)
     sz = size(arg)
-    i = Vec{N, Int}((sz .<= Vec{N, Int}(shape))) .* Vec{N, Int}(idx)
+    i = (sz .<= shape) .* idx
     return arg[i]
 end
 broadcast_index(arg, shape, idx) = arg
@@ -106,7 +106,7 @@ for N = 1:3
         fargs = ntuple(x-> :(broadcast_index($(args[x]), sz, idx)), i)
         @eval begin
             function broadcast_kernel{T}(A::gli.GLArray{T, $N}, f, $(args...))
-                idx = Vec{$N, Int}(GlobalInvocationID())
+                idx =  NTuple{2, Int}(GlobalInvocationID())
                 sz  = size(A)
                 A[idx] = f($(fargs...))
                 return

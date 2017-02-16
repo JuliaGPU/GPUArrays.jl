@@ -33,6 +33,13 @@ function glsl_hygiene(sym)
     x
 end
 
+
+glsl_sizeof(T) = sizeof(T) * 8
+# for now we disallow Float64 and map it to Float32 -> super hack alert!!!!
+glsl_sizeof(::Type{Float64}) = 32
+glsl_length{T <: Number}(::Type{T}) = 1
+glsl_length(T) = length(T)
+
 glsl_name(x) = Symbol(glsl_hygiene(_glsl_name(x)))
 
 function _glsl_name(T)

@@ -1,7 +1,7 @@
 using Sugar, GeometryTypes
 using GLWindow, GLAbstraction, ModernGL, Reactive, GLFW, GeometryTypes
 using FileIO
-include("gl_codegen.jl")
+include("rewrite_ast.jl")
 
 immutable ComputeProgram{Args <: Tuple}
     program::GLProgram
@@ -19,32 +19,38 @@ function add_deps!(io, deps, visited = Set())
         end
     end
 end
-function ComputeProgram{T}(f::Function, args::T)
+function ComputeProgram{T}(f::Function, args::T; local_size = (16, 16, 1))
     gltypes = to_glsl_types(args)
     get!(compiled_functions, (f, gltypes)) do # TODO make this faster
-        io, funcargs, f_string = transpile(f, gltypes)
-        local_size = (16, 16, 1)
+        decl = Decl((f, gltypes), Transpiler())
+
         # add compute program dependant infos
-        close(io.io)
-        io.io = IOBuffer()
+        io = GLSLIO(IOBuffer())
         print(io,
             "#version 430\n", # hardcode version for now #TODO don't hardcode :P
             "layout (local_size_x = 16, local_size_y = 16) in;\n", # same here
         )
-        cache = get_module_cache()
-        for typ in io.types
-            println(io, typ)
+        dependant_types = filter(istype, decl.dependencies)
+        dependant_funcs = filter(isfunction, decl.dependencies)
+        println(io, "// type declarations")
+        for typ in dependant_types
+            println(io, getsource!(typ))
         end
-        visited = Set()
-        add_deps!(io, io.dependencies)
-        println(io)
-        println(io, f_string)
-        declare_global(io, funcargs)
-        varnames = map(x-> string(global_identifier, x[2][1]), funcargs)
+        println(io, "// function declarations")
+        for func in dependant_funcs
+            println(io, getfuncsource!(func))
+        end
+        println(io, "// Main inner function")
+        println(io, getfuncsource!(decl))
+        funcargs = getfuncargs(decl)
+        using GLAbstraction
+        declare_global(io, getfuncargs(decl))
+
+        varnames = map(x-> string(global_identifier, x.args[1]), funcargs.args)
         print(io, "void main(){\n    ")
         show_name(io, f)
         print(io, "(", join(varnames, ", "), ");\n}")
-        shader = Shader(Symbol(f), takebuf_array(io.io), GL_COMPUTE_SHADER)
+        shader = Shader(Symbol(f), String(take!(io.io)), GL_COMPUTE_SHADER)
         program = GLAbstraction.compile_program([shader], [])
         ComputeProgram{T}(program, local_size)
     end::ComputeProgram{T}

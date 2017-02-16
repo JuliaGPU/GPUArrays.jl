@@ -163,11 +163,18 @@ type Decl
     method
     ast::Expr
     source::String
+    funcheader::String
 
     Decl(signature, transpiler) = new(signature, transpiler, OrderedSet(), OrderedSet{Decl}())
 end
 end
 
+function isfunction(x::Decl)
+    isa(x.signature, Tuple) && length(x.signature) == 2 && isa(x.signature[1], Function)
+end
+function istype(x::Decl)
+    isa(x.signature, DataType)
+end
 function Base.push!(decl::Decl, signature)
     push!(decl.dependencies, Decl(signature, decl.transpiler))
 end
@@ -249,7 +256,7 @@ function declare_type(T)
 end
 function getsource!(x::Decl)
     if !isdefined(x, :source)
-        if isa(x.signature, DataType)
+        if istype(x)
             x.source = declare_type(x.signature)
         else
             x.source = sprint() do io
@@ -260,6 +267,30 @@ function getsource!(x::Decl)
     x.source
 end
 
+function getfuncheader!(x::Decl)
+    @assert isfunction(x)
+    if !isdefined(x, :funcheader)
+        x.funcheader = sprint() do io
+            args = getfuncargs(x)
+            gio = GLSLIO(io)
+            print(gio, typename(returntype(x)))
+            print(gio, ' ')
+            show_name(gio, x.signature[1])
+            Base.show_unquoted(gio, args, 0, 0)
+        end
+    end
+    x.funcheader
+end
+function getfuncsource!(x::Decl)
+    string(getfuncheader!(x), "\n", getsource!(x))
+end
+function getfuncargs(x::Decl)
+    sn, st = slotnames(x), slottypes(x)
+    n = method_nargs(x)
+    Expr(:tuple, map(2:n) do i
+        :($(sn[i])::$(st[i]))
+    end...)
+end
 ssatypes(tp::Decl) = tp.li.ssavaluetypes
 slottypes(tp::Decl) = tp.li.slottypes
 slottype(tp::Decl, s::Slot) = slottypes(tp)[s.id]
@@ -268,6 +299,10 @@ slottype(tp::Decl, s::SSAValue) = ssatypes(tp)[s.id + 1]
 slotnames(tp::Decl) = tp.li.slotnames
 slotname(tp::Decl, s::Slot) = slotnames(tp)[s.id]
 slotname(tp::Decl, s::SSAValue) = Sugar.ssavalue_name(s)
+
+function returntype(x::Decl)
+    getcodeinfo!(x).rettype
+end
 
 if v"0.6" < VERSION
     function method_nargs(f::Decl)
@@ -280,28 +315,30 @@ else
         li.nargs
     end
 end
-
-function broadcast_index{T, N}(arg::gli.GLArray{T, N}, shape, idx)
-    sz = size(arg)
-    i = (sz .<= shape) .* idx
-    return arg[i]
-end
-broadcast_index(arg, shape, idx) = arg
-
-function broadcast_kernel{T}(A::gli.GLArray{T, 2}, f, a, b)
-    idx = NTuple{2, Int}(GlobalInvocationID())
-    sz = size(A)
-    A[idx] = f(
-        broadcast_index(a, sz, idx),
-        broadcast_index(b, sz, idx),
-    )
-    return
-end
-f, types = broadcast_kernel, (gli.GLArray{Float64, 2}, typeof(+), gli.GLArray{Float64, 2}, Float64)
-decl = Decl((f, types), Transpiler())
-#ast = getsource!(decl)
-ast = getast!(decl)
-println(getsource!(decl))
-for elem in decl.dependencies
-    println(getsource!(elem))
-end
+#
+# function broadcast_index{T, N}(arg::gli.GLArray{T, N}, shape, idx)
+#     sz = size(arg)
+#     i = (sz .<= shape) .* idx
+#     return arg[i]
+# end
+# broadcast_index(arg, shape, idx) = arg
+#
+# function broadcast_kernel{T}(A::gli.GLArray{T, 2}, f, a, b)
+#     idx = NTuple{2, Int}(GlobalInvocationID())
+#     sz = size(A)
+#     A[idx] = f(
+#         broadcast_index(a, sz, idx),
+#         broadcast_index(b, sz, idx),
+#     )
+#     return
+# end
+# f, types = broadcast_kernel, (gli.GLArray{Float64, 2}, typeof(+), gli.GLArray{Float64, 2}, Float64)
+# decl = Decl((f, types), Transpiler())
+# #ast = getsource!(decl)
+# ast = getast!(decl)
+# println(getsource!(decl))
+# for elem in decl.dependencies
+#     println(getsource!(elem))
+# end
+# lal = getcodeinfo!(decl)
+# println(getfuncsource!(decl))
