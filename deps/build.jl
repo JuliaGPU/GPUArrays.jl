@@ -59,8 +59,8 @@ end
 
 try
     using GLAbstraction, GLWindow
-    # we need at least OpenGL 4.3
-    ctx = create_glcontext("test", resolution = (10, 10), major = 4, minor = 3)
+    # we need at least OpenGL 4.1
+    ctx = create_glcontext("test", resolution = (10, 10), major = 4, minor = 1)
     if ctx.handle != C_NULL
         info("opengl added as backend.")
         push!(supported_backends, :opengl)

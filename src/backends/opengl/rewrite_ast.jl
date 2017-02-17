@@ -7,13 +7,9 @@
 using Sugar, DataStructures, GPUArrays
 import GPUArrays: GLBackend
 import Sugar: similar_expr, instance
-cd(Pkg.dir("GPUArrays", "src", "backends", "opengl"))
 include("intrinsics.jl")
-if !isdefined(:GLSLIO)
 include("gl_codegen.jl")
-end
 
-import gli: glsl_name
 
 
 function rewrite_function{T <: gli.Types}(li, f::Type{T}, types::ANY, expr)
@@ -148,7 +144,6 @@ function glsl_rewrite_pass(li, expr)
     first(list)
 end
 
-if !isdefined(:Transpiler)
 type Transpiler
     cache
     Transpiler() = new(Dict())
@@ -166,7 +161,6 @@ type Decl
     funcheader::String
 
     Decl(signature, transpiler) = new(signature, transpiler, OrderedSet(), OrderedSet{Decl}())
-end
 end
 
 function isfunction(x::Decl)
@@ -267,6 +261,24 @@ function getsource!(x::Decl)
     x.source
 end
 
+
+ssatypes(tp::Decl) = tp.li.ssavaluetypes
+slottypes(tp::Decl) = tp.li.slottypes
+slottype(tp::Decl, s::Slot) = slottypes(tp)[s.id]
+slottype(tp::Decl, s::SSAValue) = ssatypes(tp)[s.id + 1]
+
+slotnames(tp::Decl) = tp.li.slotnames
+slotname(tp::Decl, s::Slot) = slotnames(tp)[s.id]
+slotname(tp::Decl, s::SSAValue) = Sugar.ssavalue_name(s)
+
+function getfuncargs(x::Decl)
+    sn, st = slotnames(x), slottypes(x)
+    n = method_nargs(x)
+    Expr(:tuple, map(2:n) do i
+        :($(sn[i])::$(st[i]))
+    end...)
+end
+
 function getfuncheader!(x::Decl)
     @assert isfunction(x)
     if !isdefined(x, :funcheader)
@@ -284,21 +296,8 @@ end
 function getfuncsource!(x::Decl)
     string(getfuncheader!(x), "\n", getsource!(x))
 end
-function getfuncargs(x::Decl)
-    sn, st = slotnames(x), slottypes(x)
-    n = method_nargs(x)
-    Expr(:tuple, map(2:n) do i
-        :($(sn[i])::$(st[i]))
-    end...)
-end
-ssatypes(tp::Decl) = tp.li.ssavaluetypes
-slottypes(tp::Decl) = tp.li.slottypes
-slottype(tp::Decl, s::Slot) = slottypes(tp)[s.id]
-slottype(tp::Decl, s::SSAValue) = ssatypes(tp)[s.id + 1]
 
-slotnames(tp::Decl) = tp.li.slotnames
-slotname(tp::Decl, s::Slot) = slotnames(tp)[s.id]
-slotname(tp::Decl, s::SSAValue) = Sugar.ssavalue_name(s)
+
 
 function returntype(x::Decl)
     getcodeinfo!(x).rettype

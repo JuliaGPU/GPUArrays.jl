@@ -1,6 +1,7 @@
 using Sugar, GeometryTypes
 using GLWindow, GLAbstraction, ModernGL, Reactive, GLFW, GeometryTypes
 using FileIO
+
 include("rewrite_ast.jl")
 
 immutable ComputeProgram{Args <: Tuple}
@@ -43,7 +44,6 @@ function ComputeProgram{T}(f::Function, args::T; local_size = (16, 16, 1))
         println(io, "// Main inner function")
         println(io, getfuncsource!(decl))
         funcargs = getfuncargs(decl)
-        using GLAbstraction
         declare_global(io, getfuncargs(decl))
 
         varnames = map(x-> string(global_identifier, x.args[1]), funcargs.args)
