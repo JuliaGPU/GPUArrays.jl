@@ -167,9 +167,11 @@ const gl_GlobalInvocationID = uvec3((0,0,0))
 
 end # end GLSLIntrinsics
 
-if !isdefined(:gli)
+
+using .GLSLIntrinsics
+
 const gli = GLSLIntrinsics
-end
+import .gli: glsl_name
 
 function GlobalInvocationID()
     gli.gl_GlobalInvocationID
