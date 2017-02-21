@@ -3,15 +3,43 @@ using Base.Test
 import GPUArrays: GLBackend
 import GLBackend: GLArray
 glctx = GLBackend.init()
+# using Sugar
+# ast = Sugar.sugared(GLBackend.broadcast_index,
+#     (GLBackend.gli.GLArray{Float32, 2}, NTuple{Int, 2}, NTuple{Int, 2}),
+#     code_lowered
+# )
 
 # more complex function for broadcast
-function test(a, b)
-    x = sqrt(sin(a) * b) / 10.0
-    y = 33.0x + cos(b)
-    y*10.0
+function test{T}(a::T, b)
+    x = sqrt(sin(a) * b) / T(10.0)
+    y = T(33.0)x + cos(b)
+    y*T(10.0)
 end
-A = GLArray(rand(Float32, 40, 40))
-B = test.(A, 10.0)
+
+A = GLArray(rand(Float32, 40, 40));
+B = test.(A, 10f0)
+decl = GLBackend.Decl((GLBackend.broadcast_kernel, (GLBackend.gli.GLArray{Float32, 2}, typeof(test), GLBackend.gli.GLArray{Float32, 2}, Float32)), GLBackend.Transpiler())
+println(GLBackend.getfuncsource!(decl))
+for elem in GLBackend.dependencies!(decl)
+    println(GLBackend.getsource!(elem))
+end
+using ModernGL
+str = """
+#version 440
+layout (local_size_x = 16, local_size_y = 16) in;
+struct Test
+{
+    bool empty;
+};
+void kernel(layout (r32f) image2D x, Test arg1)
+{
+}"""
+GLAbstraction.compile_shader(Vector{UInt8}(str), GL_COMPUTE_SHADER, :test)
+
+ast = Sugar.sugared(getindex,
+    (GLBackend.gli.GLArray{Float32, 2}, NTuple{Int, 2}, NTuple{Int, 2}),
+    code_lowered
+)
 
 @testset "broadcast Float32" begin
     A = GLArray(rand(Float32, 40, 40))

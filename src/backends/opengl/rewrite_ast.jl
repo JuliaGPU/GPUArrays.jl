@@ -11,7 +11,7 @@ include("intrinsics.jl")
 include("gl_codegen.jl")
 
 
-
+# constructors... #TODO refine input types
 function rewrite_function{T <: gli.Types}(li, f::Type{T}, types::ANY, expr)
     expr.args[1] = glsl_name(T)
     true, expr
@@ -24,7 +24,7 @@ function rewrite_function{T <: gli.Vecs, I <: gli.int}(
     idx = expr.args[3]
     if isa(idx, Integer) # if value is inlined
         field = (:x, :y, :z, :w)[idx]
-        return true, Expr(:call, :getfield, expr.args[2], QuoteNode(field))
+        return true, Expr(:call, :getfield, expr.args[2], field)
     end
     true, expr
 end
@@ -79,6 +79,10 @@ function resolve_func(li, slot::Slot)
     instance(expr_type(li, slot))
 end
 function resolve_func(li, f::Expr)
+    @show f
+    if f.head == :static_parameter
+        return staticparam(li, f)
+    end
     try
         # TODO figure out what can go wrong here, since this seems rather fragile
         return eval(f)
@@ -102,11 +106,11 @@ _expr_type(li, slot::Union{Slot, SSAValue}) = slottype(li, slot)
 
 function glsl_rewrite_pass(li, expr)
     list = Sugar.replace_expr(expr) do expr
-
         if isa(expr, Slot)
             return true, slotname(li, expr)
+        elseif isa(expr, QuoteNode)
+            true, expr.value
         elseif isa(expr, Expr)
-
             args, head = expr.args, expr.head
             if head == :(=)
                 lhs = args[1]
@@ -122,14 +126,14 @@ function glsl_rewrite_pass(li, expr)
             elseif head == :call
                 func = args[1]
                 types = Tuple{map(x-> expr_type(li, x), args[2:end])...}
-                f = try
-                     resolve_func(li, func)
+                 intrinsic, result, f = try
+                    f = resolve_func(li, func)
+                    intrinsic, result = rewrite_function(li, f, types, similar_expr(expr, args))
+                    intrinsic, result, f
                 catch e
                     println(STDERR, "Failed to resolve $func $types")
                     rethrow(e)
                 end
-                intrinsic, result = rewrite_function(li, f, types, similar_expr(expr, args))
-                @show intrinsic result
                 if !intrinsic
                     push!(li, (f, types))
                 end
@@ -162,12 +166,19 @@ type Decl
 
     Decl(signature, transpiler) = new(signature, transpiler, OrderedSet(), OrderedSet{Decl}())
 end
+import Base: ==
+Base.hash(x::Decl, h::UInt64) = hash(x.signature, h)
+==(x::Decl, y::Decl) = x.signature == y.signature
+
 
 function isfunction(x::Decl)
     isa(x.signature, Tuple) && length(x.signature) == 2 && isa(x.signature[1], Function)
 end
 function istype(x::Decl)
     isa(x.signature, DataType)
+end
+function Base.push!(decl::Decl, x::Decl)
+    push!(decl.dependencies, x)
 end
 function Base.push!(decl::Decl, signature)
     push!(decl.dependencies, Decl(signature, decl.transpiler))
@@ -193,10 +204,16 @@ function getast!(x::Decl)
     if !isdefined(x, :ast)
         li = getcodeinfo!(x) # make sure codeinfo is present
         nargs = method_nargs(x)
-        for i in 2:nargs # make sure func args don't get redeclared
-            push!(x.decls, SlotNumber(i))
-        end
         expr = Sugar.sugared(x.signature..., code_typed)
+        st = slottypes(x)
+        for (i, T) in enumerate(st)
+            slot = SlotNumber(i)
+            push!(x.decls, slot)
+            if i > nargs # if not defined in arguments, define in body
+                name = slotname(x, slot)
+                unshift!(expr.args, :($name::$T))
+            end
+        end
         x.ast = glsl_rewrite_pass(x, expr)
     end
     x.ast
@@ -262,21 +279,31 @@ function getsource!(x::Decl)
 end
 
 
-ssatypes(tp::Decl) = tp.li.ssavaluetypes
-slottypes(tp::Decl) = tp.li.slottypes
+ssatypes(tp::Decl) = getcodeinfo!(tp).ssavaluetypes
+slottypes(tp::Decl) =  getcodeinfo!(tp).slottypes
 slottype(tp::Decl, s::Slot) = slottypes(tp)[s.id]
 slottype(tp::Decl, s::SSAValue) = ssatypes(tp)[s.id + 1]
 
-slotnames(tp::Decl) = tp.li.slotnames
-slotname(tp::Decl, s::Slot) = slotnames(tp)[s.id]
+function slotnames(tp::Decl)
+    map(enumerate(getcodeinfo!(tp).slotnames)) do iname
+        i, name = iname
+        if name == Symbol("#temp#")
+            return Symbol(string("xxtempx", i)) # must be made unique
+        end
+        name
+    end
+end
+function slotname(tp::Decl, s::Slot)
+    slotnames(tp)[s.id]
+end
 slotname(tp::Decl, s::SSAValue) = Sugar.ssavalue_name(s)
 
 function getfuncargs(x::Decl)
     sn, st = slotnames(x), slottypes(x)
     n = method_nargs(x)
-    Expr(:tuple, map(2:n) do i
+    map(2:n) do i
         :($(sn[i])::$(st[i]))
-    end...)
+    end
 end
 
 function getfuncheader!(x::Decl)
@@ -288,16 +315,27 @@ function getfuncheader!(x::Decl)
             print(gio, typename(returntype(x)))
             print(gio, ' ')
             show_name(gio, x.signature[1])
-            Base.show_unquoted(gio, args, 0, 0)
+            Base.show_enclosed_list(gio, '(', args, ", ", ')', 0, 0)
         end
     end
     x.funcheader
 end
+
 function getfuncsource!(x::Decl)
     string(getfuncheader!(x), "\n", getsource!(x))
 end
 
-
+function dependencies!(x::Decl)
+    if isfunction(x)
+        getast!(x) # make sure it walks the ast
+    else
+        # TODO add all dependant types of a type
+        # for name in fieldnames(x.signature)
+        #     FT = fieldtype(T, name)
+        # end
+    end
+    x.dependencies
+end
 
 function returntype(x::Decl)
     getcodeinfo!(x).rettype
@@ -339,5 +377,6 @@ end
 # for elem in decl.dependencies
 #     println(getsource!(elem))
 # end
+# length(filter(isfunction, decl.dependencies))
 # lal = getcodeinfo!(decl)
 # println(getfuncsource!(decl))

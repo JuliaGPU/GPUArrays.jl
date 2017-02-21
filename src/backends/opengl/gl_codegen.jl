@@ -21,14 +21,17 @@ show_linenumber(io::GLSLIO, line, file) = print(io, " // ", file, ", line ", lin
 function Base.show(io::GLSLIO, x::Float32)
     print(io, Float64(x))
 end
+function Base.show_unquoted(io::IO, sym::Symbol, ::Int, ::Int)
+    print(io, Symbol(gli.glsl_hygiene(sym)))
+end
 
 function show_unquoted(io::GLSLIO, ex::GlobalRef, ::Int, ::Int)
     # TODO Why is Base.x suddenly == GPUArrays.GLBackend.x
-    if ex.mod == GLSLIntrinsics# || ex.mod == GPUArrays.GLBackend
+    #if ex.mod == GLSLIntrinsics# || ex.mod == GPUArrays.GLBackend
         print(io, ex.name)
-    else
-        error("No non Intrinsic GlobalRef's for now!: $ex")
-    end
+    #else
+    #    error("No non Intrinsic GlobalRef's for now!: $ex")
+    #end
 end
 # show a normal (non-operator) function call, e.g. f(x,y) or A[z]
 function Base.show_call(io::GLSLIO, head, func, func_args, indent)
@@ -44,12 +47,12 @@ function Base.show_call(io::GLSLIO, head, func, func_args, indent)
     end
     if !isempty(func_args) && isa(func_args[1], Expr) && func_args[1].head == :parameters
         print(io, op)
-        show_list(io, func_args[2:end], ',', indent)
+        show_list(io, func_args[2:end], ", ", indent)
         print(io, "; ")
-        show_list(io, func_args[1].args, ',', indent)
+        show_list(io, func_args[1].args, ", ", indent)
         print(io, cl)
     else
-        show_enclosed_list(io, op, func_args, ",", cl, indent)
+        show_enclosed_list(io, op, func_args, ", ", cl, indent)
     end
 end
 
@@ -137,9 +140,9 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
         f = first(args)
         fname = Symbol(f)
         if fname == :getfield && nargs == 3
-            show_name(io, args[2]) # type to be accessed
+            show_unquoted(io, args[2], indent) # type to be accessed
             print(io, '.')
-            show_name(io, args[3])
+            show_unquoted(io, args[3], indent)
         else
             # TODO handle getfield
             func_prec = operator_precedence(fname)
@@ -275,7 +278,7 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
 
     elseif (head === :if) && nargs == 3     # if/else
         show_block(io, "if",   args[1], args[2], indent)
-        show_block(io, "else", args[3], indent)
+        show_block(io, "} else", args[3], indent)
         print(io, "}")
 
     elseif (head === :let) && nargs >= 1
@@ -300,7 +303,7 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
     elseif (head === :return)
         if length(args) == 1
             # return Void must not return anything in GLSL
-            if get_type(io, args[1]) != Void
+            if !((isa(args[1], Expr) && args[1].typ == Void) || args[1] == nothing)
                 print(io, "return ")
             end
             show_unquoted(io, args[1])
@@ -445,8 +448,8 @@ end
 function image_format{T, N}(x::Type{gli.GLArray{T, N}})
     "r32f"
 end
-function declare_global(io::GLSLIO, vars::Expr)
-    for (i, expr) in enumerate(vars.args)
+function declare_global(io::GLSLIO, vars)
+    for (i, expr) in enumerate(vars)
         name, typ = expr.args
         if typ <: Function # special casing functions
             print(io, "const ")

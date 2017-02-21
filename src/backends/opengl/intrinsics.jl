@@ -2,7 +2,7 @@ module GLSLIntrinsics
 
 prescripts = Dict(
     Float32 => "",
-    Float64 => "d",
+    Float64 => "", # ignore float64 for now
     Int => "i",
     Int32 => "i",
     UInt => "u",
@@ -22,7 +22,7 @@ function glsl_hygiene(sym)
     # this is only fine right now, because most opengl intrinsics broadcast anyways
     # but i'm sure this won't hold in general
     x = replace(x, ".", "")
-    x = replace(x, "#", "__")
+    x = replace(x, "#", "x")
     x = replace(x, "!", "_bang")
     if x == "out"
         x = "_out"
@@ -42,6 +42,7 @@ glsl_length(T) = length(T)
 
 glsl_name(x) = Symbol(glsl_hygiene(_glsl_name(x)))
 
+_glsl_name(T::QuoteNode) = _glsl_name(T.value)
 function _glsl_name(T)
     str = if isa(T, Expr) && T.head == :curly
         string(T, "_", join(T.args, "_"))
@@ -54,7 +55,7 @@ function _glsl_name(T)
         end
         str
     else
-        error("Not transpilable: $(typeof(T))")
+        error("Not transpilable: $T")
     end
     return str
 end
@@ -66,7 +67,12 @@ function _glsl_name{T, N}(x::Type{GLArray{T, N}})
     end
     sz = glsl_sizeof(T)
     len = glsl_length(T)
-    "image$(N)D$(len)x$(sz)_bindless"
+    if is_windows()
+        qualifiers = ["r32f"]
+        string("layout (", join(qualifiers, ", "), ") image$(N)D")
+    else
+        "image$(N)D$(len)x$(sz)_bindless"
+    end
 end
 function _glsl_name{N, T}(::Type{NTuple{N, T}})
     string(prescripts[T], "vec", N)
@@ -81,6 +87,9 @@ function _glsl_name(x::Union{AbstractString, Symbol})
 end
 _glsl_name(x::Type{Void}) = "void"
 _glsl_name(x::Type{Float64}) = "float"
+_glsl_name(x::Type{Float32}) = "float"
+_glsl_name(x::Type{Int}) = "int"
+_glsl_name(x::Type{Int32}) = "int"
 _glsl_name(x::Type{UInt}) = "uint"
 _glsl_name(x::Type{Bool}) = "bool"
 
@@ -115,8 +124,8 @@ const Floats = Union{floats...}
 const Numbers = Union{numbers...}
 
 const functions = (
-    +, -, *, /, ^,
-    sin, tan, sqrt
+    +, -, *, /, ^, <=, .<=,
+    sin, tan, sqrt, cos
 )
 
 const Functions = Union{map(typeof, functions)...}
@@ -157,8 +166,13 @@ imageSize{T, N}(x::GLArray{T, N}) = ret(NTuple{N, int})
 
 function is_intrinsic{F <: Function}(f::F, types)
     t = (types.parameters...)
-    F <: Functions && all(T-> T <: Types, t) ||
-    (isdefined(GLSLIntrinsics, Symbol(f)) && length(methods(f, types)) == 1) # if any funtion stub matches
+    sym = first(methods(f)).name
+    (F <: Functions && all(T-> T <: Types, t)) || (
+        # if any intrinsic funtion stub matches
+        isdefined(GLSLIntrinsics, sym) &&
+        Base.binding_module(GLSLIntrinsics, sym) == GLSLIntrinsics &&
+        length(methods(f, types)) == 1
+    )
 end
 
 #######################################
@@ -196,7 +210,7 @@ function Base.setindex!{T}(x::gli.GLArray{T, 2}, val::T, i::Integer, j::Integer)
     setindex!(x, (val, val, val, val), (i, j))
 end
 function Base.setindex!{T}(x::gli.GLArray{T, 2}, val::T, idx::gli.ivec2)
-    setindex!(x, (val, val, val, val), idx)
+    gli.imageStore(x, idx, (val, val, val, val))
 end
 function Base.setindex!{T}(x::gli.GLArray{T, 2}, val::NTuple{4, T}, idx::gli.ivec2)
     gli.imageStore(x, idx, val)

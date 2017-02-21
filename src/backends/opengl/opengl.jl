@@ -92,10 +92,15 @@ end
 # Broadcast
 
 #Broadcast
-function broadcast_index{T, N}(arg::gli.GLArray{T, N}, shape, idx)
-    sz = size(arg)
-    i = (sz .<= shape) .* idx
-    return arg[i]
+@generated function broadcast_index{T, N}(arg::gli.GLArray{T, N}, shape, idx)
+    iexpr = Expr(:tuple)
+    for i = 1:N
+        push!(iexpr.args, :(sz[$i] <= shape[$i] ? idx[$i] : 1))
+    end
+    quote
+        sz = size(arg)
+        arg[$iexpr]
+    end
 end
 broadcast_index(arg, shape, idx) = arg
 
