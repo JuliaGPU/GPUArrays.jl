@@ -7,6 +7,7 @@ import CUDAdrv, CUDArt #, CUFFT
 
 import GPUArrays: buffer, create_buffer, acc_broadcast!
 import GPUArrays: Context, GPUArray, context, broadcast_index
+using CUDAdrv: CuDefaultStream
 
 immutable GraphicsResource{T}
     glbuffer::T
@@ -28,8 +29,8 @@ function any_context()
 end
 
 #typealias GLArrayImg{T, N} GPUArray{T, N, gl.Texture{T, N}, GLContext}
-typealias CUArray{T, N, B} GPUArray{T, N, B, CUContext} #, GLArrayImg{T, N}}
-typealias CUArrayBuff{T, N} CUArray{T, N, CUDAdrv.CuArray{T, N}}
+const CUArray{T, N, B} = GPUArray{T, N, B, CUContext} #, GLArrayImg{T, N}}
+const CUArrayBuff{T, N} = CUArray{T, N, CUDAdrv.CuArray{T, N}}
 
 
 global init, all_contexts, current_context
@@ -68,9 +69,9 @@ end
     (blockIdx().x-1) * blockDim().x + threadIdx().x
 end
 @inline function map_eachindex_kernel{N}(A, f, args::Vararg{N})
-    i = (blockIdx().x-1) * blockDim().x + threadIdx().x
+    i = linear_index()
     if length(A) >= i
-        f(CartesianIndex(ind2sub(size(A), Int(i))), A, args...)
+        f(ind2sub(size(A), i), A, args...)
     end
     nothing
 end
@@ -97,18 +98,18 @@ for i=0:10
     fargs = ntuple(x-> :(broadcast_index($(args[x]), sz, idx)), i)
     @eval begin
         function broadcast_kernel(A, f, $(args...))
-            i = Int((blockIdx().x-1) * blockDim().x + threadIdx().x)
+            i = linear_index()
             @inbounds if i <= length(A)
                 sz = size(A)
-                idx = CartesianIndex(ind2sub(sz, Int(i)))
-                A[idx] = f($(fargs...))
+                idx = ind2sub(sz, i)
+                A[i] = f($(fargs...))
             end
             nothing
         end
     end
 end
 
-function acc_broadcast!{F <: Function, N}(f::F, A::CUArray, args::NTuple{N})
+function acc_broadcast!{F <: Function, N}(f::F, A::CUArray, args::NTuple{N, Any})
     call_cuda(broadcast_kernel, A, f, args...)
 end
 
@@ -212,27 +213,27 @@ end
 
 ########################################
 # CUBLAS
-using CUBLAS
-import CUDArt
-
-# implement blas interface
-blas_module(::CUContext) = CUBLAS
-function blasbuffer(ctx::CUContext, A)
-    buff = buffer(A)
-    devptr = pointer(buff)
-    device = CUDAdrv.device(devptr.ctx).handle
-    CUDArt.CudaArray(CUDArt.CudaPtr(devptr.ptr), size(A), Int(device))
-end
-
-function convert{T <: CUArray}(t::T, A::CUDArt.CudaArray)
-    ctx = context(t)
-    ptr = DevicePtr(context(t))
-    device = CUDAdrv.device(devptr.ctx).handle
-    CUDArt.CudaArray(CUDArt.CudaPtr(devptr.ptr), size(A), Int(device))
-    CuArray(size(A))
-end
-
-
+# using CUBLAS
+# import CUDArt
+#
+# # implement blas interface
+# blas_module(::CUContext) = CUBLAS
+# function blasbuffer(ctx::CUContext, A)
+#     buff = buffer(A)
+#     devptr = pointer(buff)
+#     device = CUDAdrv.device(devptr.ctx).handle
+#     CUDArt.CudaArray(CUDArt.CudaPtr(devptr.ptr), size(A), Int(device))
+# end
+#
+# function convert{T <: CUArray}(t::T, A::CUDArt.CudaArray)
+#     ctx = context(t)
+#     ptr = DevicePtr(context(t))
+#     device = CUDAdrv.device(devptr.ctx).handle
+#     CUDArt.CudaArray(CUDArt.CudaPtr(devptr.ptr), size(A), Int(device))
+#     CuArray(size(A))
+# end
+#
+#
 
 
 end
