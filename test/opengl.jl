@@ -25,15 +25,71 @@ for elem in GLBackend.dependencies!(decl)
 end
 using ModernGL
 str = """
-#version 440
+#version 430
 layout (local_size_x = 16, local_size_y = 16) in;
 struct Test
 {
     bool empty;
 };
-void kernel(layout (r32f) image2D x, Test arg1)
-{
-}"""
+float kernel(readonly image2D x){
+    return imageLoad(x, ivec2(1, 1)).x;
+}
+/*
+float kernel(image2D x, Test arg1){
+    return imageLoad(x, ivec2(1, 1)).x;
+}
+*/
+layout (binding=0, r32f) readonly uniform image2D globalvar_A;
+const Test globalvar_f = Test(false);
+void main(){
+    // works:
+    imageLoad(globalvar_A, ivec2(1, 1)).x;
+    // fails with 0:8: '' : imageLoad function cannot access the image defined
+    // without layout format qualifier or with writeonly memory qualifier
+    kernel(globalvar_A);
+}
+"""
+str = """
+#version 430
+layout (local_size_x = 16, local_size_y = 16) in;
+struct Test{
+    float a;
+}
+vec4 funcA(layout(rgba32f) restrict image2D a, Test test){
+    return imageLoad(a, ivec2(1, 1)) * test.a;
+}
+layout(rgba32f) coherent uniform image2D img1;
+void main(){
+    imageLoad(img1, ivec2(1, 1));
+    funcA(img1, Test(1.0)); // OK, adding "restrict" is allowed
+}
+"""
+"""
+#version 430
+layout (local_size_x = 16, local_size_y = 16) in;
+
+//1) Fails: needs layout qualifier for imageLoad
+vec4 func1(restrict image2D a){
+    return imageLoad(a, ivec2(1, 1));
+}
+// works:
+vec4 func2(layout(rgba32f) restrict image2D a, float b){
+    return imageLoad(a, ivec2(1, 1));
+}
+// Fails: syntax error around `a, Test b`
+struct Test{
+    float b;
+}
+vec4 func3(layout(rgba32f) restrict image2D a, Test b){
+    return imageLoad(a, ivec2(1, 1));
+}
+layout(rgba32f) coherent uniform image2D img2;
+void main(){
+    // call any of the above
+    func1(img1);
+}
+"""
+
 GLAbstraction.compile_shader(Vector{UInt8}(str), GL_COMPUTE_SHADER, :test)
 
 ast = Sugar.sugared(getindex,

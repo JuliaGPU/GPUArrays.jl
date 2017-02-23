@@ -22,8 +22,7 @@ typealias GLArray{T, N} Union{GLArrayBuff{T, N}, GLArrayTex{T, N}}
 
 
 function any_context()
-    window = GLWindow.create_glcontext()
-    GLFW.HideWindow(window)
+    window = GLWindow.create_glcontext(major = 4, minor = 3, visible = false)
     GLContext(window)
 end
 
