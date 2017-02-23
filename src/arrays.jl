@@ -102,8 +102,7 @@ end
     idx = ntuple(i->:(ifelse(s[$i] < shape[$i], 1, idx[$i])), Val{N})
     expr = quote
         s = size(arg)
-        @inbounds i = CartesianIndex{N}(($(idx...),))
-        @inbounds return arg[i]::T
+        @inbounds return arg[$(idx...)]::T
     end
 end
 broadcast_index(arg, shape, idx) = arg
@@ -130,6 +129,7 @@ function broadcast_similar(f, A, args)
     T = _broadcast_eltype(f, A, args...)
     similar(A, T)
 end
+
 
 # seems to be needed for ambiguities
 function Base.broadcast!(f::typeof(identity), A::AbstractAccArray, args::Number)
