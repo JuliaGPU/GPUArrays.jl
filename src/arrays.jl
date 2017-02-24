@@ -98,11 +98,15 @@ end
 # helper
 
 #Broadcast
-@generated function broadcast_index{T, N}(arg::AbstractArray{T, N}, shape, idx)
+function broadcast_index{T, N}(arg::AbstractArray{T, N}, shape::NTuple{N, Integer}, i)
+    @inbounds return arg[i]
+end
+@generated function broadcast_index{T, N}(arg::AbstractArray{T, N}, shape, i)
     idx = ntuple(i->:(ifelse(s[$i] < shape[$i], 1, idx[$i])), Val{N})
     expr = quote
         s = size(arg)
-        @inbounds return arg[$(idx...)]::T
+        idx = ind2sub(shape, i)
+        @inbounds return arg[$(idx...)]
     end
 end
 broadcast_index(arg, shape, idx) = arg

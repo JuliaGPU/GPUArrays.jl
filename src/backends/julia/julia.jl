@@ -64,22 +64,21 @@ end
 # Lies!
 # Well, we know how to deal with that from the CUDA backend
 for i = 0:7
-    fargs = ntuple(x-> :(broadcast_index(args[$x], sz, idx)), i)
+    fargs = ntuple(x-> :(broadcast_index(args[$x], sz, i)), i)
     fidxargs = ntuple(x-> :(args[$x]), i)
     @eval begin
         function acc_broadcast!{F}(f::F, A::JLArray, args::NTuple{$i, Any})
             n = length(A)
             sz = size(A)
             @threads for i = 1:n
-                idx = ind2sub(sz, i)
                 @inbounds A[i] = f($(fargs...))
             end
             return
         end
 
         function mapidx{F}(f::F, data::JLArray, args::NTuple{$i, Any})
-            @threads for idx in eachindex(data)
-                f(idx, data, $(fidxargs...))
+            @threads for i in eachindex(data)
+                f(i, data, $(fidxargs...))
             end
         end
         function acc_mapreduce(f, op, v0, A::JLArray, args::NTuple{$i, Any})
@@ -87,14 +86,14 @@ for i = 0:7
             arr = Vector{typeof(op(v0, v0))}(n)
             slice = ceil(Int, length(A) / n)
             sz = size(A)
-            @threads for i = 1:n
-                low = ((i-1) * slice) + 1
-                high = min(length(A), i * slice)
+            @threads for threadid in 1:n
+                low = ((threadid - 1) * slice) + 1
+                high = min(length(A), threadid * slice)
                 r = v0
-                for idx in low:high
-                    r = op(r, f(A[idx], $(fargs...)))
+                for i in low:high
+                    r = op(r, f(A[i], $(fargs...)))
                 end
-                arr[i] = r
+                arr[threadid] = r
             end
             reduce(op, arr)
         end

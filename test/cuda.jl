@@ -76,13 +76,9 @@ end
             for T in (Float32, Int32)
                 range = T <: Integer ? (T(-10):T(10)) : T
                 A = GPUArray(rand(range, dims))
-                println("sum")
                 @test sum(A) ≈ sum(Array(A))
-                println("maximum")
                 @test maximum(A) ≈ maximum(Array(A))
-                println("minimum")
                 @test minimum(A) ≈ minimum(Array(A))
-                println("prod")
                 @test prod(A) ≈ prod(Array(A))
             end
         end
@@ -96,6 +92,3 @@ end
     #     end
     # end
 end
-
-
-const ptr_fun = cfunction(identity, Ptr{Void}, Any)

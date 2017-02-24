@@ -88,15 +88,14 @@ end
 # write a @generated function to unrole the arguments.
 # And without unroling of the arguments, GPU codegen will cry!
 
-for i=0:10
+for i = 0:10
     args = ntuple(x-> Symbol("arg_", x), i)
-    fargs = ntuple(x-> :(broadcast_index($(args[x]), sz, idx)), i)
+    fargs = ntuple(x-> :(broadcast_index($(args[x]), sz, i)), i)
     @eval begin
         function broadcast_kernel(A, f, $(args...))
             i = linear_index()
             @inbounds if i <= length(A)
                 sz = size(A)
-                idx = ind2sub(sz, i)
                 A[i] = f($(fargs...))
             end
             nothing
@@ -114,12 +113,11 @@ for i=0:10
             )
             #reduce multiple elements per thread
 
-            i = (blockIdx().x-Int32(1)) * blockDim().x + threadIdx().x
+            i = (blockIdx().x - UInt32(1)) * blockDim().x + threadIdx().x
             step = blockDim().x * gridDim().x
             sz = size(A)
             result = v0
             while i <= length(A)
-                idx = ind2sub(sz, i)
                 @inbounds result = op(result, f(A[i], $(fargs...)))
                 i += step
             end
