@@ -190,14 +190,35 @@ end
 
 #############################
 # reduce
+function acc_mapreduce end
+
+
+# horrible hack to get around of fetching the first element of the GPUArray
+# as a startvalue, which is a bit complicated with the current reduce implementation
+function startvalue(f, T)
+    error("Please supply a starting value for mapreduce. E.g: mapreduce($f, $op, 1, A)")
+end
+startvalue(::typeof(+), T) = zero(T)
+startvalue(::typeof(*), T) = one(T)
+startvalue(::typeof(Base.scalarmin), T) = typemax(T)
+startvalue(::typeof(Base.scalarmax), T) = typemin(T)
+
+function Base.mapreduce{T, N}(f::Function, op::Function, A::AbstractAccArray{T, N})
+    OT = Base.r_promote_type(op, T)
+    v0 = startvalue(op, OT) # TODO do this better
+    mapreduce(f, op, v0, A)
+end
+
 
 function Base.mapreduce(f, op, v0, A::AbstractAccArray, B::AbstractAccArray, C::Number)
-    acc_mapreduce(f, op, v0, (A, B, C))
+    acc_mapreduce(f, op, v0, A, (B, C))
 end
 function Base.mapreduce(f, op, v0, A::AbstractAccArray, B::AbstractAccArray)
-    acc_mapreduce(f, op, v0, (A, B))
+    acc_mapreduce(f, op, v0, A, (B,))
 end
-
+function Base.mapreduce(f, op, v0, A::AbstractAccArray)
+    acc_mapreduce(f, op, v0, A, ())
+end
 
 ############################################
 # Constructor

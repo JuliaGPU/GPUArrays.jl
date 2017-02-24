@@ -2,7 +2,7 @@ module JLBackend
 
 using ..GPUArrays
 
-import GPUArrays: buffer, create_buffer, Context, AbstractAccArray
+import GPUArrays: buffer, create_buffer, Context, AbstractAccArray, acc_mapreduce
 import GPUArrays: broadcast_index, acc_broadcast!, blas_module, blasbuffer
 
 import Base.Threads: @threads
@@ -33,12 +33,17 @@ let contexts = JLContext[]
     end
 end
 Base.show(io::IO, ctx::JLContext) = print(io, "JLContext")
-
+##############################################
 # Implement BLAS interface
+
 function blasbuffer(ctx::JLContext, A)
     Array(A)
 end
 blas_module(::JLContext) = Base.BLAS
+
+
+####################################
+# constructors
 
 function (::Type{JLArray}){T, N}(A::Array{T, N})
     JLArray{T, N}(A, current_context())
@@ -66,8 +71,8 @@ for i = 0:7
             n = length(A)
             sz = size(A)
             @threads for i = 1:n
-                idx = CartesianIndex(ind2sub(sz, Int(i)))
-                @inbounds A[idx] = f($(fargs...))
+                idx = ind2sub(sz, i)
+                @inbounds A[i] = f($(fargs...))
             end
             return
         end
@@ -77,16 +82,17 @@ for i = 0:7
                 f(idx, data, $(fidxargs...))
             end
         end
-        function acc_mapreduce(f, op, v0, args::NTuple{$i, Any})
+        function acc_mapreduce(f, op, v0, A::JLArray, args::NTuple{$i, Any})
             n = Base.Threads.nthreads()
             arr = Vector{typeof(op(v0, v0))}(n)
             slice = ceil(Int, length(A) / n)
+            sz = size(A)
             @threads for i = 1:n
                 low = ((i-1) * slice) + 1
                 high = min(length(A), i * slice)
                 r = v0
                 for idx in low:high
-                    r = op(r, f($(fargs...)))
+                    r = op(r, f(A[idx], $(fargs...)))
                 end
                 arr[i] = r
             end

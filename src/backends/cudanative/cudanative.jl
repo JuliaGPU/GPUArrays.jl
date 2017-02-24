@@ -5,7 +5,7 @@ using ..GPUArrays, CUDAnative
 
 import CUDAdrv, CUDArt #, CUFFT
 
-import GPUArrays: buffer, create_buffer, acc_broadcast!
+import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce
 import GPUArrays: Context, GPUArray, context, broadcast_index
 using CUDAdrv: CuDefaultStream
 
@@ -53,6 +53,9 @@ end
 function Base.unsafe_copy!{T,N}(dest::CUArray{T,N}, source::Array{T,N})
     copy!(buffer(dest), source)
 end
+function Base.copy!{T,N}(dest::CUArray{T,N}, source::CUArray{T,N})
+    copy!(buffer(dest), buffer(source))
+end
 
 function thread_blocks_heuristic(A::AbstractArray)
     thread_blocks_heuristic(size(A))
@@ -66,16 +69,8 @@ function thread_blocks_heuristic{N}(s::NTuple{N, Int})
 end
 
 @inline function linear_index()
-    (blockIdx().x-1) * blockDim().x + threadIdx().x
+    (blockIdx().x - UInt32(1)) * blockDim().x + threadIdx().x
 end
-@inline function map_eachindex_kernel{N}(A, f, args::Vararg{N})
-    i = linear_index()
-    if length(A) >= i
-        f(ind2sub(size(A), i), A, args...)
-    end
-    nothing
-end
-
 
 
 unpack_cu_array(x) = x
@@ -106,32 +101,68 @@ for i=0:10
             end
             nothing
         end
+        function mapidx_kernel{F}(A, f::F, $(args...))
+            i = linear_index()
+            if i <= length(A)
+                f(i, A, $(args...))
+            end
+            nothing
+        end
+        function reduce_kernel{F <: Function, OP <: Function,T1, T2, N}(
+                out::AbstractArray{T2,1}, f::F, op::OP, v0::T2,
+                A::AbstractArray{T1, N}, $(args...)
+            )
+            #reduce multiple elements per thread
+
+            i = (blockIdx().x-Int32(1)) * blockDim().x + threadIdx().x
+            step = blockDim().x * gridDim().x
+            sz = size(A)
+            result = v0
+            while i <= length(A)
+                idx = ind2sub(sz, i)
+                @inbounds result = op(result, f(A[i], $(fargs...)))
+                i += step
+            end
+            result = reduce_block(result, op, v0)
+            if threadIdx().x == UInt32(1)
+                @inbounds out[blockIdx().x] = result
+            end
+            return
+        end
     end
 end
 
 function acc_broadcast!{F <: Function, N}(f::F, A::CUArray, args::NTuple{N, Any})
     call_cuda(broadcast_kernel, A, f, args...)
 end
-
+function mapidx{F <: Function, N}(f::F, A::CUArray, args::NTuple{N, Any})
+    call_cuda(mapidx_kernel, A, f, args...)
+end
 #################################
 # Reduction
 
-function reduce_warp{T,F<:Function}(val::T, op::F)
-    offset = CUDAnative.warpsize() ÷ 2
-    while offset > 0
+function reduce_warp{T, F<:Function}(val::T, op::F)
+    offset = CUDAnative.warpsize() ÷ UInt32(2)
+    while offset > UInt32(0)
         val = op(val, shfl_down(val, offset))
-        offset ÷= 2
+        offset ÷= UInt32(2)
     end
     return val
 end
 
-function reduce_block{T, F <: Function}(val::T, op::F, v0::T)
+@inline function reduce_block{T, F <: Function}(val::T, op::F, v0::T)::T
     shared = @cuStaticSharedMem(T, 32)
-    wid, lane = fldmod1(threadIdx().x, CUDAnative.warpsize())
+    wid  = div(threadIdx().x - UInt32(1), CUDAnative.warpsize()) + UInt32(1)
+    lane = rem(threadIdx().x - UInt32(1), CUDAnative.warpsize()) + UInt32(1)
+
+     # each warp performs partial reduction
     val = reduce_warp(val, op)
+
+    # write reduced value to shared memory
     if lane == 1
         @inbounds shared[wid] = val
     end
+    # wait for all partial reductions
     sync_threads()
     # read from shared memory only if that warp existed
     @inbounds begin
@@ -143,52 +174,24 @@ function reduce_block{T, F <: Function}(val::T, op::F, v0::T)
     end
     return val
 end
-function reduce_kernel{F <: Function, OP <: Function,T1, T2, N}(
-        A::AbstractArray{T1, N}, out::AbstractArray{T2,1}, f::F, op::OP, v0::T2
+
+
+
+function acc_mapreduce{T, OT, N}(
+        f, op, v0::OT, A::CUArray{T, N}, rest::Tuple
     )
-    #reduce multiple elements per thread
-
-    i = Int((blockIdx().x-Int32(1)) * blockDim().x + threadIdx().x)
-    step = blockDim().x * gridDim().x
-    result = v0
-    while i <= length(A)
-        @inbounds result = op(result, f(A[i]))
-        i += step
-    end
-    result = reduce_block(result, op, v0)
-    if (threadIdx().x == 1)
-        @inbounds out[blockIdx().x] = result;
-    end
-    return
-end
-
-# horrible hack to get around of fetching the first element of the GPUArray
-# as a startvalue, which is a bit complicated with the current reduce implementation
-function startvalue(op, T)
-    error("Please supply a starting value for mapreduce. E.g: mapreduce($f, $op, 1, A)")
-end
-startvalue(::typeof(+), T) = zero(T)
-startvalue(::typeof(*), T) = one(T)
-startvalue(::typeof(Base.scalarmin), T) = typemax(T)
-startvalue(::typeof(Base.scalarmax), T) = typemin(T)
-
-function Base.mapreduce{T,N}(f::Function, op::Function, A::CUArray{T, N})
-    OT = Base.r_promote_type(op, T)
-    v0 = startvalue(op, OT) # TODO do this better
-    mapreduce(f, op, v0, A)
-end
-function Base.mapreduce{T, OT, N}(f::Function, op::Function, v0::OT, A::CUArray{T,N})
     dev = context(A).device
     @assert(CUDAdrv.capability(dev) >= v"3.0", "Current CUDA reduce implementation requires a newer GPU")
     threads = 512
     blocks = min((length(A) + threads - 1) ÷ threads, 1024)
     out = similar(buffer(A), OT, (blocks,))
+    args = map(unpack_cu_array, rest)
     # TODO MAKE THIS WORK FOR ALL FUNCTIONS .... v0 is really unfit for parallel reduction
     # since every thread basically needs its own v0
-    @cuda (blocks, threads) reduce_kernel(buffer(A), out, f, op, v0)
+    @cuda (blocks, threads) reduce_kernel(out, f, op, v0, buffer(A), args...)
     # for this size it doesn't seem beneficial to run on gpu?!
     # TODO actually benchmark this theory
-    mapreduce(f, op, Array(out))
+    reduce(op, Array(out))
 end
 
 
