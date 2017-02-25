@@ -1,4 +1,4 @@
-using GPUArrays
+using GPUArrays, ModernGL
 using Base.Test
 import GPUArrays: GLBackend
 import GLBackend: GLArray
@@ -49,48 +49,34 @@ void main(){
     kernel(globalvar_A);
 }
 """
+
+
 str = """
 #version 430
+#extension GL_ARB_bindless_texture : enable
+#extension GL_ARB_gpu_shader5 : enable
 layout (local_size_x = 16, local_size_y = 16) in;
+//1) Fails: needs layout qualifier for imageLoad
 struct Test{
     float a;
+};
+vec4 func1(uint64_t handle, Test b){
+    layout(rgba8) image2D a = layout(rgba8) image2D(handle);
+    return imageLoad(a, ivec2(1, 1));
 }
-vec4 funcA(layout(rgba32f) restrict image2D a, Test test){
-    return imageLoad(a, ivec2(1, 1)) * test.a;
-}
-layout(rgba32f) coherent uniform image2D img1;
+uniform uint64_t img1;
 void main(){
-    imageLoad(img1, ivec2(1, 1));
-    funcA(img1, Test(1.0)); // OK, adding "restrict" is allowed
-}
-"""
-"""
-#version 430
-layout (local_size_x = 16, local_size_y = 16) in;
-
-//1) Fails: needs layout qualifier for imageLoad
-vec4 func1(restrict image2D a){
-    return imageLoad(a, ivec2(1, 1));
-}
-// works:
-vec4 func2(layout(rgba32f) restrict image2D a, float b){
-    return imageLoad(a, ivec2(1, 1));
-}
-// Fails: syntax error around `a, Test b`
-struct Test{
-    float b;
-}
-vec4 func3(layout(rgba32f) restrict image2D a, Test b){
-    return imageLoad(a, ivec2(1, 1));
-}
-layout(rgba32f) coherent uniform image2D img2;
-void main(){
-    // call any of the above
-    func1(img1);
+    func1(img1, Test(1.0));
 }
 """
 
 GLAbstraction.compile_shader(Vector{UInt8}(str), GL_COMPUTE_SHADER, :test)
+
+
+
+
+
+
 
 ast = Sugar.sugared(getindex,
     (GLBackend.gli.GLArray{Float32, 2}, NTuple{Int, 2}, NTuple{Int, 2}),

@@ -2,7 +2,8 @@ module JLBackend
 
 using ..GPUArrays
 
-import GPUArrays: buffer, create_buffer, Context, AbstractAccArray, acc_mapreduce
+import GPUArrays: buffer, create_buffer, Context
+import GPUArrays: AbstractAccArray, acc_mapreduce, mapidx
 import GPUArrays: broadcast_index, acc_broadcast!, blas_module, blasbuffer
 
 import Base.Threads: @threads
@@ -76,7 +77,7 @@ for i = 0:7
             return
         end
 
-        function mapidx{F}(f::F, data::JLArray, args::NTuple{$i, Any})
+        function mapidx{F, T, N}(f::F, data::JLArray{T, N}, args::NTuple{$i, Any})
             @threads for i in eachindex(data)
                 f(i, data, $(fidxargs...))
             end

@@ -6,7 +6,7 @@ type GPUArray{T, N, B, C} <: AbstractAccArray{T, N}
     context::C
 end
 
-
+# interfaces
 
 function Base.similar{T <: GPUArray, ET, N}(
         ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
@@ -62,6 +62,8 @@ function (::Type{A}){A <: AbstractAccArray}(x::Array)
     unsafe_copy!(out, x)
     out
 end
+Base.convert{A <: AbstractAccArray}(::Type{A}, x::AbstractArray) = A(x)
+Base.convert{A <: AbstractAccArray}(::Type{A}, x::A) = x
 
 #=
 Device to host data transfers
@@ -90,6 +92,16 @@ function Base.unsafe_copy!{T, N}(dest::AbstractAccArray{T, N}, source::Array{T, 
     Base.unsafe_copy!(buffer(dest), source)
 end
 
+# Function needed to be overloaded by backends
+function mapidx end
+# It is kinda hard to overwrite map/broadcast, which is why we lift it to our
+# our own broadcast function.
+# It has the signature:
+# f::Function, Context, Main/Out::AccArray, args::NTuple{N}
+# All arrays are already lifted and shape checked
+function acc_broadcast! end
+# same fore mapreduce
+function acc_mapreduce end
 
 
 ######################################
@@ -113,12 +125,7 @@ broadcast_index(arg, shape, idx) = arg
 
 
 
-# It is kinda hard to overwrite map/broadcast, which is why we lift it to our
-# our own broadcast function.
-# It has the signature:
-# f::Function, Context, Main/Out::AccArray, args::NTuple{N}
-# All arrays are already lifted and shape checked
-function acc_broadcast! end
+
 
 if !isdefined(Base.Broadcast, :_broadcast_eltype)
     eltypestuple(a) = (Base.@_pure_meta; Tuple{eltype(a)})
@@ -194,8 +201,6 @@ end
 
 #############################
 # reduce
-function acc_mapreduce end
-
 
 # horrible hack to get around of fetching the first element of the GPUArray
 # as a startvalue, which is a bit complicated with the current reduce implementation
