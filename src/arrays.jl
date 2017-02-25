@@ -207,8 +207,25 @@ startvalue(::typeof(*), T) = one(T)
 startvalue(::typeof(Base.scalarmin), T) = typemax(T)
 startvalue(::typeof(Base.scalarmax), T) = typemin(T)
 
+if !isdefined(Base, :r_promote_type)
+    # r_promote_type: promote T to the type of reduce(op, ::Array{T})
+# (some "extra" methods are required here to avoid ambiguity warnings)
+    r_promote_type{T}(op, ::Type{T}) = T
+    r_promote_type{T<:Base.WidenReduceResult}(op, ::Type{T}) = widen(T)
+    r_promote_type{T<:Base.WidenReduceResult}(::typeof(+), ::Type{T}) = widen(T)
+    r_promote_type{T<:Base.WidenReduceResult}(::typeof(*), ::Type{T}) = widen(T)
+    r_promote_type{T<:Number}(::typeof(+), ::Type{T}) = typeof(zero(T)+zero(T))
+    r_promote_type{T<:Number}(::typeof(*), ::Type{T}) = typeof(one(T)*one(T))
+    r_promote_type{T<:Base.WidenReduceResult}(::typeof(Base.scalarmax), ::Type{T}) = T
+    r_promote_type{T<:Base.WidenReduceResult}(::typeof(Base.scalarmin), ::Type{T}) = T
+    r_promote_type{T<:Base.WidenReduceResult}(::typeof(max), ::Type{T}) = T
+    r_promote_type{T<:Base.WidenReduceResult}(::typeof(min), ::Type{T}) = T
+else
+    import Base: r_promote_type
+end
+
 function Base.mapreduce{T, N}(f::Function, op::Function, A::AbstractAccArray{T, N})
-    OT = Base.r_promote_type(op, T)
+    OT = r_promote_type(op, T)
     v0 = startvalue(op, OT) # TODO do this better
     mapreduce(f, op, v0, A)
 end
