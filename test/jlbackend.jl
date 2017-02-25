@@ -5,7 +5,7 @@ import JLBackend: JLArray
 JLBackend.init()
 
 A = JLArray(rand(33, 33))
-B = JLArray(rand(33, 33))
+B = convert(JLArray, rand(33, 33))
 C = A * B
 c = Array(C)
 @test c == Array(A) * Array(B)

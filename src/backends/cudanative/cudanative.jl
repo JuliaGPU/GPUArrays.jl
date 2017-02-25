@@ -5,7 +5,7 @@ using ..GPUArrays, CUDAnative
 
 import CUDAdrv, CUDArt #, CUFFT
 
-import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce
+import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
 import GPUArrays: Context, GPUArray, context, broadcast_index
 using CUDAdrv: CuDefaultStream
 
@@ -133,11 +133,27 @@ end
 function acc_broadcast!{F <: Function, N}(f::F, A::CUArray, args::NTuple{N, Any})
     call_cuda(broadcast_kernel, A, f, args...)
 end
-function mapidx{F <: Function, N}(f::F, A::CUArray, args::NTuple{N, Any})
+function mapidx{F <: Function, N, T, N2}(f::F, A::CUArray{T, N2}, args::NTuple{N, Any})
     call_cuda(mapidx_kernel, A, f, args...)
 end
 #################################
 # Reduction
+
+# TODO do this correctly in CUDAnative/Base
+using ColorTypes
+
+function CUDAnative.shfl_down(
+        val::Tuple{RGB{Float32}, UInt32}, srclane::Integer, width::Integer = Int32(32)
+    )
+    (
+        RGB{Float32}(
+            shfl_down(val[1].r, srclane, width),
+            shfl_down(val[1].g, srclane, width),
+            shfl_down(val[1].b, srclane, width),
+        ),
+        shfl_down(val[2], srclane, width)
+    )
+end
 
 function reduce_warp{T, F<:Function}(val::T, op::F)
     offset = CUDAnative.warpsize() ÷ UInt32(2)
