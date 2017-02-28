@@ -114,7 +114,7 @@ function broadcast_index{T, N}(arg::AbstractArray{T, N}, shape::NTuple{N, Intege
     @inbounds return arg[i]
 end
 @generated function broadcast_index{T, N}(arg::AbstractArray{T, N}, shape, i)
-    idx = ntuple(i->:(ifelse(s[$i] < shape[$i], 1, idx[$i])), Val{N})
+    idx = ntuple(i-> :(ifelse(s[$i] < shape[$i], 1, idx[$i])), Val{N})
     expr = quote
         s = size(arg)
         idx = ind2sub(shape, i)
@@ -122,9 +122,6 @@ end
     end
 end
 broadcast_index(arg, shape, idx) = arg
-
-
-
 
 
 if !isdefined(Base.Broadcast, :_broadcast_eltype)
@@ -167,8 +164,17 @@ function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, 
     acc_broadcast!(f, A, (B, args...))
 end
 
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D::Number)
+function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D)
     acc_broadcast!(f, A, (B, C, D))
+end
+function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D, E...)
+    acc_broadcast!(f, A, (B, C, D, E...))
+end
+function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D)
+    acc_broadcast!(f, A, (B, C, D))
+end
+function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::Any)
+    acc_broadcast!(f, A, (B, C))
 end
 
 function Base.broadcast(f::Function, A::AbstractAccArray)
