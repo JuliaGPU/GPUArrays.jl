@@ -9,6 +9,9 @@ prescripts = Dict(
     Bool => "b"
 )
 
+function image_format{T, N}(x::Type{gli.GLArray{T, N}})
+    "r32f"
+end
 
 immutable GLArray{T, N} end
 
@@ -32,6 +35,7 @@ function glsl_hygiene(sym)
     end
     x
 end
+
 
 
 glsl_sizeof(T) = sizeof(T) * 8
@@ -67,8 +71,8 @@ function _glsl_name{T, N}(x::Type{GLArray{T, N}})
     end
     sz = glsl_sizeof(T)
     len = glsl_length(T)
-    if is_windows()
-        qualifiers = ["r32f"]
+    if true
+        qualifiers = [image_format(x)]
         string("layout (", join(qualifiers, ", "), ") image$(N)D")
     else
         "image$(N)D$(len)x$(sz)_bindless"

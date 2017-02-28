@@ -320,134 +320,14 @@ function show_unquoted(io::GLSLIO, ex::Expr, indent::Int, prec::Int)
     nothing
 end
 
-
-
-
-
 function show_name(io::GLSLIO, x)
     print(io, glsl_name(x))
 end
 
-function materialize_io(x::GLSLIO)
-    result_str = ""
-    for str in x.dependencies
-        result_str *= str * "\n"
-    end
-    string(result_str, '\n', String(take!(x.io)))
-end
 
 const global_identifier = "globalvar_"
-const shader_program_dir = joinpath(dirname(@__FILE__), "shaders")
-
-const _module_cache = Dict()
-function to_globalref(f, typs)
-    mlist = methods(f, typs)
-    if length(mlist) != 1
-        error("$f and $typs ambigious")
-    end
-    m = first(mlist)
-    GlobalRef(m.module, m.name)
-end
-function get_module_cache()
-    _module_cache
-end
 
 
-function transpile(f, typs, parentio = nothing, main = true)
-    # make sure that not already transpiled
-    # if parentio != nothing && get(parentio.vardecl, (f, typs), false)
-    #     return
-    # end
-    cache = get_module_cache()
-    if haskey(cache, (f, typs)) # add to module
-        if parentio != nothing
-            str, deps = cache[(f, typs)]
-            push!(parentio.dependencies, (f, typs))
-            for dep in deps
-                if !(dep in parentio.dependencies)
-                    push!(parentio.dependencies, dep)
-                end
-            end
-        end
-    else
-        ast = try
-            Sugar.sugared(f, typs, code_typed)
-        catch e
-            println("Failed to get code for $f $typs")
-            rethrow(e)
-        end
-        li = Sugar.get_lambda(code_typed, f, typs)
-        m = Sugar.get_method(f, typs)
-        nargs = m.nargs
-        slotnames = Base.sourceinfo_slotnames(li) # TODO make 0.5 compatible
-        ret_type = Sugar.return_type(f, typs)
-        io = IOBuffer()
-        glslio = GLSLIO(io, li, slotnames)
-        #println(glslio, "\n// $f$(join(typs, ", "))\n")
-        vars = Sugar.slot_vector(li)
-
-        funcargs = vars[2:nargs]
-
-        show_name(glslio, ret_type)
-        print(glslio, ' ')
-        show_name(glslio, f)
-        print(glslio, '(')
-
-        for (i, (slot, (name, T))) in enumerate(funcargs)
-            glslio.vardecl[slot] = true
-            if T <: Function
-                print(glslio, "const ")
-            end
-            show_name(glslio, T)
-            print(glslio, ' ')
-            show_name(glslio, name)
-            i != (nargs - 1) && print(glslio, ", ")
-        end
-        print(glslio, ')')
-        slots = filter(vars[(nargs+1):end]) do decl
-            var = decl[1]
-            if isa(var, Slot)
-                glslio.vardecl[var] = true
-                true
-            else
-                false
-            end
-        end
-
-        body = Expr(:body, map(x->NewvarNode(x[1]), slots)..., ast.args...);
-        show_unquoted(glslio, body, 0, 0)
-        # pio = parentio == nothing ? glslio : parentio
-        # pio.vardecl[(f, typs)] = true
-
-
-        typed_args = map(typs) do T
-            Expr(:(::), T)
-        end
-        ft = typeof(f)
-        fname = Symbol(ft.name.mt.name)
-        expr = quote
-            $(fname)($(typed_args...)) = ret($ret_type)
-        end
-        str = String(take!(io))
-        close(io)
-        if parentio != nothing
-            for dep in glslio.dependencies
-                if !(dep in parentio.dependencies)
-                    push!(parentio.dependencies, dep)
-                end
-            end
-            push!(parentio.dependencies, (f, typs))
-        end
-        cache[(f, typs)] = (str, glslio.dependencies)
-        return glslio, funcargs, str
-
-    end
-end
-
-
-function image_format{T, N}(x::Type{gli.GLArray{T, N}})
-    "r32f"
-end
 function declare_global(io::GLSLIO, vars)
     for (i, expr) in enumerate(vars)
         name, typ = expr.args

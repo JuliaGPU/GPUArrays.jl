@@ -18,7 +18,7 @@ end
 
 A = GLArray(rand(Float32, 40, 40));
 B = test.(A, 10f0)
-decl = GLBackend.Decl((GLBackend.broadcast_kernel, (GLBackend.gli.GLArray{Float32, 2}, typeof(test), GLBackend.gli.GLArray{Float32, 2}, Float32)), GLBackend.Transpiler())
+decl = GLBackend.LazyMethod((GLBackend.broadcast_kernel, (GLBackend.gli.GLArray{Float32, 2}, typeof(test), GLBackend.gli.GLArray{Float32, 2}, Float32)), GLBackend.Transpiler())
 println(GLBackend.getfuncsource!(decl))
 for elem in GLBackend.dependencies!(decl)
     println(GLBackend.getsource!(elem))

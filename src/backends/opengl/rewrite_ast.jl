@@ -48,8 +48,6 @@ function rewrite_function{F <: Function}(li, f::F, types::ANY, expr)
     intrinsic, expr
 end
 
-
-
 function rewrite_function(li, ::typeof(broadcast), types::ANY, expr)
     F = types[1]
     if F <: gli.Functions && all(T-> T <: gli.Types, types[2:end])
@@ -71,38 +69,6 @@ function rewrite_function(li, ::typeof(broadcast), types::ANY, expr)
     # end
     false, expr
 end
-
-
-resolve_func{T}(li, ::Type{T}) = T
-resolve_func(li, f::Union{GlobalRef, Symbol}) = eval(f)
-function resolve_func(li, slot::Slot)
-    instance(expr_type(li, slot))
-end
-function resolve_func(li, f::Expr)
-    @show f
-    if f.head == :static_parameter
-        return staticparam(li, f)
-    end
-    try
-        # TODO figure out what can go wrong here, since this seems rather fragile
-        return eval(f)
-    catch e
-        println("Couldn't resolve $f")
-        rethrow(e)
-    end
-    error("$f not a callable")
-end
-function expr_type(li, x)
-    t = _expr_type(li, x)
-    push!(li, t) # add as dependency
-    t
-end
-
-_expr_type(li, x::Expr) = x.typ
-_expr_type(li, x::TypedSlot) = x.type
-_expr_type(li, x::GlobalRef) = typeof(eval(x))
-_expr_type{T}(li, x::T) = T
-_expr_type(li, slot::Union{Slot, SSAValue}) = slottype(li, slot)
 
 function glsl_rewrite_pass(li, expr)
     list = Sugar.replace_expr(expr) do expr
@@ -148,81 +114,14 @@ function glsl_rewrite_pass(li, expr)
     first(list)
 end
 
-type Transpiler
-    cache
-    Transpiler() = new(Dict())
-end
-
-type Decl
-    signature
-    transpiler::Transpiler
-    decls::OrderedSet
-    dependencies::OrderedSet{Decl}
-    li
-    method
-    ast::Expr
-    source::String
-    funcheader::String
-
-    Decl(signature, transpiler) = new(signature, transpiler, OrderedSet(), OrderedSet{Decl}())
-end
-import Base: ==
-Base.hash(x::Decl, h::UInt64) = hash(x.signature, h)
-==(x::Decl, y::Decl) = x.signature == y.signature
 
 
-function isfunction(x::Decl)
-    isa(x.signature, Tuple) && length(x.signature) == 2 && isa(x.signature[1], Function)
-end
-function istype(x::Decl)
-    isa(x.signature, DataType)
-end
-function Base.push!(decl::Decl, x::Decl)
-    push!(decl.dependencies, x)
-end
-function Base.push!(decl::Decl, signature)
-    push!(decl.dependencies, Decl(signature, decl.transpiler))
-end
-function Base.push!{T <: gli.Types}(decl::Decl, signature::Type{T}) # don't add intrinsics
-    #push!(decl.dependencies, Decl(signature, decl.transpiler))
-end
-function getmethod(x::Decl)
-    if !isdefined(x, :method)
-        x.method = Sugar.get_method(x.signature...)
-    end
-    x.method
-end
-function getcodeinfo!(x::Decl)
-    if !isdefined(x, :li)
-        x.li = Sugar.get_lambda(code_typed, x.signature...)
-    end
-    x.li
-end
+glsl_rewrite_pass(x, expr)
 
-
-function getast!(x::Decl)
-    if !isdefined(x, :ast)
-        li = getcodeinfo!(x) # make sure codeinfo is present
-        nargs = method_nargs(x)
-        expr = Sugar.sugared(x.signature..., code_typed)
-        st = slottypes(x)
-        for (i, T) in enumerate(st)
-            slot = SlotNumber(i)
-            push!(x.decls, slot)
-            if i > nargs # if not defined in arguments, define in body
-                name = slotname(x, slot)
-                unshift!(expr.args, :($name::$T))
-            end
-        end
-        x.ast = glsl_rewrite_pass(x, expr)
-    end
-    x.ast
-end
 typename{T}(::Type{T}) = glsl_name(T)
 global operator_replacement
 let _operator_id = 0
     const operator_replace_dict = Dict{Char, String}()
-
     function operator_replacement(char)
         get!(operator_replace_dict, char) do
             _operator_id += 1
@@ -230,6 +129,8 @@ let _operator_id = 0
         end
     end
 end
+
+
 function typename{T <: Function}(::Type{T})
     x = string(T)
     x = replace(x, ".", "_")
@@ -265,49 +166,8 @@ function declare_type(T)
         println(io, "};")
     end
 end
-function getsource!(x::Decl)
-    if !isdefined(x, :source)
-        if istype(x)
-            x.source = declare_type(x.signature)
-        else
-            x.source = sprint() do io
-                Base.show_unquoted(GLSLIO(io), getast!(x), 0, 0)
-            end
-        end
-    end
-    x.source
-end
 
-
-ssatypes(tp::Decl) = getcodeinfo!(tp).ssavaluetypes
-slottypes(tp::Decl) =  getcodeinfo!(tp).slottypes
-slottype(tp::Decl, s::Slot) = slottypes(tp)[s.id]
-slottype(tp::Decl, s::SSAValue) = ssatypes(tp)[s.id + 1]
-
-function slotnames(tp::Decl)
-    map(enumerate(getcodeinfo!(tp).slotnames)) do iname
-        i, name = iname
-        if name == Symbol("#temp#")
-            return Symbol(string("xxtempx", i)) # must be made unique
-        end
-        name
-    end
-end
-function slotname(tp::Decl, s::Slot)
-    slotnames(tp)[s.id]
-end
-slotname(tp::Decl, s::SSAValue) = Sugar.ssavalue_name(s)
-
-function getfuncargs(x::Decl)
-    sn, st = slotnames(x), slottypes(x)
-    n = method_nargs(x)
-    map(2:n) do i
-        :($(sn[i])::$(st[i]))
-    end
-end
-
-function getfuncheader!(x::Decl)
-    @assert isfunction(x)
+function getfuncheader!(x::LazyMethod, ::GLSLIO)
     if !isdefined(x, :funcheader)
         x.funcheader = sprint() do io
             args = getfuncargs(x)
@@ -321,37 +181,7 @@ function getfuncheader!(x::Decl)
     x.funcheader
 end
 
-function getfuncsource!(x::Decl)
-    string(getfuncheader!(x), "\n", getsource!(x))
-end
 
-function dependencies!(x::Decl)
-    if isfunction(x)
-        getast!(x) # make sure it walks the ast
-    else
-        # TODO add all dependant types of a type
-        # for name in fieldnames(x.signature)
-        #     FT = fieldtype(T, name)
-        # end
-    end
-    x.dependencies
-end
-
-function returntype(x::Decl)
-    getcodeinfo!(x).rettype
-end
-
-if v"0.6" < VERSION
-    function method_nargs(f::Decl)
-        m = getmethod(f)
-        m.nargs
-    end
-else
-    function method_nargs(f::Decl)
-        li = getcodeinfo!(f)
-        li.nargs
-    end
-end
 #
 # function broadcast_index{T, N}(arg::gli.GLArray{T, N}, shape, idx)
 #     sz = size(arg)
@@ -370,7 +200,7 @@ end
 #     return
 # end
 # f, types = broadcast_kernel, (gli.GLArray{Float64, 2}, typeof(+), gli.GLArray{Float64, 2}, Float64)
-# decl = Decl((f, types), Transpiler())
+# decl = LazyMethod((f, types), Transpiler())
 # #ast = getsource!(decl)
 # ast = getast!(decl)
 # println(getsource!(decl))

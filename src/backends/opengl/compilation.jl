@@ -10,7 +10,7 @@ immutable ComputeProgram{Args <: Tuple}
 end
 
 const compiled_functions = Dict{Any, ComputeProgram}()
-function resolve_dependencies!(dep::Decl, visited = Decl(Void, dep.transpiler), indent = 0)
+function resolve_dependencies!(dep::LazyMethod, visited = LazyMethod(Void, dep.transpiler), indent = 0)
     println("    "^indent, dep.signature)
     if dep in visited.dependencies
         # when already in deps we need to move it up!
@@ -33,7 +33,7 @@ end
 function ComputeProgram{T}(f::Function, args::T; local_size = (16, 16, 1))
     gltypes = to_glsl_types(args)
     get!(compiled_functions, (f, gltypes)) do # TODO make this faster
-        decl = Decl((f, gltypes), Transpiler())
+        decl = LazyMethod((f, gltypes), Transpiler())
         funcsource = getfuncsource!(decl)
         # add compute program dependant infos
         io = GLSLIO(IOBuffer())
