@@ -1,6 +1,7 @@
 module JLBackend
 
 using ..GPUArrays
+using Compat
 
 import GPUArrays: buffer, create_buffer, Context
 import GPUArrays: AbstractAccArray, acc_mapreduce, mapidx
@@ -20,7 +21,7 @@ nthreads(a::JLArray) = context(a).nthreads
 
 Base.@propagate_inbounds Base.getindex(A::JLArray, i::Integer) = A.buffer[i]
 Base.@propagate_inbounds Base.setindex!(A::JLArray, val, i::Integer) = (A.buffer[i] = val)
-Base.linearindexing{T <: JLArray}(::Type{T}) = Base.LinearFast()
+Base.linearindexing{T <: JLArray}(::Type{T}) = Compat.IndexLinear()
 Base.size(x::JLArray) = size(buffer(x))
 
 global current_context, make_current, init

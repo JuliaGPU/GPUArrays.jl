@@ -1,7 +1,7 @@
 
 module CUBackend
 
-using ..GPUArrays, CUDAnative
+using ..GPUArrays, CUDAnative, StaticArrays
 
 import CUDAdrv, CUDArt #, CUFFT
 
@@ -74,6 +74,7 @@ end
 
 
 unpack_cu_array(x) = x
+unpack_cu_array(x::Scalar) = unpack_cu_array(getfield(x, 1))
 unpack_cu_array{T,N}(x::CUArray{T,N}) = buffer(x)
 
 @inline function call_cuda(kernel, A::CUArray, rest...)
@@ -90,12 +91,12 @@ end
 
 for i = 0:10
     args = ntuple(x-> Symbol("arg_", x), i)
-    fargs = ntuple(x-> :(broadcast_index($(args[x]), sz, i)), i)
+    fargs = ntuple(x-> :(broadcast_index(which[$x], $(args[x]), sz, i)), i)
+    fargs2 = ntuple(x-> :(broadcast_index($(args[x]), sz, i)), i)
     @eval begin
-        function broadcast_kernel(A, f, $(args...))
+        function broadcast_kernel(A, f, sz, which, $(args...))
             i = linear_index()
             @inbounds if i <= length(A)
-                sz = size(A)
                 A[i] = f($(fargs...))
             end
             nothing
@@ -118,7 +119,7 @@ for i = 0:10
             sz = size(A)
             result = v0
             while i <= length(A)
-                @inbounds result = op(result, f(A[i], $(fargs...)))
+                @inbounds result = op(result, f(A[i], $(fargs2...)))
                 i += step
             end
             result = reduce_block(result, op, v0)
@@ -131,7 +132,13 @@ for i = 0:10
 end
 
 function acc_broadcast!{F <: Function, N}(f::F, A::CUArray, args::NTuple{N, Any})
-    call_cuda(broadcast_kernel, A, f, args...)
+    which = map(args) do arg
+        if isa(arg, AbstractArray) && !isa(arg, Scalar)
+            return Val{true}()
+        end
+        Val{false}()
+    end
+    call_cuda(broadcast_kernel, A, f, map(UInt32, size(A)), which, args...)
 end
 function mapidx{F <: Function, N, T, N2}(f::F, A::CUArray{T, N2}, args::NTuple{N, Any})
     call_cuda(mapidx_kernel, A, f, args...)

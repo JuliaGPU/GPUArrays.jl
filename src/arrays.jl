@@ -110,19 +110,42 @@ function acc_mapreduce end
 # helper
 
 #Broadcast
-function broadcast_index{T, N}(arg::AbstractArray{T, N}, shape::NTuple{N, Integer}, i)
+Base.@propagate_inbounds broadcast_index(::Val{false}, arg, shape, i) = arg
+Base.@propagate_inbounds function broadcast_index{T, N}(
+        ::Val{true}, arg::AbstractArray{T, N}, shape::NTuple{N, Integer}, i
+    )
     @inbounds return arg[i]
 end
-@generated function broadcast_index{T, N}(arg::AbstractArray{T, N}, shape, i)
-    idx = ntuple(i-> :(ifelse(s[$i] < shape[$i], 1, idx[$i])), Val{N})
+@generated function broadcast_index{T, N}(::Val{true}, arg::AbstractArray{T, N}, shape, i)
+    idx = []
+    for i = 1:N
+        push!(idx, :(ifelse(s[$i] < shape[$i], 1, idx[$i])))
+    end
     expr = quote
+        $(Expr(:meta, :inline, :propagate_inbounds))
         s = size(arg)
         idx = ind2sub(shape, i)
         @inbounds return arg[$(idx...)]
     end
 end
-broadcast_index(arg, shape, idx) = arg
-
+Base.@propagate_inbounds broadcast_index(arg, shape, i) = arg
+Base.@propagate_inbounds function broadcast_index{T, N}(
+        arg::AbstractArray{T, N}, shape::NTuple{N, Integer}, i
+    )
+    @inbounds return arg[i]
+end
+@generated function broadcast_index{T, N}(arg::AbstractArray{T, N}, shape, i)
+    idx = []
+    for i = 1:N
+        push!(idx, :(ifelse(s[$i] < shape[$i], 1, idx[$i])))
+    end
+    expr = quote
+        $(Expr(:meta, :inline, :propagate_inbounds))
+        s = size(arg)
+        idx = ind2sub(shape, i)
+        @inbounds return arg[$(idx...)]
+    end
+end
 
 if !isdefined(Base.Broadcast, :_broadcast_eltype)
     eltypestuple(a) = (Base.@_pure_meta; Tuple{eltype(a)})
@@ -162,10 +185,6 @@ function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, 
 end
 function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, args::Number)
     acc_broadcast!(f, A, (B, args...))
-end
-
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D)
-    acc_broadcast!(f, A, (B, C, D))
 end
 function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D, E...)
     acc_broadcast!(f, A, (B, C, D, E...))

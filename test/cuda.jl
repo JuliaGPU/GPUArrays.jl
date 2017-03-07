@@ -35,6 +35,7 @@ end
     @test all(x-> x == jltest(0.5f0, 10f0) * 2 + 10f0, Array(D))
 end
 
+
 function cu_angle(z)
     cu.atan2(imag(z), real(z))
 end
