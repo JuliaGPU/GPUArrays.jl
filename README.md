@@ -3,8 +3,8 @@
 [![Build Status](https://travis-ci.org/SimonDanisch/GPUArrays.jl.svg?branch=master)](https://travis-ci.org/SimonDanisch/GPUArrays.jl)
 
 
-GPU Array prototype, implementing the Base AbstractArray interface for Julia's various GPU backends.
-For now, this is mainly to establish a baseline for our GPU adventures, but might grow into a mature and performant cross-plattform GPU Array library!
+Prototype for a GPU Array library. 
+It implements the Base AbstractArray interface for Julia's various GPU backends.
 
 #### Main type:
 
@@ -17,21 +17,22 @@ end
 ```
 
 #### Scope
-Planned backends: OpenGL, OpenCL, Vulkan and CUDA
 
-To be implemented for all backends:
+Backends: OpenCL, CUDA
+Planned backends: OpenGL, Vulkan
+
+Implemented for all backends:
 ```Julia
 map(f, ::GPUArray...)
 map!(f, dest::GPUArray, ::GPUArray...)
 
 # maps
-map_idx(f, A::GPUArray, args...) #= do idx, a, args...
-    e.g
+mapidx(f, A::GPUArray, args...) do idx, a, args...
+    # e.g
     if idx < length(A)
         a[idx+1] = a[idx]
     end
 end
-=#
 
 
 broadcast(f, ::GPUArray...)
@@ -46,10 +47,11 @@ stencil(f, window::Shape, ::GPUArray...)
 end
 
 ```
-Currently, the compilation of the Julia function `f` is done for CUDA by CUDAnative.jl
-and for OpenCL and OpenGL a simple transpiler will be used.
+Currently, the compilation of the Julia function `f` is done for CUDA by [CUDAnative.jl](https://github.com/JuliaGPU/CUDAnative.jl/)
+and for OpenCL and OpenGL [Transpiler.jl](https://github.com/SimonDanisch/Transpiler.jl) will be used.
 In the further future it's planned to replace the transpiler by the same approach
-CUDAnative.jl is doing.
+CUDAnative.jl is using (via LLVM + SPIR-V).
 
-Furthermore, OpenGL interop with CUDA and OpenCL are going to be fully supported.
-Also, it would be nice to hook up all the libraries like CLFFT, CUFFT, CLBLAS and CUBLAS.
+CLFFT, CUFFT, CLBLAS and CUBLAS will soon be supported.
+A prototype of the support can be found here: https://github.com/JuliaGPU/GPUArrays.jl/blob/sd/glsl/src/blas.jl
+
