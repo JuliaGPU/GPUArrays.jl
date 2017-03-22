@@ -5,7 +5,7 @@ abstract Context
 using Sugar
 
 include("arrays.jl")
-export buffer, context
+export buffer, context, GPUArray
 
 include(joinpath("backends", "backends.jl"))
 export is_backend_supported, supported_backends

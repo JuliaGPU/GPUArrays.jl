@@ -28,3 +28,11 @@ if is_backend_supported(:opengl)
 else
     info("not testing opengl backend")
 end
+
+if is_backend_supported(:opencl)
+    @testset "OpenCL backend" begin
+        include("opencl.jl")
+    end
+else
+    info("not testing opencl backend")
+end

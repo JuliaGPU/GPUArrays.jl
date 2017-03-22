@@ -29,8 +29,8 @@ function any_context()
 end
 
 #typealias GLArrayImg{T, N} GPUArray{T, N, gl.Texture{T, N}, GLContext}
-const CUArray{T, N, B} = GPUArray{T, N, B, CUContext} #, GLArrayImg{T, N}}
-const CUArrayBuff{T, N} = CUArray{T, N, CUDAdrv.CuArray{T, N}}
+@compat const CUArray{T, N, B} = GPUArray{T, N, B, CUContext} #, GLArrayImg{T, N}}
+@compat const CUArrayBuff{T, N} = CUArray{T, N, CUDAdrv.CuArray{T, N}}
 
 
 global init, all_contexts, current_context

@@ -51,18 +51,30 @@ catch e
     info("If error fixed, try Pkg.build(\"GPUArrays\") again!")
     false
 end
-
 if install_cudanative
-    info("cudanative added as backend.")
+    info("cudanative added as backend!")
     push!(supported_backends, :cudanative)
 end
+
+install_opencl = try
+    using OpenCL
+    true
+catch e
+    info("OpenCL not usable. Please install drivers and add OpenCL.jl")
+    false
+end
+if install_opencl
+    info("OpenCL added as backend!")
+    push!(supported_backends, :opencl)
+end
+
 
 try
     using GLAbstraction, GLWindow
     # we need at least OpenGL 4.1
     ctx = create_glcontext("test", resolution = (10, 10), major = 4, minor = 1)
     if ctx.handle != C_NULL
-        info("opengl added as backend.")
+        info("opengl added as backend!")
         push!(supported_backends, :opengl)
     else
         error("Not a high enough version of OpenGL available. Try upgrading the video driver!")

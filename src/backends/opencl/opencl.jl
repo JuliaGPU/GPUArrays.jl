@@ -1,172 +1,115 @@
 module CLBackend
 
+using Compat
 using ..GPUArrays
 using OpenCL
+using OpenCL: cl
 
-import GPUArrays: buffer, create_buffer, Context, GPUArray
+using ..GPUArrays, StaticArrays
+#import CLBLAS, CLFFT
+
+import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
+import GPUArrays: Context, GPUArray, context, broadcast_index
+
+using Transpiler
+using Transpiler: CLTranspiler
+import Transpiler.CLTranspiler.cli
+import Transpiler.CLTranspiler.ComputeProgram
+import Transpiler.CLTranspiler.cli.get_global_id
 
 immutable CLContext <: Context
-    device
-    context
-    queue
-    kernel_dict
-    function CLContext(;device_type=:gpu)
+    device::cl.Device
+    context::cl.Context
+    queue::cl.CmdQueue
+    function CLContext(device_type = :gpu)
         device = first(cl.devices(device_type))
         ctx    = cl.Context(device)
         queue  = cl.CmdQueue(ctx)
-        new(
-            device, ctx, queue,
-            Dict()
-        )
+        new(device, ctx, queue)
     end
 end
-Base.show(io::IO, ctx::CLContext) = print(io, "CLContext")
-
-function init(;kw_args...)
-    global compute_context = CLContext(;kw_args...)
+function Base.show(io::IO, ctx::CLContext)
+    name = replace(ctx.device[:name], r"\s+", " ")
+    print(io, "CLContext: $name")
 end
 
-typealias CLArray{T, N} GPUArray{cl.Buffer{T}, T, N, CLContext}
+global init, all_contexts, current_context
+let contexts = CLContext[]
+    all_contexts() = copy(contexts)::Vector{CLContext}
+    current_context() = last(contexts)::CLContext
+    function init(;typ = :gpu, ctx = CLContext(typ))
+        GPUArrays.make_current(ctx)
+        push!(contexts, ctx)
+        ctx
+    end
+end
+
+@compat const CLArray{T, N} = GPUArray{T, N, cl.Buffer{T}, CLContext}
 
 # Constructor
 function Base.copy!{T, N}(dest::Array{T, N}, source::CLArray{T, N})
     copy!(context(source).queue, dest, buffer(source))
 end
-function create_buffer{T, N}(ctx::CLContext, A::AbstractArray{T, N}, flag = :rw)
-    cl.Buffer(T, ctx.context, (flag, :copy), hostbuf=A)
+function Base.unsafe_copy!{T, N}(dest::Array{T, N}, source::CLArray{T, N})
+    copy!(context(source).queue, dest, buffer(source))
 end
-function CLArray(A::AbstractArray, flag = :rw)
-    ctx = compute_context::CLContext
-    buf = create_buffer(ctx, A, flag)
-    GPUArray(buf, size(A), ctx)
+
+function Base.unsafe_copy!{T, N}(dest::CLArray{T, N}, source::Array{T, N})
+    copy!(context(dest).queue, buffer(dest), source)
+end
+function create_buffer{T, N}(ctx::CLContext, A::AbstractArray{T, N}, flag = :rw)
+    cl.Buffer(T, ctx.context, (flag, :copy), hostbuf = A)
+end
+function create_buffer{T, N}(
+        ctx::CLContext, ::Type{T}, sz::NTuple{N, Int};
+        flag = :rw, kw_args...
+    )
+    cl.Buffer(T, ctx.context, flag, prod(sz))
 end
 
 function Base.similar{T, N}(::Type{CLArray{T, N}}, sz::Tuple, flag = :rw)
-    ctx = compute_context::CLContext
-    buf = cl.Buffer(T, ctx.context, flag, prod(sz))
-    GPUArray(buf, sz, ctx)
+    ctx = current_context()
+    b = cl.Buffer(T, ctx.context, flag, prod(sz))
+    GPUArray{T, length(sz), typeof(b), typeof(ctx)}(b, sz, ctx)
 end
-
-const cl_type_map = Dict(
-    Float32 => "float",
-    Complex{Float32} => "c_float_t",
-    Int32 => "int"
-)
-
-const cl_fun_map = Dict{Type, String}(
-)
-
-function type_expr(typ, changes=false)
-    (cltype_prefix(typ, changes) *
-    cltype_name(typ) *
-    cltype_postfix(typ))
+function Base.similar{T, N, ET}(x::CLArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
+    ctx = context(x)
+    b = create_buffer(ctx, ET, sz; kw_args...)
+    GPUArray{ET, N, typeof(b), typeof(ctx)}(b, sz, ctx)
 end
-cltype_prefix(typ, changes=false) = changes ? "" : "const "
-function cltype_prefix{T, N}(::Type{CLArray{T, N}}, changes=false)
-    isconst = !changes # || is_readonly(typ)
-    const_str = isconst ? "const " : ""
-    "__global $const_str"
-end
+# The implementation of prod in base doesn't play very well with current
+# transpiler. TODO figure out what Core._apply maps to!
+_prod{T}(x::NTuple{1, T}) = x[1]
+_prod{T}(x::NTuple{2, T}) = x[1] * x[2]
+_prod{T}(x::NTuple{3, T}) = x[1] * x[2] * x[3]
 
-function cltype_name(typ)
-    T = typ <: GPUArray ? eltype(typ) : typ
-    get(cl_type_map, T) do
-        error("Type $typ not supported by OpenCL backend")
-    end
-end
-cltype_postfix{T, N}(::Type{CLArray{T, N}}) = "* "
-cltype_postfix(typ) = ""
-
-function getindex_expr{T, N}(typ::Type{CLArray{T, N}}, sym, idx = :i)
-    "$sym[$idx]"
-end
-function getindex_expr(typ, sym, idx="i")
-    "$sym"
-end
-function setindex_expr{T, N}(typ::Type{CLArray{T, N}}, sym, value, idx="i")
-    "$sym[$idx] = $value"
-end
-
-
-function is_infix(x)
-    isa(+, x) ||
-    isa(*, x) ||
-    isa(-, x) ||
-    isa(/, x) ||
-    isa(==, x)
-end
-
-function apply_expr(op, a, b)
-    fun = replace(string(op.name.name), "#", "") # LOL
-    if is_infix(op)
-        return "$a $fun $b"
-    else
-        return "$fun($a, $b)"
+###########################################################
+# Broadcast
+for i = 0:10
+    args = ntuple(x-> Symbol("arg_", x), i)
+    fargs = ntuple(x-> :(broadcast_index($(args[x]), sz, i)), i)
+    @eval begin
+        function broadcast_kernel(A, f, sz, $(args...))
+            i = get_global_id(0) + 1
+            @inbounds if i <= _prod(sz)
+                A[i] = f($(fargs...))
+            end
+            return
+        end
     end
 end
 
-# 16x vector loads, for now (still experimenting)
-const GRID = 16
-
-# Our little silly JIT!
-function map_kernel{T1, T2, T3}(op, out::T1, A::T2, B::T3)
-    ctx = compute_context::CLContext
-    kernel, source = get!(ctx.kernel_dict, (op, T1, T2, T3)) do
-        ai, bi = getindex_expr(A, :A, :i), getindex_expr(B, :B, :i)
-        outi = setindex_expr(out, :out, :value, :i)
-        T = type_expr(eltype(out), true)
-        source = """
-        __kernel void map_kernel(
-                $(type_expr(out, true)) out,
-                $(type_expr(A)) A,
-                $(type_expr(B)) B
-            ){
-            int i = get_global_id(0);
-            $(T)$(GRID) value1a = vload$(GRID)(i, A);
-            $(T)$(GRID) value1b = vload$(GRID)(i, B);
-            vstore$(GRID)($(apply_expr(op, "value1a", "value1b")), i, out);
-        }
-        """
-        # println(source)
-        program = cl.Program(ctx.context, source=source)
-      cl.build!(program)
-        cl.Kernel(program, "map_kernel"), source
-    end
-    kernel
+# extend the private interface for the compilation types
+function CLTranspiler._to_cl_types{T, N}(arg::CLArray{T, N})
+    return cli.CLArray{T, N}
 end
+CLTranspiler.cl_convert{T, N}(x::CLArray{T, N}) = buffer(x)
 
-function workgroup_heuristic(::typeof(broadcast!), out, A, B)
-    Csize_t[div(length(out), GRID)], C_NULL
-end
-
-function Base.broadcast{T1, T2, N}(op, A::CLArray{T1, N}, B::CLArray{T2, N})
-    T = Base.promote_op(op, T1, T2)
-    S = size(A)
-    out = similar(CLArray{T, N}, S, :w)
-    broadcast!(op, out, A, B)
-    out
-end
-
-@generated function Base.broadcast!{T1, T2, T3, N}(
-        op, out::CLArray{T1, N}, A::CLArray{T2, N}, B::CLArray{T3, N}
-    )
-    kernel = map_kernel(op, out, A, B)
-    ret_event = Array(cl.CL_event, 1)
-    q = compute_context.queue::cl.CmdQueue
-    quote
-        # moved this code out of OpenCL.jl to remove performances hurdles
-        cl.set_args!($(kernel), buffer(out), buffer(A), buffer(B))
-        gsize, lsize = workgroup_heuristic(broadcast!, out, A, B)
-        goffset = C_NULL
-        n_events = cl.cl_uint(0)
-        wait_event_ids = C_NULL
-        cl.api.clEnqueueNDRangeKernel(
-            $(q.id), $(kernel.id), cl.cl_uint(1), goffset, gsize, lsize,
-            n_events, wait_event_ids, $ret_event
-        )
-        cl.finish($(q))
-        nothing
-    end
+function acc_broadcast!{F <: Function, T, N}(f::F, A::CLArray{T, N}, args::Tuple)
+    ctx = context(A)
+    sz = map(Int32, size(A))
+    clfunc = ComputeProgram(broadcast_kernel, (A, f, sz, args...), ctx.queue)
+    clfunc((A, f, sz, args...), global_work_size = length(A))
 end
 
 
@@ -175,44 +118,7 @@ end
 
 blas_module(::CLContext) = CLBLAS
 
-
 end #CLBackend
 
-
-
-#     __global  *out, KParam oInfo,
-#     uint groups_0, uint groups_1, uint num_odims)
-#
-#     {
-#
-#
-#         uint groupId  = get_group_id(1) * get_num_groups(0) + get_group_id(0)
-#         uint threadId = get_local_id(0)
-#         int idx = groupId * get_local_size(0) * get_local_size(1) + threadId
-#         if (idx >= oInfo.dims[3] * oInfo.strides[3]) return;
-#
-#
-#      out[idx] = val
-#
-# }
-# source = """
-# __kernel void map_kernel(
-#                 $(type_expr(out, true)) out,
-#                 $(type_expr(A)) A,
-#                 $(type_expr(B)) B
-#         ){
-#         int i = get_global_id(0);
-#             int li = get_local_id(0);
-#         __local $T tmpA[128];
-#         __local $T tmpB[128];
-#         __local $T tmpout[128];
-#         async_work_group_copy(tmpA, A+i-li, 128, 0);
-#         async_work_group_copy(tmpB, B+i-li, 128, 0);
-#         async_work_group_copy(tmpout, out+i-li, 128, 0);
-#         for(int k=0; k<128, k++){
-#             tmpout[k] = $(apply_expr(op, "tmpA[k]", "tmpB[k]"));
-#         }
-#         async_work_group_copy(out+i-li, tmpout, 128, 0);
-#         $outi;
-# }
-# """
+using .CLBackend
+export CLBackend
