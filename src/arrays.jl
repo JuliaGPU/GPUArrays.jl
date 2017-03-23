@@ -46,10 +46,7 @@ end
 function Base.similar{T <: AbstractAccArray, N}(x::T, dims::NTuple{N, Int})
     similar(x, eltype(x), dims)
 end
-function Base.similar{T <: AbstractAccArray, N, ET}(x::T, ::Type{ET}, dims::NTuple{N, Int})
-    out = similar(buffer(x), ET, dims)
-    T(out)
-end
+
 
 #=
 Host to Device data transfers

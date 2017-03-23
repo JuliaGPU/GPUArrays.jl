@@ -2,6 +2,7 @@ using Base.Test
 using GPUArrays
 ctx = CLBackend.init()
 
+
 @testset "CLBLAS Float32" begin
     A = GPUArray(rand(Float32, 33, 33));
     B = GPUArray(rand(Float32, 33, 33));

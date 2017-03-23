@@ -55,8 +55,15 @@ function Base.similar{T2, T, N}(A::Type{JLArray{T2, N}}, ::Type{T}, sz::Tuple)
     N2 = length(sz)
     JLArray{T, N2}(Array{T, N2}(sz), current_context())
 end
-function (AT::Type{Array{T, N}}){T, N}(A::JLArray)
-    convert(AT, buffer(A))
+function Base.similar{T, N1, ET, N}(
+        x::JLArray{T, N1}, ::Type{ET}, dims::NTuple{N, Int}
+    )
+    out = similar(buffer(x), ET, dims)
+    typeof(x)(out)
+end
+
+function (AT::Type{Array{T, N}}){T, N}(A::JLArray{T, N})
+    buffer(A)
 end
 function (::Type{A}){A <: JLArray, T, N}(x::Array{T, N})
     JLArray{T, N}(x, current_context())
