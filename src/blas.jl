@@ -1,3 +1,5 @@
+
+
 typealias AccVecOrMat{T} Union{AbstractAccArray{T, 1}, AbstractAccArray{T, 2}}
 
 # all backends need to define a blas_module function to map to the correct library
@@ -7,7 +9,7 @@ blas_module(A::AccVecOrMat) = blas_module(context(A))
 # Slightly difference behavior from buffer, since not all blas backends work directly with
 # the gpu array buffer
 function blasbuffer(ctx, A)
-    error("$ctx doesn't support BLAS operations with $A")
+    error("$ctx doesn't support BLAS operations with $(typeof(A))")
 end
 
 for T in (Float32, Float64, Complex64, Complex128)
@@ -23,7 +25,7 @@ for T in (Float32, Float64, Complex64, Complex128)
                 transA, transB, alpha,
                 blasbuffer(ctx, A), blasbuffer(ctx, B), beta, blasbuffer(ctx, C)
             )
-            typeof(A)(result)
+            C
         end
     end
 end
