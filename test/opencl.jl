@@ -1,12 +1,14 @@
 using Base.Test
 using GPUArrays
 ctx = CLBackend.init()
-A = GPUArray(rand(Float32, 33, 33));
-B = GPUArray(rand(Float32, 33, 33));
-C = A * B;
-c = Array(C);
-@test c == Array(A) * Array(B)
 
+@testset "CLBLAS Float32" begin
+    A = GPUArray(rand(Float32, 33, 33));
+    B = GPUArray(rand(Float32, 33, 33));
+    C = A * B;
+    c = Array(C);
+    @test c == Array(A) * Array(B)
+end
 # more complex function for broadcast
 function test{T}(a::T, b)
     x = sqrt(sin(a) * b) / T(10.0)
@@ -34,17 +36,16 @@ end
 
 @testset "broadcast Complex64" begin
     A = GPUArray(fill(10f0*im, 40, 40))
-
     A .= identity.(10f0*im)
     @test all(x-> x == 10f0*im, Array(A))
 
-    B = cu_angle.(A)
+    B = angle.(A)
     @test all(x-> x == angle(10f0*im), Array(B))
     A .= identity.(2f0*im)
-    C = A .* (2f0*im)
+    C = (*).(A, (2f0*im))
     @test all(x-> x == 2f0*im * 2f0*im, Array(C))
-    D = A .* B
+    D = (*).(A, B)
     @test all(x-> x == angle(10f0*im) * 2f0*im, Array(D))
-    D .= A .* B .+ (0.5f0*im)
+    D .= (+).((*).(A, B), (0.5f0*im))
     @test all(x-> x == (2f0*im * angle(10f0*im) + (0.5f0*im)), Array(D))
 end
