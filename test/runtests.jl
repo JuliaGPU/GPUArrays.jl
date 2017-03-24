@@ -7,32 +7,9 @@ function jltest(a, b)
     y*10
 end
 
-if is_backend_supported(:cudanative)
-    @testset "CUDAnative backend" begin
-        include("cuda.jl")
+# Only test supported backends!
+for backend in supported_backends()
+    @testset "CUDAnative $backend" begin
+        include("$(backend).jl")
     end
-else
-    info("not testing cudanative backend")
-end
-if is_backend_supported(:julia)
-    @testset "Threaded Julia backend" begin
-        include("jlbackend.jl")
-    end
-else
-    info("not testing julia backend")
-end
-if is_backend_supported(:opengl)
-    @testset "OpenGL backend" begin
-        include("opengl.jl")
-    end
-else
-    info("not testing opengl backend")
-end
-
-if is_backend_supported(:opencl)
-    @testset "OpenCL backend" begin
-        include("opencl.jl")
-    end
-else
-    info("not testing opencl backend")
 end
