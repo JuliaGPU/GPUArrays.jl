@@ -29,3 +29,17 @@ for T in (Float32, Float64, Complex64, Complex128)
         end
     end
 end
+
+for elty in (Float64, Float32)
+    @eval begin
+        function Base.BLAS.scal!{N}(
+                n::Integer, DA::$elty,
+                DX::AbstractAccArray{$elty, N}, incx::Integer
+            )
+            ctx = context(A)
+            blasmod = blas_module(ctx)
+            blasmod.scal!(n, DA, blasbuffer(ctx, DX), incx)
+            DX
+        end
+    end
+end
