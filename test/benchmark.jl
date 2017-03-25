@@ -1,5 +1,5 @@
-using GPUArrays, CUDAnative, BenchmarkTools
-import GPUArrays: CUBackend, JLBackend
+using JTensors, CUDAnative, BenchmarkTools
+import JTensors: CUBackend, JLBackend
 import CUBackend: CUArray
 import JLBackend: JLArray
 cuctx = CUBackend.init()

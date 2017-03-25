@@ -1,9 +1,9 @@
 module GLBackend
 
-using ..GPUArrays
+using ..JTensors
 
-import GPUArrays: buffer, create_buffer, acc_broadcast!
-import GPUArrays: Context, GPUArray, context, broadcast_index
+import JTensors: buffer, create_buffer, acc_broadcast!
+import JTensors: Context, GPUArray, context, broadcast_index
 
 import GLAbstraction, GLWindow, GLFW
 using ModernGL
@@ -35,7 +35,7 @@ let contexts = GLContext[]
     end
     init(ctx::GLWindow.Screen) = init(GLContext(GLWindow.nativewindow(ctx)))
     function init(ctx::GLContext)
-        GPUArrays.make_current(ctx)
+        JTensors.make_current(ctx)
         push!(contexts, ctx)
         ctx
     end
@@ -135,7 +135,7 @@ end
 to_glsl_types(::Type{Float32}) = Float64
 to_glsl_types{T}(arg::T) = to_glsl_types(T)
 to_glsl_types{T}(::Type{T}) = T
-function to_glsl_types{T <: GPUArrays.AbstractAccArray}(arg::T)
+function to_glsl_types{T <: JTensors.AbstractAccArray}(arg::T)
     if isa(buffer(arg), gl.Texture)
         et = to_glsl_types(eltype(arg))
         return gli.GLArray{et, ndims(arg)}

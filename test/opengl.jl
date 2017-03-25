@@ -1,6 +1,6 @@
-using GPUArrays, ModernGL
+using JTensors, ModernGL
 using Base.Test
-import GPUArrays: GLBackend
+import JTensors: GLBackend
 import GLBackend: GLArray
 glctx = GLBackend.init()
 # using Sugar

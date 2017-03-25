@@ -28,7 +28,7 @@ build_script:
   - C:\projects\julia\bin\julia -e "Pkg.clone(\"https://github.com/SimonDanisch/Matcha.jl.git\")"
   - C:\projects\julia\bin\julia -e "Pkg.clone(\"https://github.com/SimonDanisch/Sugar.jl.git\")"
   - C:\projects\julia\bin\julia -e "versioninfo();
-      Pkg.clone(pwd(), \"GPUArrays\"); Pkg.build(\"GPUArrays\")"
+      Pkg.clone(pwd(), \"JTensors\"); Pkg.build(\"JTensors\")"
 
 test_script:
-  - C:\projects\julia\bin\julia --check-bounds=yes -e "Pkg.test(\"GPUArrays\")"
+  - C:\projects\julia\bin\julia --check-bounds=yes -e "Pkg.test(\"JTensors\")"

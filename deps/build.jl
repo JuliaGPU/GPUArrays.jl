@@ -1,6 +1,6 @@
 info("""
 This process will figure out which acceleration Packages you have installed
-and therefore which backends GPUArrays can offer.
+and therefore which backends JTensors can offer.
 Theoretically available:
 :cudanative, :julia, :opengl
 
@@ -21,10 +21,10 @@ install_cudanative = true
 if !isdir(cudanative_dir)
     info("""
     Not installing CUDAnative backend. If you've installed CUDAnative.jl not in the
-    default location, consider building GPUArrays like this:
+    default location, consider building JTensors like this:
     ```
     ENV[CUDANATIVE_PATH] = "path/to/CUDAnative/"
-    Pkg.build("GPUArrays")
+    Pkg.build("JTensors")
     ```
     If not installed, you can get CUDAnative like this:
     ```
@@ -48,7 +48,7 @@ install_cudanative = try
     true
 catch e
     info("CUDAnative doesn't seem to be usable and it won't be installed as a backend. Error: $e")
-    info("If error fixed, try Pkg.build(\"GPUArrays\") again!")
+    info("If error fixed, try Pkg.build(\"JTensors\") again!")
     false
 end
 if install_cudanative
@@ -72,7 +72,7 @@ end
 try
     using GLAbstraction, GLWindow
     # we need at least OpenGL 4.1
-    ctx = create_glcontext("test", resolution = (10, 10), major = 4, minor = 1)
+    ctx = create_glcontext("test", resolution = (10, 10), major = 4, minor = 3)
     if ctx.handle != C_NULL
         info("opengl added as backend!")
         push!(supported_backends, :opengl)
@@ -82,8 +82,6 @@ try
 catch e
     info("OpenGL not added as backend: $e")
 end
-
-
 
 
 file = joinpath(dirname(@__FILE__), "..", "src", "backends", "supported_backends.jl")

@@ -1,7 +1,7 @@
 using GLAbstraction
 using ModernGL, CUDAnative
-using GPUArrays
-import GPUArrays: GPUArray, GLBackend, CUBackend, cu_map
+using JTensors
+import JTensors: GPUArray, GLBackend, CUBackend, cu_map
 
 cuctx = CUBackend.init()
 glctx = GLBackend.init()

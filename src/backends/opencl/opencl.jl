@@ -1,16 +1,16 @@
 module CLBackend
 
 using Compat
-using ..GPUArrays
+using ..JTensors
 using OpenCL
 using OpenCL: cl
 
-using ..GPUArrays, StaticArrays
+using ..JTensors, StaticArrays
 #import CLBLAS, CLFFT
 
-import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import GPUArrays: Context, GPUArray, context, broadcast_index
-import GPUArrays: blasbuffer, blas_module
+import JTensors: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
+import JTensors: Context, GPUArray, context, broadcast_index
+import JTensors: blasbuffer, blas_module
 
 using Transpiler
 using Transpiler: CLTranspiler
@@ -39,7 +39,7 @@ let contexts = CLContext[]
     all_contexts() = copy(contexts)::Vector{CLContext}
     current_context() = last(contexts)::CLContext
     function init(;typ = :gpu, ctx = CLContext(typ))
-        GPUArrays.make_current(ctx)
+        JTensors.make_current(ctx)
         push!(contexts, ctx)
         ctx
     end

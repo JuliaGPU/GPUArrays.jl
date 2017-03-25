@@ -1,11 +1,11 @@
 module JLBackend
 
-using ..GPUArrays
+using ..JTensors
 using Compat
 
-import GPUArrays: buffer, create_buffer, Context
-import GPUArrays: AbstractAccArray, acc_mapreduce, mapidx
-import GPUArrays: broadcast_index, acc_broadcast!, blas_module, blasbuffer
+import JTensors: buffer, create_buffer, Context
+import JTensors: AbstractAccArray, acc_mapreduce, mapidx
+import JTensors: broadcast_index, acc_broadcast!, blas_module, blasbuffer
 
 import Base.Threads: @threads
 

@@ -1,6 +1,6 @@
-using GPUArrays
-import GPUArrays: JLBackend, CLBackend
-import GPUArrays.JLBackend: JLArray
+using JTensors
+import JTensors: JLBackend, CLBackend
+import JTensors.JLBackend: JLArray
 
 function blackscholes(
         sptprice,

@@ -1,5 +1,5 @@
 __precompile__(true)
-module GPUArrays
+module JTensors
 
 abstract Context
 using Sugar

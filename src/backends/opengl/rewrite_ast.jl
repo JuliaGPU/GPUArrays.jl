@@ -4,8 +4,8 @@
 # invalid julia AST. The idea is to remove more logick from the actual printing
 # to glsl string
 
-using Sugar, DataStructures, GPUArrays
-import GPUArrays: GLBackend
+using Sugar, DataStructures, JTensors
+import JTensors: GLBackend
 import Sugar: similar_expr, instance
 include("intrinsics.jl")
 include("gl_codegen.jl")

@@ -1,6 +1,6 @@
-using GPUArrays
+using JTensors
 using Base.Test
-import GPUArrays: JLBackend
+import JTensors: JLBackend
 import JLBackend: JLArray
 JLBackend.init()
 

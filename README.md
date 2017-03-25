@@ -1,6 +1,6 @@
-# GPUArrays
+# JTensors
 
-[![Build Status](https://travis-ci.org/SimonDanisch/GPUArrays.jl.svg?branch=master)](https://travis-ci.org/SimonDanisch/GPUArrays.jl)
+[![Build Status](https://travis-ci.org/SimonDanisch/JTensors.jl.svg?branch=master)](https://travis-ci.org/SimonDanisch/JTensors.jl)
 
 
 Prototype for a GPU Array library. 
@@ -53,5 +53,5 @@ In the further future it's planned to replace the transpiler by the same approac
 CUDAnative.jl is using (via LLVM + SPIR-V).
 
 CLFFT, CUFFT, CLBLAS and CUBLAS will soon be supported.
-A prototype of the support can be found here: https://github.com/JuliaGPU/GPUArrays.jl/blob/sd/glsl/src/blas.jl
+A prototype of the support can be found here: https://github.com/JuliaGPU/JTensors.jl/blob/sd/glsl/src/blas.jl
 

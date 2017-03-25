@@ -1,7 +1,13 @@
 julia 0.5
 #Sugar
+#Matcha
 GLAbstraction
 GLWindow
+
 CUDArt
-CLBLAS
 CUBLAS
+CUFFT
+
+OpenCL
+CLBLAS
+CLFFT

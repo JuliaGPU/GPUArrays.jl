@@ -1,6 +1,6 @@
-using GPUArrays, CUDAnative
+using JTensors, CUDAnative
 using Base.Test
-import GPUArrays: GPUArray, CUBackend
+import JTensors: GPUArray, CUBackend
 cuctx = CUBackend.init()
 const cu = CUDAnative
 

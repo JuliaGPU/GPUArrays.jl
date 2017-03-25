@@ -1,12 +1,12 @@
 
 module CUBackend
 
-using ..GPUArrays, CUDAnative, StaticArrays
+using ..JTensors, CUDAnative, StaticArrays
 
 import CUDAdrv, CUDArt #, CUFFT
 
-import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import GPUArrays: Context, GPUArray, context, broadcast_index
+import JTensors: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
+import JTensors: Context, GPUArray, context, broadcast_index
 using CUDAdrv: CuDefaultStream
 
 immutable GraphicsResource{T}
@@ -38,7 +38,7 @@ let contexts = CUContext[]
     all_contexts() = copy(contexts)::Vector{CUContext}
     current_context() = last(contexts)::CUContext
     function init(;ctx = any_context())
-        GPUArrays.make_current(ctx)
+        JTensors.make_current(ctx)
         push!(contexts, ctx)
         ctx
     end

@@ -1,4 +1,4 @@
-using GPUArrays
+using JTensors
 using Base.Test
 
 function jltest(a, b)
