@@ -68,20 +68,21 @@ if install_opencl
     push!(supported_backends, :opencl)
 end
 
-
-try
-    using GLAbstraction, GLWindow
-    # we need at least OpenGL 4.1
-    ctx = create_glcontext("test", resolution = (10, 10), major = 4, minor = 3)
-    if ctx.handle != C_NULL
-        info("opengl added as backend!")
-        push!(supported_backends, :opengl)
-    else
-        error("Not a high enough version of OpenGL available. Try upgrading the video driver!")
-    end
-catch e
-    info("OpenGL not added as backend: $e")
-end
+# TODO add back OpenGL backend.. Currently not supported due to many driver bugs
+# in OpenGL implementation
+# try
+#     using GLAbstraction, GLWindow
+#     # we need at least OpenGL 4.1
+#     ctx = create_glcontext("test", resolution = (10, 10), major = 4, minor = 3)
+#     if ctx.handle != C_NULL
+#         info("opengl added as backend!")
+#         push!(supported_backends, :opengl)
+#     else
+#         error("Not a high enough version of OpenGL available. Try upgrading the video driver!")
+#     end
+# catch e
+#     info("OpenGL not added as backend: $e")
+# end
 
 
 file = joinpath(dirname(@__FILE__), "..", "src", "backends", "supported_backends.jl")

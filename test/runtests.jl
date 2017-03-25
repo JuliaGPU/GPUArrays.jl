@@ -9,7 +9,7 @@ end
 
 # Only test supported backends!
 for backend in supported_backends()
-    @testset "CUDAnative $backend" begin
+    @testset "$backend" begin
         include("$(backend).jl")
     end
 end

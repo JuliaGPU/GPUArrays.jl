@@ -54,7 +54,7 @@ end
 
 @testset "fft Complex64" begin
     for n = 1:3
-        @testset "N $n"
+        @testset "N $n" begin
             a = rand(Complex64, ntuple(i-> 40, n))
             A = GPUArray(a)
             fft!(A)

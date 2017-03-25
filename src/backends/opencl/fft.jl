@@ -1,20 +1,26 @@
-const plan_dict = Dict{NTuple{3, Int}, clfft.Plan}()
+import CLFFT
+
+const plan_dict = Dict()
 
 function getplan!{T, N}(A::CLArray{T, N})
-    get!(plan_dict, size(A)) do
-        p = clfft.Plan(T, ctx, size(A))
-        clfft.set_layout!(p, :interleaved, :interleaved)
-        clfft.set_result!(p, :inplace)
-        clfft.bake!(p, queue)
+    if haskey(plan_dict, size(A))
+        return plan_dict[size(A)]
+    else
+        ctx = context(A)
+        p = CLFFT.Plan(T, ctx.context, size(A))
+        CLFFT.set_layout!(p, :interleaved, :interleaved)
+        CLFFT.set_result!(p, :inplace)
+        CLFFT.bake!(p, ctx.queue)
+        plan_dict[size(A)] = p
         p
     end
 end
 
-function Base.fft!(A::cl.CLArray)
-    qref = [queue]
-    clfft.enqueue_transform(getplan!(A), :forward, qref, A.buffer, nothing)
+function Base.fft!{T, N}(A::CLArray{T, N})
+    qref = [context(A).queue]
+    CLFFT.enqueue_transform(getplan!(A), :forward, qref, buffer(A), nothing)
 end
-function Base.ifft!(A::cl.CLArray)
-    qref = [queue]
-    clfft.enqueue_transform(getplan!(A), :backward, qref, A.buffer, nothing)
+function Base.ifft!{T, N}(A::CLArray{T, N})
+    qref = [context(A).queue]
+    CLFFT.enqueue_transform(getplan!(A), :backward, qref, buffer(A), nothing)
 end

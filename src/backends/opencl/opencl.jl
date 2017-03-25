@@ -49,14 +49,20 @@ end
 
 # Constructor
 function Base.copy!{T, N}(dest::Array{T, N}, source::CLArray{T, N})
-    copy!(context(source).queue, dest, buffer(source))
+    q = context(source).queue
+    cl.finish(q)
+    copy!(q, dest, buffer(source))
 end
 function Base.unsafe_copy!{T, N}(dest::Array{T, N}, source::CLArray{T, N})
-    copy!(context(source).queue, dest, buffer(source))
+    q = context(source).queue
+    cl.finish(q)
+    copy!(q, dest, buffer(source))
 end
 
 function Base.unsafe_copy!{T, N}(dest::CLArray{T, N}, source::Array{T, N})
-    copy!(context(dest).queue, buffer(dest), source)
+    q = context(dest).queue
+    cl.finish(q)
+    copy!(q, buffer(dest), source)
 end
 function create_buffer{T, N}(ctx::CLContext, A::AbstractArray{T, N}, flag = :rw)
     cl.Buffer(T, ctx.context, (flag, :copy), hostbuf = A)
@@ -107,8 +113,10 @@ CLTranspiler.cl_convert{T, N}(x::CLArray{T, N}) = buffer(x)
 function acc_broadcast!{F <: Function, T, N}(f::F, A::CLArray{T, N}, args::Tuple)
     ctx = context(A)
     sz = map(Int32, size(A))
-    clfunc = ComputeProgram(broadcast_kernel, (A, f, sz, args...), ctx.queue)
-    clfunc((A, f, sz, args...), size(A))
+    q = ctx.queue
+    cl.finish(q)
+    clfunc = ComputeProgram(broadcast_kernel, (A, f, sz, args...), q)
+    clfunc((A, f, sz, args...), length(A))
 end
 
 
@@ -123,6 +131,8 @@ function blasbuffer(::CLContext, A)
     # LOL! TODO don't have CLArray in OpenCL/CLBLAS
     cl.CLArray(buff, context(A).queue, size(A))
 end
+
+include("fft.jl")
 
 end #CLBackend
 
