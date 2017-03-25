@@ -180,33 +180,3 @@ function getfuncheader!(x::LazyMethod, ::GLSLIO)
     end
     x.funcheader
 end
-
-
-#
-# function broadcast_index{T, N}(arg::gli.GLArray{T, N}, shape, idx)
-#     sz = size(arg)
-#     i = (sz .<= shape) .* idx
-#     return arg[i]
-# end
-# broadcast_index(arg, shape, idx) = arg
-#
-# function broadcast_kernel{T}(A::gli.GLArray{T, 2}, f, a, b)
-#     idx = NTuple{2, Int}(GlobalInvocationID())
-#     sz = size(A)
-#     A[idx] = f(
-#         broadcast_index(a, sz, idx),
-#         broadcast_index(b, sz, idx),
-#     )
-#     return
-# end
-# f, types = broadcast_kernel, (gli.GLArray{Float64, 2}, typeof(+), gli.GLArray{Float64, 2}, Float64)
-# decl = LazyMethod((f, types), Transpiler())
-# #ast = getsource!(decl)
-# ast = getast!(decl)
-# println(getsource!(decl))
-# for elem in decl.dependencies
-#     println(getsource!(elem))
-# end
-# length(filter(isfunction, decl.dependencies))
-# lal = getcodeinfo!(decl)
-# println(getfuncsource!(decl))
