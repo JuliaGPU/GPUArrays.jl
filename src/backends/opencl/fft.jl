@@ -1,8 +1,8 @@
 const plan_dict = Dict{NTuple{3, Int}, clfft.Plan}()
 
-function getplan!(A)
+function getplan!{T, N}(A::CLArray{T, N})
     get!(plan_dict, size(A)) do
-        p = clfft.Plan(Complex64, ctx, size(A))
+        p = clfft.Plan(T, ctx, size(A))
         clfft.set_layout!(p, :interleaved, :interleaved)
         clfft.set_result!(p, :inplace)
         clfft.bake!(p, queue)
@@ -11,8 +11,10 @@ function getplan!(A)
 end
 
 function Base.fft!(A::cl.CLArray)
-    clfft.enqueue_transform(getplan!(A), :forward, [queue], A.buffer, nothing)
+    qref = [queue]
+    clfft.enqueue_transform(getplan!(A), :forward, qref, A.buffer, nothing)
 end
 function Base.ifft!(A::cl.CLArray)
-    clfft.enqueue_transform(getplan!(A), :backward, [queue], A.buffer, nothing)
+    qref = [queue]
+    clfft.enqueue_transform(getplan!(A), :backward, qref, A.buffer, nothing)
 end
