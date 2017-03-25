@@ -261,3 +261,6 @@ end
 
 
 end
+
+using .CUBackend
+export CUBackend

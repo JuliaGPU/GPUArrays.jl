@@ -111,4 +111,7 @@ end
 
 include("liftbase.jl")
 
-end #CLBackend
+end #JLBackend
+
+using .JLBackend
+export JLBackend
