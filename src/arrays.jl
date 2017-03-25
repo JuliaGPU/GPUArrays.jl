@@ -54,8 +54,8 @@ Host to Device data transfers
 function (::Type{A}){A <: AbstractAccArray}(x::AbstractArray)
     A(collect(x))
 end
-function (::Type{A}){A <: AbstractAccArray}(x::Array)
-    out = similar(A, eltype(x), size(x))
+function (::Type{A}){A <: AbstractAccArray}(x::Array; kw_args...)
+    out = similar(A, eltype(x), size(x); kw_args...)
     unsafe_copy!(out, x)
     out
 end

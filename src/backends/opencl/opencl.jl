@@ -92,9 +92,7 @@ for i = 0:10
     @eval begin
         function broadcast_kernel(A, f, sz, $(args...))
             i = get_global_id(0) + 1
-            @inbounds if i <= _prod(sz)
-                A[i] = f($(fargs...))
-            end
+            A[i] = f($(fargs...))
             return
         end
     end
@@ -110,7 +108,7 @@ function acc_broadcast!{F <: Function, T, N}(f::F, A::CLArray{T, N}, args::Tuple
     ctx = context(A)
     sz = map(Int32, size(A))
     clfunc = ComputeProgram(broadcast_kernel, (A, f, sz, args...), ctx.queue)
-    clfunc((A, f, sz, args...), global_work_size = length(A))
+    clfunc((A, f, sz, args...), size(A))
 end
 
 
