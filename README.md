@@ -61,7 +61,7 @@ broadcast!(f, dest::GPUArray, ::GPUArray...)
 
 
 CLFFT, CUFFT, CLBLAS and CUBLAS will soon be supported.
-A prototype of the support can be found here: https://github.com/JuliaGPU/GPUArrays.jl/blob/sd/glsl/src/blas.jl
+A prototype of generic support of these libraries can be found in [blas.jl](https://github.com/JuliaGPU/GPUArrays.jl/blob/sd/glsl/src/blas.jl).
 The OpenCL backend already supports mat mul via `CLBLAS.gemm!` and `fft!`/`ifft!`.
 CUDAnative could support these easily as well, but we currently run into problems with the interactions of `CUDAdrv` and `CUDArt`.
 
