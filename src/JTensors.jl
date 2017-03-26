@@ -5,7 +5,7 @@ abstract Context
 using Sugar
 
 include("abstractarray.jl")
-export buffer, context, JTensor
+export JTensor, mapidx
 
 include(joinpath("backends", "backends.jl"))
 export is_backend_supported, supported_backends

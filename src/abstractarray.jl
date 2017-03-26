@@ -6,26 +6,22 @@ type JTensor{T, N, B, C} <: AbstractAccArray{T, N}
     context::C
 end
 
+
 # interfaces
 
-function Base.similar{T <: JTensor, ET, N}(
-        ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
-        context::Context = current_context(), kw_args...
-    )
-    b = create_buffer(context, ET, sz; kw_args...)
-    JTensor{ET, N, typeof(b), typeof(context)}(b, sz, context)
-end
 #=
-context interface
+Interface for accessing the lower level
 =#
 
 buffer(A::AbstractAccArray) = A.buffer
 context(A::AbstractAccArray) = A.context
 
+
+
+
 #=
 AbstractArray interface
 =#
-
 Base.eltype{T}(::AbstractAccArray{T}) = T
 Base.size(A::AbstractAccArray) = A.size
 
@@ -37,6 +33,13 @@ function Base.showcompact(io::IO, mt::MIME"text/plain", A::AbstractAccArray)
     showcompact(io, mt, Array(A))
 end
 
+function Base.similar{T <: JTensor, ET, N}(
+        ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
+        context::Context = current_context(), kw_args...
+    )
+    b = create_buffer(context, ET, sz; kw_args...)
+    JTensor{ET, N, typeof(b), typeof(context)}(b, sz, context)
+end
 function Base.similar{T <: AbstractAccArray}(x::T)
     similar(x, eltype(x), size(x))
 end
@@ -56,7 +59,7 @@ function (::Type{A}){A <: AbstractAccArray}(x::AbstractArray)
 end
 function (::Type{A}){A <: AbstractAccArray}(x::Array; kw_args...)
     out = similar(A, eltype(x), size(x); kw_args...)
-    unsafe_copy!(out, x)
+    copy!(out, x)
     out
 end
 Base.convert{A <: AbstractAccArray}(::Type{A}, x::AbstractArray) = A(x)
@@ -73,7 +76,7 @@ function (AT::Type{Array{T, N}}){T, N}(device_array::AbstractAccArray)
 end
 function (AT::Type{Array{T, N}}){T, N}(device_array::AbstractAccArray{T, N})
     hostarray = similar(AT, size(device_array))
-    unsafe_copy!(hostarray, device_array)
+    copy!(hostarray, device_array)
     hostarray
 end
 
@@ -82,11 +85,11 @@ end
 Copying
 =#
 
-function Base.unsafe_copy!{T, N}(dest::Array{T, N}, source::AbstractAccArray{T, N})
-    Base.unsafe_copy!(dest, buffer(source))
+function Base.copy!{T, N}(dest::Array{T, N}, source::AbstractAccArray{T, N})
+    copy!(dest, buffer(source))
 end
-function Base.unsafe_copy!{T, N}(dest::AbstractAccArray{T, N}, source::Array{T, N})
-    Base.unsafe_copy!(buffer(dest), source)
+function Base.copy!{T, N}(dest::AbstractAccArray{T, N}, source::Array{T, N})
+    copy!(buffer(dest), source)
 end
 
 # Function needed to be overloaded by backends
@@ -269,4 +272,25 @@ function Base.fill!{N, T}(A::AbstractAccArray{N, T}, val)
 end
 function Base.rand{T <: AbstractAccArray, ET}(::Type{T}, ::Type{ET}, size...)
     T(rand(ET, size...))
+end
+
+
+############################################
+# serialization
+
+const BaseSerializer = if isdefined(Base, :AbstractSerializer)
+    Base.AbstractSerializer
+elseif isdefined(Base, :SerializationState)
+    Base.SerializationState
+else
+    error("No Serialization type found. Probably unsupported Julia version")
+end
+
+function Base.serialize{T<:JTensor}(s::BaseSerializer, t::T)
+    Base.serialize_type(s, T)
+    serialize(s, Array(t))
+end
+function Base.deserialize{T<:JTensor}(s::BaseSerializer, ::Type{T})
+    A = deserialize(s)
+    T(A)
 end

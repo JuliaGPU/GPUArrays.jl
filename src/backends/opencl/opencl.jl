@@ -53,13 +53,8 @@ function Base.copy!{T, N}(dest::Array{T, N}, source::CLArray{T, N})
     cl.finish(q)
     copy!(q, dest, buffer(source))
 end
-function Base.unsafe_copy!{T, N}(dest::Array{T, N}, source::CLArray{T, N})
-    q = context(source).queue
-    cl.finish(q)
-    copy!(q, dest, buffer(source))
-end
 
-function Base.unsafe_copy!{T, N}(dest::CLArray{T, N}, source::Array{T, N})
+function Base.copy!{T, N}(dest::CLArray{T, N}, source::Array{T, N})
     q = context(dest).queue
     cl.finish(q)
     copy!(q, buffer(dest), source)
@@ -101,6 +96,11 @@ for i = 0:10
             A[i] = f($(fargs...))
             return
         end
+        function mapidx_kernel{F}(A, f::F, $(args...))
+            i = get_global_id(0) + 1
+            f(i, A, $(args...))
+            return
+        end
     end
 end
 
@@ -119,6 +119,14 @@ function acc_broadcast!{F <: Function, T, N}(f::F, A::CLArray{T, N}, args::Tuple
     clfunc((A, f, sz, args...), length(A))
 end
 
+function mapidx{F <: Function, N, T, N2}(f::F, A::CLArray{T, N2}, args::NTuple{N, Any})
+    ctx = context(A)
+    q = ctx.queue
+    cl.finish(q)
+    cl_args = (A, f, args...)
+    clfunc = ComputeProgram(mapidx_kernel, cl_args, q)
+    clfunc(cl_args, length(A))
+end
 
 ###################
 # Blase interface
