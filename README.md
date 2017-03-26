@@ -67,7 +67,7 @@ The OpenCL backend already supports mat mul via `CLBLAS.gemm!` and `fft!`/`ifft!
 CUDAnative could support these easily as well, but we currently run into problems with the interactions of `CUDAdrv` and `CUDArt`.
 
 
-# TODO
+# TODO / up for grabs
 
 * mapreduce (there is a first working version for cudanative)
 * stencil operations
@@ -75,3 +75,4 @@ CUDAnative could support these easily as well, but we currently run into problem
 * tests, that actually only switch the backend but use the same code
 * performance improvements!!
 * implement push!, append!, resize!, getindex, setindex!
+* interop between OpenCL, CUDA and OpenGL is there as a protype, but needs propper hooking up via `Base.copy!` / `convert`
