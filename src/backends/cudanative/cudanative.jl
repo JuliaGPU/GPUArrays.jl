@@ -1,7 +1,7 @@
 
 module CUBackend
 
-using ..JTensors, CUDAnative, StaticArrays
+using ..JTensors, CUDAnative, StaticArrays, Compat
 
 import CUDAdrv, CUDArt #, CUFFT
 
@@ -47,14 +47,20 @@ end
 function create_buffer{T, N}(ctx::CUContext, ::Type{T}, sz::NTuple{N, Int}; kw_args...)
     CUDAdrv.CuArray{T}(sz)
 end
-function Base.unsafe_copy!{T,N}(dest::Array{T,N}, source::CUArray{T,N})
+function Base.copy!{T,N}(dest::Array{T,N}, source::CUArray{T,N})
     copy!(dest, buffer(source))
 end
-function Base.unsafe_copy!{T,N}(dest::CUArray{T,N}, source::Array{T,N})
+function Base.copy!{T,N}(dest::CUArray{T,N}, source::Array{T,N})
     copy!(buffer(dest), source)
 end
 function Base.copy!{T,N}(dest::CUArray{T,N}, source::CUArray{T,N})
     copy!(buffer(dest), buffer(source))
+end
+
+function Base.similar{T, N, ET}(x::CUArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
+    ctx = context(x)
+    b = create_buffer(ctx, ET, sz; kw_args...)
+    JTensor{ET, N, typeof(b), typeof(ctx)}(b, sz, ctx)
 end
 
 function thread_blocks_heuristic(A::AbstractArray)

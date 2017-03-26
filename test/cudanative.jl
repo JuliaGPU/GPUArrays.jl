@@ -1,6 +1,5 @@
 using JTensors, CUDAnative
 using Base.Test
-import JTensors: JTensor, CUBackend
 cuctx = CUBackend.init()
 const cu = CUDAnative
 
@@ -109,5 +108,5 @@ end
         x2 = b[min(i+off, length(a))]
         a[i] = x * x2
     end
-    @test Array(A) == a
+    @test Array(A) ≈ a
 end
