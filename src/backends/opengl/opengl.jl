@@ -3,7 +3,7 @@ module GLBackend
 using ..JTensors
 
 import JTensors: buffer, create_buffer, acc_broadcast!
-import JTensors: Context, GPUArray, context, broadcast_index
+import JTensors: Context, JTensor, context, broadcast_index
 
 import GLAbstraction, GLWindow, GLFW
 using ModernGL
@@ -16,8 +16,8 @@ immutable GLContext <: Context
 end
 Base.show(io::IO, ctx::GLContext) = print(io, "GLContext")
 
-typealias GLArrayBuff{T, N} GPUArray{T, N, gl.GLBuffer{T}, GLContext}
-typealias GLArrayTex{T, N} GPUArray{T, N, gl.Texture{T, N}, GLContext}
+typealias GLArrayBuff{T, N} JTensor{T, N, gl.GLBuffer{T}, GLContext}
+typealias GLArrayTex{T, N} JTensor{T, N, gl.Texture{T, N}, GLContext}
 typealias GLArray{T, N} Union{GLArrayBuff{T, N}, GLArrayTex{T, N}}
 
 
@@ -81,7 +81,7 @@ function Base.convert{ET, ND}(
         ::Type{GLArrayTex{ET, ND}},
         A::GLArrayBuff{ET, ND}
     )
-    texB = GPUArray(gl.Texture(ET, size(A)), size(A), context(A))
+    texB = JTensor(gl.Texture(ET, size(A)), size(A), context(A))
     unsafe_copy!(texB, A)
     texB
 end

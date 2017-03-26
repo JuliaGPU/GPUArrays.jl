@@ -1,6 +1,6 @@
 abstract AbstractAccArray{T, N} <: DenseArray{T, N}
 
-type GPUArray{T, N, B, C} <: AbstractAccArray{T, N}
+type JTensor{T, N, B, C} <: AbstractAccArray{T, N}
     buffer::B
     size::NTuple{N, Int}
     context::C
@@ -8,12 +8,12 @@ end
 
 # interfaces
 
-function Base.similar{T <: GPUArray, ET, N}(
+function Base.similar{T <: JTensor, ET, N}(
         ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
         context::Context = current_context(), kw_args...
     )
     b = create_buffer(context, ET, sz; kw_args...)
-    GPUArray{ET, N, typeof(b), typeof(context)}(b, sz, context)
+    JTensor{ET, N, typeof(b), typeof(context)}(b, sz, context)
 end
 #=
 context interface
@@ -30,7 +30,7 @@ Base.eltype{T}(::AbstractAccArray{T}) = T
 Base.size(A::AbstractAccArray) = A.size
 
 function Base.show(io::IO, mt::MIME"text/plain", A::AbstractAccArray)
-    println(io, "GPUArray with ctx: $(context(A)): ")
+    println(io, "JTensor with ctx: $(context(A)): ")
     show(io, mt, Array(A))
 end
 function Base.showcompact(io::IO, mt::MIME"text/plain", A::AbstractAccArray)
@@ -217,7 +217,7 @@ end
 #############################
 # reduce
 
-# horrible hack to get around of fetching the first element of the GPUArray
+# horrible hack to get around of fetching the first element of the JTensor
 # as a startvalue, which is a bit complicated with the current reduce implementation
 function startvalue(f, T)
     error("Please supply a starting value for mapreduce. E.g: mapreduce($f, $op, 1, A)")

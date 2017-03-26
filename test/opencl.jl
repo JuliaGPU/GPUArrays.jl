@@ -4,8 +4,8 @@ ctx = CLBackend.init()
 
 
 @testset "CLBLAS Float32" begin
-    A = GPUArray(rand(Float32, 33, 33));
-    B = GPUArray(rand(Float32, 33, 33));
+    A = JTensor(rand(Float32, 33, 33));
+    B = JTensor(rand(Float32, 33, 33));
     C = A * B;
     c = Array(C);
     @test c ≈ Array(A) * Array(B)
@@ -18,7 +18,7 @@ function test{T}(a::T, b)
 end
 
 @testset "broadcast Float32" begin
-    A = GPUArray(rand(Float32, 40, 40))
+    A = JTensor(rand(Float32, 40, 40))
 
     A .= identity.(10f0)
     @test all(x-> x == 10f0, Array(A))
@@ -36,7 +36,7 @@ end
 end
 
 @testset "broadcast Complex64" begin
-    A = GPUArray(fill(10f0*im, 40, 40))
+    A = JTensor(fill(10f0*im, 40, 40))
     A .= identity.(10f0*im)
     @test all(x-> x == 10f0*im, Array(A))
 
@@ -56,7 +56,7 @@ end
     for n = 1:3
         @testset "N $n" begin
             a = rand(Complex64, ntuple(i-> 40, n))
-            A = GPUArray(a)
+            A = JTensor(a)
             fft!(A)
             fft!(a)
             @test all(isapprox.(Array(A), a))

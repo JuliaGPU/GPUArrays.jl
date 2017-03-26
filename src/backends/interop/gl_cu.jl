@@ -4,7 +4,7 @@ import CUDAdrv, CUDAnative, GLAbstraction
 const cu = CUDArt.rt
 
 
-cu_register(buff::GPUArray) = cu_register(buffer(buff))
+cu_register(buff::JTensor) = cu_register(buffer(buff))
 
 let graphic_resource_map_buff = Dict{UInt32, Ref{cu.cudaGraphicsResource_t}}(), graphic_resource_map_tex = Dict{UInt32, Ref{cu.cudaGraphicsResource_t}}()
     function cu_register(
@@ -34,7 +34,7 @@ let graphic_resource_map_buff = Dict{UInt32, Ref{cu.cudaGraphicsResource_t}}(), 
     end
 end
 
-function cu_map(f, buff::GPUArray)
+function cu_map(f, buff::JTensor)
     cu_array = cu_map(buff)
     f(cu_array)
     cu_unmap(buff)
@@ -53,7 +53,7 @@ function cu_map{T, N}(A::GLBackend.GLArrayBuff{T, N}, graphics_ref=cu_register(A
     cudevptr = Base.unsafe_convert(CUDAdrv.DevicePtr{T}, Ptr{T}(cubuff[]))
     sz = size(A)
     cuarr = CUDAdrv.CuArray{T}(sz, cudevptr)
-    GPUArray(cuarr, sz, context=ctx)
+    JTensor(cuarr, sz, context=ctx)
 end
 
 function cu_map{T, N}(A::GLBackend.GLArrayTex{T, N}, graphics_ref=cu_register(A), ctx=CUBackend.current_context())
@@ -67,7 +67,7 @@ function cu_map{T, N}(A::GLBackend.GLArrayTex{T, N}, graphics_ref=cu_register(A)
     cudevptr = Base.unsafe_convert(CUDAdrv.DevicePtr{T}, Ptr{T}(cubuff[]))
     sz = size(A)
     cuarr = CUDAdrv.CuArray{T}(sz, cudevptr)
-    GPUArray(cuarr, sz, context=ctx)
+    JTensor(cuarr, sz, context=ctx)
 end
 
 function cu_unmap{T, N}(A::GLBackend.GLArray{T, N}, graphics_ref=cu_register(A))
@@ -95,7 +95,7 @@ end
 
 
 
-# type CUDAGLBuffer{T} <: GPUArray{T, 1}
+# type CUDAGLBuffer{T} <: JTensor{T, 1}
 #     buffer::GLBuffer{T}
 #     graphics_resource::Ref{cu.cudaGraphicsResource_t}
 #     ismapped::Bool
@@ -165,7 +165,7 @@ end
 #
 #
 #
-# function register_with_cuda{T, ND}(tex::GPUArray{Texture{T, ND}}, image::CUImage)
+# function register_with_cuda{T, ND}(tex::JTensor{Texture{T, ND}}, image::CUImage)
 #     graphics_ref = Ref{cu.cudaGraphicsResource_t}()
 #     cuGraphicsGLRegisterImage(
 #         graphics_ref,
@@ -185,12 +185,12 @@ end
 #     )
 #     cuGraphicsUnmapResources(1, graphics_ref, C_NULL)
 #     cubuff = CuArray(cubuff[], size(tex), length(tex))
-#     GPUArray(cubuff, size(tex), cuctx)
+#     JTensor(cubuff, size(tex), cuctx)
 # end
 #
 #
 # function register_with_cuda{T}(
-#         glbuffer::GPUArray{GLBuffer{T}};
+#         glbuffer::JTensor{GLBuffer{T}};
 #         cuctx = first(cuda_contexts()),
 #         flag=cu.cudaGraphicsMapFlagsNone
 #     )

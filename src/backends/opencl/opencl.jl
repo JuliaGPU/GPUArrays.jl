@@ -9,7 +9,7 @@ using ..JTensors, StaticArrays
 #import CLBLAS, CLFFT
 
 import JTensors: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import JTensors: Context, GPUArray, context, broadcast_index
+import JTensors: Context, JTensor, context, broadcast_index
 import JTensors: blasbuffer, blas_module, is_blas_supported, is_fft_supported
 
 using Transpiler
@@ -45,7 +45,7 @@ let contexts = CLContext[]
     end
 end
 
-@compat const CLArray{T, N} = GPUArray{T, N, cl.Buffer{T}, CLContext}
+@compat const CLArray{T, N} = JTensor{T, N, cl.Buffer{T}, CLContext}
 
 # Constructor
 function Base.copy!{T, N}(dest::Array{T, N}, source::CLArray{T, N})
@@ -77,12 +77,12 @@ end
 function Base.similar{T, N}(::Type{CLArray{T, N}}, sz::Tuple, flag = :rw)
     ctx = current_context()
     b = cl.Buffer(T, ctx.context, flag, prod(sz))
-    GPUArray{T, length(sz), typeof(b), typeof(ctx)}(b, sz, ctx)
+    JTensor{T, length(sz), typeof(b), typeof(ctx)}(b, sz, ctx)
 end
 function Base.similar{T, N, ET}(x::CLArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
     ctx = context(x)
     b = create_buffer(ctx, ET, sz; kw_args...)
-    GPUArray{ET, N, typeof(b), typeof(ctx)}(b, sz, ctx)
+    JTensor{ET, N, typeof(b), typeof(ctx)}(b, sz, ctx)
 end
 # The implementation of prod in base doesn't play very well with current
 # transpiler. TODO figure out what Core._apply maps to!

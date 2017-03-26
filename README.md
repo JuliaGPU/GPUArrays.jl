@@ -9,7 +9,7 @@ It implements the Base AbstractArray interface for Julia's various GPU backends.
 #### Main type:
 
 ```Julia
-type GPUArray{T, N, B, C} <: DenseArray{T, N}
+type JTensor{T, N, B, C} <: DenseArray{T, N}
     buffer::B # GPU buffer, allocated by context
     size::NTuple{N, Int} # size of the array
     context::C # GPU context
@@ -23,11 +23,11 @@ Planned backends: OpenGL, Vulkan
 
 Implemented for all backends:
 ```Julia
-map(f, ::GPUArray...)
-map!(f, dest::GPUArray, ::GPUArray...)
+map(f, ::JTensor...)
+map!(f, dest::JTensor, ::JTensor...)
 
 # maps
-mapidx(f, A::GPUArray, args...) do idx, a, args...
+mapidx(f, A::JTensor, args...) do idx, a, args...
     # e.g
     if idx < length(A)
         a[idx+1] = a[idx]
@@ -35,14 +35,14 @@ mapidx(f, A::GPUArray, args...) do idx, a, args...
 end
 
 
-broadcast(f, ::GPUArray...)
-broadcast!(f, dest::GPUArray, ::GPUArray...)
+broadcast(f, ::JTensor...)
+broadcast!(f, dest::JTensor, ::JTensor...)
 
-stencil(f, window::Shape, ::GPUArray...)
+stencil(f, window::Shape, ::JTensor...)
 
-# GPUArray's must be "registered" if you want to use them in the loop body
+# JTensor's must be "registered" if you want to use them in the loop body
 # will translate into map_idx(A, B)
-@gpu A::GPUArray, B::GPUArray for loop_head
+@gpu A::JTensor, B::JTensor for loop_head
     body
 end
 

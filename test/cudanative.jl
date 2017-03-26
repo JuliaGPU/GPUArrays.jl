@@ -1,6 +1,6 @@
 using JTensors, CUDAnative
 using Base.Test
-import JTensors: GPUArray, CUBackend
+import JTensors: JTensor, CUBackend
 cuctx = CUBackend.init()
 const cu = CUDAnative
 
@@ -18,7 +18,7 @@ end
 
 
 @testset "broadcast Float32" begin
-    A = GPUArray(rand(Float32, 40, 40))
+    A = JTensor(rand(Float32, 40, 40))
 
     A .= identity.(10f0)
     @test all(x-> x == 10, Array(A))
@@ -40,7 +40,7 @@ function cu_angle(z)
     cu.atan2(imag(z), real(z))
 end
 @testset "broadcast Complex64" begin
-    A = GPUArray(fill(10f0*im, 40, 40))
+    A = JTensor(fill(10f0*im, 40, 40))
 
     A .= identity.(10f0*im)
     @test all(x-> x == 10f0*im, Array(A))
@@ -59,7 +59,7 @@ end
 # @testset "fft Complex64" begin
 #     A = rand(Float32, 7,6)
 #     # Move data to GPU
-#     B = GPUArray(A)
+#     B = JTensor(A)
 #     # Allocate space for the output (transformed array)
 #     # Compute the FFT
 #     fft!(B)
@@ -76,7 +76,7 @@ end
         for dims in ((4048,), (1024,1024), (77,), (1923,209))
             for T in (Float32, Int32)
                 range = T <: Integer ? (T(-10):T(10)) : T
-                A = GPUArray(rand(range, dims))
+                A = JTensor(rand(range, dims))
                 @test sum(A) ≈ sum(Array(A))
                 @test maximum(A) ≈ maximum(Array(A))
                 @test minimum(A) ≈ minimum(Array(A))
@@ -87,7 +87,7 @@ end
     # @testset "mapreduce with clojures" begin
     #     for dims in ((4048,), (1024,1024), (77,), (1923,209))
     #         for T in (Float32, Float64)
-    #             A = GPUArray(rand(T, dims))
+    #             A = JTensor(rand(T, dims))
     #             @test mapreduce(f1, op1, T(0), A) ≈ mapreduce(f1, op1, T(0), Array(A))
     #         end
     #     end
