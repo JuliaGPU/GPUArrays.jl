@@ -1,10 +1,27 @@
-# GPUArrays
+# JTensors (formerly GPUArrays)
 
 [![Build Status](https://travis-ci.org/SimonDanisch/GPUArrays.jl.svg?branch=master)](https://travis-ci.org/SimonDanisch/GPUArrays.jl)
 
 
 Prototype for a GPU Array library. 
 It implements the Base AbstractArray interface for Julia's various GPU backends.
+
+We're using Julia's JIT to generate optimized kernels for map/broadcast operations.
+The compilation for the GPU is done with [CUDAnative.jl](https://github.com/JuliaGPU/CUDAnative.jl/)
+and for OpenCL and OpenGL [Transpiler.jl](https://github.com/SimonDanisch/Transpiler.jl) is used.
+In the further future it's planned to replace the transpiler by the same approach
+CUDAnative.jl is using (via LLVM + SPIR-V).
+
+
+JTensors relies heavily on dot broadcasting. The great thing about dot broadcasting in Julia is, that it [actually fuses operations syntactically](http://julialang.org/blog/2017/01/moredots), which is vital for performance on the GPU.
+E.g.:
+
+```Julia
+out .= a .+ b ./ c .+ 1
+```
+
+Will result in one GPU kernel call to a function that combines the operations without any extra allocations.
+This allows JTensors to offer a lot of functionality with minimal code.
 
 #### Main type:
 
@@ -18,7 +35,7 @@ end
 
 #### Scope
 
-Backends: OpenCL, CUDA
+Current backends: OpenCL, CUDA
 Planned backends: OpenGL, Vulkan
 
 Implemented for all backends:
@@ -38,20 +55,20 @@ end
 broadcast(f, ::GPUArray...)
 broadcast!(f, dest::GPUArray, ::GPUArray...)
 
-stencil(f, window::Shape, ::GPUArray...)
-
-# GPUArray's must be "registered" if you want to use them in the loop body
-# will translate into map_idx(A, B)
-@gpu A::GPUArray, B::GPUArray for loop_head
-    body
-end
 
 ```
-Currently, the compilation of the Julia function `f` is done for CUDA by [CUDAnative.jl](https://github.com/JuliaGPU/CUDAnative.jl/)
-and for OpenCL and OpenGL [Transpiler.jl](https://github.com/SimonDanisch/Transpiler.jl) will be used.
-In the further future it's planned to replace the transpiler by the same approach
-CUDAnative.jl is using (via LLVM + SPIR-V).
+
 
 CLFFT, CUFFT, CLBLAS and CUBLAS will soon be supported.
 A prototype of the support can be found here: https://github.com/JuliaGPU/GPUArrays.jl/blob/sd/glsl/src/blas.jl
+The OpenCL backend already supports mat mul via `CLBLAS.gemm!` and `fft!`/`ifft!`.
+CUDAnative could support these easily as well, but we currently run into problems with the interactions of `CUDAdrv` and `CUDArt`.
 
+
+# TODO
+
+* mapreduce (there is a first working version for cudanative)
+* stencil operations
+* more tests
+* tests, that actually only switch the backend but use the same code
+* performance improvements!!
