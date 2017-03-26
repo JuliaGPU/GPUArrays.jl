@@ -51,7 +51,7 @@ end
 # constructors
 
 function (::Type{JLArray}){T, N}(A::Array{T, N})
-    JLArray{T, N}(A, current_context())
+    JLArray{T, N}(A, size(A), current_context())
 end
 
 function (AT::Type{Array{T, N}}){T, N}(A::JLArray{T, N})
