@@ -1,7 +1,12 @@
 #TODO register these packages!
-Pkg.clone("https://github.com/SimonDanisch/Matcha.jl.git")
-Pkg.clone("https://github.com/SimonDanisch/Sugar.jl.git")
-Pkg.clone("https://github.com/SimonDanisch/Transpiler.jl.git")
+for pkg in ("Matcha", "Sugar", "Transpiler")
+    installed = try
+        Pkg.installed(pkg) != nothing
+    catch e
+        false
+    end
+    installed || Pkg.clone("https://github.com/SimonDanisch/$(pkg).jl.git")
+end
 using JTensors
 using Base.Test
 
