@@ -56,16 +56,15 @@ if install_cudanative
     push!(supported_backends, :cudanative)
 end
 
-install_opencl = try
+try
     using OpenCL
+    device, ctx, queue = cl.create_compute_context()
+    info("OpenCL added as backend!")
+    push!(supported_backends, :opencl)
     true
 catch e
     info("OpenCL not usable. Please install drivers and add OpenCL.jl")
     false
-end
-if install_opencl
-    info("OpenCL added as backend!")
-    push!(supported_backends, :opencl)
 end
 
 # TODO add back OpenGL backend.. Currently not supported due too many driver bugs
