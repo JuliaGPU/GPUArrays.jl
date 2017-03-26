@@ -36,6 +36,7 @@ end
 #### Scope
 
 Current backends: OpenCL, CUDA
+
 Planned backends: OpenGL, Vulkan
 
 Implemented for all backends:
