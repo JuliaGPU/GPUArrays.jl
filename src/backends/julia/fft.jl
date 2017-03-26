@@ -41,5 +41,5 @@
 single_arg = (:fft, :fft!, :ifft, :ifft!)
 for f in single_arg
     # TODO, could we just be fine with being AbstractArray?
-    @eval Base.$f(A::JLArray) = JLArray($f(buffer(A)))
+    @eval Base.$f{T, N}(A::JLArray{T, N}) = JLArray{T, N}($f(buffer(A)))
 end
