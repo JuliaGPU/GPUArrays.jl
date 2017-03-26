@@ -27,7 +27,7 @@ This allows JTensors to offer a lot of functionality with minimal code.
 #### Main type:
 
 ```Julia
-type GPUArray{T, N, B, C} <: DenseArray{T, N}
+type JTensor{T, N, B, C} <: DenseArray{T, N}
     buffer::B # GPU buffer, allocated by context
     size::NTuple{N, Int} # size of the array
     context::C # GPU context
