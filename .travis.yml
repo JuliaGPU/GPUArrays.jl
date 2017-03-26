@@ -23,4 +23,5 @@ script:
  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
  - julia -e 'Pkg.clone("https://github.com/SimonDanisch/Matcha.jl.git")'
  - julia -e 'Pkg.clone("https://github.com/SimonDanisch/Sugar.jl.git")'
+ - julia -e 'Pkg.clone("https://github.com/SimonDanisch/Transpiler.jl.git")'
  - julia -e 'Pkg.clone(pwd()); Pkg.build("JTensors"); Pkg.test("JTensors"; coverage=true)'
