@@ -1,5 +1,3 @@
-
-
 typealias AccVecOrMat{T} Union{AbstractAccArray{T, 1}, AbstractAccArray{T, 2}}
 
 # all backends need to define a blas_module function to map to the correct library

@@ -10,7 +10,7 @@ using ..JTensors, StaticArrays
 
 import JTensors: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
 import JTensors: Context, GPUArray, context, broadcast_index
-import JTensors: blasbuffer, blas_module
+import JTensors: blasbuffer, blas_module, is_blas_supported, is_fft_supported
 
 using Transpiler
 using Transpiler: CLTranspiler
@@ -122,17 +122,21 @@ end
 
 ###################
 # Blase interface
-# TODO figure out at build time, if CLBLAS is available and throw
-# descriptive error in blas_module if not available!
-import CLBLAS
-blas_module(::CLContext) = CLBLAS
-function blasbuffer(::CLContext, A)
-    buff = buffer(A)
-    # LOL! TODO don't have CLArray in OpenCL/CLBLAS
-    cl.CLArray(buff, context(A).queue, size(A))
+if is_blas_supported(:CLBLAS)
+    import CLBLAS
+    blas_module(::CLContext) = CLBLAS
+    function blasbuffer(::CLContext, A)
+        buff = buffer(A)
+        # LOL! TODO don't have CLArray in OpenCL/CLBLAS
+        cl.CLArray(buff, context(A).queue, size(A))
+    end
 end
 
-include("fft.jl")
+###################
+# FFT interface
+if is_fft_supported(:CLFFT)
+    include("fft.jl")
+end
 
 end #CLBackend
 

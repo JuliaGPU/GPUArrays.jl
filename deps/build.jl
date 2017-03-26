@@ -2,7 +2,7 @@ info("""
 This process will figure out which acceleration Packages you have installed
 and therefore which backends JTensors can offer.
 Theoretically available:
-:cudanative, :julia, :opengl
+:cudanative, :julia, :opencl
 
 :julia is the default backend, which should always work.
 Just start Julia with:
@@ -68,7 +68,7 @@ if install_opencl
     push!(supported_backends, :opencl)
 end
 
-# TODO add back OpenGL backend.. Currently not supported due to many driver bugs
+# TODO add back OpenGL backend.. Currently not supported due too many driver bugs
 # in OpenGL implementation
 # try
 #     using GLAbstraction, GLWindow
@@ -85,11 +85,51 @@ end
 # end
 
 
+supported_blas_libs = [:BLAS]
+supported_fft_libs = [:FFT]
+if :opencl in supported_backends
+    try
+        import CLBLAS
+        push!(supported_blas_libs, :CLBLAS)
+    catch e
+        info("import of CLBLAS did work, not added")
+    end
+    try
+        import CLFFT
+        push!(supported_fft_libs, :CLFFT)
+    catch e
+        info("import of CLFFT did work, not added")
+    end
+end
+if :cudanative in supported_backends
+    try
+        import CUBLAS
+        push!(supported_blas_libs, :CUBLAS)
+    catch e
+        info("import of CUBLAS did work, not added")
+    end
+    try
+        import CUFFT
+        push!(supported_fft_libs, :CUFFT)
+    catch e
+        info("import of CUFFT did work, not added")
+    end
+end
+
 file = joinpath(dirname(@__FILE__), "..", "src", "backends", "supported_backends.jl")
 
 open(file, "w") do io
     backendstr = join(map(s-> string(":", s), supported_backends), ", ")
     println(io, "supported_backends() = ($backendstr,)")
+    backendstr = join(map(s-> string(':', s), supported_blas_libs), ", ")
+    println(io, "supported_blas_libs() = ($backendstr,)")
+    backendstr = join(map(s-> string(':', s), supported_fft_libs), ", ")
+    println(io, "supported_fft_libs() = ($backendstr,)")
+    println(io, """
+    is_backend_supported(sym::Symbol) = sym in supported_backends()
+    is_blas_supported(sym) = sym in supported_blas_libs()
+    is_fft_supported(sym) = sym in supported_fft_libs()
+    """)
     for elem in supported_backends
         str = string(elem)
         path = escape_string(joinpath(str, str*".jl"))

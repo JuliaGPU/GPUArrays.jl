@@ -20,7 +20,6 @@ let compute_contexts = Context[]
 end
 #interface
 function create_buffer(ctx, array) end
-
+# BLAS support
+include("blas.jl")
 include("supported_backends.jl")
-
-is_backend_supported(sym::Symbol) = sym in supported_backends()

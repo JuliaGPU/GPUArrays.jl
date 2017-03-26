@@ -109,7 +109,7 @@ for i = 0:7
     end
 end
 
-include("liftbase.jl")
+include("fft.jl")
 
 end #JLBackend
 
