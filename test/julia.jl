@@ -80,11 +80,18 @@ end
     b = rand(Complex64, 1024)
     A = JLArray(a)
     B = JLArray(b)
-    mapidx(A, (B, 1, length(A))) do i, a, b, off, len
+    off = 1
+    mapidx(A, (B, off, length(A))) do i, a, b, off, len
         x = b[i]
         x2 = b[min(i+off, len)]
         a[i] = x * x2
     end
+    foreach(1:length(a)) do i
+        x = b[i]
+        x2 = b[min(i+off, length(a))]
+        a[i] = x * x2
+    end
+    @test Array(A) == a
 end
 
 # @testset "fft Complex64" begin
