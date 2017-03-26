@@ -12,6 +12,7 @@ and for OpenCL and OpenGL [Transpiler.jl](https://github.com/SimonDanisch/Transp
 In the further future it's planned to replace the transpiler by the same approach
 CUDAnative.jl is using (via LLVM + SPIR-V).
 
+This allows to get more involved functionality, like complex arithmetic, for free, since we can compile what's already in Julia Base.
 
 JTensors relies heavily on dot broadcasting. The great thing about dot broadcasting in Julia is, that it [actually fuses operations syntactically](http://julialang.org/blog/2017/01/moredots), which is vital for performance on the GPU.
 E.g.:
