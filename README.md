@@ -76,3 +76,4 @@ CUDAnative could support these easily as well, but we currently run into problem
 * performance improvements!!
 * implement push!, append!, resize!, getindex, setindex!
 * interop between OpenCL, CUDA and OpenGL is there as a protype, but needs propper hooking up via `Base.copy!` / `convert`
+* share implementation of broadcast etc between backends. Currently they don't, since there are still subtle differences which should be elimated over time!
