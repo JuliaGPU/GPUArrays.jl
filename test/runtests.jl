@@ -1,3 +1,7 @@
+#TODO register these packages!
+Pkg.clone("https://github.com/SimonDanisch/Matcha.jl.git")
+Pkg.clone("https://github.com/SimonDanisch/Sugar.jl.git")
+Pkg.clone("https://github.com/SimonDanisch/Transpiler.jl.git")
 using JTensors
 using Base.Test
 
