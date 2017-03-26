@@ -33,13 +33,6 @@ function Base.showcompact(io::IO, mt::MIME"text/plain", A::AbstractAccArray)
     showcompact(io, mt, Array(A))
 end
 
-function Base.similar{T <: JTensor, ET, N}(
-        ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
-        context::Context = current_context(), kw_args...
-    )
-    b = create_buffer(context, ET, sz; kw_args...)
-    JTensor{ET, N, typeof(b), typeof(context)}(b, sz, context)
-end
 function Base.similar{T <: AbstractAccArray}(x::T)
     similar(x, eltype(x), size(x))
 end
@@ -49,6 +42,16 @@ end
 function Base.similar{T <: AbstractAccArray, N}(x::T, dims::NTuple{N, Int})
     similar(x, eltype(x), dims)
 end
+function Base.similar{T <: JTensor, ET, N}(
+        ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
+        context::Context = current_context(), kw_args...
+    )
+    b = create_buffer(context, ET, sz; kw_args...)
+    JTensor{ET, N, typeof(b), typeof(context)}(b, sz, context)
+end
+
+
+
 
 
 #=

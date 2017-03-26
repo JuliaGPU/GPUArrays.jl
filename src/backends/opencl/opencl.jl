@@ -69,11 +69,6 @@ function create_buffer{T, N}(
     cl.Buffer(T, ctx.context, flag, prod(sz))
 end
 
-function Base.similar{T, N}(::Type{CLArray{T, N}}, sz::Tuple, flag = :rw)
-    ctx = current_context()
-    b = cl.Buffer(T, ctx.context, flag, prod(sz))
-    JTensor{T, length(sz), typeof(b), typeof(ctx)}(b, sz, ctx)
-end
 function Base.similar{T, N, ET}(x::CLArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
     ctx = context(x)
     b = create_buffer(ctx, ET, sz; kw_args...)
