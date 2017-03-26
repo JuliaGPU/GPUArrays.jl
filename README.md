@@ -73,3 +73,4 @@ CUDAnative could support these easily as well, but we currently run into problem
 * more tests
 * tests, that actually only switch the backend but use the same code
 * performance improvements!!
+* implement push!, append!, resize!, getindex, setindex!
