@@ -58,7 +58,7 @@ global init, all_contexts, current_context
 let contexts = CLContext[]
     all_contexts() = copy(contexts)::Vector{CLContext}
     current_context() = last(contexts)::CLContext
-    function init(;typ = :gpu, ctx = CLContext(typ))
+    function init(;device_type = nothing, ctx = CLContext(device_type))
         GPUArrays.make_current(ctx)
         push!(contexts, ctx)
         ctx
