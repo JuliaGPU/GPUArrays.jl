@@ -9,13 +9,13 @@ using ..JTensors, StaticArrays
 #import CLBLAS, CLFFT
 
 import JTensors: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import JTensors: Context, JTensor, context, broadcast_index
+import JTensors: Context, JTensor, context, broadcast_index, linear_index
 import JTensors: blasbuffer, blas_module, is_blas_supported, is_fft_supported
 
 using Transpiler
 using Transpiler: CLTranspiler
 import Transpiler.CLTranspiler.cli
-import Transpiler.CLTranspiler.ComputeProgram
+import Transpiler.CLTranspiler.CLFunction
 import Transpiler.CLTranspiler.cli.get_global_id
 
 immutable CLContext <: Context
@@ -80,6 +80,8 @@ _prod{T}(x::NTuple{1, T}) = x[1]
 _prod{T}(x::NTuple{2, T}) = x[1] * x[2]
 _prod{T}(x::NTuple{3, T}) = x[1] * x[2] * x[3]
 
+linear_index() = get_global_id(0) + 1
+
 ###########################################################
 # Broadcast
 for i = 0:10
@@ -110,19 +112,28 @@ function acc_broadcast!{F <: Function, T, N}(f::F, A::CLArray{T, N}, args::Tuple
     sz = map(Int32, size(A))
     q = ctx.queue
     cl.finish(q)
-    clfunc = ComputeProgram(broadcast_kernel, (A, f, sz, args...), q)
+    clfunc = CLFunction(broadcast_kernel, (A, f, sz, args...), q)
     clfunc((A, f, sz, args...), length(A))
 end
+
 
 function mapidx{F <: Function, N, T, N2}(f::F, A::CLArray{T, N2}, args::NTuple{N, Any})
     ctx = context(A)
     q = ctx.queue
     cl.finish(q)
     cl_args = (A, f, args...)
-    clfunc = ComputeProgram(mapidx_kernel, cl_args, q)
+    clfunc = CLFunction(mapidx_kernel, cl_args, q)
     clfunc(cl_args, length(A))
 end
 
+function CLFunction{T, N}(A::CLArray{T, N}, f, args...)
+    ctx = context(A)
+    CLFunction(f, args, ctx.queue)
+end
+function (clfunc::CLFunction{T}){T, T2, N}(A::CLArray{T2, N}, args...)
+    # TODO use better heuristic
+    clfunc(args, length(A))
+end
 ###################
 # Blase interface
 if is_blas_supported(:CLBLAS)
@@ -140,6 +151,8 @@ end
 if is_fft_supported(:CLFFT)
     include("fft.jl")
 end
+
+export CLFunction, cli
 
 end #CLBackend
 

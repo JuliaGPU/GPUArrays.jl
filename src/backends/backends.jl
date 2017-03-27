@@ -1,11 +1,17 @@
 global current_context, make_current
+function default_backend()
+    if is_backend_supported(:cudanative)
+        CUBackend
+    elseif is_backend_supported(:opencl)
+        CLBackend
+    else
+        JLBackend
+    end
+end
 let compute_contexts = Context[]
     function current_context()
         if isempty(compute_contexts)
-            error("
-                Please initialize your favorite Backend. E.g.: JLBackend.init().
-                Available backends: $(supported_backends())
-            ")
+            default_backend().init()
         end
         last(compute_contexts)
     end

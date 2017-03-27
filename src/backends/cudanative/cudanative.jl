@@ -6,7 +6,7 @@ using ..JTensors, CUDAnative, StaticArrays, Compat
 import CUDAdrv, CUDArt #, CUFFT
 
 import JTensors: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import JTensors: Context, JTensor, context, broadcast_index
+import JTensors: Context, JTensor, context, broadcast_index, linear_index
 using CUDAdrv: CuDefaultStream
 
 immutable GraphicsResource{T}

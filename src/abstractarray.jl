@@ -16,6 +16,10 @@ Interface for accessing the lower level
 buffer(A::AbstractAccArray) = A.buffer
 context(A::AbstractAccArray) = A.context
 
+"""
+linear index in a GPU kernel
+"""
+function linear_index end
 
 
 
@@ -200,7 +204,7 @@ function Base.broadcast!(f::Function, A::AbstractAccArray, B)
     acc_broadcast!(f, A, (B,))
 end
 function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, args)
-    acc_broadcast!(f, A, (B, args...))
+    acc_broadcast!(f, A, (B, args))
 end
 function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D, E...)
     acc_broadcast!(f, A, (B, C, D, E...))
