@@ -22,10 +22,30 @@ immutable CLContext <: Context
     device::cl.Device
     context::cl.Context
     queue::cl.CmdQueue
-    function CLContext(device_type = :gpu)
-        device = first(cl.devices(device_type))
-        ctx    = cl.Context(device)
-        queue  = cl.CmdQueue(ctx)
+    function CLContext(device_type = nothing)
+        device = if device_type == nothing
+            devlist = cl.devices(:gpu)
+            dev = if isempty(devlist)
+                devlist = cl.devices(:cpu)
+                if isempty(devlist)
+                    error("no device found to be supporting opencl")
+                else
+                    first(devlist)
+                end
+            else
+                first(devlist)
+            end
+            dev
+        else
+            # if device type supplied by user, assume it's actually existant!
+            devlist = cl.devices(device_type)
+            if isempty(devlist)
+                error("Can't find OpenCL device for $device_type")
+            end
+            first(devlist)
+        end
+        ctx = cl.Context(device)
+        queue = cl.CmdQueue(ctx)
         new(device, ctx, queue)
     end
 end
