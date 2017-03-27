@@ -74,7 +74,7 @@ function thread_blocks_heuristic{N}(s::NTuple{N, Int})
     blocks, threads
 end
 
-@inline function linear_index()
+@inline function linear_index(::CUDAnative.CuDeviceArray)
     (blockIdx().x - UInt32(1)) * blockDim().x + threadIdx().x
 end
 
@@ -89,6 +89,65 @@ unpack_cu_array{T,N}(x::CUArray{T,N}) = buffer(x)
     @cuda (blocks, thread) kernel(buffer(A), args...)
 end
 
+# TODO hook up propperly with CUDAdrv... This is a dirty adhoc solution
+# to be consistent with the OpenCL backend
+immutable CUFunction{T}
+    kernel::T
+end
+# TODO find a future for the kernel string compilation part
+compile_lib = Pkg.dir("CUDAdrv", "examples", "compilation", "library.jl")
+has_nvcc = try
+    success(`nvcc --version`)
+catch
+    false
+end
+if isfile(compile_lib) && has_nvcc
+    include(compile_lib)
+    hasnvcc() = true
+else
+    hasnvcc() = false
+    if !has_nvcc
+        warn("Couldn't find nvcc, please add it to your path.
+            This will disable the ability to compile a CUDA kernel from a string"
+        )
+    end
+    if !isfile(compile_lib)
+        warn("Couldn't find cuda compilation lib in default location.
+        This will disable the ability to compile a CUDA kernel from a string
+        To fix, install CUDAdrv in default location."
+        )
+    end
+end
+function CUFunction{T, N}(A::CUArray{T, N}, f::Function, args...)
+    CUFunction(f) # this is mainly for consistency with OpenCL
+end
+function CUFunction{T, N}(A::CUArray{T, N}, f::Tuple{String, Symbol}, args...)
+    source, name = f
+    kernel_name = string(name)
+    ctx = context(A)
+    kernel = _compile(ctx.device, kernel_name, source, "from string")
+    CUFunction(kernel) # this is mainly for consistency with OpenCL
+end
+function (f::CUFunction{F}){F <: Function, T, N}(A::CUArray{T, N}, args...)
+    dims = thread_blocks_heuristic(A)
+    return CUDAnative.generated_cuda(
+        dims, 0, CuDefaultStream(),
+        f.kernel, map(unpack_cu_array, args)...
+    )
+end
+function cu_convert{T, N}(x::CUArray{T, N})
+    pointer(buffer(x))
+end
+cu_convert(x) = x
+
+function (f::CUFunction{F}){F <: CUDAdrv.CuFunction, T, N}(A::CUArray{T, N}, args...)
+    griddim, blockdim = thread_blocks_heuristic(A)
+    CUDAdrv.launch(
+        f.kernel, CUDAdrv.CuDim3(griddim...), CUDAdrv.CuDim3(blockdim...), 0, CuDefaultStream(),
+        map(cu_convert, args)
+    )
+end
+
 
 #####################################
 # The problem is, that I can't pass Tuple{CuArray} as a type, so I can't
@@ -101,14 +160,14 @@ for i = 0:10
     fargs2 = ntuple(x-> :(broadcast_index($(args[x]), sz, i)), i)
     @eval begin
         function broadcast_kernel(A, f, sz, which, $(args...))
-            i = linear_index()
+            i = linear_index(A)
             @inbounds if i <= length(A)
                 A[i] = f($(fargs...))
             end
             nothing
         end
         function mapidx_kernel{F}(A, f::F, $(args...))
-            i = linear_index()
+            i = linear_index(A)
             if i <= length(A)
                 f(i, A, $(args...))
             end
@@ -265,6 +324,7 @@ end
 #
 #
 
+export CUFunction
 
 end
 

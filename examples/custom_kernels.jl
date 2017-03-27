@@ -1,16 +1,17 @@
 using JTensors
 using JTensors.CLBackend
+CLBackend.init()
 
-x = JTensor(rand(Float32, 100))
-y = JTensor(rand(Float32, 100))
 
 function clmap!(f, out, b)
-    i = linear_index() # get the kernel index it gets scheduled on
+    i = linear_index(out) # get the kernel index it gets scheduled on
     out[i] = f(b[i])
     return
 end
 # we need a `guiding array`, to get the context and indicate on what size we
 # want to execute the kernel! This kind of scheme might change in the future
+x = JTensor(rand(Float32, 100))
+y = JTensor(rand(Float32, 100))
 func = CLFunction(x, clmap!, sin, x, y)
 # same here, x is just passed to supply a kernel size!
 func(x, sin, x, y)
@@ -61,3 +62,35 @@ x = Array(o_buff)
 # for opencl, mapreduce is not implemented yet
 x /= maximum(x)
 save("test.jpg", Gray.(x))
+
+
+using JTensors
+using JTensors.CUBackend
+using CUDAnative
+CUBackend.init()
+function clmap!(f, out, b)
+    i = linear_index(out) # get the kernel index it gets scheduled on
+    out[i] = f(b[i])
+    return
+end
+# CUDA works exactly the same!
+x = JTensor(rand(Float32, 100))
+y = JTensor(rand(Float32, 100))
+# CUFunction instead of CLFunction
+# Note, that we need to use the sin of CUDAnative.
+# This necessity will hopefully be removed soon
+func = CUFunction(x, clmap!, CUDAnative.sin, x, y)
+# same here, x is just passed to supply a kernel size!
+func(x,  CUDAnative.sin, x, y)
+yjl = Array(y)
+map!(sin, yjl, yjl) ≈ Array(x)
+source = """
+__global__ void copy(const float *input, float *output)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    output[i] = input[i];
+}
+"""
+cucopy = CUFunction(x, (source, :copy), x, y)
+cucopy(x, x, y)
+Array(x) == Array(y)

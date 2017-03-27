@@ -1,7 +1,6 @@
 using Base.Test
-using JTensors
+using JTensors.CLBackend
 ctx = CLBackend.init()
-
 
 @testset "CLBLAS Float32" begin
     A = JTensor(rand(Float32, 33, 33));
@@ -84,4 +83,37 @@ end
         a[i] = x * x2
     end
     @test Array(A) ≈ a
+end
+
+function clmap!(f, out, b)
+    i = linear_index(out) # get the kernel index it gets scheduled on
+    out[i] = f(b[i])
+    return
+end
+@testset "Custom kernel from Julia function" begin
+    x = JTensor(rand(Float32, 100))
+    y = JTensor(rand(Float32, 100))
+    func = CLFunction(x, clmap!, sin, x, y)
+    # same here, x is just passed to supply a kernel size!
+    func(x, sin, x, y)
+    jy = Array(y)
+    @test map!(sin, jy, jy) ≈ Array(x)
+end
+
+@testset "Custom kernel from string function" begin
+    copy_source = """
+    __kernel void copy(
+            __global float *dest,
+            __global float *source
+        ){
+        int gid = get_global_id(0);
+        dest[gid] = source[gid];
+    }
+    """
+    source = JTensor(rand(Float32, 1023, 11))
+    dest = JTensor(zeros(Float32, size(source)))
+
+    jlfunc = CLFunction(dest, (copy_source, :copy), dest, source)
+    jlfunc(dest, dest, source)
+    @test Array(dest) == Array(source)
 end

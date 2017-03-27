@@ -1,5 +1,5 @@
-using JTensors, CUDAnative
-using Base.Test
+using JTensors.CUBackend
+using CUDAnative, Base.Test
 cuctx = CUBackend.init()
 const cu = CUDAnative
 
@@ -109,4 +109,36 @@ end
         a[i] = x * x2
     end
     @test Array(A) ≈ a
+end
+
+
+function cumap!(f, out, b)
+    i = linear_index(out) # get the kernel index it gets scheduled on
+    out[i] = f(b[i])
+    return
+end
+
+@testset "Custom kernel from Julia function" begin
+    x = JTensor(rand(Float32, 100))
+    y = JTensor(rand(Float32, 100))
+    func = CUFunction(x, cumap!, cu.sin, x, y)
+    # same here, x is just passed to supply a kernel size!
+    func(x, cu.sin, x, y)
+    jy = Array(y)
+    @test map!(sin, jy, jy) ≈ Array(x)
+end
+
+@testset "Custom kernel from string function" begin
+    x = JTensor(rand(Float32, 100))
+    y = JTensor(rand(Float32, 100))
+    source = """
+    __global__ void copy(const float *input, float *output)
+    {
+        int i = blockIdx.x * blockDim.x + threadIdx.x;
+        output[i] = input[i];
+    }
+    """
+    cucopy = CUFunction(x, (source, :copy), x, y)
+    cucopy(x, x, y)
+    @test Array(x) == Array(y)
 end
