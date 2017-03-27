@@ -91,13 +91,13 @@ if :opencl in supported_backends
         import CLBLAS
         push!(supported_blas_libs, :CLBLAS)
     catch e
-        info("import of CLBLAS did work, not added")
+        info("import of CLBLAS did not work, not added")
     end
     try
         import CLFFT
         push!(supported_fft_libs, :CLFFT)
     catch e
-        info("import of CLFFT did work, not added")
+        info("import of CLFFT did not work, not added")
     end
 end
 if :cudanative in supported_backends
