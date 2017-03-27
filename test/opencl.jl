@@ -1,13 +1,14 @@
 using Base.Test
 using GPUArrays.CLBackend
 ctx = CLBackend.init()
-
-@testset "CLBLAS Float32" begin
-    A = GPUArray(rand(Float32, 33, 33));
-    B = GPUArray(rand(Float32, 33, 33));
-    C = A * B;
-    c = Array(C);
-    @test c ≈ Array(A) * Array(B)
+if GPUArrays.is_blas_supported(:CLBLAS)
+    @testset "CLBLAS Float32" begin
+        A = GPUArray(rand(Float32, 33, 33));
+        B = GPUArray(rand(Float32, 33, 33));
+        C = A * B;
+        c = Array(C);
+        @test c ≈ Array(A) * Array(B)
+    end
 end
 # more complex function for broadcast
 function test{T}(a::T, b)
@@ -50,22 +51,22 @@ end
     @test all(x-> x ≈ (2f0*im * angle(10f0*im) + (0.5f0*im)), Array(D))
 end
 
-
-@testset "fft Complex64" begin
-    for n = 1:3
-        @testset "N $n" begin
-            a = rand(Complex64, ntuple(i-> 40, n))
-            A = GPUArray(a)
-            fft!(A)
-            fft!(a)
-            @test all(isapprox.(Array(A), a))
-            ifft!(A)
-            ifft!(a)
-            @test all(isapprox.(Array(A), a))
+if GPUArrays.is_fft_supported(:CLFFT)
+    @testset "fft Complex64" begin
+        for n = 1:3
+            @testset "N $n" begin
+                a = rand(Complex64, ntuple(i-> 40, n))
+                A = GPUArray(a)
+                fft!(A)
+                fft!(a)
+                @test all(isapprox.(Array(A), a))
+                ifft!(A)
+                ifft!(a)
+                @test all(isapprox.(Array(A), a))
+            end
         end
     end
 end
-
 @testset "mapidx" begin
     a = rand(Complex64, 1024)
     b = rand(Complex64, 1024)
