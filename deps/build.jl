@@ -1,6 +1,6 @@
 info("""
 This process will figure out which acceleration Packages you have installed
-and therefore which backends JTensors can offer.
+and therefore which backends GPUArrays can offer.
 Theoretically available:
 :cudanative, :julia, :opencl
 
@@ -21,10 +21,10 @@ install_cudanative = true
 if !isdir(cudanative_dir)
     info("""
     Not installing CUDAnative backend. If you've installed CUDAnative.jl not in the
-    default location, consider building JTensors like this:
+    default location, consider building GPUArrays like this:
     ```
     ENV[CUDANATIVE_PATH] = "path/to/CUDAnative/"
-    Pkg.build("JTensors")
+    Pkg.build("GPUArrays")
     ```
     If not installed, you can get CUDAnative like this:
     ```
@@ -48,7 +48,7 @@ install_cudanative = try
     true
 catch e
     info("CUDAnative doesn't seem to be usable and it won't be installed as a backend. Error: $e")
-    info("If error fixed, try Pkg.build(\"JTensors\") again!")
+    info("If error fixed, try Pkg.build(\"GPUArrays\") again!")
     false
 end
 if install_cudanative

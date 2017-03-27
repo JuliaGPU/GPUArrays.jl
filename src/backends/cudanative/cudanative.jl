@@ -1,12 +1,12 @@
 
 module CUBackend
 
-using ..JTensors, CUDAnative, StaticArrays, Compat
+using ..GPUArrays, CUDAnative, StaticArrays, Compat
 
 import CUDAdrv, CUDArt #, CUFFT
 
-import JTensors: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import JTensors: Context, JTensor, context, broadcast_index, linear_index
+import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
+import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index
 using CUDAdrv: CuDefaultStream
 
 immutable GraphicsResource{T}
@@ -28,8 +28,8 @@ function any_context()
     CUContext(ctx, dev)
 end
 
-#typealias GLArrayImg{T, N} JTensor{T, N, gl.Texture{T, N}, GLContext}
-@compat const CUArray{T, N, B} = JTensor{T, N, B, CUContext} #, GLArrayImg{T, N}}
+#typealias GLArrayImg{T, N} GPUArray{T, N, gl.Texture{T, N}, GLContext}
+@compat const CUArray{T, N, B} = GPUArray{T, N, B, CUContext} #, GLArrayImg{T, N}}
 @compat const CUArrayBuff{T, N} = CUArray{T, N, CUDAdrv.CuArray{T, N}}
 
 
@@ -38,7 +38,7 @@ let contexts = CUContext[]
     all_contexts() = copy(contexts)::Vector{CUContext}
     current_context() = last(contexts)::CUContext
     function init(;ctx = any_context())
-        JTensors.make_current(ctx)
+        GPUArrays.make_current(ctx)
         push!(contexts, ctx)
         ctx
     end
@@ -60,7 +60,7 @@ end
 function Base.similar{T, N, ET}(x::CUArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
     ctx = context(x)
     b = create_buffer(ctx, ET, sz; kw_args...)
-    JTensor{ET, N, typeof(b), typeof(ctx)}(b, sz, ctx)
+    GPUArray{ET, N, typeof(b), typeof(ctx)}(b, sz, ctx)
 end
 
 function thread_blocks_heuristic(A::AbstractArray)
@@ -282,7 +282,7 @@ end
 
 
 #  TODO figure out how interact with CUDArt and CUDAdr
-#GFFT = JTensor(Complex64, div(size(G,1),2)+1, size(G,2))
+#GFFT = GPUArray(Complex64, div(size(G,1),2)+1, size(G,2))
 # function Base.fft!(A::CUArray)
 #     G, GFFT = CUFFT.RCpair(A)
 #     fft!(G, GFFT)

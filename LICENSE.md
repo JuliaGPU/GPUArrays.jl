@@ -1,4 +1,4 @@
-The JTensors.jl package is licensed under the MIT "Expat" License:
+The GPUArrays.jl package is licensed under the MIT "Expat" License:
 
 > Copyright (c) 2016: Simon Danisch.
 > 

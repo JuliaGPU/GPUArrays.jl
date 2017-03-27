@@ -1,11 +1,11 @@
 module JLBackend
 
-using ..JTensors
+using ..GPUArrays
 using Compat
 
-import JTensors: buffer, create_buffer, Context, context
-import JTensors: AbstractAccArray, acc_mapreduce, mapidx
-import JTensors: broadcast_index, acc_broadcast!, blas_module, blasbuffer
+import GPUArrays: buffer, create_buffer, Context, context
+import GPUArrays: AbstractAccArray, acc_mapreduce, mapidx
+import GPUArrays: broadcast_index, acc_broadcast!, blas_module, blasbuffer
 
 import Base.Threads: @threads
 
@@ -19,12 +19,12 @@ let contexts = JLContext[]
     current_context() = last(contexts)::JLContext
     function init()
         ctx = JLContext(Base.Threads.nthreads())
-        JTensors.make_current(ctx)
+        GPUArrays.make_current(ctx)
         push!(contexts, ctx)
         ctx
     end
 end
-@compat const JLArray{T, N} = JTensor{T, N, Array{T, N}, JLContext}
+@compat const JLArray{T, N} = GPUArray{T, N, Array{T, N}, JLContext}
 # Constructor
 function Base.copy!{T, N}(dest::Array{T, N}, source::JLArray{T, N})
     q = context(source).queue
@@ -45,7 +45,7 @@ end
 function Base.similar{T, N, ET}(x::JLArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
     ctx = context(x)
     b = similar(buffer(x), ET, sz)
-    JTensor{ET, N, typeof(b), typeof(ctx)}(b, sz, ctx)
+    GPUArray{ET, N, typeof(b), typeof(ctx)}(b, sz, ctx)
 end
 ####################################
 # constructors

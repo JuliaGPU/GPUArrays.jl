@@ -1,6 +1,6 @@
-# JTensors (formerly GPUArrays)
+# GPUArrays (formerly GPUArrays)
 
-[![Build Status](https://travis-ci.org/SimonDanisch/JTensors.jl.svg?branch=master)](https://travis-ci.org/SimonDanisch/JTensors.jl)
+[![Build Status](https://travis-ci.org/SimonDanisch/GPUArrays.jl.svg?branch=master)](https://travis-ci.org/SimonDanisch/GPUArrays.jl)
 
 
 Prototype for a GPU Array library.
@@ -14,7 +14,7 @@ CUDAnative.jl is using (via LLVM + SPIR-V).
 
 This allows to get more involved functionality, like complex arithmetic, for free, since we can compile what's already in Julia Base.
 
-JTensors relies heavily on dot broadcasting. The great thing about dot broadcasting in Julia is, that it [actually fuses operations syntactically](http://julialang.org/blog/2017/01/moredots), which is vital for performance on the GPU.
+GPUArrays relies heavily on dot broadcasting. The great thing about dot broadcasting in Julia is, that it [actually fuses operations syntactically](http://julialang.org/blog/2017/01/moredots), which is vital for performance on the GPU.
 E.g.:
 
 ```Julia
@@ -22,12 +22,12 @@ out .= a .+ b ./ c .+ 1
 ```
 
 Will result in one GPU kernel call to a function that combines the operations without any extra allocations.
-This allows JTensors to offer a lot of functionality with minimal code.
+This allows GPUArrays to offer a lot of functionality with minimal code.
 
 #### Main type:
 
 ```Julia
-type JTensor{T, N, B, C} <: DenseArray{T, N}
+type GPUArray{T, N, B, C} <: DenseArray{T, N}
     buffer::B # GPU buffer, allocated by context
     size::NTuple{N, Int} # size of the array
     context::C # GPU context
@@ -43,11 +43,11 @@ Planned backends: OpenGL, Vulkan
 Implemented for all backends:
 
 ```Julia
-map(f, ::JTensor...)
-map!(f, dest::JTensor, ::JTensor...)
+map(f, ::GPUArray...)
+map!(f, dest::GPUArray, ::GPUArray...)
 
 # maps
-mapidx(f, A::JTensor, args...) do idx, a, args...
+mapidx(f, A::GPUArray, args...) do idx, a, args...
     # e.g
     if idx < length(A)
         a[idx+1] = a[idx]
@@ -55,14 +55,14 @@ mapidx(f, A::JTensor, args...) do idx, a, args...
 end
 
 
-broadcast(f, ::JTensor...)
-broadcast!(f, dest::JTensor, ::JTensor...)
+broadcast(f, ::GPUArray...)
+broadcast!(f, dest::GPUArray, ::GPUArray...)
 
 ```
 
 
 CLFFT, CUFFT, CLBLAS and CUBLAS will soon be supported.
-A prototype of generic support of these libraries can be found in [blas.jl](https://github.com/JuliaGPU/JTensors.jl/blob/sd/glsl/src/blas.jl).
+A prototype of generic support of these libraries can be found in [blas.jl](https://github.com/JuliaGPU/GPUArrays.jl/blob/sd/glsl/src/blas.jl).
 The OpenCL backend already supports mat mul via `CLBLAS.gemm!` and `fft!`/`ifft!`.
 CUDAnative could support these easily as well, but we currently run into problems with the interactions of `CUDAdrv` and `CUDArt`.
 

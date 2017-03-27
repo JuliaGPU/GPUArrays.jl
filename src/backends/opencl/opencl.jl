@@ -1,16 +1,16 @@
 module CLBackend
 
 using Compat
-using ..JTensors
+using ..GPUArrays
 using OpenCL
 using OpenCL: cl
 
-using ..JTensors, StaticArrays
+using ..GPUArrays, StaticArrays
 #import CLBLAS, CLFFT
 
-import JTensors: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import JTensors: Context, JTensor, context, broadcast_index, linear_index
-import JTensors: blasbuffer, blas_module, is_blas_supported, is_fft_supported
+import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
+import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index
+import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
 
 using Transpiler
 using Transpiler: CLTranspiler
@@ -39,13 +39,13 @@ let contexts = CLContext[]
     all_contexts() = copy(contexts)::Vector{CLContext}
     current_context() = last(contexts)::CLContext
     function init(;typ = :gpu, ctx = CLContext(typ))
-        JTensors.make_current(ctx)
+        GPUArrays.make_current(ctx)
         push!(contexts, ctx)
         ctx
     end
 end
 
-@compat const CLArray{T, N} = JTensor{T, N, cl.Buffer{T}, CLContext}
+@compat const CLArray{T, N} = GPUArray{T, N, cl.Buffer{T}, CLContext}
 
 # Constructor
 function Base.copy!{T, N}(dest::Array{T, N}, source::CLArray{T, N})
@@ -72,7 +72,7 @@ end
 function Base.similar{T, N, ET}(x::CLArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
     ctx = context(x)
     b = create_buffer(ctx, ET, sz; kw_args...)
-    JTensor{ET, N, typeof(b), typeof(ctx)}(b, sz, ctx)
+    GPUArray{ET, N, typeof(b), typeof(ctx)}(b, sz, ctx)
 end
 # The implementation of prod in base doesn't play very well with current
 # transpiler. TODO figure out what Core._apply maps to!

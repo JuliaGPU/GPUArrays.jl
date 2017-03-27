@@ -1,9 +1,9 @@
 module GLBackend
 
-using ..JTensors
+using ..GPUArrays
 
-import JTensors: buffer, create_buffer, acc_broadcast!
-import JTensors: Context, JTensor, context, broadcast_index
+import GPUArrays: buffer, create_buffer, acc_broadcast!
+import GPUArrays: Context, GPUArray, context, broadcast_index
 
 import GLAbstraction, GLWindow, GLFW
 using ModernGL
@@ -16,8 +16,8 @@ immutable GLContext <: Context
 end
 Base.show(io::IO, ctx::GLContext) = print(io, "GLContext")
 
-typealias GLArrayBuff{T, N} JTensor{T, N, gl.GLBuffer{T}, GLContext}
-typealias GLArrayTex{T, N} JTensor{T, N, gl.Texture{T, N}, GLContext}
+typealias GLArrayBuff{T, N} GPUArray{T, N, gl.GLBuffer{T}, GLContext}
+typealias GLArrayTex{T, N} GPUArray{T, N, gl.Texture{T, N}, GLContext}
 typealias GLArray{T, N} Union{GLArrayBuff{T, N}, GLArrayTex{T, N}}
 
 
@@ -35,7 +35,7 @@ let contexts = GLContext[]
     end
     init(ctx::GLWindow.Screen) = init(GLContext(GLWindow.nativewindow(ctx)))
     function init(ctx::GLContext)
-        JTensors.make_current(ctx)
+        GPUArrays.make_current(ctx)
         push!(contexts, ctx)
         ctx
     end
@@ -81,7 +81,7 @@ function Base.convert{ET, ND}(
         ::Type{GLArrayTex{ET, ND}},
         A::GLArrayBuff{ET, ND}
     )
-    texB = JTensor(gl.Texture(ET, size(A)), size(A), context(A))
+    texB = GPUArray(gl.Texture(ET, size(A)), size(A), context(A))
     unsafe_copy!(texB, A)
     texB
 end
@@ -135,7 +135,7 @@ end
 to_glsl_types(::Type{Float32}) = Float64
 to_glsl_types{T}(arg::T) = to_glsl_types(T)
 to_glsl_types{T}(::Type{T}) = T
-function to_glsl_types{T <: JTensors.AbstractAccArray}(arg::T)
+function to_glsl_types{T <: GPUArrays.AbstractAccArray}(arg::T)
     if isa(buffer(arg), gl.Texture)
         et = to_glsl_types(eltype(arg))
         return gli.GLArray{et, ndims(arg)}

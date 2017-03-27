@@ -1,4 +1,4 @@
-using JTensors: CLBackend
+using GPUArrays: CLBackend
 ctx = CLBackend.init()
 using OpenCL: cl
 source = """

@@ -1,6 +1,6 @@
-using JTensors
-import JTensors: JLBackend, CLBackend
-import JTensors.JLBackend: JLArray
+using GPUArrays
+import GPUArrays: JLBackend, CLBackend
+import GPUArrays.JLBackend: JLArray
 
 function blackscholes(
         sptprice,
@@ -45,12 +45,12 @@ result = similar(time)
 result .= blackscholes.(sptprice, initStrike, rate, volatility, time)
 
 ctx = CLBackend.init()
-sptprice_gpu = JTensor(sptprice, flag = :r)
-initStrike_gpu = JTensor(initStrike, flag = :r)
-rate_gpu = JTensor(rate, flag = :r)
-volatility_gpu = JTensor(volatility, flag = :r)
-time_gpu = JTensor(time, flag = :r)
-result_gpu = JTensor(result, flag = :w)
+sptprice_gpu = GPUArray(sptprice, flag = :r)
+initStrike_gpu = GPUArray(initStrike, flag = :r)
+rate_gpu = GPUArray(rate, flag = :r)
+volatility_gpu = GPUArray(volatility, flag = :r)
+time_gpu = GPUArray(time, flag = :r)
+result_gpu = GPUArray(result, flag = :w)
 
 using BenchmarkTools
 @time test(

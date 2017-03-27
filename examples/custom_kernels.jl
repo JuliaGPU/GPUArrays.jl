@@ -1,5 +1,5 @@
-using JTensors
-using JTensors.CLBackend
+using GPUArrays
+using GPUArrays.CLBackend
 CLBackend.init()
 
 
@@ -10,8 +10,8 @@ function clmap!(f, out, b)
 end
 # we need a `guiding array`, to get the context and indicate on what size we
 # want to execute the kernel! This kind of scheme might change in the future
-x = JTensor(rand(Float32, 100))
-y = JTensor(rand(Float32, 100))
+x = GPUArray(rand(Float32, 100))
+y = GPUArray(rand(Float32, 100))
 func = CLFunction(x, clmap!, sin, x, y)
 # same here, x is just passed to supply a kernel size!
 func(x, sin, x, y)
@@ -47,7 +47,7 @@ __kernel void julia(
 w = 2048 * 2;
 h = 2048 * 2;
 q = [Complex64(r,i) for i=1:-(2.0/w):-1, r=-1.5:(3.0/h):1.5];
-q_buff = JTensor(q)
+q_buff = GPUArray(q)
 o_buff = similar(q_buff, UInt16)
 
 # you need to pass the name of the kernel you'd like to compile
@@ -64,8 +64,8 @@ x /= maximum(x)
 save("test.jpg", Gray.(x))
 
 
-using JTensors
-using JTensors.CUBackend
+using GPUArrays
+using GPUArrays.CUBackend
 using CUDAnative
 CUBackend.init()
 function clmap!(f, out, b)
@@ -74,8 +74,8 @@ function clmap!(f, out, b)
     return
 end
 # CUDA works exactly the same!
-x = JTensor(rand(Float32, 100))
-y = JTensor(rand(Float32, 100))
+x = GPUArray(rand(Float32, 100))
+y = GPUArray(rand(Float32, 100))
 # CUFunction instead of CLFunction
 # Note, that we need to use the sin of CUDAnative.
 # This necessity will hopefully be removed soon

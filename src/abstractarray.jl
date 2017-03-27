@@ -1,6 +1,6 @@
 abstract AbstractAccArray{T, N} <: DenseArray{T, N}
 
-type JTensor{T, N, B, C} <: AbstractAccArray{T, N}
+type GPUArray{T, N, B, C} <: AbstractAccArray{T, N}
     buffer::B
     size::NTuple{N, Int}
     context::C
@@ -30,7 +30,7 @@ Base.eltype{T}(::AbstractAccArray{T}) = T
 Base.size(A::AbstractAccArray) = A.size
 
 function Base.show(io::IO, mt::MIME"text/plain", A::AbstractAccArray)
-    println(io, "JTensor with ctx: $(context(A)): ")
+    println(io, "GPUArray with ctx: $(context(A)): ")
     show(io, mt, Array(A))
 end
 function Base.showcompact(io::IO, mt::MIME"text/plain", A::AbstractAccArray)
@@ -46,12 +46,12 @@ end
 function Base.similar{T <: AbstractAccArray, N}(x::T, dims::NTuple{N, Int})
     similar(x, eltype(x), dims)
 end
-function Base.similar{T <: JTensor, ET, N}(
+function Base.similar{T <: GPUArray, ET, N}(
         ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
         context::Context = current_context(), kw_args...
     )
     b = create_buffer(context, ET, sz; kw_args...)
-    JTensor{ET, N, typeof(b), typeof(context)}(b, sz, context)
+    GPUArray{ET, N, typeof(b), typeof(context)}(b, sz, context)
 end
 
 
@@ -227,7 +227,7 @@ end
 #############################
 # reduce
 
-# horrible hack to get around of fetching the first element of the JTensor
+# horrible hack to get around of fetching the first element of the GPUArray
 # as a startvalue, which is a bit complicated with the current reduce implementation
 function startvalue(f, T)
     error("Please supply a starting value for mapreduce. E.g: mapreduce($f, $op, 1, A)")
@@ -293,11 +293,11 @@ else
     error("No Serialization type found. Probably unsupported Julia version")
 end
 
-function Base.serialize{T<:JTensor}(s::BaseSerializer, t::T)
+function Base.serialize{T<:GPUArray}(s::BaseSerializer, t::T)
     Base.serialize_type(s, T)
     serialize(s, Array(t))
 end
-function Base.deserialize{T<:JTensor}(s::BaseSerializer, ::Type{T})
+function Base.deserialize{T<:GPUArray}(s::BaseSerializer, ::Type{T})
     A = deserialize(s)
     T(A)
 end

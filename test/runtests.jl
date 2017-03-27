@@ -7,7 +7,7 @@ for pkg in ("Matcha", "Sugar", "Transpiler")
     end
     installed || Pkg.clone("https://github.com/SimonDanisch/$(pkg).jl.git")
 end
-using JTensors
+using GPUArrays
 using Base.Test
 srand(42) # set random seed for reproducability
 function jltest(a, b)
