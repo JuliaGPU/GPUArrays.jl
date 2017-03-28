@@ -26,49 +26,80 @@ end
 @inline function cndf2(x)
     0.5f0 + 0.5f0 * erf(0.707106781f0 * x)
 end
-using OpenCL: cl
-function test(result, a, b, c, d, e)
-    event = (result .= blackscholes.(a, b, c, d, e))
-    cl.wait(event)
-end
-function test2(result, a, b, c, d, e)
+
+
+@noinline function test(result, a, b, c, d, e)
     result .= blackscholes.(a, b, c, d, e)
+    GPUArrays.synchronize(result)
 end
 
-N = 10^7
-sptprice   = Float32[ 42.0 for i = 1:N ];
-initStrike = Float32[ 40.0 + (i / N) for i = 1:N ];
-rate       = Float32[ 0.5 for i = 1:N ];
-volatility = Float32[ 0.2 for i = 1:N ];
-time       = Float32[ 0.5 for i = 1:N ];
-result = similar(time)
-result .= blackscholes.(sptprice, initStrike, rate, volatility, time)
+# Somehow benchmark tools doesn't like this!
+# so we create a super stupid benchmark macro ourselves
+macro benchmark(expr)
+    quote
+        mintime = Inf
+        for i=1:10
+            tic()
+            $(esc(expr))
+            t = toq()
+            mintime = min(t, mintime)
+        end
+        mintime
+    end
+end
+cltimes = Float64[]
+jltimes = Float64[]
+threadtimes = Float64[]
+for n in linspace(100, 10*10^7, 8)
+    N = round(Int, n)
+    sptprice   = Float32[ 42.0 for i = 1:N ];
+    initStrike = Float32[ 40.0 + (i / N) for i = 1:N ];
+    rate       = Float32[ 0.5 for i = 1:N ];
+    volatility = Float32[ 0.2 for i = 1:N ];
+    time       = Float32[ 0.5 for i = 1:N ];
+    result = similar(time)
 
-ctx = CLBackend.init()
-sptprice_gpu = GPUArray(sptprice, flag = :r)
-initStrike_gpu = GPUArray(initStrike, flag = :r)
-rate_gpu = GPUArray(rate, flag = :r)
-volatility_gpu = GPUArray(volatility, flag = :r)
-time_gpu = GPUArray(time, flag = :r)
-result_gpu = GPUArray(result, flag = :w)
+    ctx = CLBackend.init()
+    sptprice_gpu = GPUArray(sptprice)
+    initStrike_gpu = GPUArray(initStrike)
+    rate_gpu = GPUArray(rate)
+    volatility_gpu = GPUArray(volatility)
+    time_gpu = GPUArray(time)
+    result_gpu = GPUArray(result)
 
-using BenchmarkTools
-@time test(
-    result_gpu,
-    sptprice_gpu,
-    initStrike_gpu,
-    rate_gpu,
-    volatility_gpu,
-    time_gpu
-)
-@time test2(
-    result,
-    sptprice,
-    initStrike,
-    rate,
-    volatility,
-    time
-)
+    ctx = JLBackend.init()
+    sptprice_cpu = GPUArray(sptprice)
+    initStrike_cpu = GPUArray(initStrike)
+    rate_cpu = GPUArray(rate)
+    volatility_cpu = GPUArray(volatility)
+    time_cpu = GPUArray(time)
+    result_cpu = GPUArray(result)
 
-0.1 / 0.000652
-0.99 / 0.002
+    bench_cl = @benchmark test(
+        result_gpu,
+        sptprice_gpu,
+        initStrike_gpu,
+        rate_gpu,
+        volatility_gpu,
+        time_gpu
+    )
+    bench_thread = @benchmark test(
+        result_cpu,
+        sptprice_cpu,
+        initStrike_cpu,
+        rate_cpu,
+        volatility_cpu,
+        time_cpu
+    )
+    bench_jl = @benchmark test(
+        result,
+        sptprice,
+        initStrike,
+        rate,
+        volatility,
+        time
+    )
+    push!(cltimes, bench_cl)
+    push!(jltimes, bench_jl)
+    push!(threadtimes, bench_thread)
+end
