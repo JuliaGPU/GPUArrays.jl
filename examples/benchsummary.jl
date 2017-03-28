@@ -54,6 +54,6 @@ p2 = plot(
 
 println("| Backend | Time in Seconds N = 10^7 |")
 println("| ---- | ---- |")
-for (l, nums) in zip(labels, numbers)
+for (l, nums) in zip(labels[idx], numbers[idx])
     println("| ", l, " | ", last(nums), " |")
 end

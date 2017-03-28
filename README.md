@@ -108,13 +108,13 @@ Times in a table:
 | Backend | Time in Seconds N = 10^7 |
 | ---- | ---- |
 | OpenCL FirePro W9100 | 8.138e-6 |
-| Julia i7-6700 | 0.937901 |
-| 8 Threads i7-6700 | 0.199975 |
-| OpenCL hd4400 | 0.0420179 |
-| OpenCL GTX950 | 0.0335097 |
 | CUDA GTX950 | 0.00354474 |
-| Julia i3-4130 | 1.04109 |
+| OpenCL GTX950 | 0.0335097 |
+| OpenCL hd4400 | 0.0420179 |
+| 8 Threads i7-6700 | 0.199975 |
 | 4 Threads i3-4130 | 0.374679 |
+| Julia i7-6700 | 0.937901 |
+| Julia i3-4130 | 1.04109 |
 
 # TODO / up for grabs
 
