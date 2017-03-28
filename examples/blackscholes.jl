@@ -50,7 +50,7 @@ end
 cltimes = Float64[]
 jltimes = Float64[]
 threadtimes = Float64[]
-for n in linspace(100, 10*10^7, 8)
+for n in linspace(100, 10^7, 8)
     N = round(Int, n)
     sptprice   = Float32[ 42.0 for i = 1:N ];
     initStrike = Float32[ 40.0 + (i / N) for i = 1:N ];
@@ -58,14 +58,14 @@ for n in linspace(100, 10*10^7, 8)
     volatility = Float32[ 0.2 for i = 1:N ];
     time       = Float32[ 0.5 for i = 1:N ];
     result = similar(time)
-
-    ctx = CLBackend.init()
-    sptprice_gpu = GPUArray(sptprice)
-    initStrike_gpu = GPUArray(initStrike)
-    rate_gpu = GPUArray(rate)
-    volatility_gpu = GPUArray(volatility)
-    time_gpu = GPUArray(time)
-    result_gpu = GPUArray(result)
+    # 
+    # ctx = CLBackend.init()
+    # sptprice_gpu = GPUArray(sptprice)
+    # initStrike_gpu = GPUArray(initStrike)
+    # rate_gpu = GPUArray(rate)
+    # volatility_gpu = GPUArray(volatility)
+    # time_gpu = GPUArray(time)
+    # result_gpu = GPUArray(result)
 
     ctx = JLBackend.init()
     sptprice_cpu = GPUArray(sptprice)
@@ -74,15 +74,15 @@ for n in linspace(100, 10*10^7, 8)
     volatility_cpu = GPUArray(volatility)
     time_cpu = GPUArray(time)
     result_cpu = GPUArray(result)
-
-    bench_cl = @benchmark test(
-        result_gpu,
-        sptprice_gpu,
-        initStrike_gpu,
-        rate_gpu,
-        volatility_gpu,
-        time_gpu
-    )
+    #
+    # bench_cl = @benchmark test(
+    #     result_gpu,
+    #     sptprice_gpu,
+    #     initStrike_gpu,
+    #     rate_gpu,
+    #     volatility_gpu,
+    #     time_gpu
+    # )
     bench_thread = @benchmark test(
         result_cpu,
         sptprice_cpu,
@@ -91,15 +91,15 @@ for n in linspace(100, 10*10^7, 8)
         volatility_cpu,
         time_cpu
     )
-    bench_jl = @benchmark test(
-        result,
-        sptprice,
-        initStrike,
-        rate,
-        volatility,
-        time
-    )
-    push!(cltimes, bench_cl)
-    push!(jltimes, bench_jl)
+    # bench_jl = @benchmark test(
+    #     result,
+    #     sptprice,
+    #     initStrike,
+    #     rate,
+    #     volatility,
+    #     time
+    # )
+    # push!(cltimes, bench_cl)
+    # push!(jltimes, bench_jl)
     push!(threadtimes, bench_thread)
 end

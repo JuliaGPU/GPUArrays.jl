@@ -86,6 +86,36 @@ The OpenCL backend already supports mat mul via `CLBLAS.gemm!` and `fft!`/`ifft!
 CUDAnative could support these easily as well, but we currently run into problems with the interactions of `CUDAdrv` and `CUDArt`.
 
 
+# Benchmarks
+
+We have only benchmarked Blackscholes and not much time has been spent to optimize our kernels yet.
+So please treat these numbers with care!
+
+[source](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/blackscholes.jl)
+
+![blackscholes](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/blackscholebench.png?raw=true)
+
+Interestingly, on the GTX950, the CUDAnative backend outperforms the OpenCL backend by a factor of 10.
+This is most likely due to the fact, that LLVM is great at unrolling and vectorizing loops,
+while it seems that the nvidia OpenCL compiler isn't. So with our current primitive kernel,
+quite a bit of performance is missed out with OpenCL right now!
+This can be fixed by putting more effort into emitting specialized kernels, which should
+be straightforward with Julia's great meta programming and `@generated` functions.
+
+
+Times in a table:
+
+| Backend | Time in Seconds N = 10^7 |
+| ---- | ---- |
+| OpenCL FirePro W9100 | 8.138e-6 |
+| Julia i7-6700 | 0.937901 |
+| 8 Threads i7-6700 | 0.199975 |
+| OpenCL hd4400 | 0.0420179 |
+| OpenCL GTX950 | 0.0335097 |
+| CUDA GTX950 | 0.00354474 |
+| Julia i3-4130 | 1.04109 |
+| 4 Threads i3-4130 | 0.374679 |
+
 # TODO / up for grabs
 
 * mapreduce (there is a first working version for cudanative)
