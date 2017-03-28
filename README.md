@@ -60,6 +60,25 @@ broadcast!(f, dest::GPUArray, ::GPUArray...)
 
 ```
 
+# Usage
+
+```Julia
+using GPUArrays
+# A backend will be initialized by default on first call to the GPUArray constructor
+# But can be explicitely called like e.g.: CLBackend.init(), CUBackend.init(), JLBackend.init()
+
+a = GPUArray(rand(Float32, 32, 32)) # can be constructed from any Julia Array
+b = similar(a) # similar and other Julia.Base operations are defined
+b .= a .+ 1f0 # broadcast in action, only works on 0.6 for .+. on 0.5 do: b .= (+).(a, 1f0)!
+c = a * b # calls to BLAS
+function test(a, b)
+    Complex64(sin(a / b))
+end
+complex_c = test.(c, b)
+fft!(complex_c) # fft!/ifft! is currently implemented for JLBackend and CLBackend
+
+```
+
 
 CLFFT, CUFFT, CLBLAS and CUBLAS will soon be supported.
 A prototype of generic support of these libraries can be found in [blas.jl](https://github.com/JuliaGPU/GPUArrays.jl/blob/sd/glsl/src/blas.jl).
@@ -71,9 +90,9 @@ CUDAnative could support these easily as well, but we currently run into problem
 
 * mapreduce (there is a first working version for cudanative)
 * stencil operations
-* more tests
+* more tests and benchmarks
 * tests, that actually only switch the backend but use the same code
 * performance improvements!!
 * implement push!, append!, resize!, getindex, setindex!
-* interop between OpenCL, CUDA and OpenGL is there as a protype, but needs propper hooking up via `Base.copy!` / `convert`
+* interop between OpenCL, CUDA and OpenGL is there as a protype, but needs proper hooking up via `Base.copy!` / `convert`
 * share implementation of broadcast etc between backends. Currently they don't, since there are still subtle differences which should be elimated over time!
