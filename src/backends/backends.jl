@@ -26,12 +26,13 @@ let compute_contexts = Context[]
 end
 #interface
 function create_buffer(ctx, array) end
-# BLAS support
-include("blas.jl")
-include("supported_backends.jl")
 """
 Blocks until all operations are finished on `A`
 """
-function synchronize(A::AbstractAccArray)
-    # fallback is a noop, for backends not needing synchronization
+function synchronize(A::AbstractArray)
+    # fallback is a noop, for backends not needing synchronization. This
+    # makes it easier to write generic code that also works for AbstractArrays
 end
+# BLAS support
+include("blas.jl")
+include("supported_backends.jl")
