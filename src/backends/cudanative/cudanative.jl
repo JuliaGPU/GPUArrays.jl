@@ -7,6 +7,8 @@ import CUDAdrv, CUDArt #, CUFFT
 
 import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
 import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index
+import GPUArrays: synchronize
+
 using CUDAdrv: CuDefaultStream
 
 immutable GraphicsResource{T}
@@ -42,6 +44,10 @@ let contexts = CUContext[]
         push!(contexts, ctx)
         ctx
     end
+end
+# synchronize
+function synchronize{T, N}(x::CUArray{T, N})
+    CUDAdrv.synchronize(context(x).ctx) # TODO figure out the diverse ways of synchronization
 end
 
 function create_buffer{T, N}(ctx::CUContext, ::Type{T}, sz::NTuple{N, Int}; kw_args...)

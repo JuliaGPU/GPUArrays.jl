@@ -29,3 +29,9 @@ function create_buffer(ctx, array) end
 # BLAS support
 include("blas.jl")
 include("supported_backends.jl")
+"""
+Blocks until all operations are finished on `A`
+"""
+function synchronize(A::AbstractAccArray)
+    # fallback is a noop, for backends not needing synchronization
+end
