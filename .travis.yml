@@ -4,17 +4,14 @@ os:
   - linux
   - osx
 julia:
-  - release
+  - 0.5
   - nightly
-matrix:
-  allow_failures:
-  - julia: nightly
-
+addons:
+  apt:
+    packages:
+    - cmake
+    - libxxf86vm-dev
+    sources:
+    - kubuntu-backports
 notifications:
   email: false
-# uncomment the following lines to override the default test script
-script:
- - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
- - julia -e 'Pkg.clone("https://github.com/SimonDanisch/Matcha.jl.git")'
- - julia -e 'Pkg.clone("https://github.com/SimonDanisch/Sugar.jl.git")'
- - julia -e 'Pkg.clone(pwd()); Pkg.build("GPUArrays"); Pkg.test("GPUArrays"; coverage=true)'

@@ -9,23 +9,44 @@ using ..GPUArrays, StaticArrays
 #import CLBLAS, CLFFT
 
 import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import GPUArrays: Context, GPUArray, context, broadcast_index
-import GPUArrays: blasbuffer, blas_module
+import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index
+import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
+import GPUArrays: synchronize
 
 using Transpiler
 using Transpiler: CLTranspiler
 import Transpiler.CLTranspiler.cli
-import Transpiler.CLTranspiler.ComputeProgram
+import Transpiler.CLTranspiler.CLFunction
 import Transpiler.CLTranspiler.cli.get_global_id
 
 immutable CLContext <: Context
     device::cl.Device
     context::cl.Context
     queue::cl.CmdQueue
-    function CLContext(device_type = :gpu)
-        device = first(cl.devices(device_type))
-        ctx    = cl.Context(device)
-        queue  = cl.CmdQueue(ctx)
+    function CLContext(device_type = nothing)
+        device = if device_type == nothing
+            devlist = cl.devices(:gpu)
+            dev = if isempty(devlist)
+                devlist = cl.devices(:cpu)
+                if isempty(devlist)
+                    error("no device found to be supporting opencl")
+                else
+                    first(devlist)
+                end
+            else
+                first(devlist)
+            end
+            dev
+        else
+            # if device type supplied by user, assume it's actually existant!
+            devlist = cl.devices(device_type)
+            if isempty(devlist)
+                error("Can't find OpenCL device for $device_type")
+            end
+            first(devlist)
+        end
+        ctx = cl.Context(device)
+        queue = cl.CmdQueue(ctx)
         new(device, ctx, queue)
     end
 end
@@ -38,25 +59,40 @@ global init, all_contexts, current_context
 let contexts = CLContext[]
     all_contexts() = copy(contexts)::Vector{CLContext}
     current_context() = last(contexts)::CLContext
-    function init(;typ = :gpu, ctx = CLContext(typ))
-        GPUArrays.make_current(ctx)
-        push!(contexts, ctx)
-        ctx
+    function init(;device_type = nothing, ctx = nothing)
+        context = if ctx == nothing
+            if isempty(contexts)
+                CLContext(device_type)
+            else
+                current_context()
+            end
+        else
+            ctx
+        end
+        GPUArrays.make_current(context)
+        push!(contexts, context)
+        context
     end
 end
 
 @compat const CLArray{T, N} = GPUArray{T, N, cl.Buffer{T}, CLContext}
 
+#synchronize
+
+function synchronize{T, N}(x::CLArray{T, N})
+    cl.finish(context(x).queue) # TODO figure out the diverse ways of synchronization
+end
 # Constructor
 function Base.copy!{T, N}(dest::Array{T, N}, source::CLArray{T, N})
-    copy!(context(source).queue, dest, buffer(source))
-end
-function Base.unsafe_copy!{T, N}(dest::Array{T, N}, source::CLArray{T, N})
-    copy!(context(source).queue, dest, buffer(source))
+    q = context(source).queue
+    cl.finish(q)
+    copy!(q, dest, buffer(source))
 end
 
-function Base.unsafe_copy!{T, N}(dest::CLArray{T, N}, source::Array{T, N})
-    copy!(context(dest).queue, buffer(dest), source)
+function Base.copy!{T, N}(dest::CLArray{T, N}, source::Array{T, N})
+    q = context(dest).queue
+    cl.finish(q)
+    copy!(q, buffer(dest), source)
 end
 function create_buffer{T, N}(ctx::CLContext, A::AbstractArray{T, N}, flag = :rw)
     cl.Buffer(T, ctx.context, (flag, :copy), hostbuf = A)
@@ -68,11 +104,6 @@ function create_buffer{T, N}(
     cl.Buffer(T, ctx.context, flag, prod(sz))
 end
 
-function Base.similar{T, N}(::Type{CLArray{T, N}}, sz::Tuple, flag = :rw)
-    ctx = current_context()
-    b = cl.Buffer(T, ctx.context, flag, prod(sz))
-    GPUArray{T, length(sz), typeof(b), typeof(ctx)}(b, sz, ctx)
-end
 function Base.similar{T, N, ET}(x::CLArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
     ctx = context(x)
     b = create_buffer(ctx, ET, sz; kw_args...)
@@ -84,6 +115,8 @@ _prod{T}(x::NTuple{1, T}) = x[1]
 _prod{T}(x::NTuple{2, T}) = x[1] * x[2]
 _prod{T}(x::NTuple{3, T}) = x[1] * x[2] * x[3]
 
+linear_index(::cli.CLArray) = get_global_id(0) + 1
+
 ###########################################################
 # Broadcast
 for i = 0:10
@@ -93,6 +126,11 @@ for i = 0:10
         function broadcast_kernel(A, f, sz, $(args...))
             i = get_global_id(0) + 1
             A[i] = f($(fargs...))
+            return
+        end
+        function mapidx_kernel{F}(A, f::F, $(args...))
+            i = get_global_id(0) + 1
+            f(i, A, $(args...))
             return
         end
     end
@@ -107,22 +145,49 @@ CLTranspiler.cl_convert{T, N}(x::CLArray{T, N}) = buffer(x)
 function acc_broadcast!{F <: Function, T, N}(f::F, A::CLArray{T, N}, args::Tuple)
     ctx = context(A)
     sz = map(Int32, size(A))
-    clfunc = ComputeProgram(broadcast_kernel, (A, f, sz, args...), ctx.queue)
-    clfunc((A, f, sz, args...), size(A))
+    q = ctx.queue
+    cl.finish(q)
+    clfunc = CLFunction(broadcast_kernel, (A, f, sz, args...), q)
+    clfunc((A, f, sz, args...), length(A))
 end
 
 
+function mapidx{F <: Function, N, T, N2}(f::F, A::CLArray{T, N2}, args::NTuple{N, Any})
+    ctx = context(A)
+    q = ctx.queue
+    cl.finish(q)
+    cl_args = (A, f, args...)
+    clfunc = CLFunction(mapidx_kernel, cl_args, q)
+    clfunc(cl_args, length(A))
+end
+
+function CLFunction{T, N}(A::CLArray{T, N}, f, args...)
+    ctx = context(A)
+    CLFunction(f, args, ctx.queue)
+end
+function (clfunc::CLFunction{T}){T, T2, N}(A::CLArray{T2, N}, args...)
+    # TODO use better heuristic
+    clfunc(args, length(A))
+end
 ###################
 # Blase interface
-# TODO figure out at build time, if CLBLAS is available and throw
-# descriptive error in blas_module if not available!
-import CLBLAS
-blas_module(::CLContext) = CLBLAS
-function blasbuffer(::CLContext, A)
-    buff = buffer(A)
-    # LOL! TODO don't have CLArray in OpenCL/CLBLAS
-    cl.CLArray(buff, context(A).queue, size(A))
+if is_blas_supported(:CLBLAS)
+    import CLBLAS
+    blas_module(::CLContext) = CLBLAS
+    function blasbuffer(::CLContext, A)
+        buff = buffer(A)
+        # LOL! TODO don't have CLArray in OpenCL/CLBLAS
+        cl.CLArray(buff, context(A).queue, size(A))
+    end
 end
+
+###################
+# FFT interface
+if is_fft_supported(:CLFFT)
+    include("fft.jl")
+end
+
+export CLFunction, cli
 
 end #CLBackend
 

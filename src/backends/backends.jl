@@ -1,11 +1,17 @@
 global current_context, make_current
+function default_backend()
+    if is_backend_supported(:cudanative)
+        CUBackend
+    elseif is_backend_supported(:opencl)
+        CLBackend
+    else
+        JLBackend
+    end
+end
 let compute_contexts = Context[]
     function current_context()
         if isempty(compute_contexts)
-            error("
-                Please initialize your favorite Backend. E.g.: JLBackend.init().
-                Available backends: $(supported_backends())
-            ")
+            default_backend().init()
         end
         last(compute_contexts)
     end
@@ -20,7 +26,13 @@ let compute_contexts = Context[]
 end
 #interface
 function create_buffer(ctx, array) end
-
+"""
+Blocks until all operations are finished on `A`
+"""
+function synchronize(A::AbstractArray)
+    # fallback is a noop, for backends not needing synchronization. This
+    # makes it easier to write generic code that also works for AbstractArrays
+end
+# BLAS support
+include("blas.jl")
 include("supported_backends.jl")
-
-is_backend_supported(sym::Symbol) = sym in supported_backends()

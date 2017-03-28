@@ -1,6 +1,5 @@
-using GPUArrays, CUDAnative
-using Base.Test
-import GPUArrays: GPUArray, CUBackend
+using GPUArrays.CUBackend
+using CUDAnative, Base.Test
 cuctx = CUBackend.init()
 const cu = CUDAnative
 
@@ -92,4 +91,54 @@ end
     #         end
     #     end
     # end
+end
+@testset "mapidx" begin
+    a = rand(Complex64, 1024)
+    b = rand(Complex64, 1024)
+    A = GPUArray(a)
+    B = GPUArray(b)
+    off = 1
+    mapidx(A, (B, off, length(A))) do i, a, b, off, len
+        x = b[i]
+        x2 = b[min(i+off, len)]
+        a[i] = x * x2
+    end
+    foreach(1:length(a)) do i
+        x = b[i]
+        x2 = b[min(i+off, length(a))]
+        a[i] = x * x2
+    end
+    @test Array(A) ≈ a
+end
+
+
+function cumap!(f, out, b)
+    i = linear_index(out) # get the kernel index it gets scheduled on
+    out[i] = f(b[i])
+    return
+end
+
+@testset "Custom kernel from Julia function" begin
+    x = GPUArray(rand(Float32, 100))
+    y = GPUArray(rand(Float32, 100))
+    func = CUFunction(x, cumap!, cu.sin, x, y)
+    # same here, x is just passed to supply a kernel size!
+    func(x, cu.sin, x, y)
+    jy = Array(y)
+    @test map!(sin, jy, jy) ≈ Array(x)
+end
+
+@testset "Custom kernel from string function" begin
+    x = GPUArray(rand(Float32, 100))
+    y = GPUArray(rand(Float32, 100))
+    source = """
+    __global__ void copy(const float *input, float *output)
+    {
+        int i = blockIdx.x * blockDim.x + threadIdx.x;
+        output[i] = input[i];
+    }
+    """
+    cucopy = CUFunction(x, (source, :copy), x, y)
+    cucopy(x, x, y)
+    @test Array(x) == Array(y)
 end

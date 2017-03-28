@@ -6,26 +6,26 @@ type GPUArray{T, N, B, C} <: AbstractAccArray{T, N}
     context::C
 end
 
+
 # interfaces
 
-function Base.similar{T <: GPUArray, ET, N}(
-        ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
-        context::Context = current_context(), kw_args...
-    )
-    b = create_buffer(context, ET, sz; kw_args...)
-    GPUArray{ET, N, typeof(b), typeof(context)}(b, sz, context)
-end
 #=
-context interface
+Interface for accessing the lower level
 =#
 
 buffer(A::AbstractAccArray) = A.buffer
 context(A::AbstractAccArray) = A.context
 
+"""
+linear index in a GPU kernel
+"""
+function linear_index end
+
+
+
 #=
 AbstractArray interface
 =#
-
 Base.eltype{T}(::AbstractAccArray{T}) = T
 Base.size(A::AbstractAccArray) = A.size
 
@@ -46,6 +46,16 @@ end
 function Base.similar{T <: AbstractAccArray, N}(x::T, dims::NTuple{N, Int})
     similar(x, eltype(x), dims)
 end
+function Base.similar{T <: GPUArray, ET, N}(
+        ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
+        context::Context = current_context(), kw_args...
+    )
+    b = create_buffer(context, ET, sz; kw_args...)
+    GPUArray{ET, N, typeof(b), typeof(context)}(b, sz, context)
+end
+
+
+
 
 
 #=
@@ -56,7 +66,7 @@ function (::Type{A}){A <: AbstractAccArray}(x::AbstractArray)
 end
 function (::Type{A}){A <: AbstractAccArray}(x::Array; kw_args...)
     out = similar(A, eltype(x), size(x); kw_args...)
-    unsafe_copy!(out, x)
+    copy!(out, x)
     out
 end
 Base.convert{A <: AbstractAccArray}(::Type{A}, x::AbstractArray) = A(x)
@@ -73,7 +83,7 @@ function (AT::Type{Array{T, N}}){T, N}(device_array::AbstractAccArray)
 end
 function (AT::Type{Array{T, N}}){T, N}(device_array::AbstractAccArray{T, N})
     hostarray = similar(AT, size(device_array))
-    unsafe_copy!(hostarray, device_array)
+    copy!(hostarray, device_array)
     hostarray
 end
 
@@ -82,11 +92,11 @@ end
 Copying
 =#
 
-function Base.unsafe_copy!{T, N}(dest::Array{T, N}, source::AbstractAccArray{T, N})
-    Base.unsafe_copy!(dest, buffer(source))
+function Base.copy!{T, N}(dest::Array{T, N}, source::AbstractAccArray{T, N})
+    copy!(dest, buffer(source))
 end
-function Base.unsafe_copy!{T, N}(dest::AbstractAccArray{T, N}, source::Array{T, N})
-    Base.unsafe_copy!(buffer(dest), source)
+function Base.copy!{T, N}(dest::AbstractAccArray{T, N}, source::Array{T, N})
+    copy!(buffer(dest), source)
 end
 
 # Function needed to be overloaded by backends
@@ -97,7 +107,7 @@ function mapidx end
 # f::Function, Context, Main/Out::AccArray, args::NTuple{N}
 # All arrays are already lifted and shape checked
 function acc_broadcast! end
-# same fore mapreduce
+# same for mapreduce
 function acc_mapreduce end
 
 
@@ -159,39 +169,7 @@ function broadcast_similar(f, A, args)
 end
 
 
-# seems to be needed for ambiguities
-function Base.broadcast!(f::typeof(identity), A::AbstractAccArray, args::Number)
-    acc_broadcast!(f, A, (args,))
-end
-function Base.broadcast!(f::typeof(identity), A::AbstractAccArray, B::AbstractAccArray)
-    acc_broadcast!(f, A, (B,))
-end
-function Base.broadcast!(f::Function, A::AbstractAccArray)
-    acc_broadcast!(f, A, ())
-end
-# Base.Broadcast.check_broadcast_shape(size(A), As...)
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray)
-    acc_broadcast!(f, A, (B,))
-end
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::Number)
-    acc_broadcast!(f, A, (B,))
-end
-# Base.Broadcast.check_broadcast_shape(size(A), As...)
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, args::AbstractAccArray...)
-    acc_broadcast!(f, A, (B, args...))
-end
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, args::Number)
-    acc_broadcast!(f, A, (B, args...))
-end
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D, E...)
-    acc_broadcast!(f, A, (B, C, D, E...))
-end
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D)
-    acc_broadcast!(f, A, (B, C, D))
-end
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::Any)
-    acc_broadcast!(f, A, (B, C))
-end
+# we need to overload all the different broadcast functions, since x... is ambigious
 
 function Base.broadcast(f::Function, A::AbstractAccArray)
     out = broadcast_similar(f, A, ())
@@ -203,11 +181,36 @@ function Base.broadcast(f::Function, A::AbstractAccArray, B::Number)
     acc_broadcast!(f, out, (A, B,))
     out
 end
-
 function Base.broadcast(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
     out = broadcast_similar(f, A, args)
     acc_broadcast!(f, out, (A, args...))
     out
+end
+function Base.broadcast!(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
+    acc_broadcast!(f, A, (args...))
+end
+# identity is overloaded in Base, so there will be ambiguities without explicitely overloading it!
+function Base.broadcast!(f::typeof(identity), A::AbstractAccArray, B::Number)
+    acc_broadcast!(f, A, (B,))
+end
+function Base.broadcast!(f::typeof(identity), A::AbstractAccArray, B::AbstractAccArray)
+    acc_broadcast!(f, A, (B,))
+end
+# Various combinations with scalars
+function Base.broadcast!(f::Function, A::AbstractAccArray)
+    acc_broadcast!(f, A, ())
+end
+function Base.broadcast!(f::Function, A::AbstractAccArray, B)
+    acc_broadcast!(f, A, (B,))
+end
+function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, args)
+    acc_broadcast!(f, A, (B, args))
+end
+function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D, E...)
+    acc_broadcast!(f, A, (B, C, D, E...))
+end
+function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D)
+    acc_broadcast!(f, A, (B, C, D))
 end
 
 # TODO check size
@@ -274,12 +277,27 @@ end
 function Base.fill!{N, T}(A::AbstractAccArray{N, T}, val)
     A .= identity.(T(val))
 end
-#
-# function Base.rand{T <: AbstractAccArray, ET}(::Type{T}, ET, size...)
-#     T(rand(ET, size...))
-# end
+function Base.rand{T <: AbstractAccArray, ET}(::Type{T}, ::Type{ET}, size...)
+    T(rand(ET, size...))
+end
 
 
-#################################
-# BLAS support
-include("blas.jl")
+############################################
+# serialization
+
+const BaseSerializer = if isdefined(Base, :AbstractSerializer)
+    Base.AbstractSerializer
+elseif isdefined(Base, :SerializationState)
+    Base.SerializationState
+else
+    error("No Serialization type found. Probably unsupported Julia version")
+end
+
+function Base.serialize{T<:GPUArray}(s::BaseSerializer, t::T)
+    Base.serialize_type(s, T)
+    serialize(s, Array(t))
+end
+function Base.deserialize{T<:GPUArray}(s::BaseSerializer, ::Type{T})
+    A = deserialize(s)
+    T(A)
+end

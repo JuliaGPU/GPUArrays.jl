@@ -125,7 +125,7 @@ size3d{T}(A::GLArrayTex{T, 2}) = (size(A)..., 1)
 size3d{T}(A::GLArrayTex{T, 3}) = size(A)
 
 function acc_broadcast!{F <: Function, T, N}(f::F, A::GLArrayTex{T, N}, args::Tuple)
-    glfunc = ComputeProgram(broadcast_kernel, (A, f, args...))
+    glfunc = CLFunction(broadcast_kernel, (A, f, args...))
     glfunc((A, f, args...), size3d(A))
 end
 
