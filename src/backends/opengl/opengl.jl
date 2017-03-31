@@ -16,9 +16,9 @@ immutable GLContext <: Context
 end
 Base.show(io::IO, ctx::GLContext) = print(io, "GLContext")
 
-typealias GLArrayBuff{T, N} GPUArray{T, N, gl.GLBuffer{T}, GLContext}
-typealias GLArrayTex{T, N} GPUArray{T, N, gl.Texture{T, N}, GLContext}
-typealias GLArray{T, N} Union{GLArrayBuff{T, N}, GLArrayTex{T, N}}
+@compat const GLArrayBuff{T, N} = GPUArray{T, N, gl.GLBuffer{T}, GLContext}
+@compat const GLArrayTex{T, N} = GPUArray{T, N, gl.Texture{T, N}, GLContext}
+@compat const GLArray{T, N} = Union{GLArrayBuff{T, N}, GLArrayTex{T, N}}
 
 
 function any_context()
