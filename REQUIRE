@@ -1,5 +1,6 @@
 julia 0.5
 StaticArrays
+Compat 0.19.0
 
 #Sugar
 #Matcha
@@ -13,5 +14,3 @@ CUFFT
 OpenCL
 CLBLAS
 CLFFT
-
-Compat 0.18.0

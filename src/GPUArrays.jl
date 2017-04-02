@@ -1,8 +1,8 @@
 __precompile__(true)
 module GPUArrays
 
+using Compat
 @compat abstract type Context end
-using Sugar
 
 include("abstractarray.jl")
 export GPUArray, mapidx, linear_index

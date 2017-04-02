@@ -1,4 +1,4 @@
-abstract AbstractAccArray{T, N} <: DenseArray{T, N}
+@compat abstract type AbstractAccArray{T, N} <: DenseArray{T, N} end
 
 type GPUArray{T, N, B, C} <: AbstractAccArray{T, N}
     buffer::B
