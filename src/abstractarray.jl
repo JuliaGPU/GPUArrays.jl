@@ -6,7 +6,6 @@ type GPUArray{T, N, B, C} <: AbstractAccArray{T, N}
     context::C
 end
 
-
 # interfaces
 
 #=

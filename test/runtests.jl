@@ -1,5 +1,5 @@
 #TODO register these packages!
-for pkg in ("Matcha", "Sugar", "Transpiler")
+for pkg in ("Sugar", "Transpiler")
     installed = try
         Pkg.installed(pkg) != nothing
     catch e
