@@ -30,7 +30,7 @@ function any_context()
     CUContext(ctx, dev)
 end
 
-#typealias GLArrayImg{T, N} GPUArray{T, N, gl.Texture{T, N}, GLContext}
+#@compat const GLArrayImg{T, N} = GPUArray{T, N, gl.Texture{T, N}, GLContext}
 @compat const CUArray{T, N, B} = GPUArray{T, N, B, CUContext} #, GLArrayImg{T, N}}
 @compat const CUArrayBuff{T, N} = CUArray{T, N, CUDAdrv.CuArray{T, N}}
 
