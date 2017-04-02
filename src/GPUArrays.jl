@@ -1,7 +1,7 @@
 __precompile__(true)
 module GPUArrays
 
-using Compat
+using Compat, Sugar
 @compat abstract type Context end
 
 include("abstractarray.jl")
