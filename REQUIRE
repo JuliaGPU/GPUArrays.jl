@@ -13,3 +13,5 @@ CUFFT
 OpenCL
 CLBLAS
 CLFFT
+
+Compat 0.18.0
