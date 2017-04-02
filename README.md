@@ -107,7 +107,7 @@ Times in a table:
 
 | Backend | Time in Seconds N = 10^7 |
 | ---- | ---- |
-| OpenCL FirePro W9100 | 8.138e-6 |
+| OpenCL FirePro W9100 | 0.0014526 |
 | CUDA GTX950 | 0.00354474 |
 | OpenCL GTX950 | 0.0335097 |
 | OpenCL hd4400 | 0.0420179 |
