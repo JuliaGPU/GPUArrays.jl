@@ -34,5 +34,19 @@ function synchronize(A::AbstractArray)
     # makes it easier to write generic code that also works for AbstractArrays
 end
 # BLAS support
+hasblas(x) = false
 include("blas.jl")
 include("supported_backends.jl")
+include("shared.jl")
+
+function init(sym::Symbol, args...; kw_args...)
+    if sym == :julia
+        JLBackend.init(args...; kw_args...)
+    elseif sym == :cudanative
+        CUBackend.init(args...; kw_args...)
+    elseif sym == :opencl
+        CLBackend.init(args...; kw_args...)
+    else
+        error("$sym not a supported backend. Try one of: $(supported_backends())")
+    end
+end

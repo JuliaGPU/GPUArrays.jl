@@ -11,7 +11,7 @@ using ..GPUArrays, StaticArrays
 import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
 import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index
 import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
-import GPUArrays: synchronize
+import GPUArrays: synchronize, hasblas, LocalMemory
 
 using Transpiler
 using Transpiler: CLTranspiler
@@ -94,6 +94,15 @@ function Base.copy!{T, N}(dest::CLArray{T, N}, source::Array{T, N})
     cl.finish(q)
     copy!(q, buffer(dest), source)
 end
+
+# copy the contents of a buffer into another buffer
+function Base.copy!{T, N}(dst::CLArray{T, N}, src::CLArray{T, N})
+    q = context(dst).queue
+    cl.finish(q)
+    copy!(q, buffer(dst), buffer(src))
+end
+
+
 function create_buffer{T, N}(ctx::CLContext, A::AbstractArray{T, N}, flag = :rw)
     cl.Buffer(T, ctx.context, (flag, :copy), hostbuf = A)
 end
@@ -104,10 +113,10 @@ function create_buffer{T, N}(
     cl.Buffer(T, ctx.context, flag, prod(sz))
 end
 
-function Base.similar{T, N, ET}(x::CLArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
+function Base.similar{T, N, N2, ET}(x::CLArray{T, N}, ::Type{ET}, sz::Tuple{Vararg{Int, N2}}; kw_args...)
     ctx = context(x)
     b = create_buffer(ctx, ET, sz; kw_args...)
-    GPUArray{ET, N, typeof(b), typeof(ctx)}(b, sz, ctx)
+    GPUArray{ET, N2, typeof(b), typeof(ctx)}(b, sz, ctx)
 end
 # The implementation of prod in base doesn't play very well with current
 # transpiler. TODO figure out what Core._apply maps to!
@@ -137,10 +146,11 @@ for i = 0:10
 end
 
 # extend the private interface for the compilation types
-function CLTranspiler._to_cl_types{T, N}(arg::CLArray{T, N})
-    return cli.CLArray{T, N}
-end
+CLTranspiler._to_cl_types{T, N}(arg::CLArray{T, N}) = cli.CLArray{T, N}
+CLTranspiler._to_cl_types{T}(x::LocalMemory{T}) = cli.LocalMemory{T}
+
 CLTranspiler.cl_convert{T, N}(x::CLArray{T, N}) = buffer(x)
+CLTranspiler.cl_convert{T}(x::LocalMemory{T}) = cl.LocalMem(T, x.size)
 
 function acc_broadcast!{F <: Function, T, N}(f::F, A::CLArray{T, N}, args::Tuple)
     ctx = context(A)
@@ -149,6 +159,7 @@ function acc_broadcast!{F <: Function, T, N}(f::F, A::CLArray{T, N}, args::Tuple
     cl.finish(q)
     clfunc = CLFunction(broadcast_kernel, (A, f, sz, args...), q)
     clfunc((A, f, sz, args...), length(A))
+    A
 end
 
 
@@ -174,6 +185,7 @@ end
 if is_blas_supported(:CLBLAS)
     import CLBLAS
     blas_module(::CLContext) = CLBLAS
+    hasblas(::CLContext) = true
     function blasbuffer(::CLContext, A)
         buff = buffer(A)
         # LOL! TODO don't have CLArray in OpenCL/CLBLAS

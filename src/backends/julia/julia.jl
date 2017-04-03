@@ -4,7 +4,7 @@ using ..GPUArrays
 using Compat
 
 import GPUArrays: buffer, create_buffer, Context, context
-import GPUArrays: AbstractAccArray, acc_mapreduce, mapidx
+import GPUArrays: AbstractAccArray, acc_mapreduce, mapidx, hasblas
 import GPUArrays: broadcast_index, acc_broadcast!, blas_module, blasbuffer
 
 import Base.Threads: @threads
@@ -65,7 +65,7 @@ nthreads{T, N}(a::JLArray{T, N}) = context(a).nthreads
 
 Base.@propagate_inbounds Base.getindex{T, N}(A::JLArray{T, N}, i::Integer) = A.buffer[i]
 Base.@propagate_inbounds Base.setindex!{T, N}(A::JLArray{T, N}, val, i::Integer) = (A.buffer[i] = val)
-@compat Base.IndexStyle{T, N}(::Type{<:JLArray{T, N}}) = IndexLinear()
+@compat Base.IndexStyle{T, N}(::Type{JLArray{T, N}}) = IndexLinear()
 Base.size{T, N}(x::JLArray{T, N}) = size(buffer(x))
 
 Base.show(io::IO, ctx::JLContext) = print(io, "JLContext with $(ctx.nthreads) threads")
@@ -93,7 +93,7 @@ for i = 0:7
             @threads for i = 1:n
                 @inbounds A[i] = f($(fargs...))
             end
-            return
+            return A
         end
 
         function mapidx{F, T, N}(f::F, data::JLArray{T, N}, args::NTuple{$i, Any})
@@ -121,6 +121,7 @@ for i = 0:7
 end
 
 include("fft.jl")
+hasblas(::JLContext) = true
 
 end #JLBackend
 

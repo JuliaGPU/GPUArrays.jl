@@ -5,6 +5,9 @@ type GPUArray{T, N, B, C} <: AbstractAccArray{T, N}
     size::NTuple{N, Int}
     context::C
 end
+@compat const AccVector{T} = AbstractAccArray{T, 1}
+@compat const AccMatrix{T} = AbstractAccArray{T, 2}
+@compat const AccVecOrMat{T} = Union{AbstractAccArray{T, 1}, AbstractAccArray{T, 2}}
 
 # interfaces
 
@@ -14,6 +17,13 @@ Interface for accessing the lower level
 
 buffer(A::AbstractAccArray) = A.buffer
 context(A::AbstractAccArray) = A.context
+
+# GPU Local Memory
+immutable LocalMemory{T} <: AbstractAccArray{T, 1}
+    size::Int
+end
+
+
 
 """
 linear index in a GPU kernel
@@ -45,6 +55,7 @@ end
 function Base.similar{T <: AbstractAccArray, N}(x::T, dims::NTuple{N, Int})
     similar(x, eltype(x), dims)
 end
+
 function Base.similar{T <: GPUArray, ET, N}(
         ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
         context::Context = current_context(), kw_args...
@@ -240,9 +251,9 @@ if !isdefined(Base, :r_promote_type)
     # r_promote_type: promote T to the type of reduce(op, ::Array{T})
 # (some "extra" methods are required here to avoid ambiguity warnings)
     r_promote_type{T}(op, ::Type{T}) = T
-    r_promote_type{T<:Base.WidenReduceResult}(op, ::Type{T}) = widen(T)
-    r_promote_type{T<:Base.WidenReduceResult}(::typeof(+), ::Type{T}) = widen(T)
-    r_promote_type{T<:Base.WidenReduceResult}(::typeof(*), ::Type{T}) = widen(T)
+    r_promote_type{T<:Base.WidenReduceResult}(op, ::Type{T}) = T
+    r_promote_type{T<:Base.WidenReduceResult}(::typeof(+), ::Type{T}) = T
+    r_promote_type{T<:Base.WidenReduceResult}(::typeof(*), ::Type{T}) = T
     r_promote_type{T<:Number}(::typeof(+), ::Type{T}) = typeof(zero(T)+zero(T))
     r_promote_type{T<:Number}(::typeof(*), ::Type{T}) = typeof(one(T)*one(T))
     r_promote_type{T<:Base.WidenReduceResult}(::typeof(Base.scalarmax), ::Type{T}) = T
@@ -273,8 +284,9 @@ end
 ############################################
 # Constructor
 
-function Base.fill!{N, T}(A::AbstractAccArray{N, T}, val)
+function Base.fill!{T, N}(A::AbstractAccArray{T, N}, val)
     A .= identity.(T(val))
+    A
 end
 function Base.rand{T <: AbstractAccArray, ET}(::Type{T}, ::Type{ET}, size...)
     T(rand(ET, size...))

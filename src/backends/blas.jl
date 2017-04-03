@@ -1,5 +1,4 @@
-@compat const AccVector{T} = AbstractAccArray{T, 1}
-@compat const AccVecOrMat{T} = Union{AbstractAccArray{T, 1}, AbstractAccArray{T, 2}}
+
 
 # all backends need to define a blas_module function to map to the correct library
 blas_module(A::AccVecOrMat) = blas_module(context(A))
@@ -10,7 +9,6 @@ blas_module(A::AccVecOrMat) = blas_module(context(A))
 function blasbuffer(ctx, A)
     error("$ctx doesn't support BLAS operations with $(typeof(A))")
 end
-
 for T in (Float32, Float64, Complex64, Complex128)
     @eval begin
         function Base.BLAS.gemm!(
@@ -43,10 +41,10 @@ for elty in (Float64, Float32)
     end
 end
 
-for elty in T in (Float32, Float64, Complex64, Complex128)
+for elty in (Float32, Float64, Complex64, Complex128)
     @eval begin
         function Base.BLAS.gemv!(trans::Char, alpha::($elty), A::AccVecOrMat{$elty}, X::AccVector{$elty}, beta::($elty), Y::AccVector{$elty})
-            m,n = size(A,1),size(A,2)
+            m, n = size(A, 1), size(A, 2)
             if trans == 'N' && (length(X) != n || length(Y) != m)
                 throw(DimensionMismatch("A has dimensions $(size(A)), X has length $(length(X)) and Y has length $(length(Y))"))
             elseif trans == 'C' && (length(X) != m || length(Y) != n)
@@ -56,7 +54,10 @@ for elty in T in (Float32, Float64, Complex64, Complex128)
             end
             ctx = context(A)
             blasmod = blas_module(ctx)
-            blasmod.gemv!(trans, alpha, A, X, beta, Y)
+            blasmod.gemv!(
+                trans, alpha,
+                blasbuffer(ctx, A), blasbuffer(ctx, X), beta, blasbuffer(ctx, Y)
+            )
             Y
         end
     end

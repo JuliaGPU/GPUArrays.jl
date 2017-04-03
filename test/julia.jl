@@ -2,17 +2,12 @@ using GPUArrays
 using Base.Test
 JLBackend.init()
 
-A = GPUArray(rand(33, 33))
-B = convert(GPUArray, rand(33, 33))
-C = A * B
-c = Array(C)
-@test c == Array(A) * Array(B)
-
 @testset "mapreduce" begin
     @testset "inbuilds using mapreduce (sum maximum minimum prod)" begin
         for dims in ((4048,), (1024,1024), (77,), (1923,209))
             for T in (Float32, Int32)
-                A = GPUArray(rand(T, dims))
+                range = T <: Integer ? (T(-2):T(2)) : T
+                A = GPUArray(rand(range, dims))
                 @test sum(A) ≈ sum(Array(A))
                 @test maximum(A) ≈ maximum(Array(A))
                 @test minimum(A) ≈ minimum(Array(A))
@@ -70,39 +65,3 @@ end
         end
     end
 end
-
-
-
-@testset "mapidx" begin
-    a = rand(Complex64, 1024)
-    b = rand(Complex64, 1024)
-    A = GPUArray(a)
-    B = GPUArray(b)
-    off = 1
-    mapidx(A, (B, off, length(A))) do i, a, b, off, len
-        x = b[i]
-        x2 = b[min(i+off, len)]
-        a[i] = x * x2
-    end
-    foreach(1:length(a)) do i
-        x = b[i]
-        x2 = b[min(i+off, length(a))]
-        a[i] = x * x2
-    end
-    @test Array(A) == a
-end
-
-# @testset "fft Complex64" begin
-#     A = rand(Float32, 7,6)
-#     # Move data to GPU
-#     B = GPUArray(A)
-#     # Allocate space for the output (transformed array)
-#     # Compute the FFT
-#     fft!(B)
-#     # Copy the result to main memory
-#     # Compare against Julia's rfft
-#     @test_approx_eq rfft(A) Array(B)
-#     # Now compute the inverse transform
-#     ifft!(B)
-#     @test_approx_eq A Array(B)
-# end
