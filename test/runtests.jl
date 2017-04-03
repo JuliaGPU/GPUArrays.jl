@@ -21,7 +21,7 @@ end
 macro allbackends(title, block)
     quote
         for backend in supported_backends()
-            @testset "$($(title)) $backend" begin
+            @testset "$($(esc(title))) $backend" begin
                 ctx = GPUArrays.init(backend)
                 $(esc(block))
             end
