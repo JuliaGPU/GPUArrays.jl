@@ -1,3 +1,6 @@
+using SpecialFunctions: erf
+
+
 function blackscholes(sptprice, strike, rate, volatility, time)
     logterm = log10( sptprice / strike)
     powterm = .5f0 * volatility * volatility
