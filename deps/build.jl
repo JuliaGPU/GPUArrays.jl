@@ -58,12 +58,15 @@ end
 
 try
     using OpenCL
+    if is_apple() && isempty(cl.devices(:gpu))
+        error("You're using OpenCL CPU implementation on OSX, which currently has errors that must be fixed")
+    end
     device, ctx, queue = cl.create_compute_context()
     info("OpenCL added as backend!")
     push!(supported_backends, :opencl)
     true
 catch e
-    info("OpenCL not usable. Please install drivers and add OpenCL.jl")
+    info("OpenCL not usable. Please install drivers and add OpenCL.jl: $e")
     false
 end
 

@@ -103,9 +103,7 @@ end
 @testset "Custom kernel from Julia function" begin
     x = GPUArray(rand(Float32, 100))
     y = GPUArray(rand(Float32, 100))
-    func = CUFunction(x, cumap!, cu.sin, x, y)
-    # same here, x is just passed to supply a kernel size!
-    func(x, cu.sin, x, y)
+    gpu_call(x, cumap!, (cu.sin, x, y))
     jy = Array(y)
     @test map!(sin, jy, jy) ≈ Array(x)
 end
@@ -120,7 +118,7 @@ end
         output[i] = input[i];
     }
     """
-    cucopy = CUFunction(x, (source, :copy), x, y)
-    cucopy(x, x, y)
+    f = (source, :copy)
+    gpu_call(x, f, (x, y))
     @test Array(x) == Array(y)
 end

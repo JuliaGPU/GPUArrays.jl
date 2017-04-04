@@ -20,6 +20,28 @@ function cndf2(x)
     0.5f0 + 0.5f0 * erf(0.707106781f0 * x)
 end
 
+const cu = CUDAnative
+
+# jeeez -.-
+function cu_blackscholes(sptprice, strike, rate, volatility, time)
+    logterm = cu.log10( sptprice / strike)
+    powterm = .5f0 * volatility * volatility
+    den = volatility * cu.sqrt(time)
+    d1 = (((rate + powterm) * time) + logterm) / den
+    d2 = d1 - den
+    NofXd1 = cu_cndf2(d1)
+    NofXd2 = cu_cndf2(d2)
+    futureValue = strike * cu.exp(- rate * time)
+    c1 = futureValue * NofXd2
+    call_ = sptprice * NofXd1 - c1
+    put  = call_ - futureValue + sptprice
+    return put
+end
+
+function cu_cndf2(x)
+    0.5f0 + 0.5f0 * cu.erf(0.707106781f0 * x)
+end
+
 for T in (Float32, Float64)
     N = 1023
     sptprice   = Float32[42.0 for i = 1:N]
@@ -36,8 +58,12 @@ for T in (Float32, Float64)
         _volatility = GPUArray(volatility)
         _time = GPUArray(time)
         _result = GPUArray(result)
-
-        _result .= blackscholes.(_sptprice, _initStrike, _rate, _volatility, _time)
+        blackschole_f = if isa(GPUArrays.context(_time), CUBackend.CUContext)
+            cu_blackscholes
+        else
+            blackscholes
+        end
+        _result .= blackschole_f.(_sptprice, _initStrike, _rate, _volatility, _time)
         @test Array(_result) ≈ comparison
     end
 end

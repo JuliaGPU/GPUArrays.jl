@@ -181,7 +181,7 @@ function (clfunc::CLFunction{T}){T, T2, N}(A::CLArray{T2, N}, args...)
     clfunc(args, length(A))
 end
 
-function gpu_call{T, N}(A::CLArray{T, N}, f, args, globalsize = size(A), localsize = nothing)
+function gpu_call{T, N}(A::CLArray{T, N}, f, args, globalsize = length(A), localsize = nothing)
     ctx = GPUArrays.context(A)
     clfunc = CLFunction(f, args, ctx.queue)
     clfunc(args, globalsize, localsize)

@@ -67,9 +67,8 @@ end
 @testset "Custom kernel from Julia function" begin
     x = GPUArray(rand(Float32, 100))
     y = GPUArray(rand(Float32, 100))
-    func = CLFunction(x, clmap!, sin, x, y)
+    gpu_call(x, clmap!, (sin, x, y))
     # same here, x is just passed to supply a kernel size!
-    func(x, sin, x, y)
     jy = Array(y)
     @test map!(sin, jy, jy) ≈ Array(x)
 end
@@ -86,9 +85,8 @@ end
     """
     source = GPUArray(rand(Float32, 1023, 11))
     dest = GPUArray(zeros(Float32, size(source)))
-
-    jlfunc = CLFunction(dest, (copy_source, :copy), dest, source)
-    jlfunc(dest, dest, source)
+    f = (copy_source, :copy)
+    gpu_call(dest, f, (dest, source))
     @test Array(dest) == Array(source)
 end
 

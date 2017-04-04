@@ -89,10 +89,10 @@ unpack_cu_array(x) = x
 unpack_cu_array(x::Scalar) = unpack_cu_array(getfield(x, 1))
 unpack_cu_array{T,N}(x::CUArray{T,N}) = buffer(x)
 
-@inline function call_cuda(kernel, A::CUArray, rest...)
+@inline function call_cuda(A::CUArray, kernel, rest...)
     blocks, thread = thread_blocks_heuristic(A)
     args = map(unpack_cu_array, rest)
-    @cuda (blocks, thread) kernel(buffer(A), args...)
+    @cuda (blocks, thread) kernel(args...)
 end
 
 # TODO hook up propperly with CUDAdrv... This is a dirty adhoc solution
@@ -146,7 +146,7 @@ function cu_convert{T, N}(x::CUArray{T, N})
 end
 cu_convert(x) = x
 
-function (f::CUFunction{F}){F <: CUDAdrv.CuFunction, T, N}(A::CUArray{T, N}, args...)
+function (f::CUFunction{F}){F <: CUDAdrv.CuFunction, T, N}(A::CUArray{T, N}, args)
     griddim, blockdim = thread_blocks_heuristic(A)
     CUDAdrv.launch(
         f.kernel, CUDAdrv.CuDim3(griddim...), CUDAdrv.CuDim3(blockdim...), 0, CuDefaultStream(),
@@ -154,10 +154,10 @@ function (f::CUFunction{F}){F <: CUDAdrv.CuFunction, T, N}(A::CUArray{T, N}, arg
     )
 end
 
-function gpu_call{T, N}(A::CLArray{T, N}, f::Function, args, globalsize = size(A), localsize = nothing)
-    @cuda (globalsize, localsize) f(map(cu_convert, args)...)
+function gpu_call{T, N}(A::CUArray{T, N}, f::Function, args, globalsize = size(A), localsize = nothing)
+    call_cuda(A, f, args...)
 end
-function gpu_call{T, N}(A::CLArray{T, N}, f::Tuple{String, Symbol}, args, globalsize = size(A), localsize = nothing)
+function gpu_call{T, N}(A::CUArray{T, N}, f::Tuple{String, Symbol}, args, globalsize = size(A), localsize = nothing)
     func = CUFunction(A, f, args...)
     # TODO cache
     func(A, args) # TODO pass through local/global size
@@ -217,10 +217,10 @@ function acc_broadcast!{F <: Function, N}(f::F, A::CUArray, args::NTuple{N, Any}
         end
         Val{false}()
     end
-    call_cuda(broadcast_kernel, A, f, map(UInt32, size(A)), which, args...)
+    call_cuda(A, broadcast_kernel, A, f, map(UInt32, size(A)), which, args...)
 end
 function mapidx{F <: Function, N, T, N2}(f::F, A::CUArray{T, N2}, args::NTuple{N, Any})
-    call_cuda(mapidx_kernel, A, f, args...)
+    call_cuda(A, mapidx_kernel, A, f, args...)
 end
 #################################
 # Reduction
