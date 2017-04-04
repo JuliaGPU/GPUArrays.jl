@@ -133,6 +133,8 @@ for i = 0:10
     fargs = ntuple(x-> :(broadcast_index($(args[x]), sz, i)), i)
     @eval begin
         function broadcast_kernel(A, f, sz, $(args...))
+            # TODO I'm very sure, that we can tile this better
+            # +1, Julia is 1 based indexed, and we (currently awkwardly) try to preserve this semantic
             i = get_global_id(0) + 1
             A[i] = f($(fargs...))
             return

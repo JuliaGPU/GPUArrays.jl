@@ -11,29 +11,32 @@ function vectormap!{N, T}(f, out, a, b, V::Type{SVector{N, T}})
     vstore(vec, out, i)
     return
 end
-# we need a `guiding array`, to get the context and indicate on what size we
-# want to execute the kernel! This kind of scheme might change in the future
 
-
-# same here, x is just passed to supply a kernel size!
+# a helper function to benchmark the different sizes
 function testv{N}(f, out, a, b, ::Val{N})
     gpu_call(out, vectormap!, (f, out, a, b, SVector{N, Float32}), length(out) ÷ N)
     GPUArrays.synchronize(out)
 end
+# the implementation from GPUArrays
 testn(f, out, a, b) = (out .= f.(a, b); GPUArrays.synchronize(out))
+
 using BenchmarkTools
+
+function test{T}(a::T, b)
+    z = a ./ b
+    sin.(z)
+end
 const N = 8 * 10^6
 a = GPUArray(rand(Float32, N))
 b = GPUArray(rand(Float32, N))
 out = similar(a)
-function test{T}(a::T, b)
-    x = sqrt.(sin.(a) .* b) ./ 10f0
-    y = 33f0 .* x + cos.(b)
-    y .* 10f0
-end
-
 # deciding what vector size to use becomes very easy now!
 b16 = @benchmark testv(test, $out, $a, $b, $(Val{16}()))
 b8 = @benchmark testv(test, $out, $a, $b, $(Val{8}()))
 b4 = @benchmark testv(test, $out, $a, $b, $(Val{4}()))
 bbase = @benchmark testn(test, $out, $a, $b)
+# and we see, it's not worth it :D
+minimum(b16)
+minimum(b8)
+minimum(b4)
+minimum(bbase)
