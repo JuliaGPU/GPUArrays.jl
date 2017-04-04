@@ -36,6 +36,11 @@ amount of code:
 [unrolling](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/juliaset.jl),
 [vector loads/stores](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/vectorloard.jl)
 
+Another of these cool features is [ReverseDiff](https://github.com/JuliaDiff/ReverseDiff.jl).
+It heavily relies on Julia's strength to specialize generic code an dispatching to
+a different implementations depending on the Array type.
+We should be able to use ReverseDiff with GPUArrays! It'll be a bit of work, but the
+first [prototype](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/logreg.jl) looks already promising!
 
 #### Main type:
 
