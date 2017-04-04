@@ -1,4 +1,4 @@
-using GPUArrays.CUBackend
+using GPUArrays: free
 using CUDAnative, Base.Test
 cuctx = CUBackend.init()
 const cu = CUDAnative
@@ -32,6 +32,7 @@ end
     @test all(x-> x == jltest(0.5f0, 10f0) * 2, Array(D))
     D .= A .* B .+ 10f0
     @test all(x-> x == jltest(0.5f0, 10f0) * 2 + 10f0, Array(D))
+    free(D); free(C); free(A); free(B)
 end
 
 
@@ -53,6 +54,7 @@ end
     @test all(x-> x == angle(10f0*im) * 2f0*im, Array(D))
     D .= A .* B .+ (0.5f0*im)
     @test all(x-> x == (2f0*im * angle(10f0*im) + (0.5f0*im)), Array(D))
+    free(D); free(C); free(A); free(B)
 end
 
 # @testset "fft Complex64" begin
@@ -83,14 +85,6 @@ end
             end
         end
     end
-    # @testset "mapreduce with clojures" begin
-    #     for dims in ((4048,), (1024,1024), (77,), (1923,209))
-    #         for T in (Float32, Float64)
-    #             A = GPUArray(rand(T, dims))
-    #             @test mapreduce(f1, op1, T(0), A) ≈ mapreduce(f1, op1, T(0), Array(A))
-    #         end
-    #     end
-    # end
 end
 
 
