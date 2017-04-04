@@ -1,13 +1,13 @@
 #TODO register these packages!
-for pkg in ("Sugar", "Transpiler")
-    installed = try
-        Pkg.installed(pkg) != nothing
-    catch e
-        false
-    end
-    installed || Pkg.clone("https://github.com/SimonDanisch/$(pkg).jl.git")
-    Pkg.checkout(pkg)
-end
+# for pkg in ("Sugar", "Transpiler")
+#     installed = try
+#         Pkg.installed(pkg) != nothing
+#     catch e
+#         false
+#     end
+#     installed || Pkg.clone("https://github.com/SimonDanisch/$(pkg).jl.git")
+#     Pkg.checkout(pkg)
+# end
 
 using GPUArrays
 using Base.Test

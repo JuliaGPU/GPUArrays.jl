@@ -6,7 +6,7 @@ using ..GPUArrays, CUDAnative, StaticArrays, Compat
 import CUDAdrv, CUDArt #, CUFFT
 
 import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index
+import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index, gpu_call
 import GPUArrays: synchronize
 
 using CUDAdrv: CuDefaultStream
@@ -154,6 +154,14 @@ function (f::CUFunction{F}){F <: CUDAdrv.CuFunction, T, N}(A::CUArray{T, N}, arg
     )
 end
 
+function gpu_call{T, N}(A::CLArray{T, N}, f::Function, args, globalsize = size(A), localsize = nothing)
+    @cuda (globalsize, localsize) f(map(cu_convert, args)...)
+end
+function gpu_call{T, N}(A::CLArray{T, N}, f::Tuple{String, Symbol}, args, globalsize = size(A), localsize = nothing)
+    func = CUFunction(A, f, args...)
+    # TODO cache
+    func(A, args) # TODO pass through local/global size
+end
 
 #####################################
 # The problem is, that I can't pass Tuple{CuArray} as a type, so I can't

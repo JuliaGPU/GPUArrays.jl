@@ -11,7 +11,7 @@ using ..GPUArrays, StaticArrays
 import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
 import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index
 import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
-import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector
+import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector, gpu_call
 
 using Transpiler
 using Transpiler: CLTranspiler
@@ -180,6 +180,13 @@ function (clfunc::CLFunction{T}){T, T2, N}(A::CLArray{T2, N}, args...)
     # TODO use better heuristic
     clfunc(args, length(A))
 end
+
+function gpu_call{T, N}(A::CLArray{T, N}, f, args, globalsize = size(A), localsize = nothing)
+    ctx = GPUArrays.context(A)
+    clfunc = CLFunction(f, args, ctx.queue)
+    clfunc(args, globalsize, localsize)
+end
+
 ###################
 # Blase interface
 if is_blas_supported(:CLBLAS)
