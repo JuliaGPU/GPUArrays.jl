@@ -33,6 +33,15 @@ function synchronize(A::AbstractArray)
     # fallback is a noop, for backends not needing synchronization. This
     # makes it easier to write generic code that also works for AbstractArrays
 end
+"""
+`A` must be a gpu Array and will help to dispatch to the correct GPU backend
+and can supply queues and contexts.
+Calls `f` on args on the GPU, falls back to a normal call if there is no backend.
+"""
+function gpu_call(A::AbstractArray, f, args, worksize, localsize = nothing)
+    f(args...)
+end
+
 # BLAS support
 hasblas(x) = false
 include("blas.jl")
