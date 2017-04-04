@@ -51,14 +51,14 @@ for T in (Float32, Float64)
     time       = Float32[0.5 for i = 1:N]
     result     = similar(time)
     comparison = blackscholes.(sptprice, initStrike, rate, volatility, time)
-    @allbackends "Blackscholes with $T" begin
+    @allbackends "Blackscholes with $T" backend begin
         _sptprice = GPUArray(sptprice)
         _initStrike = GPUArray(initStrike)
         _rate = GPUArray(rate)
         _volatility = GPUArray(volatility)
         _time = GPUArray(time)
         _result = GPUArray(result)
-        blackschole_f = if isa(GPUArrays.context(_time), CUBackend.CUContext)
+        blackschole_f = if backend == :cudanative
             cu_blackscholes
         else
             blackscholes
@@ -68,7 +68,7 @@ for T in (Float32, Float64)
     end
 end
 
-@allbackends "mapidx" begin
+@allbackends "mapidx" backend begin
     a = rand(Complex64, 1025)
     b = rand(Complex64, 1025)
     A = GPUArray(a)

@@ -17,11 +17,12 @@ function jltest(a, b)
     y*10
 end
 
-macro allbackends(title, block)
+macro allbackends(title, backendname::Symbol, block)
     quote
         for backend in supported_backends()
             @testset "$($(esc(title))) $backend" begin
                 ctx = GPUArrays.init(backend)
+                $(esc(backendname)) = backend
                 $(esc(block))
             end
         end
