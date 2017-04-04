@@ -58,7 +58,7 @@ for n in linspace(100, 10^7, 8)
     volatility = Float32[ 0.2 for i = 1:N ];
     time       = Float32[ 0.5 for i = 1:N ];
     result = similar(time)
-    # 
+    #
     # ctx = CLBackend.init()
     # sptprice_gpu = GPUArray(sptprice)
     # initStrike_gpu = GPUArray(initStrike)
@@ -74,15 +74,17 @@ for n in linspace(100, 10^7, 8)
     volatility_cpu = GPUArray(volatility)
     time_cpu = GPUArray(time)
     result_cpu = GPUArray(result)
-    #
-    # bench_cl = @benchmark test(
-    #     result_gpu,
-    #     sptprice_gpu,
-    #     initStrike_gpu,
-    #     rate_gpu,
-    #     volatility_gpu,
-    #     time_gpu
-    # )
+    if is_backend_supported(:opencl)
+        bench_cl = @benchmark test(
+            result_gpu,
+            sptprice_gpu,
+            initStrike_gpu,
+            rate_gpu,
+            volatility_gpu,
+            time_gpu
+        )
+        push!(cltimes, bench_cl)
+    end
     bench_thread = @benchmark test(
         result_cpu,
         sptprice_cpu,
@@ -91,15 +93,16 @@ for n in linspace(100, 10^7, 8)
         volatility_cpu,
         time_cpu
     )
-    # bench_jl = @benchmark test(
-    #     result,
-    #     sptprice,
-    #     initStrike,
-    #     rate,
-    #     volatility,
-    #     time
-    # )
-    # push!(cltimes, bench_cl)
-    # push!(jltimes, bench_jl)
     push!(threadtimes, bench_thread)
+    # baseline
+    bench_jl = @benchmark test(
+        result,
+        sptprice,
+        initStrike,
+        rate,
+        volatility,
+        time
+    )
+    push!(jltimes, bench_jl)
+
 end
