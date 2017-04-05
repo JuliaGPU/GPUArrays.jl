@@ -40,7 +40,7 @@ Checkout the examples, to see how this can be used to emit specialized code whil
 
 In theory, we could go as far as inspecting user defined callbacks (we can get the complete AST), count operations and estimate register usage and use those numbers to optimize our kernels!
 
-# Automatic Differentiation
+### Automatic Differentiation
 
 Because of neuronal netorks, automatic differentiation is super hyped right now!
 Julia offers a couple of packages for that, e.g. [ReverseDiff](https://github.com/JuliaDiff/ReverseDiff.jl).
