@@ -2,15 +2,13 @@ julia 0.5
 StaticArrays
 Compat 0.19.0
 
-#Sugar
-#Matcha
-GLAbstraction
-GLWindow
+Sugar 0.0.3
+Matcha
 
 CUDArt
 CUBLAS
 CUFFT
 
-OpenCL
-CLBLAS
-CLFFT
+OpenCL 0.5.2
+CLBLAS 1.1.0
+CLFFT 0.4.0
