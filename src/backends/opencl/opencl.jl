@@ -85,12 +85,7 @@ end
 function free{T, N}(x::CLArray{T, N})
     synchronize(x)
     mem = buffer(x)
-    if mem.id != C_NULL
-        cl.@check_release cl.api.clReleaseMemObject(mem.id)
-        mem.id = C_NULL
-    end
-    mem.mapped  = false
-    mem.hostbuf = C_NULL
+    finalize(mem)
     nothing
 end
 # Constructor

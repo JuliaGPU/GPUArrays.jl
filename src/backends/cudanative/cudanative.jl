@@ -53,7 +53,7 @@ end
 
 function free{T, N}(x::CUArray{T, N})
     synchronize(x)
-    CUDAdrv.finalize(buffer(x))
+    Base.finalize(buffer(x))
     nothing
 end
 
