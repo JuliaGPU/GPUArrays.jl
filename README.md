@@ -37,14 +37,17 @@ higher order functions, multiple dispatch, meta programming and generated functi
 Checkout the examples, to see how this can be used to emit specialized code while not loosing flexibility:
 [unrolling](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/juliaset.jl),
 [vector loads/stores](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/vectorload.jl)
-In theory, we could go as far as to introspect user defined callbacks (we can get the complete AST), count operations and estimate register usage and use those numbers to optimize our kernels!
 
-Another of Julia's cool packages is [ReverseDiff](https://github.com/JuliaDiff/ReverseDiff.jl).
-It heavily relies on Julia's strength to specialize generic code and dispatching to
-a different implementations depending on the Array type.
+In theory, we could go as far as inspecting user defined callbacks (we can get the complete AST), count operations and estimate register usage and use those numbers to optimize our kernels!
+
+# Automatic Differentiation
+
+Because of neuronal netorks, automatic differentiation is super hyped right now!
+Julia offers a couple of packages for that, e.g. [ReverseDiff](https://github.com/JuliaDiff/ReverseDiff.jl).
+It heavily relies on Julia's strength to specialize generic code and dispatch to different implementations depending on the Array type, allowing an almost overheadless automatic differentiation.
 Making this work with GPUArrays will be a bit more involved, but the
 first [prototype](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/logreg.jl) looks already promising!
-There is also [ReverseDiffSource](https://github.com/JuliaDiff/ReverseDiffSource.jl), which should already work for non allocating functions!
+There is also [ReverseDiffSource](https://github.com/JuliaDiff/ReverseDiffSource.jl), which should already work for simple functions.
 
 #### Main type:
 
