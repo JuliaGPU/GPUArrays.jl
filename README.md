@@ -34,7 +34,7 @@ higher order functions, multiple dispatch, meta programming and generated functi
 Checkout the examples, to see how this can be used to emit specialized kernels with a minimal
 amount of code:
 [unrolling](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/juliaset.jl),
-[vector loads/stores](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/vectorloard.jl)
+[vector loads/stores](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/vectorload.jl)
 
 Another of these cool features is [ReverseDiff](https://github.com/JuliaDiff/ReverseDiff.jl).
 It heavily relies on Julia's strength to specialize generic code and dispatching to
