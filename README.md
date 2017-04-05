@@ -160,7 +160,7 @@ For the cudanative backend, you need to install [CUDAnative.jl manually](https:/
 The rest should work automatically:
 ```Julia
 Pkg.add("GPUArrays")
-Pkg.build("GPUArrays")
+Pkg.build("GPUArrays") # should print out information about what backends are added
 # Test
 Pkg.test("GPUArrays")
 ```
