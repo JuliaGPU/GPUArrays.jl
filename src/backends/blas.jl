@@ -1,4 +1,4 @@
-typealias AccVecOrMat{T} Union{AbstractAccArray{T, 1}, AbstractAccArray{T, 2}}
+
 
 # all backends need to define a blas_module function to map to the correct library
 blas_module(A::AccVecOrMat) = blas_module(context(A))
@@ -9,7 +9,6 @@ blas_module(A::AccVecOrMat) = blas_module(context(A))
 function blasbuffer(ctx, A)
     error("$ctx doesn't support BLAS operations with $(typeof(A))")
 end
-
 for T in (Float32, Float64, Complex64, Complex128)
     @eval begin
         function Base.BLAS.gemm!(
@@ -38,6 +37,28 @@ for elty in (Float64, Float32)
             blasmod = blas_module(ctx)
             blasmod.scal!(n, DA, blasbuffer(ctx, DX), incx)
             DX
+        end
+    end
+end
+
+for elty in (Float32, Float64, Complex64, Complex128)
+    @eval begin
+        function Base.BLAS.gemv!(trans::Char, alpha::($elty), A::AccVecOrMat{$elty}, X::AccVector{$elty}, beta::($elty), Y::AccVector{$elty})
+            m, n = size(A, 1), size(A, 2)
+            if trans == 'N' && (length(X) != n || length(Y) != m)
+                throw(DimensionMismatch("A has dimensions $(size(A)), X has length $(length(X)) and Y has length $(length(Y))"))
+            elseif trans == 'C' && (length(X) != m || length(Y) != n)
+                throw(DimensionMismatch("A' has dimensions $n, $m, X has length $(length(X)) and Y has length $(length(Y))"))
+            elseif trans == 'T' && (length(X) != m || length(Y) != n)
+                throw(DimensionMismatch("A.' has dimensions $n, $m, X has length $(length(X)) and Y has length $(length(Y))"))
+            end
+            ctx = context(A)
+            blasmod = blas_module(ctx)
+            blasmod.gemv!(
+                trans, alpha,
+                blasbuffer(ctx, A), blasbuffer(ctx, X), beta, blasbuffer(ctx, Y)
+            )
+            Y
         end
     end
 end

@@ -6,8 +6,8 @@ using ..GPUArrays, CUDAnative, StaticArrays, Compat
 import CUDAdrv, CUDArt #, CUFFT
 
 import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index
-import GPUArrays: synchronize
+import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index, gpu_call
+import GPUArrays: synchronize, free
 
 using CUDAdrv: CuDefaultStream
 
@@ -30,7 +30,7 @@ function any_context()
     CUContext(ctx, dev)
 end
 
-#typealias GLArrayImg{T, N} GPUArray{T, N, gl.Texture{T, N}, GLContext}
+#@compat const GLArrayImg{T, N} = GPUArray{T, N, gl.Texture{T, N}, GLContext}
 @compat const CUArray{T, N, B} = GPUArray{T, N, B, CUContext} #, GLArrayImg{T, N}}
 @compat const CUArrayBuff{T, N} = CUArray{T, N, CUDAdrv.CuArray{T, N}}
 
@@ -48,6 +48,13 @@ end
 # synchronize
 function synchronize{T, N}(x::CUArray{T, N})
     CUDAdrv.synchronize(context(x).ctx) # TODO figure out the diverse ways of synchronization
+end
+
+
+function free{T, N}(x::CUArray{T, N})
+    synchronize(x)
+    Base.finalize(buffer(x))
+    nothing
 end
 
 function create_buffer{T, N}(ctx::CUContext, ::Type{T}, sz::NTuple{N, Int}; kw_args...)
@@ -89,10 +96,10 @@ unpack_cu_array(x) = x
 unpack_cu_array(x::Scalar) = unpack_cu_array(getfield(x, 1))
 unpack_cu_array{T,N}(x::CUArray{T,N}) = buffer(x)
 
-@inline function call_cuda(kernel, A::CUArray, rest...)
+@inline function call_cuda(A::CUArray, kernel, rest...)
     blocks, thread = thread_blocks_heuristic(A)
     args = map(unpack_cu_array, rest)
-    @cuda (blocks, thread) kernel(buffer(A), args...)
+    @cuda (blocks, thread) kernel(args...)
 end
 
 # TODO hook up propperly with CUDAdrv... This is a dirty adhoc solution
@@ -146,7 +153,7 @@ function cu_convert{T, N}(x::CUArray{T, N})
 end
 cu_convert(x) = x
 
-function (f::CUFunction{F}){F <: CUDAdrv.CuFunction, T, N}(A::CUArray{T, N}, args...)
+function (f::CUFunction{F}){F <: CUDAdrv.CuFunction, T, N}(A::CUArray{T, N}, args)
     griddim, blockdim = thread_blocks_heuristic(A)
     CUDAdrv.launch(
         f.kernel, CUDAdrv.CuDim3(griddim...), CUDAdrv.CuDim3(blockdim...), 0, CuDefaultStream(),
@@ -154,6 +161,14 @@ function (f::CUFunction{F}){F <: CUDAdrv.CuFunction, T, N}(A::CUArray{T, N}, arg
     )
 end
 
+function gpu_call{T, N}(A::CUArray{T, N}, f::Function, args, globalsize = size(A), localsize = nothing)
+    call_cuda(A, f, args...)
+end
+function gpu_call{T, N}(A::CUArray{T, N}, f::Tuple{String, Symbol}, args, globalsize = size(A), localsize = nothing)
+    func = CUFunction(A, f, args...)
+    # TODO cache
+    func(A, args) # TODO pass through local/global size
+end
 
 #####################################
 # The problem is, that I can't pass Tuple{CuArray} as a type, so I can't
@@ -209,10 +224,10 @@ function acc_broadcast!{F <: Function, N}(f::F, A::CUArray, args::NTuple{N, Any}
         end
         Val{false}()
     end
-    call_cuda(broadcast_kernel, A, f, map(UInt32, size(A)), which, args...)
+    call_cuda(A, broadcast_kernel, A, f, map(UInt32, size(A)), which, args...)
 end
 function mapidx{F <: Function, N, T, N2}(f::F, A::CUArray{T, N2}, args::NTuple{N, Any})
-    call_cuda(mapidx_kernel, A, f, args...)
+    call_cuda(A, mapidx_kernel, A, f, args...)
 end
 #################################
 # Reduction

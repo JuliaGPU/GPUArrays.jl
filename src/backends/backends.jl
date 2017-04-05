@@ -33,6 +33,44 @@ function synchronize(A::AbstractArray)
     # fallback is a noop, for backends not needing synchronization. This
     # makes it easier to write generic code that also works for AbstractArrays
 end
+"""
+`A` must be a gpu Array and will help to dispatch to the correct GPU backend
+and can supply queues and contexts.
+Calls `f` on args on the GPU, falls back to a normal call if there is no backend.
+"""
+function gpu_call(A::AbstractArray, f, args, worksize, localsize = nothing)
+    f(args...)
+end
+
+function free(x::AbstractArray)
+
+end
+
 # BLAS support
+hasblas(x) = false
 include("blas.jl")
 include("supported_backends.jl")
+include("shared.jl")
+
+function init(sym::Symbol, args...; kw_args...)
+    if sym == :julia
+        JLBackend.init(args...; kw_args...)
+    elseif sym == :cudanative
+        CUBackend.init(args...; kw_args...)
+    elseif sym == :opencl
+        CLBackend.init(args...; kw_args...)
+    else
+        error("$sym not a supported backend. Try one of: $(supported_backends())")
+    end
+end
+
+
+"""
+Iterates through all backends and calls `f` after initializing the current one!
+"""
+function perbackend(f)
+    for backend in supported_backends()
+        ctx = GPUArrays.init(backend)
+        f(backend)
+    end
+end

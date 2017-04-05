@@ -1,6 +1,6 @@
-using GPUArrays
-import GPUArrays: JLBackend, CLBackend
-import GPUArrays.JLBackend: JLArray
+# you might need to add SpecialFunctions with Pkg.add("SpecialFunctions")
+using GPUArrays, SpecialFunctions
+using GPUArrays: perbackend, synchronize, free
 
 function blackscholes(
         sptprice,
@@ -33,73 +33,86 @@ end
     GPUArrays.synchronize(result)
 end
 
-# Somehow benchmark tools doesn't like this!
-# so we create a super stupid benchmark macro ourselves
-macro benchmark(expr)
-    quote
-        mintime = Inf
-        for i=1:10
-            tic()
-            $(esc(expr))
-            t = toq()
-            mintime = min(t, mintime)
-        end
-        mintime
+
+const cu = CUDAnative
+
+# jeeez -.- So CUDAnative still doesn't recognize e.g. sqrt in the LLVM-IR,
+#since it's implemented within a C-library.... Should be fixed soon!
+function cu_blackscholes(sptprice, strike, rate, volatility, time)
+    logterm = cu.log10( sptprice / strike)
+    powterm = .5f0 * volatility * volatility
+    den = volatility * cu.sqrt(time)
+    d1 = (((rate + powterm) * time) + logterm) / den
+    d2 = d1 - den
+    NofXd1 = cu_cndf2(d1)
+    NofXd2 = cu_cndf2(d2)
+    futureValue = strike * cu.exp(- rate * time)
+    c1 = futureValue * NofXd2
+    call_ = sptprice * NofXd1 - c1
+    put  = call_ - futureValue + sptprice
+    return put
+end
+
+function cu_cndf2(x)
+    0.5f0 + 0.5f0 * cu.erf(0.707106781f0 * x)
+end
+function runbench(f, out, a, b, c, d, e)
+    out .= f.(a, b, c, d, e)
+    synchronize(out)
+end
+
+
+
+# add BenchmarkTools with Pkg.add("BenchmarkTools")
+using BenchmarkTools
+benchmarks = Dict()
+for n in 1:7
+    N = 10^n
+    sptprice   = Float32[42.0 for i = 1:N]
+    initStrike = Float32[40.0 + (i / N) for i = 1:N]
+    rate       = Float32[0.5 for i = 1:N]
+    volatility = Float32[0.2 for i = 1:N]
+    spttime    = Float32[0.5 for i = 1:N]
+    result     = similar(spttime)
+    comparison = blackscholes.(sptprice, initStrike, rate, volatility, spttime)
+    perbackend() do backend
+        _sptprice = GPUArray(sptprice)
+        _initStrike = GPUArray(initStrike)
+        _rate = GPUArray(rate)
+        _volatility = GPUArray(volatility)
+        _time = GPUArray(spttime)
+        _result = GPUArray(result)
+        f = backend == :cudanative ? cu_blackscholes : blackscholes
+        b = @benchmark runbench($f, $_result, $_sptprice, $_initStrike, $_rate, $_volatility, $_time)
+        benches = get!(benchmarks, backend, [])
+        push!(benches, b)
+        @assert Array(_result) ≈ comparison
+        # this is optional, but needed in a loop like this, which allocates a lot of GPUArrays
+        # for the future, we need a way to tell the Julia gc about GPU memory
+        free(_sptprice);free(_initStrike);free(_rate);free(_volatility);free(_time);free(_result);
     end
 end
-cltimes = Float64[]
-jltimes = Float64[]
-threadtimes = Float64[]
-for n in linspace(100, 10^7, 8)
-    N = round(Int, n)
-    sptprice   = Float32[ 42.0 for i = 1:N ];
-    initStrike = Float32[ 40.0 + (i / N) for i = 1:N ];
-    rate       = Float32[ 0.5 for i = 1:N ];
-    volatility = Float32[ 0.2 for i = 1:N ];
-    time       = Float32[ 0.5 for i = 1:N ];
-    result = similar(time)
-    # 
-    # ctx = CLBackend.init()
-    # sptprice_gpu = GPUArray(sptprice)
-    # initStrike_gpu = GPUArray(initStrike)
-    # rate_gpu = GPUArray(rate)
-    # volatility_gpu = GPUArray(volatility)
-    # time_gpu = GPUArray(time)
-    # result_gpu = GPUArray(result)
+# Plot results:
+# Pkg.add("Plots")
+using Plots
+benchmarks = benchy
+labels = String.(keys(benchmarks))
+times = map(values(benchmarks)) do v
+    map(x-> minimum(x).time, v)
+end
 
-    ctx = JLBackend.init()
-    sptprice_cpu = GPUArray(sptprice)
-    initStrike_cpu = GPUArray(initStrike)
-    rate_cpu = GPUArray(rate)
-    volatility_cpu = GPUArray(volatility)
-    time_cpu = GPUArray(time)
-    result_cpu = GPUArray(result)
-    #
-    # bench_cl = @benchmark test(
-    #     result_gpu,
-    #     sptprice_gpu,
-    #     initStrike_gpu,
-    #     rate_gpu,
-    #     volatility_gpu,
-    #     time_gpu
-    # )
-    bench_thread = @benchmark test(
-        result_cpu,
-        sptprice_cpu,
-        initStrike_cpu,
-        rate_cpu,
-        volatility_cpu,
-        time_cpu
-    )
-    # bench_jl = @benchmark test(
-    #     result,
-    #     sptprice,
-    #     initStrike,
-    #     rate,
-    #     volatility,
-    #     time
-    # )
-    # push!(cltimes, bench_cl)
-    # push!(jltimes, bench_jl)
-    push!(threadtimes, bench_thread)
+p2 = plot(
+   times,
+   m = (5, 0.8, :circle, stroke(0)),
+   line = 1.5,
+   labels = reshape(labels, (1, length(label))),
+   title = "blackscholes",
+   xaxis = ("10^N"),
+   yaxis = ("Time in Seconds")
+)
+
+println("| Backend | Time in Seconds N = 10^7 |")
+println("| ---- | ---- |")
+for (l, nums) in zip(labels, times)
+    println("| ", l, " | ", last(nums), " |")
 end

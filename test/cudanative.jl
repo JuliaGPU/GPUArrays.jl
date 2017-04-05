@@ -1,4 +1,4 @@
-using GPUArrays.CUBackend
+using GPUArrays: free
 using CUDAnative, Base.Test
 cuctx = CUBackend.init()
 const cu = CUDAnative
@@ -32,6 +32,7 @@ end
     @test all(x-> x == jltest(0.5f0, 10f0) * 2, Array(D))
     D .= A .* B .+ 10f0
     @test all(x-> x == jltest(0.5f0, 10f0) * 2 + 10f0, Array(D))
+    free(D); free(C); free(A); free(B)
 end
 
 
@@ -53,6 +54,7 @@ end
     @test all(x-> x == angle(10f0*im) * 2f0*im, Array(D))
     D .= A .* B .+ (0.5f0*im)
     @test all(x-> x == (2f0*im * angle(10f0*im) + (0.5f0*im)), Array(D))
+    free(D); free(C); free(A); free(B)
 end
 
 # @testset "fft Complex64" begin
@@ -83,32 +85,6 @@ end
             end
         end
     end
-    # @testset "mapreduce with clojures" begin
-    #     for dims in ((4048,), (1024,1024), (77,), (1923,209))
-    #         for T in (Float32, Float64)
-    #             A = GPUArray(rand(T, dims))
-    #             @test mapreduce(f1, op1, T(0), A) ≈ mapreduce(f1, op1, T(0), Array(A))
-    #         end
-    #     end
-    # end
-end
-@testset "mapidx" begin
-    a = rand(Complex64, 1024)
-    b = rand(Complex64, 1024)
-    A = GPUArray(a)
-    B = GPUArray(b)
-    off = 1
-    mapidx(A, (B, off, length(A))) do i, a, b, off, len
-        x = b[i]
-        x2 = b[min(i+off, len)]
-        a[i] = x * x2
-    end
-    foreach(1:length(a)) do i
-        x = b[i]
-        x2 = b[min(i+off, length(a))]
-        a[i] = x * x2
-    end
-    @test Array(A) ≈ a
 end
 
 
@@ -121,9 +97,7 @@ end
 @testset "Custom kernel from Julia function" begin
     x = GPUArray(rand(Float32, 100))
     y = GPUArray(rand(Float32, 100))
-    func = CUFunction(x, cumap!, cu.sin, x, y)
-    # same here, x is just passed to supply a kernel size!
-    func(x, cu.sin, x, y)
+    gpu_call(x, cumap!, (cu.sin, x, y))
     jy = Array(y)
     @test map!(sin, jy, jy) ≈ Array(x)
 end
@@ -138,7 +112,7 @@ end
         output[i] = input[i];
     }
     """
-    cucopy = CUFunction(x, (source, :copy), x, y)
-    cucopy(x, x, y)
+    f = (source, :copy)
+    gpu_call(x, f, (x, y))
     @test Array(x) == Array(y)
 end
