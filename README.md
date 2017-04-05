@@ -37,9 +37,9 @@ amount of code:
 [vector loads/stores](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/vectorloard.jl)
 
 Another of these cool features is [ReverseDiff](https://github.com/JuliaDiff/ReverseDiff.jl).
-It heavily relies on Julia's strength to specialize generic code an dispatching to
+It heavily relies on Julia's strength to specialize generic code and dispatching to
 a different implementations depending on the Array type.
-We should be able to use ReverseDiff with GPUArrays! It'll be a bit of work, but the
+Making this work with GPUArrays will be a bit more involved, but the
 first [prototype](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/logreg.jl) looks already promising!
 
 #### Main type:
@@ -54,7 +54,7 @@ end
 
 #### Scope
 
-Current backends: OpenCL, CUDA
+Current backends: OpenCL, CUDA, Julia Threaded
 
 Planned backends: OpenGL, Vulkan
 
@@ -149,4 +149,4 @@ Times in a table:
 * performance improvements!!
 * implement push!, append!, resize!, getindex, setindex!
 * interop between OpenCL, CUDA and OpenGL is there as a protype, but needs proper hooking up via `Base.copy!` / `convert`
-* share implementation of broadcast etc between backends. Currently they don't, since there are still subtle differences which should be elimated over time!
+* share implementation of broadcast etc between backends. Currently they don't, since there are still subtle differences which should be eliminated over time!
