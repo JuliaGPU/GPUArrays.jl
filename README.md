@@ -148,10 +148,9 @@ Times in a table:
 
 # TODO / up for grabs
 
-* mapreduce (there is a first working version for cudanative)
 * stencil operations
 * more tests and benchmarks
-* tests, that actually only switch the backend but use the same code
+* tests, that only switch the backend but use the same code
 * performance improvements!!
 * implement push!, append!, resize!, getindex, setindex!
 * interop between OpenCL, CUDA and OpenGL is there as a protype, but needs proper hooking up via `Base.copy!` / `convert`
