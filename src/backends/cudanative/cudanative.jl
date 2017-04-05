@@ -7,7 +7,7 @@ import CUDAdrv, CUDArt #, CUFFT
 
 import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
 import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index, gpu_call
-import GPUArrays: synchronize
+import GPUArrays: synchronize, free
 
 using CUDAdrv: CuDefaultStream
 
@@ -48,6 +48,13 @@ end
 # synchronize
 function synchronize{T, N}(x::CUArray{T, N})
     CUDAdrv.synchronize(context(x).ctx) # TODO figure out the diverse ways of synchronization
+end
+
+
+function free{T, N}(x::CUArray{T, N})
+    synchronize(x)
+    CUDAdrv.finalize(buffer(x))
+    nothing
 end
 
 function create_buffer{T, N}(ctx::CUContext, ::Type{T}, sz::NTuple{N, Int}; kw_args...)

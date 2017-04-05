@@ -1,6 +1,5 @@
 using SpecialFunctions: erf
 
-
 function blackscholes(sptprice, strike, rate, volatility, time)
     logterm = log10( sptprice / strike)
     powterm = .5f0 * volatility * volatility
@@ -20,9 +19,8 @@ function cndf2(x)
     0.5f0 + 0.5f0 * erf(0.707106781f0 * x)
 end
 
-const cu = CUDAnative
-
-# jeeez -.-
+# jeeez -.- So CUDAnative still doesn't recognize e.g. sqrt in the LLVM-IR,
+#since it's implemented within a C-library.... Should be fixed soon!
 function cu_blackscholes(sptprice, strike, rate, volatility, time)
     logterm = cu.log10( sptprice / strike)
     powterm = .5f0 * volatility * volatility

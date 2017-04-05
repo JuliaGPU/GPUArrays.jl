@@ -9,7 +9,7 @@ using ..GPUArrays, StaticArrays
 #import CLBLAS, CLFFT
 
 import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index
+import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index, free
 import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
 import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector, gpu_call
 
@@ -78,9 +78,20 @@ end
 @compat const CLArray{T, N} = GPUArray{T, N, cl.Buffer{T}, CLContext}
 
 #synchronize
-
 function synchronize{T, N}(x::CLArray{T, N})
     cl.finish(context(x).queue) # TODO figure out the diverse ways of synchronization
+end
+
+function free{T, N}(x::CLArray{T, N})
+    synchronize(x)
+    mem = buffer(x)
+    if mem.id != C_NULL
+        cl.@check_release cl.api.clReleaseMemObject(mem.id)
+        mem.id = C_NULL
+    end
+    mem.mapped  = false
+    mem.hostbuf = C_NULL
+    nothing
 end
 # Constructor
 function Base.copy!{T, N}(dest::Array{T, N}, source::CLArray{T, N})

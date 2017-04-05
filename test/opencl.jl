@@ -1,5 +1,5 @@
 using Base.Test
-using GPUArrays.CLBackend
+using GPUArrays: free
 ctx = CLBackend.init()
 # more complex function for broadcast
 function test{T}(a::T, b)
@@ -24,6 +24,7 @@ end
     @test all(x-> x ≈ test(0.5f0, 10f0) * 2, Array(D))
     D .= (+).((*).(A, B), 10f0)
     @test all(x-> x ≈ test(0.5f0, 10f0) * 2 + 10f0, Array(D))
+    free(D); free(C); free(A); free(B)
 end
 
 @testset "broadcast Complex64" begin
@@ -40,6 +41,7 @@ end
     @test all(x-> x ≈ angle(10f0*im) * 2f0*im, Array(D))
     D .= (+).((*).(A, B), (0.5f0*im))
     @test all(x-> x ≈ (2f0*im * angle(10f0*im) + (0.5f0*im)), Array(D))
+    free(D); free(C); free(A); free(B)
 end
 
 if GPUArrays.is_fft_supported(:CLFFT)

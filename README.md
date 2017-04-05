@@ -5,16 +5,21 @@
 
 Prototype for a GPU Array library.
 It implements the Base AbstractArray interface for Julia's various GPU backends.
-
-We're using Julia's JIT to generate optimized kernels for map/broadcast operations.
 The compilation for the GPU is done with [CUDAnative.jl](https://github.com/JuliaGPU/CUDAnative.jl/)
 and for OpenCL and OpenGL [Transpiler.jl](https://github.com/SimonDanisch/Transpiler.jl) is used.
 In the further future it's planned to replace the transpiler by the same approach
 CUDAnative.jl is using (via LLVM + SPIR-V).
 
-This allows to get more involved functionality, like complex arithmetic, for free, since we can compile what's already in Julia Base.
+# Why yet another GPU array package and why Julia?
 
-GPUArrays relies heavily on dot broadcasting. The great thing about dot broadcasting in Julia is, that it [actually fuses operations syntactically](http://julialang.org/blog/2017/01/moredots), which is vital for performance on the GPU.
+We can use Julia's JIT to generate optimized kernels for map/broadcast operations.
+
+This allows to get more involved functionality, like complex arithmetic,
+since we can compile what's already in Julia Base.
+
+GPUArrays relies heavily on Julia's dot broadcasting.
+The great thing about dot broadcasting in Julia is, that it
+[actually fuses operations syntactically](http://julialang.org/blog/2017/01/moredots), which is vital for performance on the GPU.
 E.g.:
 
 ```Julia
@@ -23,6 +28,19 @@ out .= a .+ b ./ c .+ 1
 
 Will result in one GPU kernel call to a function that combines the operations without any extra allocations.
 This allows GPUArrays to offer a lot of functionality with minimal code.
+
+Also, when compiling Julia to the GPU, we can use all the cool features from Julia, e.g.
+higher order functions, multiple dispatch, meta programming and generated functions.
+Checkout the examples, to see how this can be used to emit specialized kernels with a minimal
+amount of code:
+[unrolling](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/juliaset.jl),
+[vector loads/stores](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/vectorloard.jl)
+
+Another of these cool features is [ReverseDiff](https://github.com/JuliaDiff/ReverseDiff.jl).
+It heavily relies on Julia's strength to specialize generic code and dispatching to
+a different implementations depending on the Array type.
+Making this work with GPUArrays will be a bit more involved, but the
+first [prototype](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/logreg.jl) looks already promising!
 
 #### Main type:
 
@@ -36,7 +54,7 @@ end
 
 #### Scope
 
-Current backends: OpenCL, CUDA
+Current backends: OpenCL, CUDA, Julia Threaded
 
 Planned backends: OpenGL, Vulkan
 
@@ -58,7 +76,13 @@ end
 broadcast(f, ::GPUArray...)
 broadcast!(f, dest::GPUArray, ::GPUArray...)
 
+# calls `f` on args, with queues, block heuristics and context taken from `array`
+# f can be a julia function or a tuple (String, Symbol),
+# being a C kernel source string + the name of the kernel function
+gpu_call(array::GPUArray, f, args::Tuple)
+
 ```
+Example for [gpu_call](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/custom_kernels.jl)
 
 # Usage
 
@@ -81,7 +105,7 @@ fft!(complex_c) # fft!/ifft! is currently implemented for JLBackend and CLBacken
 
 
 CLFFT, CUFFT, CLBLAS and CUBLAS will soon be supported.
-A prototype of generic support of these libraries can be found in [blas.jl](https://github.com/JuliaGPU/GPUArrays.jl/blob/sd/glsl/src/blas.jl).
+A prototype of generic support of these libraries can be found in [blas.jl](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/src/backends/blas.jl).
 The OpenCL backend already supports mat mul via `CLBLAS.gemm!` and `fft!`/`ifft!`.
 CUDAnative could support these easily as well, but we currently run into problems with the interactions of `CUDAdrv` and `CUDArt`.
 
@@ -125,4 +149,4 @@ Times in a table:
 * performance improvements!!
 * implement push!, append!, resize!, getindex, setindex!
 * interop between OpenCL, CUDA and OpenGL is there as a protype, but needs proper hooking up via `Base.copy!` / `convert`
-* share implementation of broadcast etc between backends. Currently they don't, since there are still subtle differences which should be elimated over time!
+* share implementation of broadcast etc between backends. Currently they don't, since there are still subtle differences which should be eliminated over time!

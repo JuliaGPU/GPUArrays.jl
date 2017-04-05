@@ -42,6 +42,10 @@ function gpu_call(A::AbstractArray, f, args, worksize, localsize = nothing)
     f(args...)
 end
 
+function free(x::AbstractArray)
+
+end
+
 # BLAS support
 hasblas(x) = false
 include("blas.jl")
@@ -57,5 +61,16 @@ function init(sym::Symbol, args...; kw_args...)
         CLBackend.init(args...; kw_args...)
     else
         error("$sym not a supported backend. Try one of: $(supported_backends())")
+    end
+end
+
+
+"""
+Iterates through all backends and calls `f` after initializing the current one!
+"""
+function perbackend(f)
+    for backend in supported_backends()
+        ctx = GPUArrays.init(backend)
+        f(backend)
     end
 end
