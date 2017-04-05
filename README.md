@@ -3,19 +3,18 @@
 [![Build Status](https://travis-ci.org/JuliaGPU/GPUArrays.jl.svg?branch=master)](https://travis-ci.org/SimonDanisch/GPUArrays.jl)
 [![Build status](https://ci.appveyor.com/api/projects/status/2aa4bvmq7e9rh338/branch/master?svg=true)](https://ci.appveyor.com/project/SimonDanisch/gpuarrays-jl-8n74h/branch/master)
 
-Prototype for a GPU Array library.
-It implements the Base AbstractArray interface for Julia's various GPU backends.
+GPU Array package for Julia's various GPU backends.
 The compilation for the GPU is done with [CUDAnative.jl](https://github.com/JuliaGPU/CUDAnative.jl/)
-and for OpenCL and OpenGL [Transpiler.jl](https://github.com/SimonDanisch/Transpiler.jl) is used.
-In the further future it's planned to replace the transpiler by the same approach
+and for OpenCL [Transpiler.jl](https://github.com/SimonDanisch/Transpiler.jl) is used.
+In the future it's planned to replace the transpiler by a similar approach
 CUDAnative.jl is using (via LLVM + SPIR-V).
 
-# Why yet another GPU array package and why Julia?
+# Why another GPU array package in yet another language?
 
-We can use Julia's JIT to generate optimized kernels for map/broadcast operations.
+Julia offers countless advantages for a GPU array package.
+E.g., we can use Julia's JIT to generate optimized kernels for map/broadcast operations.
 
-This allows to get more involved functionality, like complex arithmetic,
-since we can compile what's already in Julia Base.
+This works even for things like complex arithmetic, since we can compile what's already in Julia Base.
 
 GPUArrays relies heavily on Julia's dot broadcasting.
 The great thing about dot broadcasting in Julia is, that it
@@ -24,6 +23,10 @@ E.g.:
 
 ```Julia
 out .= a .+ b ./ c .+ 1
+#turns into this one broadcast (map):
+broadcast!(out, a, b, c) do a, b, c
+    a + b / c + 1
+end
 ```
 
 Will result in one GPU kernel call to a function that combines the operations without any extra allocations.
@@ -31,12 +34,11 @@ This allows GPUArrays to offer a lot of functionality with minimal code.
 
 Also, when compiling Julia to the GPU, we can use all the cool features from Julia, e.g.
 higher order functions, multiple dispatch, meta programming and generated functions.
-Checkout the examples, to see how this can be used to emit specialized kernels with a minimal
-amount of code:
+Checkout the examples, to see how this can be used to emit specialized code while not loosing flexibility:
 [unrolling](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/juliaset.jl),
 [vector loads/stores](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/vectorloard.jl)
 
-Another of these cool features is [ReverseDiff](https://github.com/JuliaDiff/ReverseDiff.jl).
+Another of Julia's cool packages is [ReverseDiff](https://github.com/JuliaDiff/ReverseDiff.jl).
 It heavily relies on Julia's strength to specialize generic code and dispatching to
 a different implementations depending on the Array type.
 Making this work with GPUArrays will be a bit more involved, but the
@@ -102,7 +104,6 @@ complex_c = test.(c, b)
 fft!(complex_c) # fft!/ifft! is currently implemented for JLBackend and CLBackend
 
 ```
-
 
 CLFFT, CUFFT, CLBLAS and CUBLAS will soon be supported.
 A prototype of generic support of these libraries can be found in [blas.jl](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/src/backends/blas.jl).
