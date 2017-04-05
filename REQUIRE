@@ -2,7 +2,7 @@ julia 0.5
 StaticArrays
 Compat 0.19.0
 
-Sugar
+Sugar 0.0.3
 Matcha
 
 CUDArt
@@ -10,5 +10,5 @@ CUBLAS
 CUFFT
 
 OpenCL 0.5.2
-CLBLAS
+CLBLAS 1.1.0
 CLFFT 0.4.0
