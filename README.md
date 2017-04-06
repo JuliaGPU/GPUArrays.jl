@@ -160,11 +160,14 @@ Times in a table:
 # Installation
 
 For the cudanative backend, you need to install [CUDAnative.jl manually](https://github.com/JuliaGPU/CUDAnative.jl/#installation).
-
+The cudanative backend only works on 0.6, while the other backends also support Julia 0.5.
+Make sure to have CUDA and OpenCL driver installed correctly.
+`Pkg.build("GPUArrays")` will pick those up and should include the working backends.
+So if your system configuration changes, make sure to run `Pkg.build("GPUArrays")` again.
 The rest should work automatically:
 ```Julia
 Pkg.add("GPUArrays")
 Pkg.build("GPUArrays") # should print out information about what backends are added
-# Test
+# Test it!
 Pkg.test("GPUArrays")
 ```
