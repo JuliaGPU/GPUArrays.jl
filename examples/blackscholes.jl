@@ -65,7 +65,8 @@ end
 
 # add BenchmarkTools with Pkg.add("BenchmarkTools")
 using BenchmarkTools
-benchmarks = Dict()
+import BenchmarkTools: Trial
+benchmarks = Dict{Symbol, Vector{Trial}}()
 for n in 1:7
     N = 10^n
     sptprice   = Float32[42.0 for i = 1:N]
@@ -84,7 +85,7 @@ for n in 1:7
         _result = GPUArray(result)
         f = backend == :cudanative ? cu_blackscholes : blackscholes
         b = @benchmark runbench($f, $_result, $_sptprice, $_initStrike, $_rate, $_volatility, $_time)
-        benches = get!(benchmarks, backend, [])
+        benches = get!(benchmarks, backend, Trial[])
         push!(benches, b)
         @assert Array(_result) ≈ comparison
         # this is optional, but needed in a loop like this, which allocates a lot of GPUArrays
@@ -95,8 +96,7 @@ end
 # Plot results:
 # Pkg.add("Plots")
 using Plots
-benchmarks = benchy
-labels = String.(keys(benchmarks))
+labels = (String(k) for k in keys(benchmarks))
 times = map(values(benchmarks)) do v
     map(x-> minimum(x).time, v)
 end
