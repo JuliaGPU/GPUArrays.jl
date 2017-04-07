@@ -1,4 +1,13 @@
 # you might need to add SpecialFunctions with Pkg.add("SpecialFunctions")
+
+if Pkg.installed("BenchmarkTools") == nothing ||
+   Pkg.installed("Query") == nothing ||
+   Pkg.installed("CUDAnative") == nothing ||
+   Pkg.installed("DataFrames") == nothing
+
+   error("Please install BenchmarkTools, Query, CUDAnative and DataFrames")
+end
+
 using GPUArrays, SpecialFunctions
 using GPUArrays: perbackend, synchronize, free
 
@@ -62,8 +71,6 @@ function runbench(f, out, a, b, c, d, e)
 end
 
 
-
-# add BenchmarkTools with Pkg.add("BenchmarkTools")
 using BenchmarkTools
 import BenchmarkTools: Trial
 using DataFrames
@@ -135,21 +142,20 @@ end
 
 # Plot results:
 @static if VERSION < v"0.6.0-dev" &&
-           Pkg.installed("Plots") != ""
+           Pkg.installed("Plots") != nothing
+   using Plots
 
-using Plots
+   df7 = filterResults(results, 7)
+   labels = df7[:Backend]
+   times = df7[:minT]
 
-df7 = filterResults(results, 7)
-labels = df7[:Backend]
-times = df7[:minT]
-
-p2 = plot(
-   times,
-   m = (5, 0.8, :circle, stroke(0)),
-   line = 1.5,
-   labels = reshape(labels, (1, length(label))),
-   title = "blackscholes",
-   xaxis = ("10^N"),
-   yaxis = ("Time in Seconds")
-)
+   p2 = plot(
+      times,
+      m = (5, 0.8, :circle, stroke(0)),
+      line = 1.5,
+      labels = reshape(labels, (1, length(label))),
+      title = "blackscholes",
+      xaxis = ("10^N"),
+      yaxis = ("Time in Seconds")
+   )
 end
