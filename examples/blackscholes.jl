@@ -67,14 +67,16 @@ end
 using BenchmarkTools
 import BenchmarkTools: Trial
 using DataFrames
-n = 7 
+using Query
+
+Nmax = 7
 
 benchmarks = DataFrame([Symbol, Int64, Trial, Float64], [:Backend, :N, :Trial, :minT], 0)
 
 NT = Base.Threads.nthreads()
-info("Running benchmarksi number of threads: $NT")
+info("Running benchmarks number of threads: $NT")
 
-for n in 1:n
+for n in 1:Nmax
     N = 10^n
     sptprice   = Float32[42.0 for i = 1:N]
     initStrike = Float32[40.0 + (i / N) for i = 1:N]
@@ -100,13 +102,46 @@ for n in 1:n
         free(_sptprice);free(_initStrike);free(_rate);free(_volatility);free(_time);free(_result);
     end
 end
-# Plot results:
-# Pkg.add("Plots")
-using Plots
-labels = (String(k) for k in keys(benchmarks))
-times = map(values(benchmarks)) do v
-    map(x-> minimum(x).time, v)
+
+results = @from b in benchmarks begin
+   @select {b.Backend, b.N, b.minT}
+   @collect DataFrame
 end
+
+writetable("benchmark_results_$(NT).csv", results)
+
+function filterResults(df, n)
+   dfR = @from r in df begin
+      @where r.N == 10^n
+      @select {r.Backend, r.minT}
+      @collect DataFrame
+   end
+
+   return dfR
+end
+
+io = IOBuffer()
+for n in 1:Nmax
+   df = filterResults(results, n)
+   write(io, "| Backend | Time in Seconds N = 10^$Nmax |", "\n")
+   write(io, "| ---- | ---- |", "\n")
+   for row in eachrow(df)
+      b = row[:Backend]
+      t = row[:minT]
+      write(io, "| ", b, " | ", t, " |", "\n")
+   end
+   display(Markdown.parse(io))
+end
+
+# Plot results:
+@static if VERSION < v"0.6.0-dev" &&
+           Pkg.installed("Plots") != ""
+
+using Plots
+
+df7 = filterResults(results, 7)
+labels = df7[:Backend]
+times = df7[:minT]
 
 p2 = plot(
    times,
@@ -117,9 +152,4 @@ p2 = plot(
    xaxis = ("10^N"),
    yaxis = ("Time in Seconds")
 )
-
-println("| Backend | Time in Seconds N = 10^7 |")
-println("| ---- | ---- |")
-for (l, nums) in zip(labels, times)
-    println("| ", l, " | ", last(nums), " |")
 end
