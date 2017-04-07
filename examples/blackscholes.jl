@@ -66,8 +66,15 @@ end
 # add BenchmarkTools with Pkg.add("BenchmarkTools")
 using BenchmarkTools
 import BenchmarkTools: Trial
-benchmarks = Dict{Symbol, Vector{Trial}}()
-for n in 1:7
+using DataFrames
+n = 7 
+
+benchmarks = DataFrame([Symbol, Int64, Trial, Float64], [:Backend, :N, :Trial, :minT], 0)
+
+NT = Base.Threads.nthreads()
+info("Running benchmarksi number of threads: $NT")
+
+for n in 1:n
     N = 10^n
     sptprice   = Float32[42.0 for i = 1:N]
     initStrike = Float32[40.0 + (i / N) for i = 1:N]
@@ -85,8 +92,8 @@ for n in 1:7
         _result = GPUArray(result)
         f = backend == :cudanative ? cu_blackscholes : blackscholes
         b = @benchmark runbench($f, $_result, $_sptprice, $_initStrike, $_rate, $_volatility, $_time)
-        benches = get!(benchmarks, backend, Trial[])
-        push!(benches, b)
+        push!(benchmarks, (backend, N, b, minimum(b).time))
+
         @assert Array(_result) ≈ comparison
         # this is optional, but needed in a loop like this, which allocates a lot of GPUArrays
         # for the future, we need a way to tell the Julia gc about GPU memory
