@@ -1,4 +1,13 @@
 # you might need to add SpecialFunctions with Pkg.add("SpecialFunctions")
+
+if Pkg.installed("BenchmarkTools") == nothing ||
+   Pkg.installed("Query") == nothing ||
+   Pkg.installed("CUDAnative") == nothing ||
+   Pkg.installed("DataFrames") == nothing
+
+   error("Please install BenchmarkTools, Query, CUDAnative and DataFrames")
+end
+
 using GPUArrays, SpecialFunctions
 using GPUArrays: perbackend, synchronize, free
 
@@ -62,11 +71,19 @@ function runbench(f, out, a, b, c, d, e)
 end
 
 
-
-# add BenchmarkTools with Pkg.add("BenchmarkTools")
 using BenchmarkTools
-benchmarks = Dict()
-for n in 1:7
+import BenchmarkTools: Trial
+using DataFrames
+using Query
+
+Nmax = 7
+
+benchmarks = DataFrame([Symbol, Int64, Trial, Float64], [:Backend, :N, :Trial, :minT], 0)
+
+NT = Base.Threads.nthreads()
+info("Running benchmarks number of threads: $NT")
+
+for n in 1:Nmax
     N = 10^n
     sptprice   = Float32[42.0 for i = 1:N]
     initStrike = Float32[40.0 + (i / N) for i = 1:N]
@@ -84,35 +101,61 @@ for n in 1:7
         _result = GPUArray(result)
         f = backend == :cudanative ? cu_blackscholes : blackscholes
         b = @benchmark runbench($f, $_result, $_sptprice, $_initStrike, $_rate, $_volatility, $_time)
-        benches = get!(benchmarks, backend, [])
-        push!(benches, b)
+        push!(benchmarks, (backend, N, b, minimum(b).time))
+
         @assert Array(_result) ≈ comparison
         # this is optional, but needed in a loop like this, which allocates a lot of GPUArrays
         # for the future, we need a way to tell the Julia gc about GPU memory
         free(_sptprice);free(_initStrike);free(_rate);free(_volatility);free(_time);free(_result);
     end
 end
-# Plot results:
-# Pkg.add("Plots")
-using Plots
-benchmarks = benchy
-labels = String.(keys(benchmarks))
-times = map(values(benchmarks)) do v
-    map(x-> minimum(x).time, v)
+
+results = @from b in benchmarks begin
+   @select {b.Backend, b.N, b.minT}
+   @collect DataFrame
 end
 
-p2 = plot(
-   times,
-   m = (5, 0.8, :circle, stroke(0)),
-   line = 1.5,
-   labels = reshape(labels, (1, length(label))),
-   title = "blackscholes",
-   xaxis = ("10^N"),
-   yaxis = ("Time in Seconds")
-)
+writetable("benchmark_results_$(NT).csv", results)
 
-println("| Backend | Time in Seconds N = 10^7 |")
-println("| ---- | ---- |")
-for (l, nums) in zip(labels, times)
-    println("| ", l, " | ", last(nums), " |")
+function filterResults(df, n)
+   dfR = @from r in df begin
+      @where r.N == 10^n
+      @select {r.Backend, r.minT}
+      @collect DataFrame
+   end
+
+   return dfR
+end
+
+io = IOBuffer()
+for n in 1:Nmax
+   df = filterResults(results, n)
+   write(io, "| Backend | Time in Seconds N = 10^$Nmax |", "\n")
+   write(io, "| ---- | ---- |", "\n")
+   for row in eachrow(df)
+      b = row[:Backend]
+      t = row[:minT]
+      write(io, "| ", b, " | ", t, " |", "\n")
+   end
+   display(Markdown.parse(io))
+end
+
+# Plot results:
+@static if VERSION < v"0.6.0-dev" &&
+           Pkg.installed("Plots") != nothing
+   using Plots
+
+   df7 = filterResults(results, 7)
+   labels = df7[:Backend]
+   times = df7[:minT]
+
+   p2 = plot(
+      times,
+      m = (5, 0.8, :circle, stroke(0)),
+      line = 1.5,
+      labels = reshape(labels, (1, length(label))),
+      title = "blackscholes",
+      xaxis = ("10^N"),
+      yaxis = ("Time in Seconds")
+   )
 end
