@@ -20,3 +20,10 @@
 "JLContext Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz with 1 threads",100000,8.028366e6
 "JLContext Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz with 1 threads",1000000,8.6506481e7
 "JLContext Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz with 1 threads",10000000,8.77277669e8
+"CLContext: Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz",10,17357.0
+"CLContext: Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz",100,19228.0
+"CLContext: Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz",1000,37261.0
+"CLContext: Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz",10000,198403.0
+"CLContext: Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz",100000,1.878661e6
+"CLContext: Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz",1000000,2.1451888e7
+"CLContext: Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz",10000000,2.09276533e8

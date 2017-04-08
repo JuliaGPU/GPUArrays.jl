@@ -95,7 +95,8 @@ for n in 1:Nmax
     result     = similar(spttime)
     comparison = blackscholes.(sptprice, initStrike, rate, volatility, spttime)
     perbackend() do backend # nice to go through all backends, but for benchmarks we might want to have this more explicit!
-        if true #backend == :julia 
+        if true #backend == :julia
+        backend = :opencl
             _sptprice = GPUArray(sptprice)
             _initStrike = GPUArray(initStrike)
             _rate = GPUArray(rate)
@@ -121,22 +122,28 @@ results = @from b in benchmarks begin
    @select {b.Backend, b.N, b.minT}
    @collect DataFrame
 end
-file = "blackscholes_results.csv"
-# merge
-if isfile(file)
-    merged = readtable(file)
-    backends = unique(merged[:Backend])
-    benched_backends = unique(results[:Backend])
-    to_add = setdiff(benched_backends, backends)
-    for i in 1:size(results, 1)
-        row = results[i, :]
-        if row[:Backend][1] in to_add
-            append!(merged, row)
-        end
-    end
-end
 
-writetable(file, merged)
+results = cd(dirname(@__FILE__)) do
+    file = "blackscholes_results.csv"
+    # merge
+    merged = if isfile(file)
+        merged = readtable(file)
+        backends = unique(merged[:Backend])
+        benched_backends = unique(results[:Backend])
+        to_add = setdiff(benched_backends, backends)
+        for i in 1:size(results, 1)
+            row = results[i, :]
+            if row[:Backend][1] in to_add
+                append!(merged, row)
+            end
+        end
+        merged
+    else
+        results
+    end
+    writetable(file, merged)
+    merged
+end
 
 function filterResults(df, n)
    dfR = @from r in df begin
