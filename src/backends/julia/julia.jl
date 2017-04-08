@@ -68,7 +68,10 @@ Base.@propagate_inbounds Base.setindex!{T, N}(A::JLArray{T, N}, val, i::Integer)
 @compat Base.IndexStyle{T, N}(::Type{JLArray{T, N}}) = IndexLinear()
 Base.size{T, N}(x::JLArray{T, N}) = size(buffer(x))
 
-Base.show(io::IO, ctx::JLContext) = print(io, "JLContext with $(ctx.nthreads) threads")
+function Base.show(io::IO, ctx::JLContext)
+    cpu = Sys.cpu_info()
+    print(io, "JLContext $(cpu[1].model) with $(ctx.nthreads) threads")
+end
 ##############################################
 # Implement BLAS interface
 
