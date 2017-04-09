@@ -9,42 +9,41 @@ if Pkg.installed("BenchmarkTools") == nothing ||
 end
 
 using DataFrames, Query, Plots
+pyplot()
 
-labels = String[]
-times = Vector{Float64}[]
 cd(dirname(@__FILE__))
 name = "blackscholes"
 results = readtable("$(name)_results.csv")
-hawaii = results[:Backend][2]
-unique(results[:Backend])
-
-results = @from i in results2 begin
+results = @from i in results begin
     @orderby descending(i.minT)
     @select i
     @collect DataFrame
 end
+labels = String[]
+times = Vector{Float64}[]
 for backend in unique(results[:Backend])
     push!(labels, string(backend))
     time = @from r in results begin
       @where r.Backend == backend
-      @select r.minT
+      @select get(r.minT)
       @collect
    end
-   push!(times, get.(time) ./ 10^9)
+   push!(times, time ./ 10^9)
 end
 
 p2 = plot(
-    7:-1:1,
+    [10^i for i = 7:-1:1],
     times,
     m = (5, 0.8, :circle, stroke(0)),
     line = 1.5,
     labels = reshape(labels, (1, length(labels))),
     title = name,
-    xaxis = "10^N",
-    yaxis = "Time in s"
+    legend = :topleft,
+    xaxis = ("N", :log10),
+    yaxis = ("Time in s", :log10)
 )
-savefig("$name.svg")
 
+savefig("$name.svg")
 
 function filterResults(df, n)
    dfR = @from r in df begin
