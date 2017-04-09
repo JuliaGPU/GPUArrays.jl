@@ -123,7 +123,7 @@ So please treat these numbers with care!
 
 [source](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/blackscholes.jl)
 
-![blackscholes](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/blackscholebench.png?raw=true)
+![blackscholes](https://cdn.rawgit.com/JuliaGPU/GPUArrays.jl/59750623/examples/blackscholes.svg)
 
 Interestingly, on the GTX950, the CUDAnative backend outperforms the OpenCL backend by a factor of 10.
 This is most likely due to the fact, that LLVM is great at unrolling and vectorizing loops,
@@ -135,16 +135,15 @@ be straightforward with Julia's great meta programming and `@generated` function
 
 Times in a table:
 
-| Backend | Time in Seconds N = 10^7 |
-| ---- | ---- |
-| OpenCL FirePro W9100 | 0.0014526 |
-| CUDA GTX950 | 0.00354474 |
-| OpenCL GTX950 | 0.0335097 |
-| OpenCL hd4400 | 0.0420179 |
-| 8 Threads i7-6700 | 0.199975 |
-| 4 Threads i3-4130 | 0.374679 |
-| Julia i7-6700 | 0.937901 |
-| Julia i3-4130 | 1.04109 |
+| Backend | Time (s) for N = 10^7 | OP/s in million | Speedup |
+| ---- | ---- | ---- | ---- |
+| JLContext i3-4130 CPU @ 3.40GHz 1 threads | 1.0085 s|   10 |  1.0|
+| JLContext i7-6700 CPU @ 3.40GHz 1 threads | 0.8773 s|   11 |  1.1|
+| CLContext: i7-6700 CPU @ 3.40GHz | 0.2093 s|   48 |  4.8|
+| JLContext i7-6700 CPU @ 3.40GHz 8 threads | 0.1981 s|   50 |  5.1|
+| CLContext: GeForce GTX 950 | 0.0301 s|  332 | 33.5|
+| CUContext: GeForce GTX 950 | 0.0032 s| 3124 | 315.0|
+| CLContext: FirePro w9100 | 0.0013 s| 7831 | 789.8|
 
 # TODO / up for grabs
 
