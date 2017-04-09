@@ -14,10 +14,7 @@ import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
 import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector, gpu_call
 
 using Transpiler
-using Transpiler: CLTranspiler
-import Transpiler.CLTranspiler.cli
-import Transpiler.CLTranspiler.CLFunction
-import Transpiler.CLTranspiler.cli.get_global_id
+import Transpiler: cli, CLFunction, cli.get_global_id
 
 immutable CLContext <: Context
     device::cl.Device
@@ -154,11 +151,11 @@ for i = 0:10
 end
 
 # extend the private interface for the compilation types
-CLTranspiler._to_cl_types{T, N}(arg::CLArray{T, N}) = cli.CLArray{T, N}
-CLTranspiler._to_cl_types{T}(x::LocalMemory{T}) = cli.LocalMemory{T}
+Transpiler._to_cl_types{T, N}(arg::CLArray{T, N}) = cli.CLArray{T, N}
+Transpiler._to_cl_types{T}(x::LocalMemory{T}) = cli.LocalMemory{T}
 
-CLTranspiler.cl_convert{T, N}(x::CLArray{T, N}) = buffer(x)
-CLTranspiler.cl_convert{T}(x::LocalMemory{T}) = cl.LocalMem(T, x.size)
+Transpiler.cl_convert{T, N}(x::CLArray{T, N}) = buffer(x)
+Transpiler.cl_convert{T}(x::LocalMemory{T}) = cl.LocalMem(T, x.size)
 
 function acc_broadcast!{F <: Function, T, N}(f::F, A::CLArray{T, N}, args::Tuple)
     ctx = context(A)
@@ -214,10 +211,8 @@ if is_fft_supported(:CLFFT)
     include("fft.jl")
 end
 
-using Transpiler.CLTranspiler: cli
-using Transpiler.CLTranspiler.cli: get_local_id, get_global_id, barrier
-using Transpiler.CLTranspiler.cli: CLK_LOCAL_MEM_FENCE, get_group_id
-using Transpiler.CLTranspiler.cli: get_local_size, get_global_size
+using Transpiler.cli: get_local_id, get_global_id, barrier,  CLK_LOCAL_MEM_FENCE
+using Transpiler.cli: get_local_size, get_global_size, get_group_id
 
 using OpenCL
 

@@ -1,7 +1,7 @@
-using SpecialFunctions: erf
+import SpecialFunctions: erfc
 
 function blackscholes(sptprice, strike, rate, volatility, time)
-    logterm = log10( sptprice / strike)
+    logterm = log( sptprice / strike)
     powterm = .5f0 * volatility * volatility
     den = volatility * sqrt(time)
     d1 = (((rate + powterm) * time) + logterm) / den
@@ -16,13 +16,13 @@ function blackscholes(sptprice, strike, rate, volatility, time)
 end
 
 function cndf2(x)
-    0.5f0 + 0.5f0 * erf(0.707106781f0 * x)
+    0.5f0 + 0.5f0 * erfc(0.707106781f0 * x)
 end
 
 # jeeez -.- So CUDAnative still doesn't recognize e.g. sqrt in the LLVM-IR,
 #since it's implemented within a C-library.... Should be fixed soon!
 function cu_blackscholes(sptprice, strike, rate, volatility, time)
-    logterm = cu.log10( sptprice / strike)
+    logterm = cu.log(sptprice / strike)
     powterm = .5f0 * volatility * volatility
     den = volatility * cu.sqrt(time)
     d1 = (((rate + powterm) * time) + logterm) / den
@@ -37,7 +37,7 @@ function cu_blackscholes(sptprice, strike, rate, volatility, time)
 end
 
 function cu_cndf2(x)
-    0.5f0 + 0.5f0 * cu.erf(0.707106781f0 * x)
+    0.5f0 + 0.5f0 * cu.erfc(0.707106781f0 * x)
 end
 
 for T in (Float32, Float64)

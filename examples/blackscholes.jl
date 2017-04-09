@@ -11,7 +11,7 @@ if Pkg.installed("BenchmarkTools") == nothing ||
 end
 using GPUArrays, SpecialFunctions
 using GPUArrays: perbackend, synchronize, free
-using SpecialFunctions: erf
+using SpecialFunctions: erfc
 
 function blackscholes(
         sptprice,
@@ -35,7 +35,7 @@ function blackscholes(
 end
 
 @inline function cndf2(x)
-    0.5f0 + 0.5f0 * erf(0.707106781f0 * x)
+    0.5f0 + 0.5f0 * erfc(0.707106781f0 * x)
 end
 
 @noinline function test(result, a, b, c, d, e)
@@ -49,7 +49,7 @@ if Pkg.installed("CUDAnative") != nothing
     # jeeez -.- So CUDAnative still doesn't recognize e.g. sqrt in the LLVM-IR,
     #since it's implemented within a C-library.... Should be fixed soon!
     function cu_blackscholes(sptprice, strike, rate, volatility, time)
-        logterm = cu.log10( sptprice / strike)
+        logterm = cu.log( sptprice / strike)
         powterm = .5f0 * volatility * volatility
         den = volatility * cu.sqrt(time)
         d1 = (((rate + powterm) * time) + logterm) / den
@@ -64,7 +64,7 @@ if Pkg.installed("CUDAnative") != nothing
     end
 
     function cu_cndf2(x)
-        0.5f0 + 0.5f0 * cu.erf(0.707106781f0 * x)
+        0.5f0 + 0.5f0 * cu.erfc(0.707106781f0 * x)
     end
 end
 function runbench(f, out, a, b, c, d, e)
