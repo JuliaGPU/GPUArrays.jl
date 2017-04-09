@@ -139,7 +139,7 @@ Times in a table:
 | ---- | ---- | ---- | ---- |
 | JLContext i3-4130 CPU @ 3.40GHz 1 threads | 1.0085 s|   10 |  1.0|
 | JLContext i7-6700 CPU @ 3.40GHz 1 threads | 0.8773 s|   11 |  1.1|
-| CLContext: i7-6700 CPU @ 3.40GHz | 0.2093 s|   48 |  4.8|
+| CLContext: i7-6700 CPU @ 3.40GHz 8 threads | 0.2093 s|   48 |  4.8|
 | JLContext i7-6700 CPU @ 3.40GHz 8 threads | 0.1981 s|   50 |  5.1|
 | CLContext: GeForce GTX 950 | 0.0301 s|  332 | 33.5|
 | CUContext: GeForce GTX 950 | 0.0032 s| 3124 | 315.0|
