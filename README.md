@@ -123,7 +123,7 @@ So please treat these numbers with care!
 
 [source](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/blackscholes.jl)
 
-![blackscholes](https://cdn.rawgit.com/JuliaGPU/GPUArrays.jl/59750623/examples/blackscholes.svg)
+![blackscholes](https://cdn.rawgit.com/JuliaGPU/GPUArrays.jl/efb9d2e0/examples/blackscholes.svg)
 
 Interestingly, on the GTX950, the CUDAnative backend outperforms the OpenCL backend by a factor of 10.
 This is most likely due to the fact, that LLVM is great at unrolling and vectorizing loops,
