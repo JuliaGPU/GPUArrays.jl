@@ -17,16 +17,7 @@ name = "blackscholes"
 results = readtable("$(name)_results.csv")
 hawaii = results[:Backend][2]
 unique(results[:Backend])
-results2 = @from elem in results begin
-    @select {
-        Backend = ifelse(elem.Backend == hawaii, Nullable("CLContext: FirePro w9100"), elem.Backend),
-        elem.N,
-        elem.minT
-    }
-    @collect DataFrame
-end
-_get(x::Nullable) = get(x)
-_get(x) = x
+
 results = @from i in results2 begin
     @orderby descending(i.minT)
     @select i
