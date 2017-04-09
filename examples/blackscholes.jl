@@ -78,6 +78,12 @@ import BenchmarkTools: Trial
 using DataFrames
 using Query
 
+# on 0.6:
+# Pkg.clone("https://github.com/davidanthoff/IterableTables.jl.git")
+# Pkg.checkout("NamedTuples")
+# Pkg.checkout("Query")
+# Pkg.checkout("SimpleTraits")
+
 Nmax = 7
 
 benchmarks = DataFrame([String, Int64, Trial, Float64], [:Backend, :N, :Trial, :minT], 0)
@@ -96,7 +102,6 @@ for n in 1:Nmax
     comparison = blackscholes.(sptprice, initStrike, rate, volatility, spttime)
     perbackend() do backend # nice to go through all backends, but for benchmarks we might want to have this more explicit!
         if true #backend == :julia
-        backend = :opencl
             _sptprice = GPUArray(sptprice)
             _initStrike = GPUArray(initStrike)
             _rate = GPUArray(rate)
@@ -167,10 +172,4 @@ for n in 1:Nmax
    display(Markdown.parse(io))
    seekstart(io)
    println(String(take!(io)))
-end
-
-# Plot results:
-@static if VERSION < v"0.6.0-dev" &&
-           Pkg.installed("Plots") != nothing
-
 end

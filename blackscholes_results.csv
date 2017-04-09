@@ -1,0 +1,8 @@
+"Backend","N","minT"
+"JLContext Intel(R) Core(TM) i3-4130 CPU @ 3.40GHz with 4 threads",10,1336.4
+"JLContext Intel(R) Core(TM) i3-4130 CPU @ 3.40GHz with 4 threads",100,4457.142857142857
+"JLContext Intel(R) Core(TM) i3-4130 CPU @ 3.40GHz with 4 threads",1000,35755.0
+"JLContext Intel(R) Core(TM) i3-4130 CPU @ 3.40GHz with 4 threads",10000,351771.0
+"JLContext Intel(R) Core(TM) i3-4130 CPU @ 3.40GHz with 4 threads",100000,3.551611e6
+"JLContext Intel(R) Core(TM) i3-4130 CPU @ 3.40GHz with 4 threads",1000000,3.5416187e7
+"JLContext Intel(R) Core(TM) i3-4130 CPU @ 3.40GHz with 4 threads",10000000,3.52283911e8
