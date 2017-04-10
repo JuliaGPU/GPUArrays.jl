@@ -69,3 +69,17 @@
 "JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 1 threads",10000000,9.31366734e8
 "CUContext","Quadro M6000",10000000,1.092519e6
 "CLContext","Quadro M6000",10000000,8.763701e6
+"JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads",10,1302.5
+"JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads",100,2609.0
+"JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads",1000,16734.0
+"JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads",10000,160290.0
+"JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads",100000,1.588639e6
+"JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads",1000000,1.5933972e7
+"JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads",10000000,1.60091522e8
+"JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads",10,1458.1
+"JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads",100,2531.3333333333335
+"JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads",1000,12579.0
+"JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads",10000,114749.0
+"JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads",100000,1.145862e6
+"JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads",1000000,1.1412315e7
+"JLContext","Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads",10000000,1.1496937e8

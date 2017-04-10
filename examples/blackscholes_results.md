@@ -10,6 +10,8 @@
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 1 threads |  1258.10 μs |
 | CUContext | Quadro M6000 |  94904.00 μs |
 | CLContext | Quadro M6000 |  37289.00 μs |
+| JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads |  1302.50 μs |
+| JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads |  1458.10 μs |
 
 
 | Backend | Device | Time (μs) for N = 10^2 |
@@ -24,6 +26,8 @@
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 1 threads |  9558.00 μs |
 | CUContext | Quadro M6000 |  98835.00 μs |
 | CLContext | Quadro M6000 |  27089.00 μs |
+| JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads |  2609.00 μs |
+| JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads |  2531.33 μs |
 
 
 | Backend | Device | Time (μs) for N = 10^3 |
@@ -38,6 +42,8 @@
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 1 threads |  92447.00 μs |
 | CUContext | Quadro M6000 |  99642.00 μs |
 | CLContext | Quadro M6000 |  27419.00 μs |
+| JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads |  16734.00 μs |
+| JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads |  12579.00 μs |
 
 
 | Backend | Device | Time (μs) for N = 10^4 |
@@ -52,6 +58,8 @@
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 1 threads |  924625.00 μs |
 | CUContext | Quadro M6000 |  96989.00 μs |
 | CLContext | Quadro M6000 |  32666.00 μs |
+| JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads |  160290.00 μs |
+| JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads |  114749.00 μs |
 
 
 | Backend | Device | Time (μs) for N = 10^5 |
@@ -66,6 +74,8 @@
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 1 threads |  9275064.00 μs |
 | CUContext | Quadro M6000 |  112098.00 μs |
 | CLContext | Quadro M6000 |  112540.00 μs |
+| JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads |  1588639.00 μs |
+| JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads |  1145862.00 μs |
 
 
 | Backend | Device | Time (μs) for N = 10^6 |
@@ -80,6 +90,8 @@
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 1 threads |  92940948.00 μs |
 | CUContext | Quadro M6000 |  202011.00 μs |
 | CLContext | Quadro M6000 |  903081.00 μs |
+| JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads |  15933972.00 μs |
+| JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads |  11412315.00 μs |
 
 
 | Backend | Device | Time (μs) for N = 10^7 |
@@ -94,5 +106,7 @@
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 1 threads |  931366734.00 μs |
 | CUContext | Quadro M6000 |  1092519.00 μs |
 | CLContext | Quadro M6000 |  8763701.00 μs |
+| JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads |  160091522.00 μs |
+| JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads |  114969370.00 μs |
 
 
