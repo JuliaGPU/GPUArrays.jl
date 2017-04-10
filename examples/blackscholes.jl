@@ -95,7 +95,7 @@ if :julia ∈ backends
     info("Running benchmarks $NT threads.")
 end
 
-benchmarks = DataFrame([String, Int64, Trial, Float64], [:Backend, :N, :Trial, :minT], 0)
+benchmarks = DataFrame([String, String, Int64, Trial, Float64], [:Backend, :Device, :N, :Trial, :minT], 0)
 
 for n in 1:Nmax
     N = 10^n
@@ -122,7 +122,10 @@ for n in 1:Nmax
         ctx_str = sprint() do io
             show(io, GPUArrays.current_context())
         end
-        push!(benchmarks, (ctx_str, N, b, minimum(b).time))
+        ctx_info = split(ctx_str, ": ")
+        bctx = String(ctx_info[1])
+        dev = String(ctx_info[2])
+        push!(benchmarks, (bctx, dev, N, b, minimum(b).time))
 
         @assert Array(_result) ≈ comparison
         # this is optional, but needed in a loop like this, which allocates a lot of GPUArrays
@@ -132,7 +135,7 @@ for n in 1:Nmax
 end
 
 benchmark_results = @from b in benchmarks begin
-   @select {b.Backend, b.N, b.minT}
+   @select {b.Backend, b.Device, b.N, b.minT}
    @collect DataFrame
 end
 
@@ -141,12 +144,29 @@ results = cd(dirname(@__FILE__)) do
     # merge
     merged = if isfile(file)
         merged = readtable(file)
-        prev_backends = unique(merged[:Backend])
-        prev_Nmax = maximum(merged[:N])
+
+        # get backends combinations and minT
+        previous = @from r in merged begin
+          @let backend = (get(r.Backend), get(r.Device))
+          @select {Backend = backend, N = get(r.N)}
+          @collect DataFrame
+        end
+        prev_backends = unique(previous[:Backend])
+
+        prev_Nmax = Dict{Tuple{String, String}, Int}()
+        for pb in prev_backends
+          subset = @from p in previous begin
+            @where p.Backend == pb
+            @select {N = p.N}
+            @collect DataFrame
+          end
+          prev_Nmax[pb] = maximum(subset[:N])
+        end
 
         results = @from r in benchmark_results begin
-          @where r.Backend ∉ prev_backends || # add new backends
-                 r.N > prev_Nmax # add new results from old backends
+          @let backend = (get(r.Backend), get(r.Device))
+          @where backend ∉ prev_backends || # add new backends
+                 r.N > prev_Nmax[backend] # add new results from old backends
           @select r
           @collect DataFrame
         end
@@ -162,7 +182,7 @@ end
 function filterResults(df, n)
    dfR = @from r in df begin
       @where r.N == 10^n
-      @select {r.Backend, r.minT}
+      @select {r.Backend, r.Device, r.minT}
       @collect DataFrame
    end
    return dfR
@@ -171,14 +191,21 @@ end
 io = IOBuffer()
 for n in 1:Nmax
    df = filterResults(results, n)
-   println(io, "| Backend | Time (μs) for N = 10^$n |")
-   println(io, "| ---- | ---- |")
+   println(io, "| Backend | Device | Time (μs) for N = 10^$n |")
+   println(io, "| ---- | ---- | ---- |")
    for row in eachrow(df)
       b = row[:Backend]
+      d = row[:Device]
       t = row[:minT]
-      @printf(io, "| %s | %6.2f μs|\n", b, t)
+      @printf(io, "| %s | %s |  %6.2f μs |\n", b, d, t)
    end
-   display(Markdown.parse(io))
-   seekstart(io)
-   println(String(take!(io)))
+   print(io, "\n\n")
+end
+
+seekstart(io)
+display(Markdown.parse(io))
+
+seekstart(io)
+open("blackscholes_results.md", "w") do fid
+  write(fid, io)
 end
