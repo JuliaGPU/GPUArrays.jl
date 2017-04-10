@@ -12,6 +12,17 @@
 | CLContext | Quadro M6000 |  37289.00 μs |
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads |  1302.50 μs |
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads |  1458.10 μs |
+| JLContext | POWER8NVL with 1 threads |  2911.00 μs |
+| CUContext | Tesla P100-SXM2-16GB |  146851.00 μs |
+| JLContext | POWER8NVL with 8 threads |  2766.11 μs |
+| JLContext | POWER8NVL with 16 threads |  4821.67 μs |
+| JLContext | POWER8NVL with 32 threads |  6179.50 μs |
+| JLContext | POWER8NVL with 40 threads |  6291.00 μs |
+| JLContext | POWER8NVL with 10 threads |  3239.00 μs |
+| JLContext | POWER8NVL with 64 threads |  9160.00 μs |
+| JLContext | POWER8NVL with 80 threads |  10098.00 μs |
+| JLContext | POWER8NVL with 128 threads |  15010.00 μs |
+| JLContext | POWER8NVL with 160 threads |  19504.00 μs |
 
 
 | Backend | Device | Time (μs) for N = 10^2 |
@@ -28,6 +39,17 @@
 | CLContext | Quadro M6000 |  27089.00 μs |
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads |  2609.00 μs |
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads |  2531.33 μs |
+| JLContext | POWER8NVL with 1 threads |  22556.00 μs |
+| CUContext | Tesla P100-SXM2-16GB |  151031.00 μs |
+| JLContext | POWER8NVL with 8 threads |  6901.00 μs |
+| JLContext | POWER8NVL with 16 threads |  7380.67 μs |
+| JLContext | POWER8NVL with 32 threads |  6722.75 μs |
+| JLContext | POWER8NVL with 40 threads |  6381.00 μs |
+| JLContext | POWER8NVL with 10 threads |  6809.00 μs |
+| JLContext | POWER8NVL with 64 threads |  9675.00 μs |
+| JLContext | POWER8NVL with 80 threads |  10626.00 μs |
+| JLContext | POWER8NVL with 128 threads |  16367.00 μs |
+| JLContext | POWER8NVL with 160 threads |  19572.00 μs |
 
 
 | Backend | Device | Time (μs) for N = 10^3 |
@@ -44,6 +66,17 @@
 | CLContext | Quadro M6000 |  27419.00 μs |
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads |  16734.00 μs |
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads |  12579.00 μs |
+| JLContext | POWER8NVL with 1 threads |  216984.00 μs |
+| CUContext | Tesla P100-SXM2-16GB |  153589.00 μs |
+| JLContext | POWER8NVL with 8 threads |  31760.00 μs |
+| JLContext | POWER8NVL with 16 threads |  23334.00 μs |
+| JLContext | POWER8NVL with 32 threads |  13078.00 μs |
+| JLContext | POWER8NVL with 40 threads |  13152.00 μs |
+| JLContext | POWER8NVL with 10 threads |  24125.00 μs |
+| JLContext | POWER8NVL with 64 threads |  13416.00 μs |
+| JLContext | POWER8NVL with 80 threads |  14485.00 μs |
+| JLContext | POWER8NVL with 128 threads |  24104.00 μs |
+| JLContext | POWER8NVL with 160 threads |  23395.00 μs |
 
 
 | Backend | Device | Time (μs) for N = 10^4 |
@@ -60,6 +93,17 @@
 | CLContext | Quadro M6000 |  32666.00 μs |
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads |  160290.00 μs |
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads |  114749.00 μs |
+| JLContext | POWER8NVL with 1 threads |  2166235.00 μs |
+| CUContext | Tesla P100-SXM2-16GB |  155908.00 μs |
+| JLContext | POWER8NVL with 8 threads |  272565.00 μs |
+| JLContext | POWER8NVL with 16 threads |  140560.00 μs |
+| JLContext | POWER8NVL with 32 threads |  88196.00 μs |
+| JLContext | POWER8NVL with 40 threads |  98143.00 μs |
+| JLContext | POWER8NVL with 10 threads |  218574.00 μs |
+| JLContext | POWER8NVL with 64 threads |  70303.00 μs |
+| JLContext | POWER8NVL with 80 threads |  60309.00 μs |
+| JLContext | POWER8NVL with 128 threads |  57963.00 μs |
+| JLContext | POWER8NVL with 160 threads |  59975.00 μs |
 
 
 | Backend | Device | Time (μs) for N = 10^5 |
@@ -76,6 +120,17 @@
 | CLContext | Quadro M6000 |  112540.00 μs |
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads |  1588639.00 μs |
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads |  1145862.00 μs |
+| JLContext | POWER8NVL with 1 threads |  21644173.00 μs |
+| CUContext | Tesla P100-SXM2-16GB |  161750.00 μs |
+| JLContext | POWER8NVL with 8 threads |  2706448.00 μs |
+| JLContext | POWER8NVL with 16 threads |  1381327.00 μs |
+| JLContext | POWER8NVL with 32 threads |  841415.00 μs |
+| JLContext | POWER8NVL with 40 threads |  683085.00 μs |
+| JLContext | POWER8NVL with 10 threads |  2163455.00 μs |
+| JLContext | POWER8NVL with 64 threads |  638642.00 μs |
+| JLContext | POWER8NVL with 80 threads |  520739.00 μs |
+| JLContext | POWER8NVL with 128 threads |  479096.00 μs |
+| JLContext | POWER8NVL with 160 threads |  451527.00 μs |
 
 
 | Backend | Device | Time (μs) for N = 10^6 |
@@ -92,6 +147,17 @@
 | CLContext | Quadro M6000 |  903081.00 μs |
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads |  15933972.00 μs |
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads |  11412315.00 μs |
+| JLContext | POWER8NVL with 1 threads |  216533528.00 μs |
+| CUContext | Tesla P100-SXM2-16GB |  225688.00 μs |
+| JLContext | POWER8NVL with 8 threads |  27059363.00 μs |
+| JLContext | POWER8NVL with 16 threads |  13886778.00 μs |
+| JLContext | POWER8NVL with 32 threads |  8349377.00 μs |
+| JLContext | POWER8NVL with 40 threads |  6779449.00 μs |
+| JLContext | POWER8NVL with 10 threads |  21684779.00 μs |
+| JLContext | POWER8NVL with 64 threads |  6362315.00 μs |
+| JLContext | POWER8NVL with 80 threads |  5232020.00 μs |
+| JLContext | POWER8NVL with 128 threads |  5207850.00 μs |
+| JLContext | POWER8NVL with 160 threads |  4349085.00 μs |
 
 
 | Backend | Device | Time (μs) for N = 10^7 |
@@ -108,5 +174,16 @@
 | CLContext | Quadro M6000 |  8763701.00 μs |
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 6 threads |  160091522.00 μs |
 | JLContext | Intel(R) Xeon(R) CPU E5-2643 v3 @ 3.40GHz with 12 threads |  114969370.00 μs |
+| JLContext | POWER8NVL with 1 threads |  2168615985.00 μs |
+| CUContext | Tesla P100-SXM2-16GB |  775973.00 μs |
+| JLContext | POWER8NVL with 8 threads |  271267733.00 μs |
+| JLContext | POWER8NVL with 16 threads |  138805447.00 μs |
+| JLContext | POWER8NVL with 32 threads |  83552400.00 μs |
+| JLContext | POWER8NVL with 40 threads |  67829380.00 μs |
+| JLContext | POWER8NVL with 10 threads |  216296064.00 μs |
+| JLContext | POWER8NVL with 64 threads |  63557088.00 μs |
+| JLContext | POWER8NVL with 80 threads |  51988805.00 μs |
+| JLContext | POWER8NVL with 128 threads |  51994391.00 μs |
+| JLContext | POWER8NVL with 160 threads |  43031821.00 μs |
 
 
