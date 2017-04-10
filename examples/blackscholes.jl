@@ -84,15 +84,22 @@ using Query
 # Pkg.checkout("Query")
 # Pkg.checkout("SimpleTraits")
 
-Nmax = 7
+Nmax = haskey(ENV, "GPUARRAYS_BENCH_NMAX") ? parse(Int, ENV["GPUARRAYS_BENCH_NMAX"]) : 7
+backends = haskey(ENV, "GPUARRAYS_BENCH_BACKENDS") ?
+             map(Symbol, split(ENV["GPUARRAYS_BENCH_BACKENDS"])) :
+             collect(supported_backends())
+
+info("Running benchmarks on $backends to a maximum N of $(10^Nmax)")
+NT = Base.Threads.nthreads()
+if :julia ∈ backends
+    info("Running benchmarks $NT threads.")
+end
 
 benchmarks = DataFrame([String, Int64, Trial, Float64], [:Backend, :N, :Trial, :minT], 0)
 
-NT = Base.Threads.nthreads()
-info("Running benchmarks number of threads: $NT")
-
 for n in 1:Nmax
     N = 10^n
+    info("Running benchmark for N=$N")
     sptprice   = Float32[42.0 for i = 1:N]
     initStrike = Float32[40.0 + (i / N) for i = 1:N]
     rate       = Float32[0.5 for i = 1:N]
@@ -100,30 +107,31 @@ for n in 1:Nmax
     spttime    = Float32[0.5 for i = 1:N]
     result     = similar(spttime)
     comparison = blackscholes.(sptprice, initStrike, rate, volatility, spttime)
-    perbackend() do backend # nice to go through all backends, but for benchmarks we might want to have this more explicit!
-        if true #backend == :julia
-            _sptprice = GPUArray(sptprice)
-            _initStrike = GPUArray(initStrike)
-            _rate = GPUArray(rate)
-            _volatility = GPUArray(volatility)
-            _time = GPUArray(spttime)
-            _result = GPUArray(result)
-            f = backend == :cudanative ? cu_blackscholes : blackscholes
-            b = @benchmark runbench($f, $_result, $_sptprice, $_initStrike, $_rate, $_volatility, $_time)
-            ctx_str = sprint() do io
-                show(io, GPUArrays.current_context())
-            end
-            push!(benchmarks, (ctx_str, N, b, minimum(b).time))
 
-            @assert Array(_result) ≈ comparison
-            # this is optional, but needed in a loop like this, which allocates a lot of GPUArrays
-            # for the future, we need a way to tell the Julia gc about GPU memory
-            free(_sptprice);free(_initStrike);free(_rate);free(_volatility);free(_time);free(_result);
+    for backend in backends
+        ctx = GPUArrays.init(backend)
+
+        _sptprice = GPUArray(sptprice)
+        _initStrike = GPUArray(initStrike)
+        _rate = GPUArray(rate)
+        _volatility = GPUArray(volatility)
+        _time = GPUArray(spttime)
+        _result = GPUArray(result)
+        f = backend == :cudanative ? cu_blackscholes : blackscholes
+        b = @benchmark runbench($f, $_result, $_sptprice, $_initStrike, $_rate, $_volatility, $_time)
+        ctx_str = sprint() do io
+            show(io, GPUArrays.current_context())
         end
+        push!(benchmarks, (ctx_str, N, b, minimum(b).time))
+
+        @assert Array(_result) ≈ comparison
+        # this is optional, but needed in a loop like this, which allocates a lot of GPUArrays
+        # for the future, we need a way to tell the Julia gc about GPU memory
+        free(_sptprice); free(_initStrike); free(_rate); free(_volatility); free(_time); free(_result);
     end
 end
 
-results = @from b in benchmarks begin
+benchmark_results = @from b in benchmarks begin
    @select {b.Backend, b.N, b.minT}
    @collect DataFrame
 end
@@ -133,18 +141,19 @@ results = cd(dirname(@__FILE__)) do
     # merge
     merged = if isfile(file)
         merged = readtable(file)
-        backends = unique(merged[:Backend])
-        benched_backends = unique(results[:Backend])
-        to_add = setdiff(benched_backends, backends)
-        for i in 1:size(results, 1)
-            row = results[i, :]
-            if row[:Backend][1] in to_add
-                append!(merged, row)
-            end
+        prev_backends = unique(merged[:Backend])
+        prev_Nmax = maximum(merged[:N])
+
+        results = @from r in benchmark_results begin
+          @where r.Backend ∉ prev_backends || # add new backends
+                 r.N > prev_Nmax # add new results from old backends
+          @select r
+          @collect DataFrame
         end
-        merged
+
+        vcat(merged, results)
     else
-        results
+        benchmark_results
     end
     writetable(file, merged)
     merged
@@ -167,7 +176,7 @@ for n in 1:Nmax
    for row in eachrow(df)
       b = row[:Backend]
       t = row[:minT]
-      @printf(io, "| %s | %6.2f μs|\n", b, t / 10^9)
+      @printf(io, "| %s | %6.2f μs|\n", b, t)
    end
    display(Markdown.parse(io))
    seekstart(io)
