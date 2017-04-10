@@ -15,6 +15,7 @@ Julia offers countless advantages for a GPU array package.
 E.g., we can use Julia's JIT to generate optimized kernels for map/broadcast operations.
 
 This works even for things like complex arithmetic, since we can compile what's already in Julia Base.
+This isn't restricted to Julia Base, GPUArrays works with all kind of user defined types and functions!
 
 GPUArrays relies heavily on Julia's dot broadcasting.
 The great thing about dot broadcasting in Julia is, that it
@@ -39,6 +40,7 @@ Checkout the examples, to see how this can be used to emit specialized code whil
 [vector loads/stores](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/vectorload.jl)
 
 In theory, we could go as far as inspecting user defined callbacks (we can get the complete AST), count operations and estimate register usage and use those numbers to optimize our kernels!
+
 
 ### Automatic Differentiation
 
