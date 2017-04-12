@@ -51,17 +51,7 @@ Making this work with GPUArrays will be a bit more involved, but the
 first [prototype](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/logreg.jl) looks already promising!
 There is also [ReverseDiffSource](https://github.com/JuliaDiff/ReverseDiffSource.jl), which should already work for simple functions.
 
-#### Main type:
-
-```Julia
-type GPUArray{T, N, B, C} <: DenseArray{T, N}
-    buffer::B # GPU buffer, allocated by context
-    size::NTuple{N, Int} # size of the array
-    context::C # GPU context
-end
-```
-
-#### Scope
+# Scope
 
 Current backends: OpenCL, CUDA, Julia Threaded
 
