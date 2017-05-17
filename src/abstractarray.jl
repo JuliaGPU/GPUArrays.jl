@@ -1,13 +1,14 @@
 @compat abstract type AbstractAccArray{T, N} <: DenseArray{T, N} end
+@compat const AccVector{T} = AbstractAccArray{T, 1}
+@compat const AccMatrix{T} = AbstractAccArray{T, 2}
+@compat const AccVecOrMat{T} = Union{AbstractAccArray{T, 1}, AbstractAccArray{T, 2}}
 
 type GPUArray{T, N, B, C} <: AbstractAccArray{T, N}
     buffer::B
     size::NTuple{N, Int}
     context::C
 end
-@compat const AccVector{T} = AbstractAccArray{T, 1}
-@compat const AccMatrix{T} = AbstractAccArray{T, 2}
-@compat const AccVecOrMat{T} = Union{AbstractAccArray{T, 1}, AbstractAccArray{T, 2}}
+
 
 # interfaces
 
@@ -24,9 +25,8 @@ immutable LocalMemory{T} <: AbstractAccArray{T, 1}
 end
 
 
-
 """
-linear index in a GPU kernel
+Optimal linear index in a GPU kernel
 """
 function linear_index end
 
@@ -97,11 +97,9 @@ function (AT::Type{Array{T, N}}){T, N}(device_array::AbstractAccArray{T, N})
     hostarray
 end
 
-
 #=
 Copying
 =#
-
 function Base.copy!{T, N}(dest::Array{T, N}, source::AbstractAccArray{T, N})
     copy!(dest, buffer(source))
 end
@@ -299,11 +297,11 @@ else
     error("No Serialization type found. Probably unsupported Julia version")
 end
 
-function Base.serialize{T<:GPUArray}(s::BaseSerializer, t::T)
+function Base.serialize{T <: GPUArray}(s::BaseSerializer, t::T)
     Base.serialize_type(s, T)
     serialize(s, Array(t))
 end
-function Base.deserialize{T<:GPUArray}(s::BaseSerializer, ::Type{T})
+function Base.deserialize{T <: GPUArray}(s::BaseSerializer, ::Type{T})
     A = deserialize(s)
     T(A)
 end
