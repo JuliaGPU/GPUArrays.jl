@@ -70,7 +70,7 @@ Base.size{T, N}(x::JLArray{T, N}) = size(buffer(x))
 
 function Base.show(io::IO, ctx::JLContext)
     cpu = Sys.cpu_info()
-    print(io, "JLContext $(cpu[1].model) with $(ctx.nthreads) threads")
+    print(io, "JLContext: $(cpu[1].model) with $(ctx.nthreads) threads")
 end
 ##############################################
 # Implement BLAS interface

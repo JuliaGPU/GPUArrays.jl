@@ -22,7 +22,7 @@ immutable CUContext <: Context
     device::CUDAdrv.CuDevice
 end
 
-Base.show(io::IO, ctx::CUContext) = print(io, "CUContext")
+Base.show(io::IO, ctx::CUContext) = print(io, "CUContext: ", CUDAdrv.name(ctx.device))
 
 function any_context()
     dev = CUDAdrv.CuDevice(0)
