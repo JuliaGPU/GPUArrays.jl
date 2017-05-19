@@ -27,12 +27,12 @@ using GPUArrays
 function benchmark(a, b, c)
     N = Int32(length(a))
     mapidx(pairwise_dist4, a, (b, c, Int32(N)))
-    GPUArrays.synchronize(a)
+    Array(a)
 end
 
-N = 2048
+N = 10000
 ABC = rand(Float32, N), rand(Float32, N), rand(Float32, N, N);
 abc = map(GPUArray, ABC);
 
-@time benchmark(abc...)
-@time pairwise_dist_cpu(ABC..., N)
+@time benchmark(abc...);
+@time pairwise_dist_cpu(ABC..., N);

@@ -121,8 +121,9 @@ function Base.similar{T, N, N2, ET}(x::CLArray{T, N}, ::Type{ET}, sz::Tuple{Vara
     b = create_buffer(ctx, ET, sz; kw_args...)
     GPUArray{ET, N2, typeof(b), typeof(ctx)}(b, sz, ctx)
 end
+
 # The implementation of prod in base doesn't play very well with current
-# transpiler. TODO figure out what Core._apply maps to!
+# transpiler.
 _prod{T}(x::NTuple{1, T}) = x[1]
 _prod{T}(x::NTuple{2, T}) = x[1] * x[2]
 _prod{T}(x::NTuple{3, T}) = x[1] * x[2] * x[3]
