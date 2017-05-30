@@ -1,26 +1,8 @@
 using Sugar, CUDAnative
-const CUMethod = Sugar.LazyMethod{:CU}
+using Sugar.LazyMethod
 
-function deep_recurse(x)
-    sin(sqrt(x))
-end
-function recursive_test(t)
-    cos(t) + deep_recurse(t)
-end
-function haversine{T <: Float32}(lat1::T, lon1::T, lat2::T, lon2::T, radius::T)
-    c1 = cospi(lat1 / 180.0f0)
-    c2 = cospi(lat2 / 180.0f0)
-    dlat = lat2 - recursive_test(lat1)
-    dlon = lon2 - lon1
-    d1 = sinpi(dlat / 360.0f0)
-    d2 = sinpi(dlon / 360.0f0)
-    t = d2 * d2 * c1 * c2
-    a = d1 * d1 + t
-    c = 2.0f0 * asin(min(1.0f0, sqrt(a)))
-    return radius * c
-end
 
-function rewrite_expr_cu(m::CUMethod, expr)
+function rewrite_expr_cu(m::LazyMethod, expr)
     was_rewritten = false
     body = first(Sugar.replace_expr(expr) do expr
         if isa(expr, Expr)
@@ -52,6 +34,11 @@ function rewrite_expr_cu(m::CUMethod, expr)
     end)
     body, was_rewritten
 end
+
+"""
+Replaces recursively Julia Base functions which are defined as intrinsics in CUDAnative
+Returns the resulting function and a bool indicating, wether the function was rewritten.
+"""
 function rewrite_for_cudanative(f, types)
     fsym = Symbol(f)
     # if defined in CUDAnative, but doesn't match the function passed in here
@@ -64,7 +51,7 @@ function rewrite_for_cudanative(f, types)
         end
     end
     # it's not a CUDAnative intrinsic, so now we need to check it's source for intrinsics
-    m = CUMethod((f, types))
+    m = LazyMethod((f, types))
     # if is a Julia intrinsic, stop
     Sugar.isintrinsic(m) && return f, false
     # otherwise go through the source and rewrite function calls recursevely the source!
@@ -76,6 +63,26 @@ function rewrite_for_cudanative(f, types)
     else
         f, false
     end
+end
+
+
+function deep_recurse(x)
+    sin(sqrt(x))
+end
+function recursive_test(t)
+    cos(t) + deep_recurse(t)
+end
+function haversine{T <: Float32}(lat1::T, lon1::T, lat2::T, lon2::T, radius::T)
+    c1 = cospi(lat1 / 180.0f0)
+    c2 = cospi(lat2 / 180.0f0)
+    dlat = lat2 - recursive_test(lat1)
+    dlon = lon2 - lon1
+    d1 = sinpi(dlat / 360.0f0)
+    d2 = sinpi(dlon / 360.0f0)
+    t = d2 * d2 * c1 * c2
+    a = d1 * d1 + t
+    c = 2.0f0 * asin(min(1.0f0, sqrt(a)))
+    return radius * c
 end
 
 m = rewrite_for_cudanative(haversine, Tuple{Float32, Float32, Float32, Float32, Float32})

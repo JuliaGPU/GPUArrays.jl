@@ -7,7 +7,7 @@ import CUDAdrv, CUDArt #, CUFFT
 
 import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
 import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index, gpu_call
-import GPUArrays: synchronize, free
+import GPUArrays: synchronize, free, blas_module, blasbuffer, is_blas_supported, hasblas
 
 using CUDAdrv: CuDefaultStream
 
@@ -99,6 +99,7 @@ unpack_cu_array{T,N}(x::CUArray{T,N}) = buffer(x)
 @inline function call_cuda(A::CUArray, kernel, rest...)
     blocks, thread = thread_blocks_heuristic(A)
     args = map(unpack_cu_array, rest)
+    #cu_kernel, rewritten = CUDAnative.rewrite_for_cudanative(kernel, map(typeof, args))
     @cuda (blocks, thread) kernel(args...)
 end
 
@@ -108,7 +109,7 @@ immutable CUFunction{T}
     kernel::T
 end
 # TODO find a future for the kernel string compilation part
-compile_lib = Pkg.dir("CUDAdrv", "examples", "compilation", "library.jl")
+const compile_lib = Pkg.dir("CUDArt", "examples", "compilation", "library.jl")
 has_nvcc = try
     success(`nvcc --version`)
 catch
@@ -323,17 +324,20 @@ end
 
 ########################################
 # CUBLAS
-# using CUBLAS
-# import CUDArt
-#
-# # implement blas interface
-# blas_module(::CUContext) = CUBLAS
-# function blasbuffer(ctx::CUContext, A)
-#     buff = buffer(A)
-#     devptr = pointer(buff)
-#     device = CUDAdrv.device(devptr.ctx).handle
-#     CUDArt.CudaArray(CUDArt.CudaPtr(devptr.ptr), size(A), Int(device))
-# end
+if is_blas_supported(:CUBLAS)
+    using CUBLAS
+    import CUDArt
+    #
+    # # implement blas interface
+    hasblas(::CUContext) = true
+    blas_module(::CUContext) = CUBLAS
+    function blasbuffer(ctx::CUContext, A)
+        buff = buffer(A)
+        devptr = pointer(buff)
+        device = CUDAdrv.device(devptr.ctx).handle
+        CUDArt.CudaArray(CUDArt.CudaPtr(devptr.ptr, ctx.ctx), size(A), Int(device))
+    end
+end
 #
 # function convert{T <: CUArray}(t::T, A::CUDArt.CudaArray)
 #     ctx = context(t)
