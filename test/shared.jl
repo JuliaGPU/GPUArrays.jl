@@ -84,3 +84,15 @@ end
     end
     @test Array(A) ≈ a
 end
+
+
+@allbackends "broadcast" backend begin
+    u0 = GPUArray(rand(Float32, 32, 32))
+    tmp = ones(u0)
+    uprev = ones(u0)
+    k1 = ones(u0)
+    a = Float32(2.0)
+    tmp .=  uprev .+ a .* k1
+    comparison = ones(Float32, 32, 32) .+  a .* ones(Float32, 32, 32)
+    @test comparison == Array(tmp)
+end
