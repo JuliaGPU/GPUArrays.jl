@@ -1,4 +1,4 @@
-using Base.Test
+using Base.Test, GPUArrays
 using GPUArrays: free
 ctx = CLBackend.init()
 # more complex function for broadcast
@@ -52,9 +52,12 @@ if GPUArrays.is_fft_supported(:CLFFT)
                 A = GPUArray(a)
                 fft!(A)
                 fft!(a)
+                GPUArrays.synchronize(A)
+                # this is a pretty large difference
                 @test all(isapprox.(Array(A), a))
                 ifft!(A)
                 ifft!(a)
+                GPUArrays.synchronize(A)
                 @test all(isapprox.(Array(A), a))
             end
         end
@@ -99,16 +102,16 @@ end
     @test Array(Agpu') == A'
 end
 
-
 for dims in ((4048,), (1024,1024), (77,), (1923, 209))
     for T in (Float32, Int32)
         @testset "mapreduce $T $dims" begin
             range = T <: Integer ? (T(-2):T(2)) : T
-            A = GPUArray(rand(range, dims))
-            @test sum(A) ≈ sum(Array(A))
-            @test maximum(A) ≈ maximum(Array(A))
-            @test minimum(A) ≈ minimum(Array(A))
-            @test prod(A) ≈ prod(Array(A))
+            a = rand(range, dims)
+            A = GPUArray(a)
+            @test sum(A) ≈ sum(a)
+            @test maximum(A) ≈ maximum(a)
+            @test minimum(A) ≈ minimum(a)
+            @test prod(A) ≈ prod(a)
         end
     end
 end

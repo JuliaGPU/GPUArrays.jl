@@ -1,7 +1,7 @@
 #TODO register these packages!
 using GPUArrays
 using Base.Test
-srand(42) # set random seed for reproducability
+srand(44) # set random seed for reproducability
 function jltest(a, b)
     x = sqrt(sin(a) * b) / 10
     y = 33x + cos(b)
