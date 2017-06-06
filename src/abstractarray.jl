@@ -213,15 +213,10 @@ end
 function Base.broadcast!(f::Function, A::AbstractAccArray, B)
     acc_broadcast!(f, A, (B,))
 end
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, args)
-    acc_broadcast!(f, A, (B, args))
+function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, args...)
+    acc_broadcast!(f, A, (B, args...))
 end
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D, E...)
-    acc_broadcast!(f, A, (B, C, D, E...))
-end
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D)
-    acc_broadcast!(f, A, (B, C, D))
-end
+
 
 # TODO check size
 function Base.map!(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
