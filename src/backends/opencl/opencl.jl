@@ -80,7 +80,7 @@ function synchronize{T, N}(x::CLArray{T, N})
 end
 
 function free{T, N}(x::CLArray{T, N})
-    synchronize(x)c
+    synchronize(x)
     mem = buffer(x)
     finalize(mem)
     nothing

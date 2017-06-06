@@ -370,14 +370,14 @@ for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArr
             srange = CartesianRange(start.(ssrc), last.(ssrc))
             copy!(unpack_buffer(dest), drange, unpack_buffer(src), srange)
         end
-        function copy!{T}(
-                dest::$D{T, 1}, src::$S{T, 1}
+        function copy!{T, N}(
+                dest::$D{T, N}, src::$S{T, N}
             )
             len = length(src)
             if length(dest) > len
                 throw(BoundsError(dest, length(src)))
             end
-            r = crange(1, len)
+            r = crange(ntuple(i-> 1, Val{N}), size(src))
             copy!(dest, r, src, r)
         end
     end
