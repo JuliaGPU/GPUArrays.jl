@@ -84,3 +84,13 @@ end
     end
     @test Array(A) ≈ a
 end
+
+
+@allbackends "muladd + abs" backend begin
+    a = rand(Float32, 32) - 0.5f0
+    A = GPUArray(a)
+    x = abs.(A)
+    @test Array(x) == abs.(a)
+    y = muladd.(A, 2f0, x)
+    @test Array(y) == muladd(a, 2f0, abs.(a))
+end
