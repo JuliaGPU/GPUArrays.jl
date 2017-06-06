@@ -2,47 +2,10 @@ import Base: copy!, splice!, append!, push!, setindex!, start, next, done
 import Base: getindex, map, length, eltype, endof, ndims, size, resize!
 
 
-function to_cartesian(indices::Tuple)
-    start = CartesianIndex(map(indices) do i
-        isa(val, Integer) && return val
-        isa(val, UnitRange) && return first(val)
-        error("GPU indexing only defined for integers or unit ranges. Found: $val")
-    end)
-    stop = CartesianIndex(map(indices) do i
-        isa(val, Integer) && return val
-        isa(val, UnitRange) && return last(val)
-        error("GPU indexing only defined for integers or unit ranges. Found: $val")
-    end)
-    CartesianRange(start, stop)
-end
 
 
-#Hmmm... why is this not part of the Array constructors???
-#TODO Figure out or issue THEM JULIA CORE PEOPLE SO HARD ... or PR? Who'd know
-function array_convert{T, N}(t::Type{Array{T, N}}, x::AbstractArray)
-    convert(t, x)
-end
-function array_convert{T, N}(t::Type{Array{T, N}}, x)
-    # okay x is no array, so convert doesn't work.. Only chance is collect
-    # this actually works nice for values, since they become 0 dim array, which we conveniently can use as a mem ref
-    convert(t, collect(x))
-end
 
 
-function setindex!{T, N}(A::GPUArray{T, N}, value, indexes...)
-    # similarly, value should always be a julia array
-    v = array_convert(Array{T, N}, value)
-    # We shouldn't really bother about checkbounds performance, since setindex/getindex will always be relatively slow
-    checkbounds(A, ranges...)
-    checkbounds(v, ranges...)
-    # since you shouldn't update GPUArrays with single indices, we simplify the interface
-    # by always mapping to ranges
-    ranges_dest = to_cartesian(indexes)
-    ranges_src = CartesianRange(size(value))
-
-    copy!(A, ranges_dest, v, ranges_src)
-    return
-end
 
 """
 resize! of GPUArrays. Tries to be inplace, but inplace can also mean changing the
@@ -116,7 +79,7 @@ push!{T}(v::GPUVector{T}, x::T) = append!(v, [x])
 push!{T}(v::GPUVector{T}, x::T...) = append!(v, [x...])
 
 function append!{T}(v::GPUVector{T}, value)
-    x = reasonable_convert(Vector{T}, value)
+    x = array_convert(Vector{T}, value)
     lv, lx = length(v), length(x)
     real_length = length(buffer(v))
     if (v.real_length < lv + lx)
@@ -141,7 +104,7 @@ end
 function splice!{T}(v::GPUVector{T}, index::UnitRange, x::Vector=T[])
     lenv = length(v)
     elements_to_grow = length(x) - length(index) # -1
-    buffer = similar(v.buffer, length(v) + elements_to_grow)
+    buffer = similar(buffer(v), length(v) + elements_to_grow)
     copy!(v.buffer, 1, buffer, 1, first(index) - 1) # copy first half
     copy!(v.buffer, last(index) + 1, buffer, first(index) + length(x), lenv - last(index)) # shift second half
     v.buffer = buffer

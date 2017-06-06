@@ -60,20 +60,45 @@ end
 function create_buffer{T, N}(ctx::CUContext, ::Type{T}, sz::NTuple{N, Int}; kw_args...)
     CUDAdrv.CuArray{T}(sz)
 end
-function Base.copy!{T,N}(dest::Array{T,N}, source::CUArray{T,N})
-    copy!(dest, buffer(source))
-end
-function Base.copy!{T,N}(dest::CUArray{T,N}, source::Array{T,N})
-    copy!(buffer(dest), source)
-end
-function Base.copy!{T,N}(dest::CUArray{T,N}, source::CUArray{T,N})
-    copy!(buffer(dest), buffer(source))
-end
 
-function Base.similar{T, N, ET}(x::CUArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
-    ctx = context(x)
-    b = create_buffer(ctx, ET, sz; kw_args...)
-    GPUArray{ET, N, typeof(b), typeof(ctx)}(b, sz, ctx)
+function Base.copy!{T, N}(
+        dest::Array{T, N}, drange::CartesianRange{CartesianIndex{N}},
+        source::CUDAdrv.CuArray{T, N}, srange::CartesianRange{CartesianIndex{N}}
+    )
+    amount = length(drange)
+    if length(srange) != amount
+        throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
+    end
+    amount == 0 && return dest
+    d_offset = first(drange)[1]
+    s_offset = first(srange)[1] - 1
+    device_ptr = source.devptr
+    sptr = CUDAdrv.DevicePtr{T}(device_ptr.ptr + (sizeof(T) * s_offset), device_ptr.ctx)
+    CUDAdrv.Mem.download(Ref(dest, d_offset), sptr, sizeof(T) * (amount))
+    dest
+end
+function Base.copy!{T, N}(
+        dest::CUDAdrv.CuArray{T, N}, drange::CartesianRange{CartesianIndex{N}},
+        source::Array{T, N}, srange::CartesianRange{CartesianIndex{N}}
+    )
+    amount = length(drange)
+    if length(srange) != amount
+        throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
+    end
+    amount == 0 && return dest
+    d_offset = first(drange)[1] - 1
+    s_offset = first(srange)[1]
+    device_ptr = dest.devptr
+    sptr = CUDAdrv.DevicePtr{T}(device_ptr.ptr + (sizeof(T) * d_offset), device_ptr.ctx)
+    CUDAdrv.Mem.upload(sptr, Ref(source, s_offset), sizeof(T) * (amount))
+    dest
+end
+function Base.copy!{T, N}(dest::CUArray{T, N}, source::Array{T, N})
+    copy!(buffer(dest), source)
+    #Mem.upload(dst.devptr, pointer(src), length(src) * sizeof(T))
+end
+function Base.copy!{T, N}(dest::CUArray{T, N}, source::CUArray{T, N})
+    copy!(buffer(dest), buffer(source))
 end
 
 function thread_blocks_heuristic(A::AbstractArray)

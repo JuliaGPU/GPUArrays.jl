@@ -1,7 +1,12 @@
 @compat abstract type AbstractAccArray{T, N} <: DenseArray{T, N} end
+# Sampler type that acts like a texture/image and allows interpolated access
+@compat abstract type AbstractSampler{T, N} <: AbstractAccArray{T, N} end
+
 @compat const AccVector{T} = AbstractAccArray{T, 1}
 @compat const AccMatrix{T} = AbstractAccArray{T, 2}
 @compat const AccVecOrMat{T} = Union{AbstractAccArray{T, 1}, AbstractAccArray{T, 2}}
+
+
 
 type GPUArray{T, N, B, C} <: AbstractAccArray{T, N}
     buffer::B
@@ -64,6 +69,9 @@ function Base.similar{T <: GPUArray, ET, N}(
     GPUArray{ET, N, typeof(b), typeof(context)}(b, sz, context)
 end
 
+function Base.similar{N, ET}(x::AbstractAccArray, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
+    similar(typeof(x), ET, sz, context = context(x))
+end
 
 
 
@@ -97,15 +105,6 @@ function (AT::Type{Array{T, N}}){T, N}(device_array::AbstractAccArray{T, N})
     hostarray
 end
 
-#=
-Copying
-=#
-function Base.copy!{T, N}(dest::Array{T, N}, source::AbstractAccArray{T, N})
-    copy!(dest, buffer(source))
-end
-function Base.copy!{T, N}(dest::AbstractAccArray{T, N}, source::Array{T, N})
-    copy!(buffer(dest), source)
-end
 
 # Function needed to be overloaded by backends
 function mapidx end
@@ -304,4 +303,116 @@ end
 function Base.deserialize{T <: GPUArray}(s::BaseSerializer, ::Type{T})
     A = deserialize(s)
     T(A)
+end
+
+import Base: copy!, getindex, setindex!
+
+@inline unpack_buffer(x) = x
+@inline unpack_buffer(x::AbstractAccArray) = buffer(x)
+
+function to_cartesian(indices::Tuple)
+    start = CartesianIndex(map(indices) do val
+        isa(val, Integer) && return val
+        isa(val, UnitRange) && return first(val)
+        error("GPU indexing only defined for integers or unit ranges. Found: $val")
+    end)
+    stop = CartesianIndex(map(indices) do val
+        isa(val, Integer) && return val
+        isa(val, UnitRange) && return last(val)
+        error("GPU indexing only defined for integers or unit ranges. Found: $val")
+    end)
+    CartesianRange(start, stop)
+end
+
+crange(start, stop) = CartesianRange(CartesianIndex(start), CartesianIndex(stop))
+
+#Hmmm... why is this not part of the Array constructors???
+#TODO Figure out or issue THEM JULIA CORE PEOPLE SO HARD ... or PR? Who'd know
+function array_convert{T, N}(t::Type{Array{T, N}}, x::Array)
+    convert(t, x)
+end
+
+
+array_convert{T, N}(t::Type{Array{T, N}}, x::T) = [x]
+
+function array_convert{T, N, T2}(t::Type{Array{T, N}}, x::T2)
+    arr = collect(x) # iterator
+    dims = ntuple(Val{N}) do i
+        ifelse(ndims(arr) >= i, size(arr, i), 1)
+    end
+    return reshape(map(T, arr), dims) # broadcast dims
+end
+
+for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArray), (AbstractAccArray, AbstractAccArray))
+    @eval begin
+        function copy!{T}(
+                dest::$D{T, 1}, doffset::Integer,
+                src::$S{T, 1}, soffset::Integer, amount::Integer
+            )
+            copy!(
+                dest, crange(doffset, amount),
+                src, crange(soffset, amount)
+            )
+        end
+        function copy!{T, N}(
+                dest::$D{T, N}, rdest::NTuple{N, UnitRange},
+                src::$S{T, N}, ssrc::NTuple{N, UnitRange},
+            )
+            drange = CartesianRange(start.(rdest), last.(rdest))
+            srange = CartesianRange(start.(ssrc), last.(ssrc))
+            copy!(dest, drange, src, srange)
+        end
+        function copy!{T, N}(
+                dest::$D{T, N}, rdest::CartesianRange{CartesianIndex{N}},
+                src::$S{T, N}, ssrc::CartesianRange{CartesianIndex{N}},
+            )
+            drange = CartesianRange(start.(rdest), last.(rdest))
+            srange = CartesianRange(start.(ssrc), last.(ssrc))
+            copy!(unpack_buffer(dest), drange, unpack_buffer(src), srange)
+        end
+        function copy!{T}(
+                dest::$D{T, 1}, src::$S{T, 1}
+            )
+            len = length(src)
+            if length(dest) > len
+                throw(BoundsError(dest, length(src)))
+            end
+            r = crange(1, len)
+            copy!(dest, r, src, r)
+        end
+    end
+end
+
+function Base.setindex!{T, N}(A::AbstractAccArray{T, N}, value, indexes...)
+    # similarly, value should always be a julia array
+    shape = map(length, indexes)
+    if !isa(value, T) # TODO, shape check errors for x[1:3] = 1
+        Base.setindex_shape_check(value, indexes...)
+    end
+    checkbounds(A, indexes...)
+    v = array_convert(Array{T, N}, value)
+    # since you shouldn't update GPUArrays with single indices, we simplify the interface
+    # by always mapping to ranges
+    ranges_dest = to_cartesian(indexes)
+    ranges_src = CartesianRange(size(v))
+
+    copy!(A, ranges_dest, v, ranges_src)
+    return
+end
+
+function Base.getindex{T, N}(A::AbstractAccArray{T, N}, indexes...)
+    # similarly, value should always be a julia array
+    # We shouldn't really bother about checkbounds performance, since setindex/getindex will always be relatively slow
+    checkbounds(A, indexes...)
+
+    shape = map(length, indexes)
+    result = Array{T, N}(shape)
+    ranges_src = to_cartesian(indexes)
+    ranges_dest = CartesianRange(shape)
+    copy!(result, ranges_dest, A, ranges_src)
+    if all(i-> isa(i, Integer), indexes) # scalar
+        return result[]
+    else
+        return result
+    end
 end

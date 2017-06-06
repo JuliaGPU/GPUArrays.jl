@@ -2,10 +2,11 @@ module JLBackend
 
 using ..GPUArrays
 using Compat
+using StaticArrays, Interpolations
 
-import GPUArrays: buffer, create_buffer, Context, context
-import GPUArrays: AbstractAccArray, acc_mapreduce, mapidx, hasblas
-import GPUArrays: broadcast_index, acc_broadcast!, blas_module, blasbuffer
+import GPUArrays: buffer, create_buffer, Context, context, mapidx
+import GPUArrays: AbstractAccArray, AbstractSampler, acc_mapreduce, acc_broadcast!
+import GPUArrays: broadcast_index, hasblas, blas_module, blasbuffer
 
 import Base.Threads: @threads
 
@@ -24,6 +25,25 @@ let contexts = JLContext[]
         ctx
     end
 end
+
+
+immutable Sampler{T, N, Buffer} <: AbstractSampler{T, N}
+    buffer::Buffer
+    size::SVector{N, Float32}
+end
+
+function Sampler{T, N}(A::AbstractArray{T, N}, interpolation = Linear(), edge = Flat())
+    Ai = extrapolate(interpolate(A, BSpline(interpolation), OnCell()), edge)
+    Sampler{T, N, typeof(Ai)}(Ai, SVector{N, Float32}(size(A)) - 1f0)
+end
+
+@generated function Base.getindex{T, B, N, IF <: AbstractFloat}(x::Sampler{T, N, B}, idx::StaticVector{N, IF})
+    quote
+        scaled = idx .* x.size + 1f0
+        x.buffer[$(ntuple(i-> :(scaled[$i]), Val{N})...)] # why does splatting not work -.-
+    end
+end
+
 @compat const JLArray{T, N} = GPUArray{T, N, Array{T, N}, JLContext}
 # Constructor
 function Base.copy!{T, N}(dest::Array{T, N}, source::JLArray{T, N})

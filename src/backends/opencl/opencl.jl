@@ -80,22 +80,65 @@ function synchronize{T, N}(x::CLArray{T, N})
 end
 
 function free{T, N}(x::CLArray{T, N})
-    synchronize(x)
+    synchronize(x)c
     mem = buffer(x)
     finalize(mem)
     nothing
 end
-# Constructor
-function Base.copy!{T, N}(dest::Array{T, N}, source::CLArray{T, N})
-    q = context(source).queue
-    cl.finish(q)
-    copy!(q, dest, buffer(source))
+
+function cl_readbuffer(q, buf, dev_offset, hostref, nbytes)
+    n_evts  = UInt(0)
+    evt_ids = C_NULL
+    ret_evt = Ref{cl.CL_event}()
+    cl.@check cl.api.clEnqueueReadBuffer(
+        q.id, buf.id, cl.cl_bool(true),
+        dev_offset, nbytes, hostref,
+        n_evts, evt_ids, ret_evt
+    )
+end
+function cl_writebuffer(q, buf, dev_offset, hostref, nbytes)
+    n_evts  = UInt(0)
+    evt_ids = C_NULL
+    ret_evt = Ref{cl.CL_event}()
+    cl.@check cl.api.clEnqueueWriteBuffer(
+        q.id, buf.id, cl.cl_bool(true),
+        dev_offset, nbytes, hostref,
+        n_evts, evt_ids, ret_evt
+    )
 end
 
-function Base.copy!{T, N}(dest::CLArray{T, N}, source::Array{T, N})
+function Base.copy!{T, N}(
+        dest::Array{T, N}, drange::CartesianRange{CartesianIndex{N}},
+        source::CLArray{T, N}, srange::CartesianRange{CartesianIndex{N}}
+    )
+    amount = length(drange)
+    if length(srange) != amount
+        throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
+    end
+    amount == 0 && return dest
+    q = context(source).queue
+    cl.finish(q)
+    d_offset = first(drange)[1]
+    s_offset = (first(srange)[1] - 1) * sizeof(T)
+    cl_readbuffer(q, buffer(source), unsigned(s_offset), Ref(dest, d_offset), amount * sizeof(T))
+    dest
+end
+
+function Base.copy!{T, N}(
+        dest::CLArray{T, N}, drange::CartesianRange{CartesianIndex{N}},
+        source::Array{T, N}, srange::CartesianRange{CartesianIndex{N}}
+    )
+    amount = length(drange)
+    if length(srange) != amount
+        throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
+    end
+    amount == 0 && return dest
     q = context(dest).queue
     cl.finish(q)
-    copy!(q, buffer(dest), source)
+    d_offset = (first(drange)[1] - 1) * sizeof(T)
+    s_offset = first(srange)[1]
+    cl_writebuffer(q, buffer(dest), unsigned(d_offset), Ref(source, s_offset), amount * sizeof(T))
+    dest
 end
 
 # copy the contents of a buffer into another buffer
