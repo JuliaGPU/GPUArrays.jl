@@ -40,13 +40,13 @@ function cu_cndf2(x)
     0.5f0 + 0.5f0 * cu.erfc(0.707106781f0 * x)
 end
 
-for T in (Float32, Float64)
+for T in (Float32,)
     N = 1023
-    sptprice   = Float32[42.0 for i = 1:N]
-    initStrike = Float32[40.0 + (i / N) for i = 1:N]
-    rate       = Float32[0.5 for i = 1:N]
-    volatility = Float32[0.2 for i = 1:N]
-    time       = Float32[0.5 for i = 1:N]
+    sptprice   = T[42.0 for i = 1:N]
+    initStrike = T[40.0 + (i / N) for i = 1:N]
+    rate       = T[0.5 for i = 1:N]
+    volatility = T[0.2 for i = 1:N]
+    time       = T[0.5 for i = 1:N]
     result     = similar(time)
     comparison = blackscholes.(sptprice, initStrike, rate, volatility, time)
     @allbackends "Blackscholes with $T" backend begin
@@ -67,26 +67,28 @@ for T in (Float32, Float64)
 end
 
 @allbackends "mapidx" backend begin
-    a = rand(Complex64, 1025)
-    b = rand(Complex64, 1025)
-    A = GPUArray(a)
-    B = GPUArray(b)
-    off = 1
-    mapidx(A, (B, off, length(A))) do i, a, b, off, len
-        x = b[i]
-        x2 = b[min(i+off, len)]
-        a[i] = x * x2
+    if backend != :opengl # TODO implement mapidx for opengl
+        a = rand(Complex64, 1025)
+        b = rand(Complex64, 1025)
+        A = GPUArray(a)
+        B = GPUArray(b)
+        off = 1
+        mapidx(A, (B, off, length(A))) do i, a, b, off, len
+            x = b[i]
+            x2 = b[min(i+off, len)]
+            a[i] = x * x2
+        end
+        foreach(1:length(a)) do i
+            x = b[i]
+            x2 = b[min(i+off, length(a))]
+            a[i] = x * x2
+        end
+        @test Array(A) ≈ a
     end
-    foreach(1:length(a)) do i
-        x = b[i]
-        x2 = b[min(i+off, length(a))]
-        a[i] = x * x2
-    end
-    @test Array(A) ≈ a
 end
 
 
-@allbackends "muladd + abs" backend begin
+@allbackends "muladd & abs" backend begin
     a = rand(Float32, 32) - 0.5f0
     A = GPUArray(a)
     x = abs.(A)

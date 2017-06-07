@@ -54,11 +54,11 @@ end
 function Base.similar{T <: AbstractAccArray}(x::T)
     similar(x, eltype(x), size(x))
 end
-function Base.similar{T <: AbstractAccArray, ET}(x::T, ::Type{ET})
-    similar(x, ET, size(x))
+function Base.similar{T <: AbstractAccArray, ET}(x::T, ::Type{ET}; kw_args...)
+    similar(x, ET, size(x); kw_args...)
 end
-function Base.similar{T <: AbstractAccArray, N}(x::T, dims::NTuple{N, Int})
-    similar(x, eltype(x), dims)
+function Base.similar{T <: AbstractAccArray, N}(x::T, dims::NTuple{N, Int}; kw_args...)
+    similar(x, eltype(x), dims; kw_args...)
 end
 
 function Base.similar{T <: GPUArray, ET, N}(
@@ -70,7 +70,7 @@ function Base.similar{T <: GPUArray, ET, N}(
 end
 
 function Base.similar{N, ET}(x::AbstractAccArray, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
-    similar(typeof(x), ET, sz, context = context(x))
+    similar(typeof(x), ET, sz, context = context(x); kw_args...)
 end
 
 
@@ -170,9 +170,10 @@ else
     import Base.Broadcast._broadcast_eltype
 end
 
+using ModernGL
 function broadcast_similar(f, A, args)
     T = _broadcast_eltype(f, A, args...)
-    similar(A, T)
+    similar(A, T, usage = GL_STATIC_DRAW)
 end
 
 
@@ -358,8 +359,8 @@ for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArr
                 dest::$D{T, N}, rdest::NTuple{N, UnitRange},
                 src::$S{T, N}, ssrc::NTuple{N, UnitRange},
             )
-            drange = CartesianRange(start.(rdest), last.(rdest))
-            srange = CartesianRange(start.(ssrc), last.(ssrc))
+            drange = crange(start.(rdest), last.(rdest))
+            srange = crange(start.(ssrc), last.(ssrc))
             copy!(dest, drange, src, srange)
         end
         function copy!{T, N}(
@@ -374,6 +375,7 @@ for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArr
                 dest::$D{T, N}, src::$S{T, N}
             )
             len = length(src)
+            len == 0 && return dest
             if length(dest) > len
                 throw(BoundsError(dest, length(src)))
             end

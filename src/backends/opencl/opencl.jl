@@ -141,12 +141,29 @@ function Base.copy!{T, N}(
     dest
 end
 
-# copy the contents of a buffer into another buffer
-function Base.copy!{T, N}(dst::CLArray{T, N}, src::CLArray{T, N})
-    q = context(dst).queue
+
+function Base.copy!{T, N}(
+        dest::CLArray{T, N}, drange::CartesianRange{CartesianIndex{N}},
+        src::CLArray{T, N}, srange::CartesianRange{CartesianIndex{N}}
+    )
+    amount = length(drange)
+    if length(srange) != amount
+        throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
+    end
+    amount == 0 && return dest
+    q = context(dest).queue
     cl.finish(q)
-    copy!(q, buffer(dst), buffer(src))
+    d_offset = (first(drange)[1] - 1) * sizeof(T)
+    s_offset = (first(srange)[1] - 1) * sizeof(T)
+    cl.enqueue_copy_buffer(
+        q, buffer(src), buffer(dest),
+        Csize_t(amount * sizeof(T)), Csize_t(s_offset), Csize_t(d_offset),
+        nothing
+    )
+    dest
 end
+
+
 
 
 function create_buffer{T, N}(ctx::CLContext, A::AbstractArray{T, N}, flag = :rw)
@@ -156,6 +173,9 @@ function create_buffer{T, N}(
         ctx::CLContext, ::Type{T}, sz::NTuple{N, Int};
         flag = :rw, kw_args...
     )
+    if prod(sz) == 0
+        sz = (1,)
+    end
     cl.Buffer(T, ctx.context, flag, prod(sz))
 end
 

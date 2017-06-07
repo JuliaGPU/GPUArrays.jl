@@ -1,4 +1,3 @@
-
 module CUBackend
 
 using ..GPUArrays, CUDAnative, StaticArrays, Compat
@@ -7,7 +6,7 @@ import CUDAdrv, CUDArt #, CUFFT
 
 import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
 import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index, gpu_call
-import GPUArrays: synchronize, free, blas_module, blasbuffer, is_blas_supported, hasblas
+import GPUArrays: blas_module, blasbuffer, is_blas_supported, hasblas
 
 using CUDAdrv: CuDefaultStream
 
@@ -46,19 +45,24 @@ let contexts = CUContext[]
     end
 end
 # synchronize
-function synchronize{T, N}(x::CUArray{T, N})
+function GPUArrays.synchronize{T, N}(x::CUArray{T, N})
     CUDAdrv.synchronize(context(x).ctx) # TODO figure out the diverse ways of synchronization
 end
 
-
-function free{T, N}(x::CUArray{T, N})
-    synchronize(x)
+function GPUArrays.free{T, N}(x::CUArray{T, N})
+    GPUArrays.synchronize(x)
     Base.finalize(buffer(x))
     nothing
 end
 
 function create_buffer{T, N}(ctx::CUContext, ::Type{T}, sz::NTuple{N, Int}; kw_args...)
-    CUDAdrv.CuArray{T}(sz)
+    if prod(sz) == 0
+        # cuda doesn't allow a size of 0, but since the length of the underlying buffer
+        # doesn't matter, with can just initilize it to 0
+        CUDAdrv.CuArray{T}((1,))
+    else
+        CUDAdrv.CuArray{T}(sz)
+    end
 end
 
 function Base.copy!{T, N}(
@@ -93,12 +97,25 @@ function Base.copy!{T, N}(
     CUDAdrv.Mem.upload(sptr, Ref(source, s_offset), sizeof(T) * (amount))
     dest
 end
-function Base.copy!{T, N}(dest::CUArray{T, N}, source::Array{T, N})
-    copy!(buffer(dest), source)
-    #Mem.upload(dst.devptr, pointer(src), length(src) * sizeof(T))
-end
-function Base.copy!{T, N}(dest::CUArray{T, N}, source::CUArray{T, N})
-    copy!(buffer(dest), buffer(source))
+
+
+function Base.copy!{T, N}(
+        dest::CUDAdrv.CuArray{T, N}, drange::CartesianRange{CartesianIndex{N}},
+        source::CUDAdrv.CuArray{T, N}, srange::CartesianRange{CartesianIndex{N}}
+    )
+    amount = length(drange)
+    amount == 0 && return dest
+    if length(srange) != amount
+        throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
+    end
+    d_offset = first(drange)[1] - 1
+    s_offset = first(srange)[1] - 1
+    d_ptr = dest.devptr
+    s_ptr = source.devptr
+    dptr = CUDAdrv.DevicePtr{T}(d_ptr.ptr + (sizeof(T) * d_offset), d_ptr.ctx)
+    sptr = CUDAdrv.DevicePtr{T}(s_ptr.ptr + (sizeof(T) * s_offset), s_ptr.ctx)
+    CUDAdrv.Mem.transfer(sptr, dptr, sizeof(T) * (amount))
+    dest
 end
 
 function thread_blocks_heuristic(A::AbstractArray)

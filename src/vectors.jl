@@ -1,26 +1,23 @@
 import Base: copy!, splice!, append!, push!, setindex!, start, next, done
 import Base: getindex, map, length, eltype, endof, ndims, size, resize!
-
-
-
-
-
-
-
-"""
-resize! of GPUArrays. Tries to be inplace, but inplace can also mean changing the
-buffer of the GPUArray
-"""
-function resize!(A::AbstractGPUArray, dims)
-    error("Inplace resizing not implemented for $(typeof(A))")
-end
-
-
-function resize!{T, NDim}(A::GPUArray{T, NDim}, newdims::NTuple{NDim, Int})
+resize!(A::GPUArray, newdims::Int...) = resize!(A, newdims)
+function resize!{T}(A::GPUArray{T, 1}, newdims::NTuple{1, Int})
     newdims == size(A) && return A
-    A.buffer = resize!(buffer(A), newdims)
-    A.size = newdims # we might need an interface for this
-    A
+    newlength = newdims[1]
+    real_length = length(buffer(A))
+    if real_length >= newlength # underlying buffer already big enough
+        A.size = newdims
+        return A
+    else
+        B = similar(A, newdims)
+        if length(A) > 0
+            max_len = min(length(A), newlength) #might also shrink
+            copy!(B, (1:max_len,), A, (1:max_len,))
+        end
+        A.size = newdims
+        A.buffer = buffer(B)
+        return A
+    end
 end
 
 function reshape!{T, NDim}(A::GPUArray{T, NDim}, newdims::NTuple{NDim, Int})
@@ -55,15 +52,6 @@ function update!{T, N}(A::GPUArray{T, N}, value::Array{T, N})
     return
 end
 
-function getindex{T, N}(A::GPUArray{T, N}, indices...)
-    getindex(A, to_range.(indices))
-end
-function getindex{T, N}(A::GPUArray{T, N}, ranges::UnitRange...)
-    checkbounds(A, ranges...)
-    result = Array{T, N}(length.(ranges))
-    copy!(result, A, ranges...)
-end
-
 
 function grow_dimensions(
         real_length::Int, _size::Int, additonal_size::Int,
@@ -73,6 +61,7 @@ function grow_dimensions(
     return max(new_dim, additonal_size + _size)
 end
 
+const GPUVector{T} = GPUArray{T, 1}
 
 push!{T}(v::GPUVector{T}, x) = push!(v, convert(T, x))
 push!{T}(v::GPUVector{T}, x::T) = append!(v, [x])
@@ -82,11 +71,11 @@ function append!{T}(v::GPUVector{T}, value)
     x = array_convert(Vector{T}, value)
     lv, lx = length(v), length(x)
     real_length = length(buffer(v))
-    if (v.real_length < lv + lx)
+    if real_length < (lv + lx)
         resize!(v, grow_dimensions(real_length, lv, lx))
     end
-    v[(lv + 1) : (lv + lx)] = value
     v.size = (lv + lx,)
+    v[(lv + 1) : (lv + lx)] = value
     v
 end
 

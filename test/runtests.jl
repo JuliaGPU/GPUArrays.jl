@@ -33,3 +33,8 @@ end
 @testset "Shared" begin
     include("shared.jl")
 end
+
+@testset "Array/Vector Operations" begin
+    include("indexing.jl")
+    include("vector.jl")
+end

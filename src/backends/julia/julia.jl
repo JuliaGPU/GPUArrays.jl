@@ -45,16 +45,7 @@ end
 end
 
 @compat const JLArray{T, N} = GPUArray{T, N, Array{T, N}, JLContext}
-# Constructor
-function Base.copy!{T, N}(dest::Array{T, N}, source::JLArray{T, N})
-    q = context(source).queue
-    cl.finish(q)
-    copy!(q, dest, buffer(source))
-end
 
-function Base.copy!{T, N}(dest::JLArray{T, N}, source::Array{T, N})
-    copy!(buffer(dest), source)
-end
 create_buffer{T, N}(ctx::JLContext, A::AbstractArray{T, N}) = A
 function create_buffer{T, N}(
         ctx::JLContext, ::Type{T}, sz::NTuple{N, Int}
@@ -86,7 +77,6 @@ nthreads{T, N}(a::JLArray{T, N}) = context(a).nthreads
 Base.@propagate_inbounds Base.getindex{T, N}(A::JLArray{T, N}, i::Integer) = A.buffer[i]
 Base.@propagate_inbounds Base.setindex!{T, N}(A::JLArray{T, N}, val, i::Integer) = (A.buffer[i] = val)
 @compat Base.IndexStyle{T, N}(::Type{JLArray{T, N}}) = IndexLinear()
-Base.size{T, N}(x::JLArray{T, N}) = size(buffer(x))
 
 function Base.show(io::IO, ctx::JLContext)
     cpu = Sys.cpu_info()
@@ -95,12 +85,8 @@ end
 ##############################################
 # Implement BLAS interface
 
-function blasbuffer(ctx::JLContext, A)
-    Array(A)
-end
+blasbuffer(ctx::JLContext, A) = Array(A)
 blas_module(::JLContext) = Base.BLAS
-
-
 
 
 # lol @threads makes @generated say that we have an unpure @generated function body.
