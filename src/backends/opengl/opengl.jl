@@ -3,7 +3,7 @@ module GLBackend
 using ..GPUArrays
 
 import GPUArrays: buffer, create_buffer, acc_broadcast!, synchronize, free
-import GPUArrays: Context, GPUArray, context, broadcast_index
+import GPUArrays: Context, GPUArray, context, broadcast_index, default_buffer_type
 
 import GLAbstraction, GLWindow, GLFW
 using ModernGL, Compat
@@ -22,7 +22,7 @@ Base.show(io::IO, ctx::GLContext) = print(io, "GLContext")
 
 @compat const GLBuffer{T, N} = GPUArray{T, N, gl.GLBuffer{T}, GLContext}
 @compat const GLSampler{T, N} = GPUArray{T, N, gl.Texture{T, N}, GLContext}
-@compat const GLArray{T, N} = Union{GLBuffer{T, N}, GLSampler{T, N}}
+@compat const GLArray{T, N, Buffer} = GPUArray{T, N, Buffer, GLContext}
 
 
 function any_context()
@@ -58,23 +58,37 @@ function free(x::GLArray)
     gl.free(buffer(x))
 end
 
-function create_buffer{T, N}(
-        ctx::GLContext, ::Type{T}, sz::NTuple{N, Int};
+function default_buffer_type{T, N}(
+        ::Type, ::Type{Tuple{T, N}}, ::GLContext
+    )
+    gl.GLBuffer{T}
+end
+function default_buffer_type{T, N}(
+        ::Type{<: GPUArray{FT, FN, gl.Texture{FT, FN}} where {FT, FN}},
+        ::Type{Tuple{T, N}}, ::GLContext
+    )
+    gl.Texture{T, N}
+end
+# default_buffer_type{T, N}(::Tuple{T, 2}, ::GLContext) = gl.GLBuffer{T, 1}
+# default_buffer_type{T, N}(::Tuple{T, 3}, ::GLContext) = gl.GLBuffer{T, 1}
+
+
+function (AT::Type{GLArray{T, N, Buffer}}){T, N, Buffer <: gl.GLBuffer}(
+        size::NTuple{N, Int};
+        context = current_context(),
         usage = GL_STATIC_READ, kw_args...
     )
-    gl.GLBuffer(T, prod(sz); kw_args...)
-end
-function create_buffer{T}(
-        ctx::GLContext, ::Type{T}, sz::NTuple{2, Int}; kw_args...
-    )
-    gl.Texture(T, sz; kw_args...)
-end
-function create_buffer{T}(
-        ctx::GLContext, ::Type{T}, sz::NTuple{3, Int}; kw_args...
-    )
-    gl.Texture(T, sz; kw_args...)
+    buff = gl.GLBuffer(T, prod(size); usage = usage, kw_args...)
+    AT(buff, size, context)
 end
 
+function (AT::Type{GLArray{T, N, Buffer}}){T, N, Buffer <: gl.Texture}(
+        size::NTuple{N, Int};
+        context = current_context(), kw_args...
+    )
+    tex = gl.Texture(T, size; kw_args...)
+    AT(tex, size, context)
+end
 
 function Base.convert{ET, ND}(
         ::Type{GLSampler{ET, ND}},
@@ -84,7 +98,12 @@ function Base.convert{ET, ND}(
     copy!(texB, A)
     texB
 end
-
+function copy!{T, N}(
+        dest::GLSampler{T, N}, dest_range::CartesianRange{CartesianIndex{N}},
+        src::Array{T, N}, src_range::CartesianRange{CartesianIndex{N}},
+    )
+    copy!(buffer(dest), dest_range, src, src_range)
+end
 
 ################################################################################
 # Broadcast

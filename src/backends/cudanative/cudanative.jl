@@ -7,6 +7,8 @@ import CUDAdrv, CUDArt #, CUFFT
 import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
 import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index, gpu_call
 import GPUArrays: blas_module, blasbuffer, is_blas_supported, hasblas
+import GPUArrays: default_buffer_type
+
 
 using CUDAdrv: CuDefaultStream
 
@@ -55,43 +57,40 @@ function GPUArrays.free{T, N}(x::CUArray{T, N})
     nothing
 end
 
-function create_buffer{T, N}(ctx::CUContext, ::Type{T}, sz::NTuple{N, Int}; kw_args...)
-    if prod(sz) == 0
-        # cuda doesn't allow a size of 0, but since the length of the underlying buffer
-        # doesn't matter, with can just initilize it to 0
-        CUDAdrv.CuArray{T}((1,))
-    else
-        CUDAdrv.CuArray{T}(sz)
-    end
+
+default_buffer_type{T, N}(::Type, ::Type{Tuple{T, N}}, ::CUContext) = CUDAdrv.CuArray{T, N}
+
+function (AT::Type{CUArray{T, N, Buffer}}){T, N, Buffer <: CUDAdrv.CuArray}(
+        size::NTuple{N, Int};
+        context = current_context(),
+        kw_args...
+    )
+    # cuda doesn't allow a size of 0, but since the length of the underlying buffer
+    # doesn't matter, with can just initilize it to 0
+    buff = prod(size) == 0 ? CUDAdrv.CuArray{T}((1,)) : CUDAdrv.CuArray{T}(size)
+    AT(buff, size, context)
 end
 
-function Base.copy!{T, N}(
-        dest::Array{T, N}, drange::CartesianRange{CartesianIndex{N}},
-        source::CUDAdrv.CuArray{T, N}, srange::CartesianRange{CartesianIndex{N}}
+
+function Base.copy!{T}(
+        dest::Array{T}, d_offset::Integer,
+        source::CUDAdrv.CuArray{T}, s_offset::Integer, amount::Integer
     )
-    amount = length(drange)
-    if length(srange) != amount
-        throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
-    end
     amount == 0 && return dest
-    d_offset = first(drange)[1]
-    s_offset = first(srange)[1] - 1
+    d_offset = d_offset
+    s_offset = s_offset - 1
     device_ptr = source.devptr
     sptr = CUDAdrv.DevicePtr{T}(device_ptr.ptr + (sizeof(T) * s_offset), device_ptr.ctx)
     CUDAdrv.Mem.download(Ref(dest, d_offset), sptr, sizeof(T) * (amount))
     dest
 end
-function Base.copy!{T, N}(
-        dest::CUDAdrv.CuArray{T, N}, drange::CartesianRange{CartesianIndex{N}},
-        source::Array{T, N}, srange::CartesianRange{CartesianIndex{N}}
+function Base.copy!{T}(
+        dest::CUDAdrv.CuArray{T}, d_offset::Integer,
+        source::Array{T}, s_offset::Integer, amount::Integer
     )
-    amount = length(drange)
-    if length(srange) != amount
-        throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
-    end
     amount == 0 && return dest
-    d_offset = first(drange)[1] - 1
-    s_offset = first(srange)[1]
+    d_offset = d_offset - 1
+    s_offset = s_offset
     device_ptr = dest.devptr
     sptr = CUDAdrv.DevicePtr{T}(device_ptr.ptr + (sizeof(T) * d_offset), device_ptr.ctx)
     CUDAdrv.Mem.upload(sptr, Ref(source, s_offset), sizeof(T) * (amount))
@@ -99,17 +98,12 @@ function Base.copy!{T, N}(
 end
 
 
-function Base.copy!{T, N}(
-        dest::CUDAdrv.CuArray{T, N}, drange::CartesianRange{CartesianIndex{N}},
-        source::CUDAdrv.CuArray{T, N}, srange::CartesianRange{CartesianIndex{N}}
+function Base.copy!{T}(
+        dest::CUDAdrv.CuArray{T}, d_offset::Integer,
+        source::CUDAdrv.CuArray{T}, s_offset::Integer, amount::Integer
     )
-    amount = length(drange)
-    amount == 0 && return dest
-    if length(srange) != amount
-        throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
-    end
-    d_offset = first(drange)[1] - 1
-    s_offset = first(srange)[1] - 1
+    d_offset = d_offset - 1
+    s_offset = s_offset - 1
     d_ptr = dest.devptr
     s_ptr = source.devptr
     dptr = CUDAdrv.DevicePtr{T}(d_ptr.ptr + (sizeof(T) * d_offset), d_ptr.ctx)

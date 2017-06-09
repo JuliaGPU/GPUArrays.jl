@@ -1,8 +1,11 @@
 using GPUArrays
 using Base.Test
 using GPUArrays: free
+using GLAbstraction
 
 ctx = GLBackend.init()
+
+
 # more complex function for broadcast
 function test{T}(a::T, b)
     x = sqrt(sin(a) * b) / T(10.0)

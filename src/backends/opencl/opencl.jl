@@ -12,6 +12,7 @@ import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
 import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index, free
 import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
 import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector, gpu_call
+import GPUArrays: default_buffer_type
 
 using Transpiler
 import Transpiler: cli, CLFunction, cli.get_global_id
@@ -107,54 +108,40 @@ function cl_writebuffer(q, buf, dev_offset, hostref, nbytes)
     )
 end
 
-function Base.copy!{T, N}(
-        dest::Array{T, N}, drange::CartesianRange{CartesianIndex{N}},
-        source::CLArray{T, N}, srange::CartesianRange{CartesianIndex{N}}
+function Base.copy!{T}(
+        dest::Array{T}, d_offset::Integer,
+        source::CLArray{T}, s_offset::Integer, amount::Integer
     )
-    amount = length(drange)
-    if length(srange) != amount
-        throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
-    end
     amount == 0 && return dest
+    s_offset = (s_offset - 1) * sizeof(T)
     q = context(source).queue
     cl.finish(q)
-    d_offset = first(drange)[1]
-    s_offset = (first(srange)[1] - 1) * sizeof(T)
     cl_readbuffer(q, buffer(source), unsigned(s_offset), Ref(dest, d_offset), amount * sizeof(T))
     dest
 end
 
-function Base.copy!{T, N}(
-        dest::CLArray{T, N}, drange::CartesianRange{CartesianIndex{N}},
-        source::Array{T, N}, srange::CartesianRange{CartesianIndex{N}}
+function Base.copy!{T}(
+        dest::CLArray{T}, d_offset::Integer,
+        source::Array{T}, s_offset::Integer, amount::Integer
     )
-    amount = length(drange)
-    if length(srange) != amount
-        throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
-    end
     amount == 0 && return dest
     q = context(dest).queue
     cl.finish(q)
-    d_offset = (first(drange)[1] - 1) * sizeof(T)
-    s_offset = first(srange)[1]
+    d_offset = (d_offset - 1) * sizeof(T)
     cl_writebuffer(q, buffer(dest), unsigned(d_offset), Ref(source, s_offset), amount * sizeof(T))
     dest
 end
 
 
-function Base.copy!{T, N}(
-        dest::CLArray{T, N}, drange::CartesianRange{CartesianIndex{N}},
-        src::CLArray{T, N}, srange::CartesianRange{CartesianIndex{N}}
+function Base.copy!{T}(
+        dest::CLArray{T}, d_offset::Integer,
+        src::CLArray{T}, s_offset::Integer, amount::Integer
     )
-    amount = length(drange)
-    if length(srange) != amount
-        throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
-    end
     amount == 0 && return dest
     q = context(dest).queue
     cl.finish(q)
-    d_offset = (first(drange)[1] - 1) * sizeof(T)
-    s_offset = (first(srange)[1] - 1) * sizeof(T)
+    d_offset = (d_offset - 1) * sizeof(T)
+    s_offset = (s_offset - 1) * sizeof(T)
     cl.enqueue_copy_buffer(
         q, buffer(src), buffer(dest),
         Csize_t(amount * sizeof(T)), Csize_t(s_offset), Csize_t(d_offset),
@@ -164,26 +151,18 @@ function Base.copy!{T, N}(
 end
 
 
+default_buffer_type{T, N}(::Type, ::Type{Tuple{T, N}}, ::CLContext) = cl.Buffer{T}
 
-
-function create_buffer{T, N}(ctx::CLContext, A::AbstractArray{T, N}, flag = :rw)
-    cl.Buffer(T, ctx.context, (flag, :copy), hostbuf = A)
-end
-function create_buffer{T, N}(
-        ctx::CLContext, ::Type{T}, sz::NTuple{N, Int};
+function (AT::Type{CLArray{T, N}}){T, N}(
+        size::NTuple{N, Int};
+        context = current_context(),
         flag = :rw, kw_args...
     )
-    if prod(sz) == 0
-        sz = (1,)
-    end
-    cl.Buffer(T, ctx.context, flag, prod(sz))
+    ctx = context.context
+    buff = prod(size) == 0 ? cl.Buffer(T, ctx, flag, 1) : cl.Buffer(T, ctx, flag, prod(size))
+    AT(buff, size, context)
 end
 
-function Base.similar{T, N, N2, ET}(x::CLArray{T, N}, ::Type{ET}, sz::Tuple{Vararg{Int, N2}}; kw_args...)
-    ctx = context(x)
-    b = create_buffer(ctx, ET, sz; kw_args...)
-    GPUArray{ET, N2, typeof(b), typeof(ctx)}(b, sz, ctx)
-end
 
 # The implementation of prod in base doesn't play very well with current
 # transpiler.

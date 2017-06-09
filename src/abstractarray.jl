@@ -23,6 +23,7 @@ Interface for accessing the lower level
 
 buffer(A::AbstractAccArray) = A.buffer
 context(A::AbstractAccArray) = A.context
+default_buffer_type(typ, context) = error("Found unsupported context: $context")
 
 # GPU Local Memory
 immutable LocalMemory{T} <: AbstractAccArray{T, 1}
@@ -60,18 +61,21 @@ end
 function Base.similar{T <: AbstractAccArray, N}(x::T, dims::NTuple{N, Int}; kw_args...)
     similar(x, eltype(x), dims; kw_args...)
 end
+function Base.similar{N, ET}(x::AbstractAccArray, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
+    similar(typeof(x), ET, sz, context = context(x); kw_args...)
+end
 
+
+using Compat.TypeUtils
 function Base.similar{T <: GPUArray, ET, N}(
         ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
         context::Context = current_context(), kw_args...
     )
-    b = create_buffer(context, ET, sz; kw_args...)
-    GPUArray{ET, N, typeof(b), typeof(context)}(b, sz, context)
+    bt = default_buffer_type(T, Tuple{ET, N}, context)
+    GPUArray{ET, N, bt, typeof(context)}(sz; context = context)
 end
 
-function Base.similar{N, ET}(x::AbstractAccArray, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
-    similar(typeof(x), ET, sz, context = context(x); kw_args...)
-end
+
 
 
 
@@ -346,13 +350,13 @@ end
 
 for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArray), (AbstractAccArray, AbstractAccArray))
     @eval begin
-        function copy!{T}(
-                dest::$D{T, 1}, doffset::Integer,
-                src::$S{T, 1}, soffset::Integer, amount::Integer
+        function copy!(
+                dest::$D, doffset::Integer,
+                src::$S, soffset::Integer, amount::Integer
             )
             copy!(
-                dest, crange(doffset, amount),
-                src, crange(soffset, amount)
+                unpack_buffer(dest), doffset,
+                unpack_buffer(src), soffset, amount
             )
         end
         function copy!{T, N}(
@@ -363,13 +367,24 @@ for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArr
             srange = crange(start.(ssrc), last.(ssrc))
             copy!(dest, drange, src, srange)
         end
+        function copy!{T}(
+                dest::$D{T, 1}, d_range::CartesianRange{CartesianIndex{1}},
+                src::$S{T, 1}, s_range::CartesianRange{CartesianIndex{1}},
+            )
+            amount = length(d_range)
+            if length(s_range) != amount
+                throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
+            end
+            amount == 0 && return dest
+            d_offset = first(d_range)[1]
+            s_offset = first(s_range)[1]
+            copy!(dest, d_offset, src, s_offset, amount)
+        end
         function copy!{T, N}(
                 dest::$D{T, N}, rdest::CartesianRange{CartesianIndex{N}},
                 src::$S{T, N}, ssrc::CartesianRange{CartesianIndex{N}},
             )
-            drange = CartesianRange(start.(rdest), last.(rdest))
-            srange = CartesianRange(start.(ssrc), last.(ssrc))
-            copy!(unpack_buffer(dest), drange, unpack_buffer(src), srange)
+            copy!(unpack_buffer(dest), rdest, unpack_buffer(src), ssrc)
         end
         function copy!{T, N}(
                 dest::$D{T, N}, src::$S{T, N}
@@ -379,8 +394,7 @@ for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArr
             if length(dest) > len
                 throw(BoundsError(dest, length(src)))
             end
-            r = crange(ntuple(i-> 1, Val{N}), size(src))
-            copy!(dest, r, src, r)
+            copy!(dest, 1, src, 1, len)
         end
     end
 end

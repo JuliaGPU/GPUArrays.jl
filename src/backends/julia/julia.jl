@@ -6,7 +6,7 @@ using StaticArrays, Interpolations
 
 import GPUArrays: buffer, create_buffer, Context, context, mapidx
 import GPUArrays: AbstractAccArray, AbstractSampler, acc_mapreduce, acc_broadcast!
-import GPUArrays: broadcast_index, hasblas, blas_module, blasbuffer
+import GPUArrays: broadcast_index, hasblas, blas_module, blasbuffer, default_buffer_type
 
 import Base.Threads: @threads
 
@@ -46,11 +46,16 @@ end
 
 @compat const JLArray{T, N} = GPUArray{T, N, Array{T, N}, JLContext}
 
-create_buffer{T, N}(ctx::JLContext, A::AbstractArray{T, N}) = A
-function create_buffer{T, N}(
-        ctx::JLContext, ::Type{T}, sz::NTuple{N, Int}
+default_buffer_type{T, N}(::Type, ::Type{Tuple{T, N}}, ::JLContext) = Array{T, N}
+
+function (AT::Type{JLArray{T, N}}){T, N}(
+        size::NTuple{N, Int};
+        context = current_context(),
+        kw_args...
     )
-    Array{T, N}(sz)
+    # cuda doesn't allow a size of 0, but since the length of the underlying buffer
+    # doesn't matter, with can just initilize it to 0
+    AT(Array{T, N}(size), size, context)
 end
 
 function Base.similar{T, N, ET}(x::JLArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
