@@ -417,16 +417,17 @@ function Base.setindex!{T, N}(A::AbstractAccArray{T, N}, value, indexes...)
 end
 
 function Base.getindex{T, N}(A::AbstractAccArray{T, N}, indexes...)
+    cindexes = Base.to_indices(A, indexes)
     # similarly, value should always be a julia array
     # We shouldn't really bother about checkbounds performance, since setindex/getindex will always be relatively slow
-    checkbounds(A, indexes...)
+    checkbounds(A, cindexes...)
 
-    shape = map(length, indexes)
+    shape = map(length, cindexes)
     result = Array{T, N}(shape)
-    ranges_src = to_cartesian(indexes)
+    ranges_src = to_cartesian(cindexes)
     ranges_dest = CartesianRange(shape)
     copy!(result, ranges_dest, A, ranges_src)
-    if all(i-> isa(i, Integer), indexes) # scalar
+    if all(i-> isa(i, Integer), cindexes) # scalar
         return result[]
     else
         return result

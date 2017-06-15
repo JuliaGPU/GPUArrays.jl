@@ -1,6 +1,6 @@
 __precompile__(true)
 module GPUArrays
-
+using Iterators
 using Compat, Sugar
 
 @compat abstract type Context end

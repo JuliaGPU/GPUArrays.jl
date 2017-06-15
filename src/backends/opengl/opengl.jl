@@ -6,9 +6,10 @@ import GPUArrays: buffer, create_buffer, acc_broadcast!, synchronize, free
 import GPUArrays: Context, GPUArray, context, broadcast_index, default_buffer_type
 
 import GLAbstraction, GLWindow, GLFW
-using ModernGL, Compat
+using ModernGL, Compat, StaticArrays
 using Transpiler, Sugar
 import Transpiler: gli, GLMethod, to_gl_types, glsl_gensym, GLIO
+import Base: copy!, convert
 
 const gl = GLAbstraction
 
@@ -26,7 +27,7 @@ Base.show(io::IO, ctx::GLContext) = print(io, "GLContext")
 
 
 function any_context()
-    window = GLWindow.create_glcontext(major = 4, minor = 3, visible = false)
+    window = GLWindow.create_glcontext(major = 4, minor = 3, visible = true)
     GLContext(window)
 end
 
@@ -37,7 +38,7 @@ let contexts = GLContext[]
     function init(; ctx = any_context())
         init(ctx)
     end
-    init(ctx::GLWindow.Screen) = init(GLContext(GLWindow.nativewindow(ctx)))
+    init(ctx::GLFW.Window) = init(GLContext(ctx))
     function init(ctx::GLContext)
         GPUArrays.make_current(ctx)
         push!(contexts, ctx)
@@ -94,8 +95,8 @@ function Base.convert{ET, ND}(
         ::Type{GLSampler{ET, ND}},
         A::GLBuffer{ET, ND}
     )
-    texB = GPUArray(gl.Texture(ET, size(A)), size(A), context(A))
-    copy!(texB, A)
+    texB = GLSampler{ET, ND}(size(A), context = context(A))
+    copy!(buffer(texB), buffer(A))
     texB
 end
 function copy!{T, N}(
