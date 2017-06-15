@@ -32,5 +32,4 @@ cu_map(tex) do cu_arr
     threads = min(len, 1024)
     blocks = ceil(Int, len/threads)
     @cuda (blocks, threads) kernel_vadd(buffer(cu_arr))
-    println(Array(cu_arr))
 end

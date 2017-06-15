@@ -15,10 +15,12 @@ const gl = GLAbstraction
 
 
 immutable GLContext <: Context
-    window::GLFW.Window
+    # There are sadly many types of contexts from different packages.
+    # We can't add those packages as a dependency, just to type this field
+    window
     program_cache::Dict{Any, Any}
 end
-GLContext(window::GLFW.Window) = GLContext(window, Dict{Any, Any}())
+GLContext(window) = GLContext(window, Dict{Any, Any}())
 Base.show(io::IO, ctx::GLContext) = print(io, "GLContext")
 
 @compat const GLBuffer{T, N} = GPUArray{T, N, gl.GLBuffer{T}, GLContext}
@@ -26,19 +28,24 @@ Base.show(io::IO, ctx::GLContext) = print(io, "GLContext")
 @compat const GLArray{T, N, Buffer} = GPUArray{T, N, Buffer, GLContext}
 
 
-function any_context()
-    window = GLWindow.create_glcontext(major = 4, minor = 3, visible = true)
-    GLContext(window)
-end
 
-global all_contexts, current_context, init
+
+global all_contexts, current_context, init, any_context
 let contexts = GLContext[]
+    function any_context()
+        if isempty(contexts)
+            window = GLWindow.create_glcontext(major = 3, minor = 3, visible = false)
+            GLContext(window)
+        else
+            last(contexts) # TODO check if is open (all context creating library need to implement isopen first)
+        end
+    end
     all_contexts() = copy(contexts)::Vector{GLContext}
     current_context() = last(contexts)::GLContext
     function init(; ctx = any_context())
         init(ctx)
     end
-    init(ctx::GLFW.Window) = init(GLContext(ctx))
+    init(ctx) = init(GLContext(ctx))
     function init(ctx::GLContext)
         GPUArrays.make_current(ctx)
         push!(contexts, ctx)
