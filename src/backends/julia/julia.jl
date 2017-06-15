@@ -31,17 +31,25 @@ immutable Sampler{T, N, Buffer} <: AbstractSampler{T, N}
     buffer::Buffer
     size::SVector{N, Float32}
 end
+@compat Base.IndexStyle{T, N}(::Type{Sampler{T, N}}) = IndexLinear()
+(AT::Type{Array}){T, N, B}(s::Sampler{T, N, B}) = parent(parent(buffer(s)))
 
-function Sampler{T, N}(A::AbstractArray{T, N}, interpolation = Linear(), edge = Flat())
+function Sampler{T, N}(A::Array{T, N}, interpolation = Linear(), edge = Flat())
     Ai = extrapolate(interpolate(A, BSpline(interpolation), OnCell()), edge)
     Sampler{T, N, typeof(Ai)}(Ai, SVector{N, Float32}(size(A)) - 1f0)
 end
 
-@generated function Base.getindex{T, B, N, IF <: AbstractFloat}(x::Sampler{T, N, B}, idx::StaticVector{N, IF})
+@generated function Base.getindex{T, B, N, IF <: AbstractFloat}(A::Sampler{T, N, B}, idx::StaticVector{N, IF})
     quote
-        scaled = idx .* x.size + 1f0
-        x.buffer[$(ntuple(i-> :(scaled[$i]), Val{N})...)] # why does splatting not work -.-
+        scaled = idx .* A.size + 1f0
+        A.buffer[$(ntuple(i-> :(scaled[$i]), Val{N})...)] # why does splatting not work -.-
     end
+end
+Base.@propagate_inbounds function Base.getindex(A::Sampler, indexes...)
+    Array(A)[indexes...]
+end
+Base.@propagate_inbounds function Base.setindex!(A::Sampler, val, indexes...)
+    Array(A)[indexes...] = val
 end
 
 @compat const JLArray{T, N} = GPUArray{T, N, Array{T, N}, JLContext}
