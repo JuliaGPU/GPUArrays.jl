@@ -108,7 +108,7 @@ immutable CUFunction{T}
     kernel::T
 end
 # TODO find a future for the kernel string compilation part
-compile_lib = Pkg.dir("CUDAdrv", "examples", "compilation", "library.jl")
+compile_lib = Pkg.dir("CUDArt", "examples", "compilation", "library.jl")
 has_nvcc = try
     success(`nvcc --version`)
 catch
