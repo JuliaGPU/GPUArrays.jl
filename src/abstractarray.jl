@@ -180,50 +180,10 @@ function broadcast_similar(f, A, args)
     similar(A, T, usage = GL_STATIC_DRAW)
 end
 
+include("broadcast.jl")
+
 
 # we need to overload all the different broadcast functions, since x... is ambigious
-
-function Base.broadcast(f::Function, A::AbstractAccArray)
-    out = broadcast_similar(f, A, ())
-    acc_broadcast!(f, out, (A,))
-    out
-end
-function Base.broadcast(f::Function, A::AbstractAccArray, B::Number)
-    out = broadcast_similar(f, A, B)
-    acc_broadcast!(f, out, (A, B,))
-    out
-end
-function Base.broadcast(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
-    out = broadcast_similar(f, A, args)
-    acc_broadcast!(f, out, (A, args...))
-    out
-end
-function Base.broadcast!(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
-    acc_broadcast!(f, A, (args...))
-end
-# identity is overloaded in Base, so there will be ambiguities without explicitely overloading it!
-function Base.broadcast!(f::typeof(identity), A::AbstractAccArray, B::Number)
-    acc_broadcast!(f, A, (B,))
-end
-function Base.broadcast!(f::typeof(identity), A::AbstractAccArray, B::AbstractAccArray)
-    acc_broadcast!(f, A, (B,))
-end
-# Various combinations with scalars
-function Base.broadcast!(f::Function, A::AbstractAccArray)
-    acc_broadcast!(f, A, ())
-end
-function Base.broadcast!(f::Function, A::AbstractAccArray, B)
-    acc_broadcast!(f, A, (B,))
-end
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, args)
-    acc_broadcast!(f, A, (B, args))
-end
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D, E...)
-    acc_broadcast!(f, A, (B, C, D, E...))
-end
-function Base.broadcast!(f::Function, A::AbstractAccArray, B::AbstractAccArray, C::AbstractAccArray, D)
-    acc_broadcast!(f, A, (B, C, D))
-end
 
 # TODO check size
 function Base.map!(f::Function, A::AbstractAccArray, args::AbstractAccArray...)

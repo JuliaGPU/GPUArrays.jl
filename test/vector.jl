@@ -21,6 +21,6 @@ using GPUArrays, Base.Test
 
     resize!(x, 3)
     @test length(x) == 3
-    # we don't shrink buffers yet... TODO shrink them
+    # we don't shrink buffers yet... TODO shrink them... or should we?
     @test length(GPUArrays.buffer(x)) == 5
 end
