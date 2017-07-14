@@ -170,7 +170,7 @@ _prod{T}(x::NTuple{1, T}) = x[1]
 _prod{T}(x::NTuple{2, T}) = x[1] * x[2]
 _prod{T}(x::NTuple{3, T}) = x[1] * x[2] * x[3]
 
-linear_index(::cli.CLArray) = get_global_id(0) + 1
+linear_index(::cli.CLArray) = Cint(get_global_id(0)) + Cint(1)
 
 ###########################################################
 # Broadcast

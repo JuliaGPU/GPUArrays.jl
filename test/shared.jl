@@ -96,3 +96,35 @@ end
     y = muladd.(A, 2f0, x)
     @test Array(y) == muladd(a, 2f0, abs.(a))
 end
+
+
+using GPUArrays
+x = GPUArray(rand(Float32, 32))
+y = x .+ 1f0
+
+Array(x) .+ 1f0 == Array(y)
+
+z = sin.(x) .* cos.(y)
+
+Array(z) ≈ sin.(Array(x)) .* cos.(Array(y))
+
+
+g1 = GPUArray(rand(4,5,3));
+g2 = GPUArray(rand(1,5,3));
+a1 = Array(g1); a2 = Array(g2);
+
+isapprox(Array(g1 .+ g2), a1 .+ a2)
+
+g3 = GPUArray(rand(1,5,1)); a3 = Array(g3);
+
+isapprox(Array(g1 .+ g3), a1 .+ a3)
+
+using Iterators
+using Sugar, Transpiler
+
+function test(a, b)
+    a + b
+end
+m = Transpiler.CLMethod((test, (Float32, Float32)))
+ast = Sugar.getast!(m)
+println(Sugar.getsource!(m))
