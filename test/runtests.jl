@@ -1,4 +1,17 @@
-#TODO register these packages!
+
+
+if get(ENV, "TRAVIS", "") == "true" ||
+        get(ENV, "APPVEYOR", "") == "true" ||
+        get(ENV, "CI", "") == "true"
+
+    cd(()-> run(`git checkout sd/applyvarargstack`), Pkg.dir("Sugar"))
+    cd(()-> run(`git checkout sd/for`), Pkg.dir("Transpiler"))
+
+end
+
+
+
+
 using GPUArrays
 using Base.Test
 srand(42) # set random seed for reproducability
