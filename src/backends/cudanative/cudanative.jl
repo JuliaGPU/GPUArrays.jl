@@ -124,7 +124,7 @@ function thread_blocks_heuristic{N}(s::NTuple{N, Int})
 end
 
 @inline function linear_index(::CUDAnative.CuDeviceArray)
-    (blockIdx().x - UInt32(1)) * blockDim().x + threadIdx().x
+    Cint((blockIdx().x - UInt32(1)) * blockDim().x + threadIdx().x)
 end
 
 
@@ -136,6 +136,7 @@ unpack_cu_array{T,N}(x::CUArray{T,N}) = buffer(x)
     blocks, thread = thread_blocks_heuristic(A)
     args = map(unpack_cu_array, rest)
     #cu_kernel, rewritten = CUDAnative.rewrite_for_cudanative(kernel, map(typeof, args))
+    #println(CUDAnative.@code_typed kernel(args...))
     @cuda (blocks, thread) kernel(args...)
 end
 

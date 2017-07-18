@@ -67,24 +67,22 @@ for T in (Float32,)
 end
 
 @allbackends "mapidx" backend begin
-    if backend != :opengl # TODO implement mapidx for opengl
-        a = rand(Complex64, 1025)
-        b = rand(Complex64, 1025)
-        A = GPUArray(a)
-        B = GPUArray(b)
-        off = 1
-        mapidx(A, (B, off, length(A))) do i, a, b, off, len
-            x = b[i]
-            x2 = b[min(i+off, len)]
-            a[i] = x * x2
-        end
-        foreach(1:length(a)) do i
-            x = b[i]
-            x2 = b[min(i+off, length(a))]
-            a[i] = x * x2
-        end
-        @test Array(A) ≈ a
+    a = rand(Complex64, 1025)
+    b = rand(Complex64, 1025)
+    A = GPUArray(a)
+    B = GPUArray(b)
+    off = 1
+    mapidx(A, (B, off, length(A))) do i, a, b, off, len
+        x = b[i]
+        x2 = b[min(i+off, len)]
+        a[i] = x * x2
     end
+    foreach(1:length(a)) do i
+        x = b[i]
+        x2 = b[min(i+off, length(a))]
+        a[i] = x * x2
+    end
+    @test Array(A) ≈ a
 end
 
 
@@ -96,35 +94,3 @@ end
     y = muladd.(A, 2f0, x)
     @test Array(y) == muladd(a, 2f0, abs.(a))
 end
-
-
-using GPUArrays
-x = GPUArray(rand(Float32, 32))
-y = x .+ 1f0
-
-Array(x) .+ 1f0 == Array(y)
-
-z = sin.(x) .* cos.(y)
-
-Array(z) ≈ sin.(Array(x)) .* cos.(Array(y))
-
-
-g1 = GPUArray(rand(4,5,3));
-g2 = GPUArray(rand(1,5,3));
-a1 = Array(g1); a2 = Array(g2);
-
-isapprox(Array(g1 .+ g2), a1 .+ a2)
-
-g3 = GPUArray(rand(1,5,1)); a3 = Array(g3);
-
-isapprox(Array(g1 .+ g3), a1 .+ a3)
-
-using Iterators
-using Sugar, Transpiler
-
-function test(a, b)
-    a + b
-end
-m = Transpiler.CLMethod((test, (Float32, Float32)))
-ast = Sugar.getast!(m)
-println(Sugar.getsource!(m))

@@ -1,4 +1,5 @@
 using Base.Test
+using GPUArrays
 using GPUArrays: free
 ctx = CLBackend.init()
 # more complex function for broadcast
@@ -26,6 +27,7 @@ end
     @test all(x-> x ≈ test(0.5f0, 10f0) * 2 + 10f0, Array(D))
     free(D); free(C); free(A); free(B)
 end
+
 
 @testset "broadcast Complex64" begin
     A = GPUArray(fill(10f0*im, 40, 40))
@@ -98,7 +100,6 @@ end
     Agpu = GPUArray(A)
     @test Array(Agpu') == A'
 end
-
 
 for dims in ((4048,), (1024,1024), (77,), (1923, 209))
     for T in (Float32, Int32)

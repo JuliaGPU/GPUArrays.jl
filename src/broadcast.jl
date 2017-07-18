@@ -32,7 +32,7 @@ function _sub2ind(inds, L, ind, i::IT, I::IT...) where IT
 end
 
 # don't do anything for empty tuples
-newindex(I, keep, Idefault, size::Tuple{}) = Cint(0)
+newindex(I, ilin::Cint, keep::Tuple{}, Idefault::Tuple{}, size::Tuple{}) = Cint(0)
 
 # optimize for arrays of same shape to leading array
 newindex{N}(I::NTuple{N}, ilin, keep::NTuple{N}, Idefault, size) = ilin
@@ -45,6 +45,24 @@ newindex{N}(I::NTuple{N}, ilin, keep::NTuple{N}, Idefault, size) = ilin
     end
     :(gpu_sub2ind(size, $exprs))
 end
+
+
+function Base.broadcast!(f, A::AbstractAccArray)
+    gpu_call(A, (op, a)-> (a[linear_index(a)] = op(); return), (f, A))
+end
+
+function const_kernel(A, x, len)
+    idx = linear_index(A)
+    if idx <= len
+        A[idx] = x
+    end
+    return
+end
+function Base.broadcast!(f::typeof(identity), A::AbstractAccArray, val::Number)
+    valconv = convert(eltype(A), val)
+    gpu_call(A, const_kernel, (A, valconv, Cint(length(A))))
+end
+
 
 @inline function Base.Broadcast.broadcast_t(
         f, T, shape, iter, A::AbstractAccArray, Bs::Vararg{Any,N}
@@ -64,37 +82,30 @@ arg_length(x::GPUArray) = Cint.(size(x))
 arg_length(x) = ()
 
 immutable BroadcastDescriptor{Typ, N}
-    padd::Float32 # the following might all be empty, so we need at least one field
     size::NTuple{N, Cint}
     keep::NTuple{N, Cint}
     idefault::NTuple{N, Cint}
+    padd::Float32 # the following might all be empty, so we need at least one field
 end
 
 function BroadcastDescriptor(val, keep, idefault)
     N = length(keep)
     BroadcastDescriptor{Broadcast.containertype(val), N}(
-        0f0,
         arg_length(val),
         Cint.(keep),
-        Cint.(idefault)
+        Cint.(idefault),
+        0f0
     )
 end
 
  Base.@propagate_inbounds function _broadcast_getindex(
-        ::BroadcastDescriptor{Array}, A::Ref, I
+        ::BroadcastDescriptor{Array}, A, I
     )
-    A[]
-end
-Base.@propagate_inbounds function _broadcast_getindex(
-        ::BroadcastDescriptor{Broadcast.ScalarType}, A, I
-    )
-    A
-end
-Base.@propagate_inbounds function _broadcast_getindex(any, A, I)
     A[I]
 end
+_broadcast_getindex(any, A, I) = A
 
-for N = 0:3
+for N = 0:10
     nargs = N + 1
     inner_expr = []
     args = []
@@ -122,15 +133,16 @@ for N = 0:3
         push!(valargs, val_i)
     end
     final_expr = quote
-        function broadcast_kernel!(func, B, shape, descriptor_ref, $(args...))
-            descriptor = descriptor_ref[1]
+        function broadcast_kernel!(func, B, shape, len, descriptor_ref, $(args...))
             ilin = linear_index(B)
-            # this will hopefully get dead code removed,
-            # if only arrays with linear index are involved
-            I = gpu_ind2sub(shape, ilin)
-            $(inner_expr...)
-            result = func($(valargs...))
-            @inbounds B[ilin] = result
+            if ilin <= len
+                descriptor = descriptor_ref[1]
+                # this will hopefully get dead code removed,
+                # if only arrays with linear index are involved
+                I = gpu_ind2sub(shape, ilin)
+                $(inner_expr...)
+                @inbounds B[ilin] = func($(valargs...))
+            end
             return
         end
     end
@@ -150,6 +162,6 @@ function Base.Broadcast._broadcast!(
         BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
     end
     descriptor = GPUArray([descriptor_tuple])
-    gpu_call(out, broadcast_kernel!, (func, out, shape, descriptor, A, Bs...))
+    gpu_call(out, broadcast_kernel!, (func, out, shape, Cint.(length(out)), descriptor, A, Bs...))
     out
 end
