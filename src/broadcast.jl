@@ -1,90 +1,62 @@
+using Base.Broadcast
+import Base.Broadcast: broadcast!, _broadcast!, broadcast_t
+using Base.Broadcast: map_newindexer
+using Base: @propagate_inbounds, @pure
 
-function gpu_ind2sub{T}(dims, ind::T)
-    Base.@_inline_meta
-    _ind2sub(dims, ind - T(1))
-end
-_ind2sub{T}(::Tuple{}, ind::T) = (ind + T(1),)
-function _ind2sub{T}(indslast::NTuple{1}, ind::T)
-    Base.@_inline_meta
-    ((ind + T(1)),)
-end
-function _ind2sub{T}(inds, ind::T)
-    Base.@_inline_meta
-    r1 = inds[1]
-    indnext = div(ind, r1)
-    f = T(1); l = r1
-    (ind-l*indnext+f, _ind2sub(Base.tail(inds), indnext)...)
-end
-
-function gpu_sub2ind{N, T}(dims::NTuple{N, T}, I::NTuple{N, T})
-    Base.@_inline_meta
-    _sub2ind(dims, T(1), T(1), I...)
-end
-_sub2ind(x, L, ind) = ind
-function _sub2ind{T}(::Tuple{}, L, ind, i::T, I::T...)
-    Base.@_inline_meta
-    ind + (i - T(1)) * L
-end
-function _sub2ind(inds, L, ind, i::IT, I::IT...) where IT
-    Base.@_inline_meta
-    r1 = inds[1]
-    _sub2ind(Base.tail(inds), L * r1, ind + (i - IT(1)) * L, I...)
-end
-
-# don't do anything for empty tuples
-newindex(I, ilin::Cint, keep::Tuple{}, Idefault::Tuple{}, size::Tuple{}) = Cint(0)
-
-# optimize for arrays of same shape to leading array
-newindex{N}(I::NTuple{N}, ilin, keep::NTuple{N}, Idefault, size) = ilin
-
-# differently shaped arrays
-@generated function newindex{N}(I, ilin, keep::NTuple{N}, Idefault, size)
-    exprs = Expr(:tuple)
-    for i = 1:N
-        push!(exprs.args, :(Bool(keep[$i]) ? I[$i] : Idefault[$i]))
+@inline function const_kernel(state, A, op, len)
+    idx = linear_index(A, state)
+    @inbounds if idx <= len
+        A[idx] = op()
     end
-    :(gpu_sub2ind(size, $exprs))
+    return
 end
-
-
-function Base.broadcast!(f, A::AbstractAccArray)
-    gpu_call(A, (op, a)-> (a[linear_index(a)] = op(); return), (f, A))
-end
-
-function const_kernel(A, x, len)
-    idx = linear_index(A)
-    if idx <= len
+@inline function const_kernel2(state, A, x, len)
+    idx = linear_index(A, state)
+    @inbounds if idx <= len
         A[idx] = x
     end
     return
 end
-function Base.broadcast!(f::typeof(identity), A::AbstractAccArray, val::Number)
-    valconv = convert(eltype(A), val)
-    gpu_call(A, const_kernel, (A, valconv, Cint(length(A))))
+function broadcast!(f, A::AbstractAccArray)
+    gpu_call(const_kernel, A, (A, f, Cuint(length(A))))
 end
-
-
-@inline function Base.Broadcast.broadcast_t(
+function broadcast!(f::typeof(identity), A::AbstractAccArray, val::Number)
+    valconv = convert(eltype(A), val)
+    gpu_call(const_kernel2, A, (A, valconv, Cuint(length(A))))
+end
+@inline function broadcast_t(
         f, T, shape, iter, A::AbstractAccArray, Bs::Vararg{Any,N}
     ) where N
     C = similar(A, T, shape)
-    keeps, Idefaults = Base.Broadcast.map_newindexer(shape, A, Bs)
-    Base.Broadcast._broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, iter)
+    keeps, Idefaults = map_newindexer(shape, A, Bs)
+    _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, iter)
     return C
 end
-using Base.Broadcast
 
-function get_cartesian_index(A, shape)
-    gpu_ind2sub(shape, Cint(linear_index(A)))
+function _broadcast!(
+        func, out::AbstractAccArray,
+        keeps::K, Idefaults::ID,
+        A::AT, Bs::BT, ::Type{Val{N}}, unused2 # we don't need those arguments
+    ) where {N, K, ID, AT, BT}
+    shape = Cuint.(size(out))
+    args = (A, Bs...)
+    descriptor_tuple = ntuple(length(args)) do i
+        BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
+    end
+    descriptor = GPUArray([descriptor_tuple])
+    gpu_call(broadcast_kernel!, out, (func, out, shape, Cuint.(length(out)), descriptor, A, Bs...))
+    out
 end
 
-arg_length(x::GPUArray) = Cint.(size(x))
+
+
+arg_length(x::GPUArray) = Cuint.(size(x))
 arg_length(x) = ()
 
 immutable BroadcastDescriptor{Typ, N}
-    size::NTuple{N, Cint}
-    keep::NTuple{N, Cint}
-    idefault::NTuple{N, Cint}
+    size::NTuple{N, Cuint}
+    keep::NTuple{N, Cuint}
+    idefault::NTuple{N, Cuint}
     padd::Float32 # the following might all be empty, so we need at least one field
 end
 
@@ -92,18 +64,18 @@ function BroadcastDescriptor(val, keep, idefault)
     N = length(keep)
     BroadcastDescriptor{Broadcast.containertype(val), N}(
         arg_length(val),
-        Cint.(keep),
-        Cint.(idefault),
+        Cuint.(keep),
+        Cuint.(idefault),
         0f0
     )
 end
 
- Base.@propagate_inbounds function _broadcast_getindex(
+@propagate_inbounds @inline function _broadcast_getindex(
         ::BroadcastDescriptor{Array}, A, I
     )
     A[I]
 end
-_broadcast_getindex(any, A, I) = A
+@inline _broadcast_getindex(any, A, I) = A
 
 for N = 0:10
     nargs = N + 1
@@ -127,41 +99,79 @@ for N = 0:10
             )
             # extract array values
             @inbounds $val_i = _broadcast_getindex($desi, $Ai, $I_i)
-            # call the function and store the result
         end
         push!(inner_expr, inner)
         push!(valargs, val_i)
     end
     final_expr = quote
-        function broadcast_kernel!(func, B, shape, len, descriptor_ref, $(args...))
-            ilin = linear_index(B)
+        @inline function broadcast_kernel!(state, func, B, shape, len, descriptor_ref, $(args...))
+            ilin = linear_index(B, state)
             if ilin <= len
                 descriptor = descriptor_ref[1]
                 # this will hopefully get dead code removed,
-                # if only arrays with linear index are involved
+                # if only arrays with linear index are involved, because I should be unused in that case
                 I = gpu_ind2sub(shape, ilin)
                 $(inner_expr...)
+                # call the function and store the result
                 @inbounds B[ilin] = func($(valargs...))
             end
             return
         end
     end
     eval(final_expr)
-end
-using Transpiler
-
-
-function Base.Broadcast._broadcast!(
-        func, out::AbstractAccArray,
-        keeps::K, Idefaults::ID,
-        A::AT, Bs::BT, ::Type{Val{N}}, unused2 # we don't need those arguments
-    ) where {N, K, ID, AT, BT}
-    shape = Cint.(size(out))
-    args = (A, Bs...)
-    descriptor_tuple = ntuple(length(args)) do i
-        BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
+    @eval function mapidx_kernel(state, f, A, len, $(args...))
+        i = linear_index(A, state)
+        @inbounds if i <= len
+            f(i, A, $(args...))
+        end
+        return
     end
-    descriptor = GPUArray([descriptor_tuple])
-    gpu_call(out, broadcast_kernel!, (func, out, shape, Cint.(length(out)), descriptor, A, Bs...))
-    out
+end
+
+function mapidx{N}(f, A::AbstractAccArray, args::NTuple{N, Any})
+    gpu_call(mapidx_kernel, A, (f, A, Cuint(length(A)), args...))
+end
+# Base functions that are sadly not fit for the the GPU yet (they only work for Int64)
+@pure @noinline function gpu_ind2sub{T}(dims, ind::T)
+    _ind2sub(dims, ind - T(1))
+end
+@pure @inline _ind2sub{T}(::Tuple{}, ind::T) = (ind + T(1),)
+@pure @inline function _ind2sub{T}(indslast::NTuple{1}, ind::T)
+    ((ind + T(1)),)
+end
+@pure @inline function _ind2sub{T}(inds, ind::T)
+    r1 = inds[1]
+    indnext = div(ind, r1)
+    f = T(1); l = r1
+    (ind-l*indnext+f, _ind2sub(Base.tail(inds), indnext)...)
+end
+
+@pure function gpu_sub2ind{N, T}(dims::NTuple{N, T}, I::NTuple{N, T})
+    Base.@_inline_meta
+    _sub2ind(dims, T(1), T(1), I...)
+end
+_sub2ind(x, L, ind) = ind
+function _sub2ind{T}(::Tuple{}, L, ind, i::T, I::T...)
+    Base.@_inline_meta
+    ind + (i - T(1)) * L
+end
+function _sub2ind(inds, L, ind, i::IT, I::IT...) where IT
+    Base.@_inline_meta
+    r1 = inds[1]
+    _sub2ind(Base.tail(inds), L * r1, ind + (i - IT(1)) * L, I...)
+end
+
+# don't do anything for empty tuples
+@pure newindex(I, ilin, keep::Tuple{}, Idefault::Tuple{}, size::Tuple{}) = Cuint(0)
+
+# optimize for arrays of same shape to leading array
+@pure newindex{N}(I::NTuple{N}, ilin, keep::NTuple{N}, Idefault, size) = ilin
+
+# differently shaped arrays
+@generated function newindex{N}(I, ilin, keep::NTuple{N}, Idefault, size)
+    exprs = Expr(:tuple)
+    for i = 1:N
+        push!(exprs.args, :(Bool(keep[$i]) ? I[$i] : Idefault[$i]))
+    end
+    :(Base.@_inline_meta; gpu_sub2ind(size, $exprs))
 end

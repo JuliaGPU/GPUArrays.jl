@@ -2,6 +2,7 @@ using Base.Test
 using GPUArrays
 using GPUArrays: free
 ctx = CLBackend.init()
+
 # more complex function for broadcast
 function test{T}(a::T, b)
     x = sqrt(sin(a) * b) / T(10.0)
@@ -63,15 +64,15 @@ if GPUArrays.is_fft_supported(:CLFFT)
     end
 end
 
-function clmap!(f, out, b)
-    i = linear_index(out) # get the kernel index it gets scheduled on
+function clmap!(state, f, out, b)
+    i = linear_index(out, state) # get the kernel index it gets scheduled on
     out[i] = f(b[i])
     return
 end
 @testset "Custom kernel from Julia function" begin
     x = GPUArray(rand(Float32, 100))
     y = GPUArray(rand(Float32, 100))
-    gpu_call(x, clmap!, (sin, x, y))
+    gpu_call(clmap!, x, (sin, x, y))
     # same here, x is just passed to supply a kernel size!
     jy = Array(y)
     @test map!(sin, jy, jy) ≈ Array(x)
@@ -90,7 +91,7 @@ end
     source = GPUArray(rand(Float32, 1023, 11))
     dest = GPUArray(zeros(Float32, size(source)))
     f = (copy_source, :copy)
-    gpu_call(dest, f, (dest, source))
+    gpu_call(f, dest, (dest, source))
     @test Array(dest) == Array(source)
 end
 

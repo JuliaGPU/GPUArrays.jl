@@ -32,7 +32,7 @@ end
 
 
 """
-Optimal linear index in a GPU kernel
+linear index in a GPU kernel
 """
 function linear_index end
 
@@ -112,74 +112,12 @@ end
 
 # Function needed to be overloaded by backends
 function mapidx end
-# It is kinda hard to overwrite map/broadcast, which is why we lift it to our
-# our own broadcast function.
-# It has the signature:
-# f::Function, Context, Main/Out::AccArray, args::NTuple{N}
-# All arrays are already lifted and shape checked
-function acc_broadcast! end
 # same for mapreduce
 function acc_mapreduce end
 
 
 ######################################
 # Broadcast
-
-# helper
-
-#Broadcast
-Base.@propagate_inbounds broadcast_index(::Val{false}, arg, shape, i) = arg
-Base.@propagate_inbounds function broadcast_index{T, N}(
-        ::Val{true}, arg::AbstractArray{T, N}, shape::NTuple{N, Integer}, i
-    )
-    @inbounds return arg[i]
-end
-@generated function broadcast_index{T, N}(::Val{true}, arg::AbstractArray{T, N}, shape, i)
-    idx = []
-    for i = 1:N
-        push!(idx, :(ifelse(s[$i] < shape[$i], 1, idx[$i])))
-    end
-    expr = quote
-        $(Expr(:meta, :inline, :propagate_inbounds))
-        s = size(arg)
-        idx = ind2sub(shape, i)
-        @inbounds return arg[$(idx...)]
-    end
-end
-Base.@propagate_inbounds broadcast_index(arg, shape, i) = arg
-Base.@propagate_inbounds function broadcast_index{T, N}(
-        arg::AbstractArray{T, N}, shape::NTuple{N, Integer}, i
-    )
-    @inbounds return arg[i]
-end
-@generated function broadcast_index{T, N}(arg::AbstractArray{T, N}, shape, i)
-    idx = []
-    for i = 1:N
-        push!(idx, :(ifelse(s[$i] < shape[$i], 1, idx[$i])))
-    end
-    expr = quote
-        $(Expr(:meta, :inline, :propagate_inbounds))
-        s = size(arg)
-        idx = ind2sub(shape, i)
-        @inbounds return arg[$(idx...)]
-    end
-end
-
-if !isdefined(Base.Broadcast, :_broadcast_eltype)
-    eltypestuple(a) = (Base.@_pure_meta; Tuple{eltype(a)})
-    eltypestuple(T::Type) = (Base.@_pure_meta; Tuple{Type{T}})
-    eltypestuple(a, b...) = (Base.@_pure_meta; Tuple{eltypestuple(a).types..., eltypestuple(b...).types...})
-    _broadcast_eltype(f, A, Bs...) = Sugar.return_type(f, eltypestuple(A, Bs...))
-else
-    import Base.Broadcast._broadcast_eltype
-end
-
-using ModernGL
-function broadcast_similar(f, A, args)
-    T = _broadcast_eltype(f, A, args...)
-    similar(A, T, usage = GL_STATIC_DRAW)
-end
-
 include("broadcast.jl")
 
 
@@ -187,11 +125,10 @@ include("broadcast.jl")
 
 # TODO check size
 function Base.map!(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
-    acc_broadcast!(f, A, (args...))
+    broadcast!(f, A, args...)
 end
 function Base.map(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
-    out = broadcast_similar(f, A, args)
-    acc_broadcast!(f, out, (A, args...))
+    broadcast(f, out, (A, args...))
     out
 end
 
@@ -199,7 +136,7 @@ end
 #############################
 # reduce
 
-# horrible hack to get around of fetching the first element of the GPUArray
+# hack to get around of fetching the first element of the GPUArray
 # as a startvalue, which is a bit complicated with the current reduce implementation
 function startvalue(f, T)
     error("Please supply a starting value for mapreduce. E.g: mapreduce($f, $op, 1, A)")

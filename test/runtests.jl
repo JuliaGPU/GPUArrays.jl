@@ -24,7 +24,7 @@ end
 macro allbackends(title, backendname::Symbol, block)
     quote
         for backend in supported_backends()
-            if backend in (:opencl, :cudanative)
+            if backend in (:opencl, :cudanative, :julia)
                 @testset "$($(esc(title))) $backend" begin
                     ctx = GPUArrays.init(backend)
                     $(esc(backendname)) = backend
@@ -37,7 +37,7 @@ end
 
 # Only test supported backends!
 for backend in supported_backends()
-    if backend in (:opencl, :cudanative)
+    if backend in (:opencl, :cudanative, :julia)
         @testset "$backend" begin
             include("$(backend).jl")
         end

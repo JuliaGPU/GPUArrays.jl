@@ -71,8 +71,8 @@ end
     b = rand(Complex64, 1025)
     A = GPUArray(a)
     B = GPUArray(b)
-    off = 1
-    mapidx(A, (B, off, length(A))) do i, a, b, off, len
+    off = Cuint(1)
+    mapidx(A, (B, off, Cuint(length(A)))) do i, a, b, off, len
         x = b[i]
         x2 = b[min(i+off, len)]
         a[i] = x * x2

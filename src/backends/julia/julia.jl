@@ -4,9 +4,9 @@ using ..GPUArrays
 using Compat
 using StaticArrays, Interpolations
 
-import GPUArrays: buffer, create_buffer, Context, context, mapidx
-import GPUArrays: AbstractAccArray, AbstractSampler, acc_mapreduce, acc_broadcast!
-import GPUArrays: broadcast_index, hasblas, blas_module, blasbuffer, default_buffer_type
+import GPUArrays: buffer, create_buffer, Context, context, mapidx, unpack_buffer
+import GPUArrays: AbstractAccArray, AbstractSampler, acc_mapreduce, gpu_call, linear_index
+import GPUArrays: hasblas, blas_module, blasbuffer, default_buffer_type
 
 import Base.Threads: @threads
 
@@ -140,6 +140,40 @@ for i = 0:7
             reduce(op, arr)
         end
     end
+end
+
+linear_index(A::AbstractArray, state) = state
+
+
+@generated function parallel_kernel(id, width, f, args::NTuple{N, T where T}) where N
+    args_unrolled = ntuple(Val{N}) do i
+        :(args[$i])
+    end
+    quote
+        for idx = (id + 1):(id + width)
+            f(idx, $(args_unrolled...))
+        end
+        return
+    end
+end
+function gpu_call(f, A::JLArray, args)
+    unpacked_args = unpack_buffer.(args)
+    n = nthreads(A)
+    len = length(A)
+    width = floor(Int, len / n)
+    if width <= 10 # arbitrary number. TODO figure out good value for when it's worth launching threads
+        parallel_kernel(0, len, f, unpacked_args)
+        return
+    end
+    for id = 1:n
+        parallel_kernel((id - 1) * width, width, f, unpacked_args)
+    end
+    len_floored = width * n
+    rest = len - len_floored
+    if rest > 0
+        parallel_kernel(len_floored, rest, f, unpacked_args)
+    end
+    return
 end
 
 include("fft.jl")

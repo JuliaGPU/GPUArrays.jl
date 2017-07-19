@@ -35,6 +35,8 @@ end
 end
 
 
+
+
 function cu_angle(z)
     cu.atan2(imag(z), real(z))
 end
@@ -87,8 +89,8 @@ end
 end
 
 
-function cumap!(f, out, b)
-    i = linear_index(out) # get the kernel index it gets scheduled on
+function cumap!(state, f, out, b)
+    i = linear_index(out, state) # get the kernel index it gets scheduled on
     out[i] = f(b[i])
     return
 end
@@ -96,22 +98,24 @@ end
 @testset "Custom kernel from Julia function" begin
     x = GPUArray(rand(Float32, 100))
     y = GPUArray(rand(Float32, 100))
-    gpu_call(x, cumap!, (cu.sin, x, y))
+    gpu_call(cumap!, x, (cu.sin, x, y))
     jy = Array(y)
     @test map!(sin, jy, jy) ≈ Array(x)
 end
 
-@testset "Custom kernel from string function" begin
-    x = GPUArray(rand(Float32, 100))
-    y = GPUArray(rand(Float32, 100))
-    source = """
-    __global__ void copy(const float *input, float *output)
-    {
-        int i = blockIdx.x * blockDim.x + threadIdx.x;
-        output[i] = input[i];
-    }
-    """
-    f = (source, :copy)
-    gpu_call(x, f, (x, y))
-    @test Array(x) == Array(y)
+if CUBackend.hasnvcc()
+    @testset "Custom kernel from string function" begin
+        x = GPUArray(rand(Float32, 100))
+        y = GPUArray(rand(Float32, 100))
+        source = """
+        __global__ void copy(const float *input, float *output)
+        {
+            int i = blockIdx.x * blockDim.x + threadIdx.x;
+            output[i] = input[i];
+        }
+        """
+        f = (source, :copy)
+        gpu_call(f, x, (x, y))
+        @test Array(x) == Array(y)
+    end
 end

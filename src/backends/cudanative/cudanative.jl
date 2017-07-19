@@ -4,8 +4,8 @@ using ..GPUArrays, CUDAnative, StaticArrays, Compat
 
 import CUDAdrv, CUDArt #, CUFFT
 
-import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index, gpu_call
+import GPUArrays: buffer, create_buffer, acc_mapreduce
+import GPUArrays: Context, GPUArray, context, linear_index, gpu_call
 import GPUArrays: blas_module, blasbuffer, is_blas_supported, hasblas
 import GPUArrays: default_buffer_type
 
@@ -32,8 +32,8 @@ function any_context()
 end
 
 #@compat const GLArrayImg{T, N} = GPUArray{T, N, gl.Texture{T, N}, GLContext}
-@compat const CUArray{T, N, B} = GPUArray{T, N, B, CUContext} #, GLArrayImg{T, N}}
-@compat const CUArrayBuff{T, N} = CUArray{T, N, CUDAdrv.CuArray{T, N}}
+const CUArray{T, N, B} = GPUArray{T, N, B, CUContext} #, GLArrayImg{T, N}}
+const CUArrayBuff{T, N} = CUArray{T, N, CUDAdrv.CuArray{T, N}}
 
 
 global init, all_contexts, current_context
@@ -123,8 +123,8 @@ function thread_blocks_heuristic{N}(s::NTuple{N, Int})
     blocks, threads
 end
 
-@inline function linear_index(::CUDAnative.CuDeviceArray)
-    Cint((blockIdx().x - UInt32(1)) * blockDim().x + threadIdx().x)
+@inline function linear_index(::CUDAnative.CuDeviceArray, state)
+    Cuint((blockIdx().x - Cuint(1)) * blockDim().x + threadIdx().x)
 end
 
 
@@ -145,30 +145,17 @@ end
 immutable CUFunction{T}
     kernel::T
 end
-# TODO find a future for the kernel string compilation part
-const compile_lib = Pkg.dir("CUDArt", "examples", "compilation", "library.jl")
-has_nvcc = try
-    success(`nvcc --version`)
-catch
-    false
-end
-if isfile(compile_lib) && has_nvcc
-    include(compile_lib)
+
+if success(`nvcc --version`)
+    include("compilation.jl")
     hasnvcc() = true
 else
     hasnvcc() = false
-    if !has_nvcc
-        warn("Couldn't find nvcc, please add it to your path.
-            This will disable the ability to compile a CUDA kernel from a string"
-        )
-    end
-    if !isfile(compile_lib)
-        warn("Couldn't find cuda compilation lib in default location.
-        This will disable the ability to compile a CUDA kernel from a string
-        To fix, install CUDAdrv in default location."
-        )
-    end
+    warn("Couldn't find nvcc, please add it to your path.
+        This will disable the ability to compile a CUDA kernel from a string"
+    )
 end
+
 function CUFunction{T, N}(A::CUArray{T, N}, f::Function, args...)
     CUFunction(f) # this is mainly for consistency with OpenCL
 end
@@ -199,10 +186,10 @@ function (f::CUFunction{F}){F <: CUDAdrv.CuFunction, T, N}(A::CUArray{T, N}, arg
     )
 end
 
-function gpu_call{T, N}(A::CUArray{T, N}, f::Function, args, globalsize = size(A), localsize = nothing)
-    call_cuda(A, f, args...)
+function gpu_call{T, N}(f::Function, A::CUArray{T, N}, args, globalsize = size(A), localsize = nothing)
+    call_cuda(A, f, 0f0, args...)
 end
-function gpu_call{T, N}(A::CUArray{T, N}, f::Tuple{String, Symbol}, args, globalsize = size(A), localsize = nothing)
+function gpu_call{T, N}(f::Tuple{String, Symbol}, A::CUArray{T, N}, args, globalsize = size(A), localsize = nothing)
     func = CUFunction(A, f, args...)
     # TODO cache
     func(A, args) # TODO pass through local/global size
@@ -218,20 +205,7 @@ for i = 0:10
     fargs = ntuple(x-> :(broadcast_index(which[$x], $(args[x]), sz, i)), i)
     fargs2 = ntuple(x-> :(broadcast_index($(args[x]), sz, i)), i)
     @eval begin
-        function broadcast_kernel(A, f, sz, which, $(args...))
-            i = linear_index(A)
-            @inbounds if i <= length(A)
-                A[i] = f($(fargs...))
-            end
-            nothing
-        end
-        function mapidx_kernel{F}(A, f::F, $(args...))
-            i = linear_index(A)
-            if i <= length(A)
-                f(i, A, $(args...))
-            end
-            nothing
-        end
+
         function reduce_kernel{F <: Function, OP <: Function,T1, T2, N}(
                 out::AbstractArray{T2,1}, f::F, op::OP, v0::T2,
                 A::AbstractArray{T1, N}, $(args...)
@@ -255,18 +229,7 @@ for i = 0:10
     end
 end
 
-function acc_broadcast!{F <: Function, N}(f::F, A::CUArray, args::NTuple{N, Any})
-    which = map(args) do arg
-        if isa(arg, AbstractArray) && !isa(arg, Scalar)
-            return Val{true}()
-        end
-        Val{false}()
-    end
-    call_cuda(A, broadcast_kernel, A, f, map(UInt32, size(A)), which, args...)
-end
-function mapidx{F <: Function, N, T, N2}(f::F, A::CUArray{T, N2}, args::NTuple{N, Any})
-    call_cuda(A, mapidx_kernel, A, f, args...)
-end
+
 #################################
 # Reduction
 

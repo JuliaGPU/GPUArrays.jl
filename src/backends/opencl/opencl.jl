@@ -8,8 +8,8 @@ using OpenCL: cl
 using ..GPUArrays, StaticArrays
 #import CLBLAS, CLFFT
 
-import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index, free
+import GPUArrays: buffer, create_buffer, acc_mapreduce, mapidx
+import GPUArrays: Context, GPUArray, context, linear_index, free
 import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
 import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector, gpu_call
 import GPUArrays: default_buffer_type
@@ -87,6 +87,9 @@ function free{T, N}(x::CLArray{T, N})
     nothing
 end
 
+linear_index(::cli.CLArray, state) = get_global_id(0) + Cuint(1)
+
+
 function cl_readbuffer(q, buf, dev_offset, hostref, nbytes)
     n_evts  = UInt(0)
     evt_ids = C_NULL
@@ -163,62 +166,12 @@ function (AT::Type{CLArray{T, N}}){T, N}(
     AT(buff, size, context)
 end
 
-
-# The implementation of prod in base doesn't play very well with current
-# transpiler.
-_prod{T}(x::NTuple{1, T}) = x[1]
-_prod{T}(x::NTuple{2, T}) = x[1] * x[2]
-_prod{T}(x::NTuple{3, T}) = x[1] * x[2] * x[3]
-
-linear_index(::cli.CLArray) = Cint(get_global_id(0)) + Cint(1)
-
-###########################################################
-# Broadcast
-for i = 0:10
-    args = ntuple(x-> Symbol("arg_", x), i)
-    fargs = ntuple(x-> :(broadcast_index($(args[x]), sz, i)), i)
-    @eval begin
-        function broadcast_kernel(A, f, sz, $(args...))
-            # TODO I'm very sure, that we can tile this better
-            # +1, Julia is 1 based indexed, and we (currently awkwardly) try to preserve this semantic
-            i = get_global_id(0) + 1
-            A[i] = f($(fargs...))
-            return
-        end
-        function mapidx_kernel{F}(A, f::F, $(args...))
-            i = get_global_id(0) + 1
-            f(i, A, $(args...))
-            return
-        end
-    end
-end
-
 # extend the private interface for the compilation types
 Transpiler._to_cl_types{T, N}(arg::CLArray{T, N}) = cli.CLArray{T, N}
 Transpiler._to_cl_types{T}(x::LocalMemory{T}) = cli.LocalMemory{T}
 
 Transpiler.cl_convert{T, N}(x::CLArray{T, N}) = buffer(x)
 Transpiler.cl_convert{T}(x::LocalMemory{T}) = cl.LocalMem(T, x.size)
-
-function acc_broadcast!{F <: Function, T, N}(f::F, A::CLArray{T, N}, args::Tuple)
-    ctx = context(A)
-    sz = map(Int32, size(A))
-    q = ctx.queue
-    cl.finish(q)
-    clfunc = CLFunction(broadcast_kernel, (A, f, sz, args...), q)
-    clfunc((A, f, sz, args...), length(A))
-    A
-end
-
-
-function mapidx{F <: Function, N, T, N2}(f::F, A::CLArray{T, N2}, args::NTuple{N, Any})
-    ctx = context(A)
-    q = ctx.queue
-    cl.finish(q)
-    cl_args = (A, f, args...)
-    clfunc = CLFunction(mapidx_kernel, cl_args, q)
-    clfunc(cl_args, length(A))
-end
 
 function CLFunction{T, N}(A::CLArray{T, N}, f, args...)
     ctx = context(A)
@@ -229,10 +182,15 @@ function (clfunc::CLFunction{T}){T, T2, N}(A::CLArray{T2, N}, args...)
     clfunc(args, length(A))
 end
 
-function gpu_call{T, N}(A::CLArray{T, N}, f, args, globalsize = length(A), localsize = nothing)
+function gpu_call{T, N}(f, A::CLArray{T, N}, args, globalsize = length(A), localsize = nothing)
     ctx = GPUArrays.context(A)
-    clfunc = CLFunction(f, args, ctx.queue)
-    clfunc(args, globalsize, localsize)
+    _args = if !isa(f, Tuple{String, Symbol})
+        (0f0, args...)# include "state"
+    else
+        args
+    end
+    clfunc = CLFunction(f, _args, ctx.queue)
+    clfunc(_args, globalsize, localsize)
 end
 
 ###################
@@ -295,7 +253,7 @@ for i = 0:10
     fargs = ntuple(x-> :(broadcast_index($(args[x]), length, global_index)), i)
     @eval begin
         function reduce_kernel(f, op, v0, A, tmp_local, length, result, $(args...))
-            global_index = get_global_id(0) + 1
+            global_index = get_global_id(0) + Cuint(1)
             local_v0 = v0
             # Loop sequentially over chunks of input vector
             while (global_index <= length)
@@ -306,20 +264,20 @@ for i = 0:10
 
             # Perform parallel reduction
             local_index = get_local_id(0)
-            tmp_local[local_index + 1] = local_v0
+            tmp_local[local_index + Cuint(1)] = local_v0
             barrier(CLK_LOCAL_MEM_FENCE)
-            offset = div(get_local_size(0), 2)
+            offset = div(get_local_size(0), Cuint(2))
             while offset > 0
                 if (local_index < offset)
-                    other = tmp_local[local_index + offset + 1]
-                    mine = tmp_local[local_index + 1];
-                    tmp_local[local_index + 1] = op(mine, other)
+                    other = tmp_local[local_index + offset + Cuint(1)]
+                    mine = tmp_local[local_index + Cuint(1)];
+                    tmp_local[local_index + Cuint(1)] = op(mine, other)
                 end
                 barrier(CLK_LOCAL_MEM_FENCE)
-                offset = div(offset, 2)
+                offset = div(offset, Cuint(2))
             end
-            if local_index == 0
-                result[get_group_id(0) + 1] = tmp_local[1]
+            if local_index == Cuint(0)
+                result[get_group_id(0) + Cuint(1)] = tmp_local[1]
             end
             return
         end
@@ -335,7 +293,7 @@ function acc_mapreduce{T, OT, N}(
     out = similar(A, OT, (group_size,))
     fill!(out, v0)
     lmem = GPUArrays.LocalMemory{OT}(block_size)
-    args = (f, op, v0, A, lmem, Int32(length(A)), out, rest...)
+    args = (f, op, v0, A, lmem, Cuint(length(A)), out, rest...)
     func = GPUArrays.CLFunction(A, reduce_kernel, args...)
     func(args, group_size * block_size, (block_size,))
     reduce(op, Array(out))
