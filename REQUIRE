@@ -16,3 +16,4 @@ CLBLAS 1.1.0
 CLFFT 0.4.0
 
 Interpolations
+IterTools
