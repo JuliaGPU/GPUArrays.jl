@@ -150,7 +150,7 @@ linear_index(A::AbstractArray, state) = state
         :(args[$i])
     end
     quote
-        for idx = (id + 1):(id + width)
+        @simd for idx = (id + 1):(id + width)
             f(idx, $(args_unrolled...))
         end
         return
@@ -165,7 +165,7 @@ function gpu_call(f, A::JLArray, args)
         parallel_kernel(0, len, f, unpacked_args)
         return
     end
-    for id = 1:n
+    @threads for id = 1:n
         parallel_kernel((id - 1) * width, width, f, unpacked_args)
     end
     len_floored = width * n
