@@ -1,7 +1,8 @@
 
 if get(ENV, "TRAVIS", "") == "true" ||
         get(ENV, "APPVEYOR", "") == "true" ||
-        get(ENV, "CI", "") == "true"
+        get(ENV, "CI", "") == "true" ||
+        get(ENV, "USER", "") == "buildbot"
 
     cd(()-> run(`git checkout sd/applyvarargstack`), Pkg.dir("Sugar"))
     cd(()-> run(`git checkout sd/for`), Pkg.dir("Transpiler"))
