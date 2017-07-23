@@ -5,7 +5,6 @@ if get(ENV, "TRAVIS", "") == "true" ||
 
     cd(()-> run(`git checkout sd/applyvarargstack`), Pkg.dir("Sugar"))
     cd(()-> run(`git checkout sd/for`), Pkg.dir("Transpiler"))
-
 end
 
 
