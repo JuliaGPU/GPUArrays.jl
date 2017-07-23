@@ -1,4 +1,5 @@
 using GPUArrays, Base.Test
+CLBackend.init()
 
 @allbackends "vector interface" backend begin
     if backend in (:cudanative, :opencl)
@@ -13,6 +14,7 @@ using GPUArrays, Base.Test
         a = Float32[0]
         x = GPUArray(a)
         @test length(x) == 1
+        @test length(GPUArrays.buffer(x)) == 1
         push!(x, 12)
         @test length(GPUArrays.buffer(x)) == GPUArrays.grow_dimensions(0, 1, 1)
         resize!(x, 5)

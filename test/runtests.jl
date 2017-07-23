@@ -1,5 +1,4 @@
 
-
 if get(ENV, "TRAVIS", "") == "true" ||
         get(ENV, "APPVEYOR", "") == "true" ||
         get(ENV, "CI", "") == "true"
@@ -8,8 +7,6 @@ if get(ENV, "TRAVIS", "") == "true" ||
     cd(()-> run(`git checkout sd/for`), Pkg.dir("Transpiler"))
 
 end
-
-
 
 
 using GPUArrays
@@ -35,6 +32,10 @@ macro allbackends(title, backendname::Symbol, block)
     end
 end
 
+@testset "Broadcast" begin
+    include("broadcast.jl")
+end
+
 # Only test supported backends!
 for backend in supported_backends()
     if backend in (:opencl, :cudanative, :julia)
@@ -43,6 +44,7 @@ for backend in supported_backends()
         end
     end
 end
+
 @testset "BLAS" begin
     include("blas.jl")
 end
