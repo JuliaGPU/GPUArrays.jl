@@ -24,6 +24,7 @@ function broadcast!(f::typeof(identity), A::AbstractAccArray, val::Number)
     valconv = convert(eltype(A), val)
     gpu_call(const_kernel2, A, (A, valconv, Cuint(length(A))))
 end
+
 @inline function broadcast_t(
         f, T, shape, iter, A::AbstractAccArray, Bs::Vararg{Any,N}
     ) where N
@@ -53,21 +54,38 @@ end
 arg_length(x::GPUArray) = Cuint.(size(x))
 arg_length(x) = ()
 
-immutable BroadcastDescriptor{Typ, N}
+abstract type BroadcastDescriptor{Typ} end
+# Until we figure out alignement for all structs, we special case for most common size
+immutable BroadcastDescriptor0{Typ} <: BroadcastDescriptor{Typ}
+    size::Tuple{}
+    keep::Tuple{}
+    idefault::Tuple{}
+    padd::Float32 # can't be empty
+end
+immutable BroadcastDescriptor3{Typ} <: BroadcastDescriptor{Typ}
+    size::NTuple{3, Cuint}
+    keep::NTuple{3, Cuint}
+    idefault::NTuple{3, Cuint}
+    padd::NTuple{3, Cuint}
+end
+immutable BroadcastDescriptorN{Typ, N} <: BroadcastDescriptor{Typ}
     size::NTuple{N, Cuint}
     keep::NTuple{N, Cuint}
     idefault::NTuple{N, Cuint}
-    padd::Float32 # the following might all be empty, so we need at least one field
 end
 
 function BroadcastDescriptor(val, keep, idefault)
     N = length(keep)
-    BroadcastDescriptor{Broadcast.containertype(val), N}(
-        arg_length(val),
-        Cuint.(keep),
-        Cuint.(idefault),
-        0f0
-    )
+    typ = if isa(val, Ref{<: AbstractAccArray})
+        Any # special case ref, so we can upload it unwrapped already!
+    else
+        Broadcast.containertype(val)
+    end
+    args = arg_length(val), Cuint.(keep), Cuint.(idefault)
+    if N == 0
+        return BroadcastDescriptor0{typ}((), (), (), 0f0)
+    end
+    BroadcastDescriptorN{typ, N}(args...)
 end
 
 @propagate_inbounds @inline function _broadcast_getindex(
@@ -132,8 +150,8 @@ function mapidx{N}(f, A::AbstractAccArray, args::NTuple{N, Any})
     gpu_call(mapidx_kernel, A, (f, A, Cuint(length(A)), args...))
 end
 # Base functions that are sadly not fit for the the GPU yet (they only work for Int64)
-@pure @noinline function gpu_ind2sub{T}(dims, ind::T)
-    _ind2sub(dims, ind - T(1))
+@pure @noinline function gpu_ind2sub{N, T}(dims::NTuple{N}, ind::T)
+    _ind2sub(NTuple{N, T}(dims), ind - T(1))
 end
 @pure @inline _ind2sub{T}(::Tuple{}, ind::T) = (ind + T(1),)
 @pure @inline function _ind2sub{T}(indslast::NTuple{1}, ind::T)
@@ -146,9 +164,9 @@ end
     (ind-l*indnext+f, _ind2sub(Base.tail(inds), indnext)...)
 end
 
-@pure function gpu_sub2ind{N, T}(dims::NTuple{N, T}, I::NTuple{N, T})
+@pure function gpu_sub2ind{N, T}(dims::NTuple{N}, I::NTuple{N, T})
     Base.@_inline_meta
-    _sub2ind(dims, T(1), T(1), I...)
+    _sub2ind(NTuple{N, T}(dims), T(1), T(1), I...)
 end
 _sub2ind(x, L, ind) = ind
 function _sub2ind{T}(::Tuple{}, L, ind, i::T, I::T...)
@@ -164,14 +182,14 @@ end
 # don't do anything for empty tuples
 @pure newindex(I, ilin, keep::Tuple{}, Idefault::Tuple{}, size::Tuple{}) = Cuint(0)
 
-# optimize for arrays of same shape to leading array
-@pure newindex{N}(I::NTuple{N}, ilin, keep::NTuple{N}, Idefault, size) = ilin
+# optimize for 1D arrays
+@pure newindex(I::NTuple{1}, ilin, keep::NTuple{1}, Idefault, size) = ilin
 
 # differently shaped arrays
-@generated function newindex{N}(I, ilin, keep::NTuple{N}, Idefault, size)
+@generated function newindex{N, T}(I, ilin::T, keep::NTuple{N}, Idefault, size)
     exprs = Expr(:tuple)
     for i = 1:N
-        push!(exprs.args, :(Bool(keep[$i]) ? I[$i] : Idefault[$i]))
+        push!(exprs.args, :(Bool(keep[$i]) ? T(I[$i]) : T(Idefault[$i])))
     end
     :(Base.@_inline_meta; gpu_sub2ind(size, $exprs))
 end

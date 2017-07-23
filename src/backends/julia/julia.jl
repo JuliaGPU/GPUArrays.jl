@@ -6,7 +6,7 @@ using StaticArrays, Interpolations
 
 import GPUArrays: buffer, create_buffer, Context, context, mapidx, unpack_buffer
 import GPUArrays: AbstractAccArray, AbstractSampler, acc_mapreduce, gpu_call, linear_index
-import GPUArrays: hasblas, blas_module, blasbuffer, default_buffer_type
+import GPUArrays: hasblas, blas_module, blasbuffer, default_buffer_type, broadcast_index
 
 import Base.Threads: @threads
 
@@ -102,26 +102,29 @@ blasbuffer(ctx::JLContext, A) = Array(A)
 blas_module(::JLContext) = Base.BLAS
 
 
+
 # lol @threads makes @generated say that we have an unpure @generated function body.
 # Lies!
 # Well, we know how to deal with that from the CUDA backend
+
 for i = 0:7
     fargs = ntuple(x-> :(broadcast_index(args[$x], sz, i)), i)
     fidxargs = ntuple(x-> :(args[$x]), i)
     @eval begin
-        function acc_broadcast!{F, T, N}(f::F, A::JLArray{T, N}, args::NTuple{$i, Any})
-            n = length(A)
-            sz = size(A)
-            @threads for i = 1:n
-                @inbounds A[i] = f($(fargs...))
-            end
-            return A
-        end
 
         function mapidx{F, T, N}(f::F, data::JLArray{T, N}, args::NTuple{$i, Any})
             @threads for i in eachindex(data)
                 f(i, data, $(fidxargs...))
             end
+        end
+        @noinline function inner_mapreduce(threadid, slice, v0, op, f, A, args::NTuple{$i, Any}, arr, sz)
+            low = ((threadid - 1) * slice) + 1
+            high = min(length(A), threadid * slice)
+            r = v0
+            for i in low:high
+                @inbounds r = op(r, f(A[i], $(fargs...)))
+            end
+            @inbounds arr[threadid] = r
         end
         function acc_mapreduce{T, N}(f, op, v0, A::JLArray{T, N}, args::NTuple{$i, Any})
             n = Base.Threads.nthreads()
@@ -129,13 +132,7 @@ for i = 0:7
             slice = ceil(Int, length(A) / n)
             sz = size(A)
             @threads for threadid in 1:n
-                low = ((threadid - 1) * slice) + 1
-                high = min(length(A), threadid * slice)
-                r = v0
-                for i in low:high
-                    r = op(r, f(A[i], $(fargs...)))
-                end
-                arr[threadid] = r
+                inner_mapreduce(threadid, slice, v0, op, f, A, args, arr, sz)
             end
             reduce(op, arr)
         end

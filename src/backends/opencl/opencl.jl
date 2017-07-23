@@ -12,7 +12,7 @@ import GPUArrays: buffer, create_buffer, acc_mapreduce, mapidx
 import GPUArrays: Context, GPUArray, context, linear_index, free
 import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
 import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector, gpu_call
-import GPUArrays: default_buffer_type
+import GPUArrays: default_buffer_type, broadcast_index
 
 using Transpiler
 import Transpiler: cli, CLFunction, cli.get_global_id
@@ -73,7 +73,7 @@ let contexts = CLContext[]
     end
 end
 
-@compat const CLArray{T, N} = GPUArray{T, N, cl.Buffer{T}, CLContext}
+const CLArray{T, N} = GPUArray{T, N, B, CLContext} where B <: cl.Buffer
 
 #synchronize
 function synchronize{T, N}(x::CLArray{T, N})
@@ -131,7 +131,17 @@ function Base.copy!{T}(
     q = context(dest).queue
     cl.finish(q)
     d_offset = (d_offset - 1) * sizeof(T)
-    cl_writebuffer(q, buffer(dest), unsigned(d_offset), Ref(source, s_offset), amount * sizeof(T))
+    buff = buffer(dest)
+    clT = eltype(buff)
+    if clT != T # element type has different padding from cl type in julia
+        # TODO only convert the range in the offset, or maybe convert elements and directly upload?
+        # depends a bit on the overhead ov cl_writebuffer
+        source = map(source) do x
+            clx, off = aligned_convert(x)
+            clx
+        end
+    end
+    cl_writebuffer(q, buff, unsigned(d_offset), Ref(source, s_offset), amount * sizeof(clT))
     dest
 end
 
@@ -156,21 +166,128 @@ end
 
 default_buffer_type{T, N}(::Type, ::Type{Tuple{T, N}}, ::CLContext) = cl.Buffer{T}
 
-function (AT::Type{CLArray{T, N}}){T, N}(
+is_cl_vector(x::T) where T = _is_cl_vector(T)
+is_cl_vector(x::Type{T}) where T = _is_cl_vector(T)
+_is_cl_vector(x) = false
+_is_cl_vector(x::Type{NTuple{N, T}}) where {N, T} = is_cl_number(T) && N in (2, 3, 4, 8, 16)
+is_cl_number(x::Type{T}) where T = _is_cl_number(T)
+is_cl_number(x::T) where T = _is_cl_number(T)
+_is_cl_number(x) = false
+function _is_cl_number(::Type{<: Union{
+        Int64, Int32, Int16, Int8,
+        UInt64, UInt32, UInt16, UInt8,
+        Float64, Float32, Float16
+    }})
+    true
+end
+is_cl_inbuild{T}(x::T) = is_cl_vector(x) || is_cl_number(x)
+
+
+struct Pad{N}
+    val::NTuple{N, Int8}
+    Pad{N}() where N = new{N}(ntuple(i-> Int8(0), Val{N}))
+end
+Base.isempty(::Type{Pad{N}}) where N = (N == 0)
+Base.isempty(::Pad{N}) where N = N == 0
+function walk(f, T, args...)
+    if nfields(T) > 0
+        for field in fieldnames(T)
+            x = isa(T, DataType) ? fieldtype(T, field) : getfield(T, field)
+            f(x, args...)
+        end
+    else
+        f(T, args...)
+    end
+    return
+end
+
+
+inbuild_alignement(::Type{T}) where T = T <: NTuple && length(T.parameters) == 3 && sizeof(T) == 12 ? 16 : sizeof(T)
+inbuild_alignement(x::T) where T = inbuild_alignement(T)
+
+function cl_alignement(x)
+    is_cl_inbuild(x) ? inbuild_alignement(x) : cl_sizeof(x)
+end
+
+function advance_aligned(offset, alignment)
+    (offset == 0 || alignment == 0) && return 0
+    if offset % alignment != 0
+        npad = ((div(offset, alignment) + 1) * alignment) - offset
+        offset += npad
+    end
+    offset
+end
+
+function cl_sizeof(x, offset = 0)
+    align, size = if is_cl_inbuild(x) || nfields(x) == 0
+        inbuild_alignement(x), sizeof(x)
+    else
+        nextoffset = offset
+        for field in fieldnames(x)
+            xelem = isa(x, DataType) ? fieldtype(x, field) : getfield(x, field)
+            nextoffset = cl_sizeof(xelem, nextoffset)
+        end
+        size = nextoffset - offset
+        size, size
+    end
+    offset = advance_aligned(offset, align)
+    offset += size
+    offset
+end
+
+
+function aligned_convert(x, offset = Ref(0), types = [])
+    _aligned_convert(x, offset, types)
+    ret = if length(types) == 1
+        types[1]
+    else
+        isa(x, DataType) ? Tuple{types...} : (types...,)
+    end
+    ret, offset[]
+end
+function _aligned_convert(x, offset = Ref(0), types = [])
+    alignment = cl_alignement(x)
+    if alignment != 0 && offset[] % alignment != 0
+        npad = ((div(offset[], alignment) + 1) * alignment) - offset[]
+        pad = CLBackend.Pad{npad}()
+        offset[] += npad
+        if isa(x, DataType)
+            push!(types, CLBackend.Pad{npad})
+        else
+            push!(types, CLBackend.Pad{npad}())
+        end
+    end
+    if !CLBackend.is_cl_inbuild(x) && nfields(x) > 0
+        walk(_aligned_convert, x, offset, types)
+    else
+        push!(types, x)
+        offset[] += sizeof(x)
+    end
+    return
+end
+
+
+
+function (AT::Type{<: CLArray{T, N}})(
         size::NTuple{N, Int};
         context = current_context(),
         flag = :rw, kw_args...
-    )
+    ) where {T, N}
     ctx = context.context
-    buff = prod(size) == 0 ? cl.Buffer(T, ctx, flag, 1) : cl.Buffer(T, ctx, flag, prod(size))
-    AT(buff, size, context)
+    clT, offset = aligned_convert(T)
+    clT = sizeof(clT) == sizeof(T) ? T : clT
+    buffsize = prod(size)
+    buff = buffsize == 0 ? cl.Buffer(clT, ctx, flag, 1) : cl.Buffer(clT, ctx, flag, buffsize)
+    GPUArray{T, N, typeof(buff), typeof(context)}(buff, size, context)
 end
 
 # extend the private interface for the compilation types
 Transpiler._to_cl_types{T, N}(arg::CLArray{T, N}) = cli.CLArray{T, N}
 Transpiler._to_cl_types{T}(x::LocalMemory{T}) = cli.LocalMemory{T}
 
-Transpiler.cl_convert{T, N}(x::CLArray{T, N}) = buffer(x)
+Transpiler._to_cl_types(x::Ref{<: CLArray}) = Transpiler._to_cl_types(x[])
+Transpiler.cl_convert(x::Ref{<: CLArray}) = Transpiler.cl_convert(x[])
+Transpiler.cl_convert(x::CLArray) = buffer(x)
 Transpiler.cl_convert{T}(x::LocalMemory{T}) = cl.LocalMem(T, x.size)
 
 function CLFunction{T, N}(A::CLArray{T, N}, f, args...)

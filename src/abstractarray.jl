@@ -128,8 +128,7 @@ function Base.map!(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
     broadcast!(f, A, args...)
 end
 function Base.map(f::Function, A::AbstractAccArray, args::AbstractAccArray...)
-    broadcast(f, out, (A, args...))
-    out
+    broadcast(f, A, args...)
 end
 
 
@@ -179,7 +178,8 @@ end
 # Constructor
 
 function Base.fill!{T, N}(A::AbstractAccArray{T, N}, val)
-    A .= identity.(T(val))
+    valconv = T(val)
+    gpu_call(const_kernel2, A, (A, valconv, Cuint(length(A))))
     A
 end
 function Base.rand{T <: AbstractAccArray, ET}(::Type{T}, ::Type{ET}, size...)
@@ -211,6 +211,7 @@ import Base: copy!, getindex, setindex!
 
 @inline unpack_buffer(x) = x
 @inline unpack_buffer(x::AbstractAccArray) = buffer(x)
+@inline unpack_buffer(x::Ref{<: AbstractAccArray}) = unpack_buffer(x[])
 
 function to_cartesian(indices::Tuple)
     start = CartesianIndex(map(indices) do val
@@ -328,5 +329,49 @@ function Base.getindex{T, N}(A::AbstractAccArray{T, N}, indexes...)
         return result[]
     else
         return result
+    end
+end
+
+
+#Broadcast
+Base.@propagate_inbounds broadcast_index(::Val{false}, arg, shape, i) = arg
+Base.@propagate_inbounds function broadcast_index{T, N}(
+        ::Val{true}, arg::AbstractArray{T, N}, shape::NTuple{N, Integer}, i
+    )
+    @inbounds return arg[i]
+end
+@generated function broadcast_index{T, N}(::Val{true}, arg::AbstractArray{T, N}, shape, i)
+    idx = []
+    for i = 1:N
+        push!(idx, :(s[$i] < shape[$i] ? 1 : idx[$i]))
+    end
+    expr = quote
+        $(Expr(:meta, :inline, :propagate_inbounds))
+        s = size(arg)
+        idx = ind2sub(shape, i)
+        @inbounds return arg[$(idx...)]
+    end
+end
+Base.@propagate_inbounds broadcast_index(arg, shape, i) = arg
+Base.@propagate_inbounds function broadcast_index{T, N}(
+        arg::AbstractArray{T, N}, shape::NTuple{N, Integer}, i
+    )
+    return arg[i]
+end
+Base.@propagate_inbounds function broadcast_index(
+        arg::AbstractArray, shape::Integer, i::Integer
+    )
+    return arg[i]
+end
+@generated function broadcast_index{T, N}(arg::AbstractArray{T, N}, shape, i)
+    idx = []
+    for i = 1:N
+        push!(idx, :(ifelse(s[$i] < shape[$i], 1, idx[$i])))
+    end
+    expr = quote
+        $(Expr(:meta, :inline, :propagate_inbounds))
+        s = size(arg)
+        idx = ind2sub(shape, i)
+        @inbounds return arg[$(idx...)]
     end
 end

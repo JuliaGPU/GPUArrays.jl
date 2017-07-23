@@ -7,7 +7,7 @@ import CUDAdrv, CUDArt #, CUFFT
 import GPUArrays: buffer, create_buffer, acc_mapreduce
 import GPUArrays: Context, GPUArray, context, linear_index, gpu_call
 import GPUArrays: blas_module, blasbuffer, is_blas_supported, hasblas
-import GPUArrays: default_buffer_type
+import GPUArrays: default_buffer_type, broadcast_index
 
 
 using CUDAdrv: CuDefaultStream
@@ -131,6 +131,7 @@ end
 unpack_cu_array(x) = x
 unpack_cu_array(x::Scalar) = unpack_cu_array(getfield(x, 1))
 unpack_cu_array{T,N}(x::CUArray{T,N}) = buffer(x)
+unpack_cu_array(x::Ref{<:GPUArrays.AbstractAccArray}) = unpack_cu_array(x[])
 
 @inline function call_cuda(A::CUArray, kernel, rest...)
     blocks, thread = thread_blocks_heuristic(A)
@@ -202,7 +203,6 @@ end
 
 for i = 0:10
     args = ntuple(x-> Symbol("arg_", x), i)
-    fargs = ntuple(x-> :(broadcast_index(which[$x], $(args[x]), sz, i)), i)
     fargs2 = ntuple(x-> :(broadcast_index($(args[x]), sz, i)), i)
     @eval begin
 
@@ -212,17 +212,17 @@ for i = 0:10
             )
             #reduce multiple elements per thread
 
-            i = (blockIdx().x - UInt32(1)) * blockDim().x + threadIdx().x
-            step = blockDim().x * gridDim().x
-            sz = size(A)
+            i = (CUDAnative.blockIdx().x - UInt32(1)) * CUDAnative.blockDim().x + CUDAnative.threadIdx().x
+            step = CUDAnative.blockDim().x * CUDAnative.gridDim().x
+            sz = Cuint.(size(A))
             result = v0
             while i <= length(A)
                 @inbounds result = op(result, f(A[i], $(fargs2...)))
                 i += step
             end
             result = reduce_block(result, op, v0)
-            if threadIdx().x == UInt32(1)
-                @inbounds out[blockIdx().x] = result
+            if CUDAnative.threadIdx().x == UInt32(1)
+                @inbounds out[CUDAnative.blockIdx().x] = result
             end
             return
         end
@@ -241,27 +241,27 @@ function CUDAnative.shfl_down(
     )
     (
         RGB{Float32}(
-            shfl_down(val[1].r, srclane, width),
-            shfl_down(val[1].g, srclane, width),
-            shfl_down(val[1].b, srclane, width),
+            CUDAnative.shfl_down(val[1].r, srclane, width),
+            CUDAnative.shfl_down(val[1].g, srclane, width),
+            CUDAnative.shfl_down(val[1].b, srclane, width),
         ),
-        shfl_down(val[2], srclane, width)
+        CUDAnative.shfl_down(val[2], srclane, width)
     )
 end
 
 function reduce_warp{T, F<:Function}(val::T, op::F)
     offset = CUDAnative.warpsize() ÷ UInt32(2)
     while offset > UInt32(0)
-        val = op(val, shfl_down(val, offset))
+        val = op(val, CUDAnative.shfl_down(val, offset))
         offset ÷= UInt32(2)
     end
     return val
 end
 
 @inline function reduce_block{T, F <: Function}(val::T, op::F, v0::T)::T
-    shared = @cuStaticSharedMem(T, 32)
-    wid  = div(threadIdx().x - UInt32(1), CUDAnative.warpsize()) + UInt32(1)
-    lane = rem(threadIdx().x - UInt32(1), CUDAnative.warpsize()) + UInt32(1)
+    shared = CUDAnative.@cuStaticSharedMem(T, 32)
+    wid  = div(CUDAnative.threadIdx().x - UInt32(1), CUDAnative.warpsize()) + UInt32(1)
+    lane = rem(CUDAnative.threadIdx().x - UInt32(1), CUDAnative.warpsize()) + UInt32(1)
 
      # each warp performs partial reduction
     val = reduce_warp(val, op)
@@ -271,10 +271,10 @@ end
         @inbounds shared[wid] = val
     end
     # wait for all partial reductions
-    sync_threads()
+    CUDAnative.sync_threads()
     # read from shared memory only if that warp existed
     @inbounds begin
-        val = (threadIdx().x <= fld(blockDim().x, CUDAnative.warpsize())) ? shared[lane] : v0
+        val = (threadIdx().x <= fld(CUDAnative.blockDim().x, CUDAnative.warpsize())) ? shared[lane] : v0
     end
     if wid == 1
         # final reduce within first warp
