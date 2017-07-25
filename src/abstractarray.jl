@@ -297,6 +297,8 @@ for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArr
     end
 end
 
+Base.copy(x::AbstractAccArray) = identity.(x)
+
 function Base.setindex!{T, N}(A::AbstractAccArray{T, N}, value, indexes...)
     # similarly, value should always be a julia array
     shape = map(length, indexes)

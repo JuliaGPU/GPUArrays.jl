@@ -411,9 +411,11 @@ function acc_mapreduce{T, OT, N}(
     fill!(out, v0)
     lmem = GPUArrays.LocalMemory{OT}(block_size)
     args = (f, op, v0, A, lmem, Cuint(length(A)), out, rest...)
+
     func = GPUArrays.CLFunction(A, reduce_kernel, args...)
     func(args, group_size * block_size, (block_size,))
-    reduce(op, Array(out))
+    x = reduce(op, Array(out))
+    x
 end
 
 

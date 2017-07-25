@@ -113,7 +113,7 @@ for i = 0:7
     @eval begin
 
         function mapidx{F, T, N}(f::F, data::JLArray{T, N}, args::NTuple{$i, Any})
-            @threads for i in eachindex(data)
+            for i in eachindex(data)
                 f(i, data, $(fidxargs...))
             end
         end
@@ -162,7 +162,7 @@ function gpu_call(f, A::JLArray, args)
         parallel_kernel(0, len, f, unpacked_args)
         return
     end
-    @threads for id = 1:n
+    for id = 1:n
         parallel_kernel((id - 1) * width, width, f, unpacked_args)
     end
     len_floored = width * n

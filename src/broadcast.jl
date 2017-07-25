@@ -26,9 +26,28 @@ function broadcast!(f::typeof(identity), A::AbstractAccArray, val::Number)
 end
 
 @inline function broadcast_t(
-        f, T, shape, iter, A::AbstractAccArray, Bs::Vararg{Any,N}
-    ) where N
+        f, ::Type{T}, shape, iter, A::AbstractAccArray, Bs::Vararg{Any,N}
+    ) where {N, T}
     C = similar(A, T, shape)
+    keeps, Idefaults = map_newindexer(shape, A, Bs)
+    _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, iter)
+    return C
+end
+@inline function broadcast_t(
+        f, ::Type{T}, shape, iter, A::AbstractAccArray, B::AbstractAccArray, rest::Vararg{Any,N}
+    ) where {N, T}
+    C = similar(A, T, shape)
+    Bs = (B, rest...)
+    keeps, Idefaults = map_newindexer(shape, A, Bs)
+    _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, iter)
+    return C
+end
+
+@inline function broadcast_t(
+        f, T, shape, iter, A::Any, B::AbstractAccArray, rest::Vararg{Any, N}
+    ) where N
+    C = similar(B, T, shape)
+    Bs = (B, rest...)
     keeps, Idefaults = map_newindexer(shape, A, Bs)
     _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, iter)
     return C
@@ -49,6 +68,17 @@ function _broadcast!(
     out
 end
 
+function Base.foreach(func, over::AbstractAccArray, Bs...)
+    shape = Cuint.(size(over))
+    keeps, Idefaults = map_newindexer(shape, over, Bs)
+    args = (over, Bs...)
+    descriptor_tuple = ntuple(length(args)) do i
+        BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
+    end
+    descriptor = GPUArray([descriptor_tuple])
+    gpu_call(foreach_kernel, over, (func, shape, Cuint.(length(over)), descriptor, over, Bs...))
+    return
+end
 
 
 arg_length(x::GPUArray) = Cuint.(size(x))
@@ -132,6 +162,29 @@ for N = 0:10
                 $(inner_expr...)
                 # call the function and store the result
                 @inbounds B[ilin] = func($(valargs...))
+            end
+            return
+        end
+        @inline function apply_broadcast(ilin, state, func, shape, len, descriptor_ref, $(args...))
+            descriptor = descriptor_ref[1]
+            # this will hopefully get dead code removed,
+            # if only arrays with linear index are involved, because I should be unused in that case
+            I = gpu_ind2sub(shape, ilin)
+            $(inner_expr...)
+            # call the function and store the result
+            func($(valargs...))
+        end
+        function broadcast_kernel!(state, func, B, shape, len, descriptor_ref, $(args...))
+            ilin = linear_index(B, state)
+            if ilin <= len
+                @inbounds B[ilin] = apply_broadcast(ilin, state, func, shape, len, descriptor_ref, $(args...))
+            end
+            return
+        end
+        function foreach_kernel(state, func, shape, len, descriptor_ref, A, $(args...))
+            ilin = linear_index(A, state)
+            if ilin <= len
+                apply_broadcast(ilin, state, func, shape, len, descriptor_ref, A, $(args...))
             end
             return
         end
