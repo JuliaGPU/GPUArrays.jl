@@ -4,10 +4,10 @@ if get(ENV, "TRAVIS", "") == "true" ||
         get(ENV, "CI", "") == "true" ||
         get(ENV, "USER", "") == "buildbot"
 
-    cd(()-> run(`git checkout sd/applyvarargstack`), Pkg.dir("Sugar"))
-    cd(()-> run(`git checkout sd/for`), Pkg.dir("Transpiler"))
+    cd(Pkg.dir("Transpiler")) do
+        run(`git checkout master`)
+    end
 end
-
 
 using GPUArrays
 using Base.Test

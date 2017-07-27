@@ -73,10 +73,9 @@ clusters = [
 imgs = RGB{Float32}.(load(impath)) # scale and convert image
 imgvec = vec(imgs)
 clusters = rand(eltype(imgvec), 32)
-CLBackend.init()
+JLBackend.init()
 
 thimgvec, thclusters = GPUArray(imgvec), GPUArray(clusters)
-eltype(thimgvec)
 @time begin
     x,l = kmeans(thimgvec, thclusters)
     GPUArrays.synchronize(x)

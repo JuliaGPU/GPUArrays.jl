@@ -160,16 +160,18 @@ function filterResults(df, n)
 end
 
 io = IOBuffer()
-for n in 1:Nmax
+for n in Nmax:Nmax
    df = filterResults(results, n)
    println(io, "| Backend | Time (μs) for N = 10^$n |")
    println(io, "| ---- | ---- |")
    for row in eachrow(df)
       b = row[:Backend]
       t = row[:minT]
-      @printf(io, "| %s | %6.2f μs|\n", b, t / 10^9)
+      @printf(io, "| %s | %6.5f μs|\n", b, t / 10^9)
    end
-   display(Markdown.parse(io))
-   seekstart(io)
-   println(String(take!(io)))
+   # display(Markdown.parse(io))
+   # seekstart(io)
+   write((take!(io)))
 end
+0.00264
+0.00296

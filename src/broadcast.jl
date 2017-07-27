@@ -151,20 +151,8 @@ for N = 0:10
         push!(inner_expr, inner)
         push!(valargs, val_i)
     end
-    final_expr = quote
-        @inline function broadcast_kernel!(state, func, B, shape, len, descriptor_ref, $(args...))
-            ilin = linear_index(B, state)
-            if ilin <= len
-                descriptor = descriptor_ref[1]
-                # this will hopefully get dead code removed,
-                # if only arrays with linear index are involved, because I should be unused in that case
-                I = gpu_ind2sub(shape, ilin)
-                $(inner_expr...)
-                # call the function and store the result
-                @inbounds B[ilin] = func($(valargs...))
-            end
-            return
-        end
+    @eval begin
+
         @inline function apply_broadcast(ilin, state, func, shape, len, descriptor_ref, $(args...))
             descriptor = descriptor_ref[1]
             # this will hopefully get dead code removed,
@@ -174,13 +162,15 @@ for N = 0:10
             # call the function and store the result
             func($(valargs...))
         end
-        function broadcast_kernel!(state, func, B, shape, len, descriptor_ref, $(args...))
+
+        @inline function broadcast_kernel!(state, func, B, shape, len, descriptor_ref, $(args...))
             ilin = linear_index(B, state)
             if ilin <= len
                 @inbounds B[ilin] = apply_broadcast(ilin, state, func, shape, len, descriptor_ref, $(args...))
             end
             return
         end
+
         function foreach_kernel(state, func, shape, len, descriptor_ref, A, $(args...))
             ilin = linear_index(A, state)
             if ilin <= len
@@ -188,15 +178,16 @@ for N = 0:10
             end
             return
         end
-    end
-    eval(final_expr)
-    @eval function mapidx_kernel(state, f, A, len, $(args...))
-        i = linear_index(A, state)
-        @inbounds if i <= len
-            f(i, A, $(args...))
+
+        function mapidx_kernel(state, f, A, len, $(args...))
+            i = linear_index(A, state)
+            @inbounds if i <= len
+                f(i, A, $(args...))
+            end
+            return
         end
-        return
     end
+
 end
 
 function mapidx{N}(f, A::AbstractAccArray, args::NTuple{N, Any})
