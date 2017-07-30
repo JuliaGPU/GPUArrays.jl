@@ -94,3 +94,31 @@ end
     y = muladd.(A, 2f0, x)
     @test Array(y) == muladd(a, 2f0, abs.(a))
 end
+
+
+@allbackends "copy!"
+    x = zeros(Float32, 10, 10)
+    y = rand(Float32, 20, 10)
+    a = GPUArray(x)
+    b = GPUArray(y)
+    r1 = CartesianRange(CartesianIndex(1, 3), CartesianIndex(7, 8))
+    r2 = CartesianRange(CartesianIndex(4, 3), CartesianIndex(10, 8))
+    copy!(x, r1, y, r2)
+    copy!(a, r1, b, r2)
+    @test x == Array(a)
+
+    fill!(x, 0f0)
+    x2 = zeros(Float32, 10, 10)
+    copy!(x2, r1, b, r2)
+    @test x2 == x
+
+    fill!(a, 0f0)
+    x2 = zeros(Float32, 10, 10)
+    copy!(a, r1, y, r2)
+    @test Array(a) == x
+
+    @test vcat(x, y) == Array(vcat(a, b))
+    z = rand(Float32, 10, 10)
+    c = GPUArray(z)
+    hcat(x, z) == Array(hcat(a, c))
+end
