@@ -153,10 +153,10 @@ linear_index(A::AbstractArray, state) = state
         return
     end
 end
-function gpu_call(f, A::JLArray, args)
+function gpu_call(f, A::JLArray, args, globalsize = length(A), local_size = 0)
     unpacked_args = unpack_buffer.(args)
     n = nthreads(A)
-    len = length(A)
+    len = prod(globalsize)
     width = floor(Int, len / n)
     if width <= 10 # arbitrary number. TODO figure out good value for when it's worth launching threads
         parallel_kernel(0, len, f, unpacked_args)

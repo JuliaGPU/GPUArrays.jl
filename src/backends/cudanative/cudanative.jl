@@ -113,11 +113,11 @@ function Base.copy!{T}(
 end
 
 function thread_blocks_heuristic(A::AbstractArray)
-    thread_blocks_heuristic(size(A))
+    thread_blocks_heuristic(length(A))
 end
 
-function thread_blocks_heuristic{N}(s::NTuple{N, Int})
-    len = prod(s)
+thread_blocks_heuristic{N}(s::NTuple{N, Integer}) = thread_blocks_heuristic(prod(s))
+function thread_blocks_heuristic(len::Integer)
     threads = min(len, 1024)
     blocks = ceil(Int, len/threads)
     blocks, threads
@@ -132,14 +132,6 @@ unpack_cu_array(x) = x
 unpack_cu_array(x::Scalar) = unpack_cu_array(getfield(x, 1))
 unpack_cu_array{T,N}(x::CUArray{T,N}) = buffer(x)
 unpack_cu_array(x::Ref{<:GPUArrays.AbstractAccArray}) = unpack_cu_array(x[])
-
-@inline function call_cuda(A::CUArray, kernel, rest...)
-    blocks, thread = thread_blocks_heuristic(A)
-    args = map(unpack_cu_array, rest)
-    #cu_kernel, rewritten = CUDAnative.rewrite_for_cudanative(kernel, map(typeof, args))
-    #println(CUDAnative.@code_typed kernel(args...))
-    @cuda (blocks, thread) kernel(args...)
-end
 
 # TODO hook up propperly with CUDAdrv... This is a dirty adhoc solution
 # to be consistent with the OpenCL backend
@@ -187,8 +179,12 @@ function (f::CUFunction{F}){F <: CUDAdrv.CuFunction, T, N}(A::CUArray{T, N}, arg
     )
 end
 
-function gpu_call{T, N}(f::Function, A::CUArray{T, N}, args, globalsize = size(A), localsize = nothing)
-    call_cuda(A, f, 0f0, args...)
+function gpu_call{T, N}(f::Function, A::CUArray{T, N}, args, globalsize = length(A), localsize = nothing)
+    blocks, thread = thread_blocks_heuristic(globalsize)
+    args = map(unpack_cu_array, args)
+    #cu_kernel, rewritten = CUDAnative.rewrite_for_cudanative(kernel, map(typeof, args))
+    #println(CUDAnative.@code_typed kernel(args...))
+    @cuda (blocks, thread) f(0f0, args...)
 end
 function gpu_call{T, N}(f::Tuple{String, Symbol}, A::CUArray{T, N}, args, globalsize = size(A), localsize = nothing)
     func = CUFunction(A, f, args...)
@@ -324,6 +320,15 @@ end
 
 ########################################
 # CUBLAS
+
+function to_cudart(A::CUArray)
+    ctx = context(A)
+    buff = buffer(A)
+    devptr = pointer(buff)
+    device = CUDAdrv.device(devptr.ctx).handle
+    CUDArt.CudaArray(CUDArt.CudaPtr(devptr.ptr, ctx.ctx), size(A), Int(device))
+end
+
 if is_blas_supported(:CUBLAS)
     using CUBLAS
     import CUDArt
@@ -331,12 +336,8 @@ if is_blas_supported(:CUBLAS)
     # # implement blas interface
     hasblas(::CUContext) = true
     blas_module(::CUContext) = CUBLAS
-    function blasbuffer(ctx::CUContext, A)
-        buff = buffer(A)
-        devptr = pointer(buff)
-        device = CUDAdrv.device(devptr.ctx).handle
-        CUDArt.CudaArray(CUDArt.CudaPtr(devptr.ptr, ctx.ctx), size(A), Int(device))
-    end
+    blasbuffer(ctx::CUContext, A) = to_cudart(A)
+
 end
 #
 # function convert{T <: CUArray}(t::T, A::CUDArt.CudaArray)

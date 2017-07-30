@@ -213,15 +213,19 @@ import Base: copy!, getindex, setindex!
 @inline unpack_buffer(x::AbstractAccArray) = buffer(x)
 @inline unpack_buffer(x::Ref{<: AbstractAccArray}) = unpack_buffer(x[])
 
-function to_cartesian(indices::Tuple)
-    start = CartesianIndex(map(indices) do val
+function to_cartesian(A, indices::Tuple)
+    start = CartesianIndex(ntuple(length(indices)) do i
+        val = indices[i]
         isa(val, Integer) && return val
         isa(val, UnitRange) && return first(val)
+        isa(val, Colon) && return 1
         error("GPU indexing only defined for integers or unit ranges. Found: $val")
     end)
-    stop = CartesianIndex(map(indices) do val
+    stop = CartesianIndex(ntuple(length(indices)) do i
+        val = indices[i]
         isa(val, Integer) && return val
         isa(val, UnitRange) && return last(val)
+        isa(val, Colon) && return size(A, i)
         error("GPU indexing only defined for integers or unit ranges. Found: $val")
     end)
     CartesianRange(start, stop)
@@ -278,12 +282,12 @@ for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArr
             s_offset = first(s_range)[1]
             copy!(dest, d_offset, src, s_offset, amount)
         end
-        function copy!{T, N}(
-                dest::$D{T, N}, rdest::CartesianRange{CartesianIndex{N}},
-                src::$S{T, N}, ssrc::CartesianRange{CartesianIndex{N}},
-            )
-            copy!(unpack_buffer(dest), rdest, unpack_buffer(src), ssrc)
-        end
+        # function copy!{T, N}(
+        #         dest::$D{T, N}, rdest::CartesianRange{CartesianIndex{N}},
+        #         src::$S{T, N}, ssrc::CartesianRange{CartesianIndex{N}},
+        #     )
+        #     copy!(unpack_buffer(dest), rdest, unpack_buffer(src), ssrc)
+        # end
         function copy!{T, N}(
                 dest::$D{T, N}, src::$S{T, N}
             )
@@ -297,11 +301,73 @@ for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArr
     end
 end
 
+
+function copy_kernel!(state, dest, dest_offsets, src, src_offsets, shape, shape_dest, shape_source, length)
+    i = linear_index(dest, state)
+    if i <= length
+        # TODO can this be done faster and smarter?
+        idx = gpu_ind2sub(shape, i)
+        dest_idx = gpu_sub2ind(shape_dest, idx .+ dest_offsets)
+        src_idx = gpu_sub2ind(shape_source, idx .+ src_offsets)
+        @inbounds dest[dest_idx] = src[src_idx]
+    end
+    return
+end
+
+function copy!{T, N}(
+        dest::AbstractAccArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
+        src::AbstractAccArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
+    )
+    shape = size(destcrange)
+    if shape != size(srccrange)
+        throw(DimensionMismatch("Ranges don't match their size. Found: $shape, $(size(srccrange))"))
+    end
+    len = length(destcrange)
+    dest_offsets = Cuint.(destcrange.start.I .- 1)
+    src_offsets = Cuint.(srccrange.start.I .- 1)
+    ui_shape = Cuint.(shape)
+    gpu_call(
+        copy_kernel!, dest,
+        (dest, dest_offsets, src, src_offsets, ui_shape, Cuint.(size(dest)), Cuint.(size(src)), Cuint(len)),
+        len
+    )
+end
+
+
+function copy!{T, N}(
+        dest::AbstractAccArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
+        src::AbstractArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
+    )
+    # Is this efficient? Maybe!
+    src_gpu = typeof(dest)(map(idx-> src[idx], srccrange))
+    nrange = CartesianRange(one(CartesianIndex{N}), CartesianIndex(size(src_gpu)))
+    copy!(dest, destcrange, src_gpu, nrange)
+end
+
+
+function copy!{T, N}(
+        dest::AbstractArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
+        src::AbstractAccArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
+    )
+    # Is this efficient? Maybe!
+    dest_gpu = similar(src, size(destcrange))
+    nrange = CartesianRange(one(CartesianIndex{N}), CartesianIndex(size(dest_gpu)))
+    copy!(dest_gpu, nrange, src, srccrange)
+    copy!(dest, destcrange, Array(dest_gpu), nrange)
+end
+
+
 Base.copy(x::AbstractAccArray) = identity.(x)
+
+indexlength(A, i, array::AbstractArray) = length(array)
+indexlength(A, i, array::Number) = 1
+indexlength(A, i, array::Colon) = size(A, i)
 
 function Base.setindex!{T, N}(A::AbstractAccArray{T, N}, value, indexes...)
     # similarly, value should always be a julia array
-    shape = map(length, indexes)
+    shape = ntuple(Val{N}) do i
+        indexlength(A, i, indexes[i])
+    end
     if !isa(value, T) # TODO, shape check errors for x[1:3] = 1
         Base.setindex_shape_check(value, indexes...)
     end
@@ -309,7 +375,7 @@ function Base.setindex!{T, N}(A::AbstractAccArray{T, N}, value, indexes...)
     v = array_convert(Array{T, N}, value)
     # since you shouldn't update GPUArrays with single indices, we simplify the interface
     # by always mapping to ranges
-    ranges_dest = to_cartesian(indexes)
+    ranges_dest = to_cartesian(A, indexes)
     ranges_src = CartesianRange(size(v))
 
     copy!(A, ranges_dest, v, ranges_src)
@@ -324,7 +390,7 @@ function Base.getindex{T, N}(A::AbstractAccArray{T, N}, indexes...)
 
     shape = map(length, cindexes)
     result = Array{T, N}(shape)
-    ranges_src = to_cartesian(cindexes)
+    ranges_src = to_cartesian(A, cindexes)
     ranges_dest = CartesianRange(shape)
     copy!(result, ranges_dest, A, ranges_src)
     if all(i-> isa(i, Integer), cindexes) # scalar
@@ -377,3 +443,71 @@ end
         @inbounds return arg[$(idx...)]
     end
 end
+
+
+
+
+#
+#
+#
+# # based on KArrays.jl
+# # based on typed_hcat{T}(::Type{T}, A::AbstractVecOrMat...) in base/abstractarray.jl:996
+# function hcat{T}(A::AccVecOrMat{T}...)
+#     nargs = length(A)
+#     nrows = size(A[1], 1)
+#     ncols = 0
+#     for j = 1:nargs
+#         Aj = A[j]
+#         if size(Aj, 1) != nrows
+#             throw(ArgumentError("number of rows of each array must match (got $(map(x->size(x,1), A)))"))
+#         end
+#         nd = ndims(Aj)
+#         ncols += (nd==2 ? size(Aj,2) : 1)
+#     end
+#     B = similar(A[1], nrows, ncols)
+#     pos = 1
+#     for k = 1:nargs
+#         Ak = A[k]
+#         n = length(Ak)
+#         copy!(B, pos, Ak, 1, n)
+#         pos += n
+#     end
+#     return B
+# end
+#
+# function vcat{T}(A::AccVector{T}...)
+#     nargs = length(A)
+#     nrows = 0
+#     for a in A
+#         nrows += length(a)
+#     end
+#     B = similar(A[1], nrows)
+#     pos = 1
+#     for k = 1:nargs
+#         Ak = A[k]
+#         n = length(Ak)
+#         copy!(B, pos, Ak, 1, n)
+#         pos += n
+#     end
+#     return B
+# end
+#
+# function vcat{T}(A::AccVecOrMat{T}...)
+#     nargs = length(A)
+#     nrows = sum(a->size(a, 1), A)::Int
+#     ncols = size(A[1], 2)
+#     for j = 2:nargs
+#         if size(A[j], 2) != ncols
+#             throw(ArgumentError("number of columns of each array must match (got $(map(x->size(x,2), A)))"))
+#         end
+#     end
+#     B = similar(A[1], nrows, ncols)
+#     pos = 1
+#     for k = 1:nargs
+#         Ak = A[k]
+#         p1 = pos+size(Ak,1)-1
+#         B[pos:p1, :] = Ak
+#         pos = p1+1
+#     end
+#     return B
+# end

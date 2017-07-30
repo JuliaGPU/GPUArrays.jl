@@ -136,10 +136,7 @@ function Base.copy!{T}(
     if clT != T # element type has different padding from cl type in julia
         # TODO only convert the range in the offset, or maybe convert elements and directly upload?
         # depends a bit on the overhead ov cl_writebuffer
-        source = map(source) do x
-            clx, off = cl.aligned_convert(x)
-            clx
-        end
+        source = map(cl.packed_convert, source)
     end
     cl_writebuffer(q, buff, unsigned(d_offset), Ref(source, s_offset), amount * sizeof(clT))
     dest
@@ -174,7 +171,7 @@ function (AT::Type{<: CLArray{T, N}})(
         flag = :rw, kw_args...
     ) where {T, N}
     ctx = context.context
-    clT, offset = cl.aligned_convert(T)
+    clT = cl.packed_convert(T)
     clT = sizeof(clT) == sizeof(T) ? T : clT
     buffsize = prod(size)
     buff = buffsize == 0 ? cl.Buffer(clT, ctx, flag, 1) : cl.Buffer(clT, ctx, flag, buffsize)

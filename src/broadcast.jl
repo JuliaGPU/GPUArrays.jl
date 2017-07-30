@@ -63,8 +63,7 @@ function _broadcast!(
     descriptor_tuple = ntuple(length(args)) do i
         BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
     end
-    descriptor = GPUArray([descriptor_tuple])
-    gpu_call(broadcast_kernel!, out, (func, out, shape, Cuint.(length(out)), descriptor, A, Bs...))
+    gpu_call(broadcast_kernel!, out, (func, out, shape, Cuint.(length(out)), descriptor_tuple, A, Bs...))
     out
 end
 
@@ -75,8 +74,7 @@ function Base.foreach(func, over::AbstractAccArray, Bs...)
     descriptor_tuple = ntuple(length(args)) do i
         BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
     end
-    descriptor = GPUArray([descriptor_tuple])
-    gpu_call(foreach_kernel, over, (func, shape, Cuint.(length(over)), descriptor, over, Bs...))
+    gpu_call(foreach_kernel, over, (func, shape, Cuint.(length(over)), descriptor_tuple, over, Bs...))
     return
 end
 
@@ -85,19 +83,7 @@ arg_length(x::GPUArray) = Cuint.(size(x))
 arg_length(x) = ()
 
 abstract type BroadcastDescriptor{Typ} end
-# Until we figure out alignement for all structs, we special case for most common size
-immutable BroadcastDescriptor0{Typ} <: BroadcastDescriptor{Typ}
-    size::Tuple{}
-    keep::Tuple{}
-    idefault::Tuple{}
-    padd::Float32 # can't be empty
-end
-immutable BroadcastDescriptor3{Typ} <: BroadcastDescriptor{Typ}
-    size::NTuple{3, Cuint}
-    keep::NTuple{3, Cuint}
-    idefault::NTuple{3, Cuint}
-    padd::NTuple{3, Cuint}
-end
+
 immutable BroadcastDescriptorN{Typ, N} <: BroadcastDescriptor{Typ}
     size::NTuple{N, Cuint}
     keep::NTuple{N, Cuint}
@@ -111,11 +97,7 @@ function BroadcastDescriptor(val, keep, idefault)
     else
         Broadcast.containertype(val)
     end
-    args = arg_length(val), Cuint.(keep), Cuint.(idefault)
-    if N == 0
-        return BroadcastDescriptor0{typ}((), (), (), 0f0)
-    end
-    BroadcastDescriptorN{typ, N}(args...)
+    BroadcastDescriptorN{typ, N}(arg_length(val), Cuint.(keep), Cuint.(idefault))
 end
 
 @propagate_inbounds @inline function _broadcast_getindex(
@@ -153,8 +135,7 @@ for N = 0:10
     end
     @eval begin
 
-        @inline function apply_broadcast(ilin, state, func, shape, len, descriptor_ref, $(args...))
-            descriptor = descriptor_ref[1]
+        @inline function apply_broadcast(ilin, state, func, shape, len, descriptor, $(args...))
             # this will hopefully get dead code removed,
             # if only arrays with linear index are involved, because I should be unused in that case
             I = gpu_ind2sub(shape, ilin)
@@ -163,18 +144,18 @@ for N = 0:10
             func($(valargs...))
         end
 
-        @inline function broadcast_kernel!(state, func, B, shape, len, descriptor_ref, $(args...))
+        @inline function broadcast_kernel!(state, func, B, shape, len, descriptor, $(args...))
             ilin = linear_index(B, state)
             if ilin <= len
-                @inbounds B[ilin] = apply_broadcast(ilin, state, func, shape, len, descriptor_ref, $(args...))
+                @inbounds B[ilin] = apply_broadcast(ilin, state, func, shape, len, descriptor, $(args...))
             end
             return
         end
 
-        function foreach_kernel(state, func, shape, len, descriptor_ref, A, $(args...))
+        function foreach_kernel(state, func, shape, len, descriptor, A, $(args...))
             ilin = linear_index(A, state)
             if ilin <= len
-                apply_broadcast(ilin, state, func, shape, len, descriptor_ref, A, $(args...))
+                apply_broadcast(ilin, state, func, shape, len, descriptor, A, $(args...))
             end
             return
         end
