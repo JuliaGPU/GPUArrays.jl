@@ -3,7 +3,7 @@ StaticArrays
 Compat 0.19.0
 ColorTypes
 
-Transpiler 0.0.1
+Transpiler 0.1.0
 Sugar 0.0.3
 Matcha
 
