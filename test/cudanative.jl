@@ -103,19 +103,19 @@ end
     @test map!(sin, jy, jy) ≈ Array(x)
 end
 
-if CUBackend.hasnvcc()
-    @testset "Custom kernel from string function" begin
-        x = GPUArray(rand(Float32, 100))
-        y = GPUArray(rand(Float32, 100))
-        source = """
-        __global__ void copy(const float *input, float *output)
-        {
-            int i = blockIdx.x * blockDim.x + threadIdx.x;
-            output[i] = input[i];
-        }
-        """
-        f = (source, :copy)
-        gpu_call(f, x, (x, y))
-        @test Array(x) == Array(y)
-    end
-end
+# if CUBackend.hasnvcc()
+#     @testset "Custom kernel from string function" begin
+#         x = GPUArray(rand(Float32, 100))
+#         y = GPUArray(rand(Float32, 100))
+#         source = """
+#         __global__ void copy(const float *input, float *output)
+#         {
+#             int i = blockIdx.x * blockDim.x + threadIdx.x;
+#             output[i] = input[i];
+#         }
+#         """
+#         f = (source, :copy)
+#         gpu_call(f, x, (x, y))
+#         @test Array(x) == Array(y)
+#     end
+# end

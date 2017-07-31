@@ -64,3 +64,38 @@ test(idx, A) = A[idx] * 2f0
     u0 = GPUArray(u0c)
     @test Array(abs.(u0)) ≈ abs.(u0c)
 end
+
+function testv3_1(a, b)
+    x = a .* b
+    y =  x .+ b
+    @inbounds return y[1]
+end
+
+function testv3_2(a, b)
+    x = a .* b
+    y =  x .+ b
+    return y
+end
+
+
+@allbackends "vec 3" backend begin
+    N = 20
+    xc = map(x-> ntuple(i-> rand(Float32), Val{3}), 1:N)
+    yc = map(x-> ntuple(i-> rand(Float32), Val{3}), 1:N)
+    x = GPUArray(xc)
+    y = GPUArray(yc)
+    res1c = zeros(Float32, N)
+    res2c = similar(xc)
+    res1 = GPUArray(res1c)
+    res2 = GPUArray(res2c)
+
+    res1 .= testv3_1.(x, y)
+    res1c .= testv3_1.(xc, yc)
+    @test Array(res1) ≈ res1c
+
+    res2 .= testv3_2.(x, y)
+    res2c .= testv3_2.(xc, yc)
+    @test all(map((a,b)->all((1,2,3) .≈ (1,2,3)),Array(res2), res2c))
+end
+
+Sugar.isintrinsic(Transpiler.CLMethod(Complex64))

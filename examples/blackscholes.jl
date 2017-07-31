@@ -38,10 +38,6 @@ end
     0.5f0 + 0.5f0 * erfc(0.707106781f0 * x)
 end
 
-@noinline function test(result, a, b, c, d, e)
-    result .= blackscholes.(a, b, c, d, e)
-    GPUArrays.synchronize(result)
-end
 
 if Pkg.installed("CUDAnative") != nothing
     using CUDAnative
@@ -69,8 +65,9 @@ if Pkg.installed("CUDAnative") != nothing
 end
 function runbench(f, out, a, b, c, d, e)
     out .= f.(a, b, c, d, e)
-    synchronize(out)
+    GPUArrays.synchronize(out)
 end
+
 
 
 using BenchmarkTools
@@ -101,7 +98,7 @@ for n in 1:Nmax
     result     = similar(spttime)
     comparison = blackscholes.(sptprice, initStrike, rate, volatility, spttime)
     perbackend() do backend # nice to go through all backends, but for benchmarks we might want to have this more explicit!
-        if true #backend == :julia
+        if backend == :opencl
             _sptprice = GPUArray(sptprice)
             _initStrike = GPUArray(initStrike)
             _rate = GPUArray(rate)
@@ -113,6 +110,8 @@ for n in 1:Nmax
             ctx_str = sprint() do io
                 show(io, GPUArrays.current_context())
             end
+            println(b)
+
             push!(benchmarks, (ctx_str, N, b, minimum(b).time))
 
             @assert Array(_result) ≈ comparison
@@ -173,5 +172,169 @@ for n in Nmax:Nmax
    # seekstart(io)
    write((take!(io)))
 end
-0.00264
-0.00296
+
+function blackscholes(args, time)
+    sptprice, strike, rate, volatility = args[1], args[2], args[3], args[4]
+    logterm = log( sptprice / strike)
+    powterm = .5f0 * volatility * volatility
+    den = volatility * sqrt(time)
+    d1 = (((rate + powterm) * time) + logterm) / den
+    d2 = d1 - den
+    NofXd1 = cndf2(d1)
+    NofXd2 = cndf2(d2)
+    futureValue = strike * exp(-rate * time)
+    c1 = futureValue * NofXd2
+    call_ = sptprice * NofXd1 - c1
+    put  = call_ - futureValue + sptprice
+    return put
+end
+
+function runs(iterations, AT)
+    args = [(42f0, 40f0, 0.5f0, 0.5f0) for i = 1:iterations]
+    time = 0.5f0
+    args_gpu = AT(args)
+    @show eltype(args_gpu) eltype(args_gpu.buffer)
+    put1 = blackscholes.(args, time)
+    put2 = blackscholes.(args_gpu, time)
+    tic()
+    put2 .= blackscholes.(args_gpu, time)
+    res = Array(put2)
+    toc()
+    res
+end
+
+using BenchmarkTools
+benchmarks = Dict{Symbol, Any}()
+
+N = 10^7
+sptprice   = Float32[42.0 for i = 1:N]
+initStrike = Float32[40.0 + (i / N) for i = 1:N]
+rate       = Float32[0.5 for i = 1:N]
+volatility = Float32[0.2 for i = 1:N]
+spttime    = Float32[0.5 for i = 1:N]
+result     = similar(spttime)
+comparison = blackscholes.(sptprice, initStrike, rate, volatility, spttime)
+CLBackend.init()
+_sptprice = GPUArray(sptprice)
+_initStrike = GPUArray(initStrike)
+_rate = GPUArray(rate)
+_volatility = GPUArray(volatility)
+_time = GPUArray(spttime)
+_result = GPUArray(result)
+
+lol = runbench(blackscholes, _result, _sptprice, _initStrike, _rate, _volatility, _time)
+b = @benchmark runbench($blackscholes, $_result, $_sptprice, $_initStrike, $_rate, $_volatility, $_time)
+btrans = @benchmark runbenchtrans($blackscholes, $_result, $_sptprice, $_initStrike, $_rate, $_volatility, $_time)
+benchmarks[:cl_notrans] = b
+benchmarks[:cl_trans] = btrans
+
+free(_sptprice);free(_initStrike);free(_rate);free(_volatility);free(_time);free(_result);
+
+for (a, b) in benchmarks
+    println(a)
+    println(minimum(b))
+end
+
+using ArrayFire
+_sptprice = AFArray(sptprice);
+
+b1 = @benchmark Array($_sptprice)
+gb = sizeof(sptprice) / 1000000000
+s = minimum(b1).time * 1e-9
+gb / s
+
+
+
+
+function blackscholes_serial(sptprice,
+                             strike,
+                             rate,
+                             volatility,
+                             time)
+    logterm = log10( sptprice / strike)
+    powterm = .5f0 * volatility * volatility
+    den = volatility * sqrt(time)
+    d1 = (((rate + powterm) * time) + logterm) / den
+    d2 = d1 - den
+    NofXd1 = cndf2(d1)
+    NofXd2 = cndf2(d2)
+    futureValue = strike * exp(- rate * time)
+    c1 = futureValue * NofXd2
+    call_ = sptprice * NofXd1 - c1
+    put  = call_ - futureValue + sptprice
+end
+
+@inline function cndf2(in)
+    out = 0.5f0 + 0.5f0 * erf(0.707106781f0 * in)
+    return out
+end
+
+function runs(iterations)
+    sptprice   = Float32[ 42.0 for i = 1:iterations ]
+    initStrike = Float32[ 40.0 + (i / iterations) for i = 1:iterations ]
+    rate       = Float32[ 0.5 for i = 1:iterations ]
+    volatility = Float32[ 0.2 for i = 1:iterations ]
+    time       = Float32[ 0.5 for i = 1:iterations ]
+
+    sptprice_gpu = AFArray(sptprice)
+    initStrike_gpu = AFArray(initStrike)
+    rate_gpu = AFArray(rate)
+    volatility_gpu = AFArray(volatility)
+    time_gpu = AFArray(time)
+
+    put1 = blackscholes_serial.(sptprice, initStrike, rate, volatility, time)
+    put2 = blackscholes_serial.(sptprice_gpu, initStrike_gpu, rate_gpu, volatility_gpu, time_gpu)
+    tic()
+    put2 .= blackscholes_serial.(sptprice_gpu, initStrike_gpu, rate_gpu, volatility_gpu, time_gpu)
+    sync(put2)
+    res = Array(put2)
+    toc()
+    @test sum(put1) ≈ sum(put2)
+    res
+end
+
+using GPUArrays
+CLBackend.init()
+iterations = 10^7
+sptprice   = Float32[ 42.0 for i = 1:iterations ]
+initStrike = Float32[ 40.0 + (i / iterations) for i = 1:iterations ]
+rate       = Float32[ 0.5 for i = 1:iterations ]
+volatility = Float32[ 0.2 for i = 1:iterations ]
+time       = Float32[ 0.5 for i = 1:iterations ]
+
+function blackscholes_serial(sptprice,
+                             strike,
+                             rate,
+                             volatility,
+                             time)
+    logterm = log10( sptprice / strike)
+    powterm = .5f0 * volatility * volatility
+    den = volatility * sqrt(time)
+    d1 = (((rate + powterm) * time) + logterm) / den
+    d2 = d1 - den
+    NofXd1 = cndf2(d1)
+    NofXd2 = cndf2(d2)
+    futureValue = strike * exp(- rate * time)
+    c1 = futureValue * NofXd2
+    call_ = sptprice * NofXd1 - c1
+    put  = call_ - futureValue + sptprice
+end
+
+@inline function cndf2(in)
+    out = 0.5f0 + 0.5f0 * erf(0.707106781f0 * in)
+    return out
+end
+function runbench(out, a, b, c, d, e)
+    out .= blackscholes_serial.(a, b, c, d, e)
+    GPUArrays.synchronize(out)
+    #ArrayFire.sync(out)
+end
+AT = GPUArray
+sptprice_gpu = AT(sptprice)
+initStrike_gpu = AT(initStrike)
+rate_gpu = AT(rate)
+volatility_gpu = AT(volatility)
+time_gpu = AT(time)
+out = blackscholes_serial.(sptprice_gpu, initStrike_gpu, rate_gpu, volatility_gpu, time_gpu);
+
+@time runbench(out, sptprice_gpu, initStrike_gpu, rate_gpu, volatility_gpu, time_gpu);

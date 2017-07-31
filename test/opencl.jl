@@ -29,7 +29,6 @@ end
     free(D); free(C); free(A); free(B)
 end
 
-
 @testset "broadcast Complex64" begin
     A = GPUArray(fill(10f0*im, 40, 40))
     A .= identity.(10f0*im)
@@ -47,22 +46,6 @@ end
     free(D); free(C); free(A); free(B)
 end
 
-if GPUArrays.is_fft_supported(:CLFFT)
-    @testset "fft Complex64" begin
-        for n = 1:3
-            @testset "N $n" begin
-                a = rand(Complex64, ntuple(i-> 40, n))
-                A = GPUArray(a)
-                fft!(A)
-                fft!(a)
-                @test all(isapprox.(Array(A), a))
-                ifft!(A)
-                ifft!(a)
-                @test all(isapprox.(Array(A), a))
-            end
-        end
-    end
-end
 
 function clmap!(state, f, out, b)
     i = linear_index(out, state) # get the kernel index it gets scheduled on

@@ -96,7 +96,7 @@ end
 end
 
 
-@allbackends "copy!"
+@allbackends "copy!" backend begin
     x = zeros(Float32, 10, 10)
     y = rand(Float32, 20, 10)
     a = GPUArray(x)
@@ -107,18 +107,36 @@ end
     copy!(a, r1, b, r2)
     @test x == Array(a)
 
-    fill!(x, 0f0)
     x2 = zeros(Float32, 10, 10)
     copy!(x2, r1, b, r2)
     @test x2 == x
 
     fill!(a, 0f0)
-    x2 = zeros(Float32, 10, 10)
     copy!(a, r1, y, r2)
     @test Array(a) == x
+end
 
+@allbackends "vcat + hcat" backend begin
+    x = zeros(Float32, 10, 10)
+    y = rand(Float32, 20, 10)
+    a = GPUArray(x)
+    b = GPUArray(y)
     @test vcat(x, y) == Array(vcat(a, b))
     z = rand(Float32, 10, 10)
     c = GPUArray(z)
-    hcat(x, z) == Array(hcat(a, c))
+    @test hcat(x, z) == Array(hcat(a, c))
+end
+
+@allbackends "reinterpret" backend begin
+    a = rand(Complex64, 1077)
+    A = GPUArray(a)
+    af0 = reinterpret(Float32, a)
+    Af0 = reinterpret(Float32, A)
+    @test Array(Af0) == af0
+
+    a = rand(Complex64, 10 * 10)
+    A = GPUArray(a)
+    af0 = reinterpret(Float32, a, (20, 10))
+    Af0 = reinterpret(Float32, A, (20, 10))
+    @test Array(Af0) == af0
 end

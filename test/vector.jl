@@ -1,8 +1,7 @@
 using GPUArrays, Base.Test
-CLBackend.init()
 
 @allbackends "vector interface" backend begin
-    if backend in (:cudanative, :opencl)
+    if backend in ( :opencl,)
         a = Float32[]
         x = GPUArray(a)
         @test length(x) == 0

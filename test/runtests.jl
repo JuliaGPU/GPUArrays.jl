@@ -1,14 +1,3 @@
-
-if get(ENV, "TRAVIS", "") == "true" ||
-        get(ENV, "APPVEYOR", "") == "true" ||
-        get(ENV, "CI", "") == "true" ||
-        get(ENV, "USER", "") == "buildbot"
-
-    cd(Pkg.dir("Transpiler")) do
-        run(`git checkout master`)
-    end
-end
-
 using GPUArrays
 using Base.Test
 srand(42) # set random seed for reproducability
@@ -56,4 +45,8 @@ end
 @testset "Array/Vector Operations" begin
     include("indexing.jl")
     include("vector.jl")
+end
+
+@testset "FFT" begin
+    include("fft.jl")
 end
