@@ -79,7 +79,7 @@ function Base.foreach(func, over::AbstractAccArray, Bs...)
 end
 
 
-arg_length(x::GPUArray) = Cuint.(size(x))
+arg_length(x::AbstractAccArray) = Cuint.(size(x))
 arg_length(x) = ()
 
 abstract type BroadcastDescriptor{Typ} end

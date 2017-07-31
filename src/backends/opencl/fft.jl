@@ -7,7 +7,7 @@ import CLFFT
 # An atexit hook here, which will empty the dictionary seems to introduce racing
 # conditions.
 #const plan_dict = Dict()
-import Base: *, plan_ifft!, plan_fft!, plan_fft, plan_ifft, size, plan_bfft
+import Base: *, plan_ifft!, plan_fft!, plan_fft, plan_ifft, size, plan_bfft, plan_bfft!
 
 immutable CLFFTPlan{Direction, Inplace, T, N} <: Base.FFTW.FFTWPlan{T, Direction, Inplace}
     plan::CLFFT.Plan{T}
@@ -20,6 +20,7 @@ immutable CLFFTPlan{Direction, Inplace, T, N} <: Base.FFTW.FFTWPlan{T, Direction
         else
             CLFFT.set_result!(p, :outofplace)
         end
+        CLFFT.set_scaling_factor!(p, Direction, 1f0)
         CLFFT.bake!(p, ctx.queue)
         new{Direction, Inplace, T, N}(p)
     end
@@ -31,20 +32,14 @@ size(x::CLFFTPlan) = (CLFFT.lengths(x.plan)...,)
 function plan_fft(A::CLArray; flags = nothing, timelimit = Inf)
     CLFFTPlan{:forward, false}(A)
 end
-function plan_bfft(A::CLArray, region; flags = nothing, timelimit = Inf)
-    CLFFTPlan{:forward, false}(A)
-end
 function plan_fft!(A::CLArray; flags = nothing, timelimit = Inf)
     CLFFTPlan{:forward, true}(A)
 end
-
-function plan_ifft!(A::CLArray; flags = nothing, timelimit = Inf)
-    CLFFTPlan{:backward, true}(A)
+function plan_bfft(A::CLArray, region; flags = nothing, timelimit = Inf)
+    CLFFTPlan{:backward, false}(A)
 end
-
-function *(p::Base.DFT.ScaledPlan{T, CLFFTPlan{Direction, Inplace, T, N}}, x::CLArray{T, N}) where {T, N, Inplace, Direction}
-    CLFFT.set_scaling_factor!(p.p.plan, Direction, p.scale)
-    p.p * x
+function plan_bfft!(A::CLArray, region; flags = nothing, timelimit = Inf)
+    CLFFTPlan{:backward, true}(A)
 end
 
 const _queue_ref = Vector{cl.CmdQueue}(1)

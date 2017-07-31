@@ -12,7 +12,7 @@ import GPUArrays: buffer, create_buffer, acc_mapreduce, mapidx
 import GPUArrays: Context, GPUArray, context, linear_index, free
 import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
 import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector, gpu_call
-import GPUArrays: default_buffer_type, broadcast_index
+import GPUArrays: default_buffer_type, broadcast_index, unsafe_reinterpret
 
 using Transpiler
 import Transpiler: cli, CLFunction, cli.get_global_id
@@ -133,7 +133,9 @@ function Base.copy!{T}(
     d_offset = (d_offset - 1) * sizeof(T)
     buff = buffer(dest)
     clT = eltype(buff)
-    if clT != T # element type has different padding from cl type in julia
+    # element type has different padding from cl type in julia
+    # for fixedsize arrays we use vload/vstore, so we can use it packed
+    if sizeof(clT) != sizeof(T) && !Transpiler.is_fixedsize_array(T)
         # TODO only convert the range in the offset, or maybe convert elements and directly upload?
         # depends a bit on the overhead ov cl_writebuffer
         source = map(cl.packed_convert, source)
@@ -171,12 +173,25 @@ function (AT::Type{<: CLArray{T, N}})(
         flag = :rw, kw_args...
     ) where {T, N}
     ctx = context.context
-    clT = cl.packed_convert(T)
-    clT = sizeof(clT) == sizeof(T) ? T : clT
+    # element type has different padding from cl type in julia
+    # for fixedsize arrays we use vload/vstore, so we can use it packed
+    clT = if !Transpiler.is_fixedsize_array(T)
+        cl.packed_convert(T)
+    else
+        T
+    end
     buffsize = prod(size)
     buff = buffsize == 0 ? cl.Buffer(clT, ctx, flag, 1) : cl.Buffer(clT, ctx, flag, buffsize)
     GPUArray{T, N, typeof(buff), typeof(context)}(buff, size, context)
 end
+
+function unsafe_reinterpret(::Type{T}, A::CLArray{ET}, dims::Tuple) where {T, ET}
+    buff = buffer(A)
+    newbuff = cl.Buffer{T}(buff.id, true, prod(dims))
+    ctx = context(A)
+    GPUArray{T, length(dims), typeof(newbuff), typeof(ctx)}(newbuff, dims, ctx)
+end
+
 
 # extend the private interface for the compilation types
 Transpiler._to_cl_types{T, N}(arg::CLArray{T, N}) = cli.CLArray{T, N}

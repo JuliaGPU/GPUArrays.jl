@@ -331,6 +331,7 @@ function copy!{T, N}(
         (dest, dest_offsets, src, src_offsets, ui_shape, Cuint.(size(dest)), Cuint.(size(src)), Cuint(len)),
         len
     )
+    dest
 end
 
 
@@ -339,9 +340,13 @@ function copy!{T, N}(
         src::AbstractArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
     )
     # Is this efficient? Maybe!
+    # TODO: compare to a pure intrinsic copy implementation!
+    # this would mean looping over linear sections of memory and
+    # use copy!(dest, offset::Integer, buffer(src), offset::Integer, amout::Integer)
     src_gpu = typeof(dest)(map(idx-> src[idx], srccrange))
     nrange = CartesianRange(one(CartesianIndex{N}), CartesianIndex(size(src_gpu)))
     copy!(dest, destcrange, src_gpu, nrange)
+    dest
 end
 
 
@@ -354,6 +359,7 @@ function copy!{T, N}(
     nrange = CartesianRange(one(CartesianIndex{N}), CartesianIndex(size(dest_gpu)))
     copy!(dest_gpu, nrange, src, srccrange)
     copy!(dest, destcrange, Array(dest_gpu), nrange)
+    dest
 end
 
 
@@ -445,69 +451,56 @@ end
 end
 
 
+#=
+reinterpret taken from julia base/array.jl
+Copyright (c) 2009-2016: Jeff Bezanson, Stefan Karpinski, Viral B. Shah, and other contributors:
 
+https://github.com/JuliaLang/julia/contributors
 
-#
-#
-#
-# # based on KArrays.jl
-# # based on typed_hcat{T}(::Type{T}, A::AbstractVecOrMat...) in base/abstractarray.jl:996
-# function hcat{T}(A::AccVecOrMat{T}...)
-#     nargs = length(A)
-#     nrows = size(A[1], 1)
-#     ncols = 0
-#     for j = 1:nargs
-#         Aj = A[j]
-#         if size(Aj, 1) != nrows
-#             throw(ArgumentError("number of rows of each array must match (got $(map(x->size(x,1), A)))"))
-#         end
-#         nd = ndims(Aj)
-#         ncols += (nd==2 ? size(Aj,2) : 1)
-#     end
-#     B = similar(A[1], nrows, ncols)
-#     pos = 1
-#     for k = 1:nargs
-#         Ak = A[k]
-#         n = length(Ak)
-#         copy!(B, pos, Ak, 1, n)
-#         pos += n
-#     end
-#     return B
-# end
-#
-# function vcat{T}(A::AccVector{T}...)
-#     nargs = length(A)
-#     nrows = 0
-#     for a in A
-#         nrows += length(a)
-#     end
-#     B = similar(A[1], nrows)
-#     pos = 1
-#     for k = 1:nargs
-#         Ak = A[k]
-#         n = length(Ak)
-#         copy!(B, pos, Ak, 1, n)
-#         pos += n
-#     end
-#     return B
-# end
-#
-# function vcat{T}(A::AccVecOrMat{T}...)
-#     nargs = length(A)
-#     nrows = sum(a->size(a, 1), A)::Int
-#     ncols = size(A[1], 2)
-#     for j = 2:nargs
-#         if size(A[j], 2) != ncols
-#             throw(ArgumentError("number of columns of each array must match (got $(map(x->size(x,2), A)))"))
-#         end
-#     end
-#     B = similar(A[1], nrows, ncols)
-#     pos = 1
-#     for k = 1:nargs
-#         Ak = A[k]
-#         p1 = pos+size(Ak,1)-1
-#         B[pos:p1, :] = Ak
-#         pos = p1+1
-#     end
-#     return B
-# end
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+=#
+import Base.reinterpret
+
+"""
+Unsafe reinterpret for backends to overload.
+This makes it easier to do checks just on the high level.
+"""
+function unsafe_reinterpret end
+
+function reinterpret(::Type{T}, a::AbstractAccArray{S,1}) where T where S
+    nel = Int(div(length(a)*sizeof(S),sizeof(T)))
+    # TODO: maybe check that remainder is zero?
+    return reinterpret(T, a, (nel,))
+end
+
+function reinterpret(::Type{T}, a::AbstractAccArray{S}) where T where S
+    if sizeof(S) != sizeof(T)
+        throw(ArgumentError("result shape not specified"))
+    end
+    reinterpret(T, a, size(a))
+end
+
+function reinterpret(::Type{T}, a::AbstractAccArray{S}, dims::NTuple{N,Int}) where T where S where N
+    if !isbits(T)
+        throw(ArgumentError("cannot reinterpret Array{$(S)} to ::Type{Array{$(T)}}, type $(T) is not a bits type"))
+    end
+    if !isbits(S)
+        throw(ArgumentError("cannot reinterpret Array{$(S)} to ::Type{Array{$(T)}}, type $(S) is not a bits type"))
+    end
+    nel = div(length(a)*sizeof(S),sizeof(T))
+    if prod(dims) != nel
+        throw(DimensionMismatch("new dimensions $(dims) must be consistent with array size $(nel)"))
+    end
+    unsafe_reinterpret(T, a, dims)
+end
+
+function Base.reshape(a::AbstractAccArray{T}, dims::NTuple{N,Int}) where T where N
+    if prod(dims) != length(a)
+        throw(DimensionMismatch("new dimensions $(dims) must be consistent with array size $(length(a))"))
+    end
+    unsafe_reinterpret(T, a, dims)
+end

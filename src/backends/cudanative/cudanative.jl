@@ -7,7 +7,7 @@ import CUDAdrv, CUDArt #, CUFFT
 import GPUArrays: buffer, create_buffer, acc_mapreduce
 import GPUArrays: Context, GPUArray, context, linear_index, gpu_call
 import GPUArrays: blas_module, blasbuffer, is_blas_supported, hasblas
-import GPUArrays: default_buffer_type, broadcast_index
+import GPUArrays: default_buffer_type, broadcast_index, is_fft_supported, unsafe_reinterpret
 
 
 using CUDAdrv: CuDefaultStream
@@ -71,6 +71,13 @@ function (AT::Type{CUArray{T, N, Buffer}}){T, N, Buffer <: CUDAdrv.CuArray}(
     AT(buff, size, context)
 end
 
+function unsafe_reinterpret(::Type{T}, A::CUArray{ET}, dims::NTuple{N, Integer}) where {T, ET, N}
+    buff = buffer(A)
+    newbuff = CUDAdrv.CuArray{T, N}(dims, convert(CUDAdrv.OwnedPtr{T}, pointer(buff)))
+    ctx = context(A)
+    GPUArray{T, length(dims), typeof(newbuff), typeof(ctx)}(newbuff, dims, ctx)
+end
+
 
 function Base.copy!{T}(
         dest::Array{T}, d_offset::Integer,
@@ -79,8 +86,8 @@ function Base.copy!{T}(
     amount == 0 && return dest
     d_offset = d_offset
     s_offset = s_offset - 1
-    device_ptr = source.devptr
-    sptr = CUDAdrv.DevicePtr{T}(device_ptr.ptr + (sizeof(T) * s_offset), device_ptr.ctx)
+    device_ptr = pointer(source)
+    sptr = CUDAdrv.OwnedPtr{T}(device_ptr.ptr + (sizeof(T) * s_offset), device_ptr.ctx)
     CUDAdrv.Mem.download(Ref(dest, d_offset), sptr, sizeof(T) * (amount))
     dest
 end
@@ -91,8 +98,8 @@ function Base.copy!{T}(
     amount == 0 && return dest
     d_offset = d_offset - 1
     s_offset = s_offset
-    device_ptr = dest.devptr
-    sptr = CUDAdrv.DevicePtr{T}(device_ptr.ptr + (sizeof(T) * d_offset), device_ptr.ctx)
+    device_ptr = pointer(dest)
+    sptr = CUDAdrv.OwnedPtr{T}(device_ptr.ptr + (sizeof(T) * d_offset), device_ptr.ctx)
     CUDAdrv.Mem.upload(sptr, Ref(source, s_offset), sizeof(T) * (amount))
     dest
 end
@@ -104,10 +111,10 @@ function Base.copy!{T}(
     )
     d_offset = d_offset - 1
     s_offset = s_offset - 1
-    d_ptr = dest.devptr
-    s_ptr = source.devptr
-    dptr = CUDAdrv.DevicePtr{T}(d_ptr.ptr + (sizeof(T) * d_offset), d_ptr.ctx)
-    sptr = CUDAdrv.DevicePtr{T}(s_ptr.ptr + (sizeof(T) * s_offset), s_ptr.ctx)
+    d_ptr = pointer(dest)
+    s_ptr = pointer(source)
+    dptr = CUDAdrv.OwnedPtr{T}(d_ptr.ptr + (sizeof(T) * d_offset), d_ptr.ctx)
+    sptr = CUDAdrv.OwnedPtr{T}(s_ptr.ptr + (sizeof(T) * s_offset), s_ptr.ctx)
     CUDAdrv.Mem.transfer(sptr, dptr, sizeof(T) * (amount))
     dest
 end
@@ -339,6 +346,11 @@ if is_blas_supported(:CUBLAS)
     blasbuffer(ctx::CUContext, A) = to_cudart(A)
 
 end
+
+if is_fft_supported(:CUFFT)
+    include("fft.jl")
+end
+
 #
 # function convert{T <: CUArray}(t::T, A::CUDArt.CudaArray)
 #     ctx = context(t)

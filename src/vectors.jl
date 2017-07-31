@@ -28,19 +28,6 @@ function reshape!{T, NDim}(A::GPUArray{T, NDim}, newdims::NTuple{NDim, Int})
     GPUArray(buffer(A), context(A), newdims)
 end
 
-function reinterpret{T, S, N}(::Type{T}, A::GPUArray{S}, dims::NTuple{N, Int})
-    if !isbits(T)
-        throw(ArgumentError("cannot reinterpret Array{$(S)} to ::Type{Array{$(T)}}, type $(T) is not a bits type"))
-    end
-    if !isbits(S)
-        throw(ArgumentError("cannot reinterpret Array{$(S)} to ::Type{Array{$(T)}}, type $(S) is not a bits type"))
-    end
-    nel = div(length(a) * sizeof(S), sizeof(T))
-    if prod(dims) != nel
-        throw(DimensionMismatch("new dimensions $(dims) must be consistent with array size $(nel)"))
-    end
-    GPUArray(unsafe_reinterpret(T, buffer(A), dims), dims, context(A))
-end
 
 """
 This updates an array, even if dimensions and sizes don't match.

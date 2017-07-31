@@ -5,8 +5,9 @@ using Compat
 using StaticArrays, Interpolations
 
 import GPUArrays: buffer, create_buffer, Context, context, mapidx, unpack_buffer
-import GPUArrays: AbstractAccArray, AbstractSampler, acc_mapreduce, gpu_call, linear_index
-import GPUArrays: hasblas, blas_module, blasbuffer, default_buffer_type, broadcast_index
+import GPUArrays: AbstractAccArray, AbstractSampler, acc_mapreduce, gpu_call
+import GPUArrays: hasblas, blas_module, blasbuffer, default_buffer_type
+import GPUArrays: unsafe_reinterpret, broadcast_index, linear_index
 
 import Base.Threads: @threads
 
@@ -73,6 +74,12 @@ function Base.similar{T, N, ET}(x::JLArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}
 end
 ####################################
 # constructors
+function unsafe_reinterpret(::Type{T}, A::JLArray{ET}, dims::NTuple{N, Integer}) where {T, ET, N}
+    buff = buffer(A)
+    newbuff = reinterpret(T, buff, dims)
+    ctx = context(A)
+    GPUArray{T, length(dims), typeof(newbuff), typeof(ctx)}(newbuff, dims, ctx)
+end
 
 function (::Type{JLArray}){T, N}(A::Array{T, N})
     JLArray{T, N}(A, size(A), current_context())
@@ -82,7 +89,7 @@ function (AT::Type{Array{T, N}}){T, N}(A::JLArray{T, N})
     buffer(A)
 end
 function (::Type{A}){A <: JLArray, T, N}(x::Array{T, N})
-    JLArray{T, N}(x, current_context())
+    JLArray{T, N}(x, size(x), current_context())
 end
 
 nthreads{T, N}(a::JLArray{T, N}) = context(a).nthreads
