@@ -77,7 +77,6 @@ function testv3_2(a, b)
     return y
 end
 
-
 @allbackends "vec 3" backend begin
     N = 20
     xc = map(x-> ntuple(i-> rand(Float32), Val{3}), 1:N)
@@ -97,5 +96,3 @@ end
     res2c .= testv3_2.(xc, yc)
     @test all(map((a,b)->all((1,2,3) .≈ (1,2,3)),Array(res2), res2c))
 end
-
-Sugar.isintrinsic(Transpiler.CLMethod(Complex64))
