@@ -6,7 +6,7 @@ import GPUArrays: buffer, create_buffer, acc_broadcast!, synchronize, free
 import GPUArrays: Context, GPUArray, context, broadcast_index, default_buffer_type
 
 import GLAbstraction, GLWindow, GLFW
-using ModernGL, Compat, StaticArrays
+using ModernGL, StaticArrays
 using Transpiler, Sugar
 import Transpiler: gli, GLMethod, to_gl_types, glsl_gensym, GLIO
 import Base: copy!, convert
@@ -23,9 +23,9 @@ end
 GLContext(window) = GLContext(window, Dict{Any, Any}())
 Base.show(io::IO, ctx::GLContext) = print(io, "GLContext")
 
-@compat const GLBuffer{T, N} = GPUArray{T, N, gl.GLBuffer{T}, GLContext}
-@compat const GLSampler{T, N} = GPUArray{T, N, gl.Texture{T, N}, GLContext}
-@compat const GLArray{T, N, Buffer} = GPUArray{T, N, Buffer, GLContext}
+const GLBuffer{T, N} = GPUArray{T, N, gl.GLBuffer{T}, GLContext}
+const GLSampler{T, N} = GPUArray{T, N, gl.Texture{T, N}, GLContext}
+const GLArray{T, N, Buffer} = GPUArray{T, N, Buffer, GLContext}
 
 
 

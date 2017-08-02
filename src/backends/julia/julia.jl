@@ -1,7 +1,6 @@
 module JLBackend
 
 using ..GPUArrays
-using Compat
 using StaticArrays, Interpolations
 
 import GPUArrays: buffer, create_buffer, Context, context, mapidx, unpack_buffer
@@ -32,7 +31,7 @@ immutable Sampler{T, N, Buffer} <: AbstractSampler{T, N}
     buffer::Buffer
     size::SVector{N, Float32}
 end
-@compat Base.IndexStyle{T, N}(::Type{Sampler{T, N}}) = IndexLinear()
+Base.IndexStyle{T, N}(::Type{Sampler{T, N}}) = IndexLinear()
 (AT::Type{Array}){T, N, B}(s::Sampler{T, N, B}) = parent(parent(buffer(s)))
 
 function Sampler{T, N}(A::Array{T, N}, interpolation = Linear(), edge = Flat())
@@ -53,7 +52,7 @@ Base.@propagate_inbounds function Base.setindex!(A::Sampler, val, indexes...)
     Array(A)[indexes...] = val
 end
 
-@compat const JLArray{T, N} = GPUArray{T, N, Array{T, N}, JLContext}
+const JLArray{T, N} = GPUArray{T, N, Array{T, N}, JLContext}
 
 default_buffer_type{T, N}(::Type, ::Type{Tuple{T, N}}, ::JLContext) = Array{T, N}
 
@@ -96,7 +95,7 @@ nthreads{T, N}(a::JLArray{T, N}) = context(a).nthreads
 
 Base.@propagate_inbounds Base.getindex{T, N}(A::JLArray{T, N}, i::Integer) = A.buffer[i]
 Base.@propagate_inbounds Base.setindex!{T, N}(A::JLArray{T, N}, val, i::Integer) = (A.buffer[i] = val)
-@compat Base.IndexStyle{T, N}(::Type{JLArray{T, N}}) = IndexLinear()
+Base.IndexStyle{T, N}(::Type{JLArray{T, N}}) = IndexLinear()
 
 function Base.show(io::IO, ctx::JLContext)
     cpu = Sys.cpu_info()

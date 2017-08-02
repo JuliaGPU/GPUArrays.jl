@@ -1,10 +1,10 @@
-@compat abstract type AbstractAccArray{T, N} <: DenseArray{T, N} end
+abstract type AbstractAccArray{T, N} <: DenseArray{T, N} end
 # Sampler type that acts like a texture/image and allows interpolated access
-@compat abstract type AbstractSampler{T, N} <: AbstractAccArray{T, N} end
+abstract type AbstractSampler{T, N} <: AbstractAccArray{T, N} end
 
-@compat const AccVector{T} = AbstractAccArray{T, 1}
-@compat const AccMatrix{T} = AbstractAccArray{T, 2}
-@compat const AccVecOrMat{T} = Union{AbstractAccArray{T, 1}, AbstractAccArray{T, 2}}
+const AccVector{T} = AbstractAccArray{T, 1}
+const AccMatrix{T} = AbstractAccArray{T, 2}
+const AccVecOrMat{T} = Union{AbstractAccArray{T, 1}, AbstractAccArray{T, 2}}
 
 
 

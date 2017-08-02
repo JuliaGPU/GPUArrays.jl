@@ -1,6 +1,5 @@
 module CLBackend
 
-using Compat
 using ..GPUArrays
 using OpenCL
 using OpenCL: cl

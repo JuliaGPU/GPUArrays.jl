@@ -1,9 +1,9 @@
 __precompile__(true)
 module GPUArrays
-using IterTools
-using Compat, Sugar
 
-@compat abstract type Context end
+using IterTools, Sugar
+
+abstract type Context end
 
 include("abstractarray.jl")
 export GPUArray, mapidx, linear_index, gpu_call
