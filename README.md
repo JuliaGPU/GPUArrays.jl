@@ -15,6 +15,7 @@ Julia offers countless advantages for a GPU array package.
 E.g., we can use Julia's JIT to generate optimized kernels for map/broadcast operations.
 
 This works even for things like complex arithmetic, since we can compile what's already in Julia Base.
+This isn't restricted to Julia Base, GPUArrays works with all kind of user defined types and functions!
 
 GPUArrays relies heavily on Julia's dot broadcasting.
 The great thing about dot broadcasting in Julia is, that it
@@ -40,6 +41,7 @@ Checkout the examples, to see how this can be used to emit specialized code whil
 
 In theory, we could go as far as inspecting user defined callbacks (we can get the complete AST), count operations and estimate register usage and use those numbers to optimize our kernels!
 
+
 ### Automatic Differentiation
 
 Because of neuronal netorks, automatic differentiation is super hyped right now!
@@ -49,17 +51,7 @@ Making this work with GPUArrays will be a bit more involved, but the
 first [prototype](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/logreg.jl) looks already promising!
 There is also [ReverseDiffSource](https://github.com/JuliaDiff/ReverseDiffSource.jl), which should already work for simple functions.
 
-#### Main type:
-
-```Julia
-type GPUArray{T, N, B, C} <: DenseArray{T, N}
-    buffer::B # GPU buffer, allocated by context
-    size::NTuple{N, Int} # size of the array
-    context::C # GPU context
-end
-```
-
-#### Scope
+# Scope
 
 Current backends: OpenCL, CUDA, Julia Threaded
 
@@ -123,7 +115,7 @@ So please treat these numbers with care!
 
 [source](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/blackscholes.jl)
 
-![blackscholes](https://cdn.rawgit.com/JuliaGPU/GPUArrays.jl/efb9d2e0/examples/blackscholes.svg)
+![blackscholes](https://cdn.rawgit.com/JuliaGPU/GPUArrays.jl/91678a36/examples/blackscholes.svg)
 
 Interestingly, on the GTX950, the CUDAnative backend outperforms the OpenCL backend by a factor of 10.
 This is most likely due to the fact, that LLVM is great at unrolling and vectorizing loops,

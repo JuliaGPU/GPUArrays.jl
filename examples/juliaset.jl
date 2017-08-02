@@ -1,6 +1,7 @@
 # julia set
 # (the familiar mandelbrot set is obtained by setting c==z initially)
-# works only on 0.6 because of a stupid bug
+
+# generated functions allow you to emit specialized code for the argument types.
 @generated function julia{N}(z, maxiter::Val{N} = Val{16}())
     unrolled = Expr(:block)
     for i=1:N
