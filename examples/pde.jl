@@ -1,5 +1,4 @@
 using GPUArrays
-CLBackend.init()
 # an optimised implementation of CH_vectorised!
 tocomplex64(x) = Complex64(x) # cudanative doesn't like Complex64.(gpu_array)
 
@@ -38,6 +37,7 @@ function CH_memory!(nruns, N, AT)
     # ======================================================================
     u
 end
+CUBackend.init()
 
 x = CH_memory!(100, 2^9, GPUArray)
 
