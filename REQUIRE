@@ -6,6 +6,7 @@ Transpiler 0.2
 Sugar 0.3
 Matcha 0.0.2
 
+CUDAnative 0.4.0
 CUDAdrv 0.5.1
 CUDArt
 CUBLAS
