@@ -12,9 +12,12 @@ import GPUArrays: Context, GPUArray, context, linear_index, free
 import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
 import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector, gpu_call
 import GPUArrays: default_buffer_type, broadcast_index, unsafe_reinterpret
+import GPUArrays: is_opencl, is_gpu, is_cpu
 
 using Transpiler
 import Transpiler: cli, CLFunction, cli.get_global_id
+
+
 
 immutable CLContext <: Context
     device::cl.Device
@@ -51,6 +54,15 @@ function Base.show(io::IO, ctx::CLContext)
     name = replace(ctx.device[:name], r"\s+", " ")
     print(io, "CLContext: $name")
 end
+
+
+function devices()
+    cl.devices()
+end
+is_opencl(ctx::CLContext) = true
+is_gpu(ctx::CLContext) = cl.info(ctx.device, :device_type) == :gpu
+is_cpu(ctx::CLContext) = cl.info(ctx.device, :device_type) == :cpu
+
 
 global init, all_contexts, current_context
 let contexts = CLContext[]
