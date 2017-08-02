@@ -42,19 +42,20 @@ end
 
 # Julia will always be available
 info("julia added as a backend.")
-
-install_cudanative = try
-    using CUDAnative
-    true
+test_kernel() = nothing
+try
+    using CUDAnative, CUDAdrv
+    using CUDAnative.@cuda
+    dev = CuDevice(0)
+    ctx = CuContext(dev)
+    CUDAnative._cuda((1, 1), 0, CuDefaultStream(), test_kernel)
+    info("cudanative added as backend!")
+    push!(supported_backends, :cudanative)
 catch e
     info("CUDAnative doesn't seem to be usable and it won't be installed as a backend. Error: $e")
     info("If error fixed, try Pkg.build(\"GPUArrays\") again!")
-    false
 end
-if install_cudanative
-    info("cudanative added as backend!")
-    push!(supported_backends, :cudanative)
-end
+
 
 try
     using OpenCL
