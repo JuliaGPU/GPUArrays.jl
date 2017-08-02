@@ -7,6 +7,10 @@ dist: trusty
 julia:
   - 0.6
   - nightly
+matrix:
+ allow_failures:
+ - julia: nightly
+
 addons:
   apt:
     packages:
