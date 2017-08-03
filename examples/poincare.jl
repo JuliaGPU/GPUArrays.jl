@@ -1,6 +1,8 @@
-using Transpiler.cli: mem_fence, CLK_GLOBAL_MEM_FENCE
+using GPUArrays, StaticArrays, FileIO
 
-# Base.@code_warntype poincare_inner(Vec3f0(0), rand(Float32, 10, 10), 1f0, Float32(π), Val{1}(), Cuint(1))
+# Original poincare implementation by https://github.com/RainerEngelken
+# GPU version by Simon Danisch
+
 
 function poincare_inner{N}(rv, result, c, π, ::Val{N}, n)
     # find next spiking neuron
@@ -17,13 +19,12 @@ function poincare_inner{N}(rv, result, c, π, ::Val{N}, n)
                 ϕ₂ = atan(tan(ϕ₂ + dt) - c)
                 ϕ₃ += dt
                 # save state of neuron 2 and 3
-                x = Cuint(round(((ϕ₂ + πh) / π) * Float32(n) - 1f0))
-                y = Cuint(round(((ϕ₃ + πh) / π) * Float32(n) - 1f0))
-                i1d = GPUArrays.gpu_sub2ind((n, n), (x, y))
-                @inbounds if i1d <= Cuint(n * n) && i1d > Cuint(0)
-                    accum = result[i1d]
-                    result[i1d] = accum + 1f0 # this is unsafe, since it could read + write from different threads, but good enough for the stochastic kind of process we're doing
-                end
+                x = Cuint(max(round(((ϕ₂ + πh) / π) * (Float32(n) - 1f0)) + 1f0, 1f0))
+                y = Cuint(max(round(((ϕ₃ + πh) / π) * (Float32(n) - 1f0)) + 1f0, 1f0))
+                i1d = GPUArrays.gpu_sub2ind((n, n), (x, y)) # convert to linear index
+                accum = result[i1d]
+                # this is unsafe, since it could read + write from different threads, but good enough for the stochastic kind of process we're doing
+                result[i1d] = accum + 1f0
                 continue
             end
         else
@@ -47,37 +48,29 @@ function poincare_inner{N}(rv, result, c, π, ::Val{N}, n)
     return
 end
 
-function poincareFast(iterations, c = 1f0, divisor = 256)
+function poincare_gpu(iterations, c = 1f0, divisor = 256)
     srand(2)
     ND = Cuint(1024)
     result = GPUArray(zeros(Float32, ND, ND))
     N = div(iterations, divisor)
-    seeds = GPUArray(rand(Vec3f0, divisor))
+    seeds = GPUArray([ntuple(i-> rand(Float32), Val{3}) for x in 1:divisor])
     tic()
     foreach(poincare_inner, seeds, Base.RefValue(result), c, Float32(pi), Val{N}(), ND)
-    GPUArrays.synchronize(result)
+    GPUArrays.synchronize(result) # synchronize for the benchmark
     toc()
     result
 end
 
-div(2048, 256)
-
-using GPUArrays, FileIO
-using GeometryTypes
-backend = CLBackend.init()
-
-result = poincareFast(10^10, 1f0, 2048);
+backend = CLBackend.init() # try different backends, e.g. CUBackend.init()
+result = poincare_gpu(10^9, 1f0, 2^11);
 
 res2 = Array(result) ./ 2000f0
 img = clamp.(res2, 0f0, 1f0);
+#save as an image
 save(homedir()*"/Desktop/testcl.png", img)
 
-rand_idx = calc_idx()
-accum = result[rand_idx]
-result[rand_idx] = accum + 1f0
-mem_fence(CLK_GLOBAL_MEM_FENCE)
 
-function poincareFast(n,c)
+function poincare_cpu_original(n,c)
     srand(2)
     ϕ₁,ϕ₂,ϕ₃ = rand(3)
     𝚽 = Point2f0[]
@@ -117,5 +110,4 @@ function poincareFast(n,c)
     𝚽
 end
 
-using GeometryTypes
 poincareFast(10^8, 1f0);
