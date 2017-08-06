@@ -1,16 +1,20 @@
-julia 0.5
+julia 0.6
 StaticArrays
-Compat 0.19.0
 ColorTypes
 
-Transpiler 0.0.1
-Sugar 0.0.3
-Matcha
+Transpiler 0.2
+Sugar 0.3
+Matcha 0.0.2
 
+CUDAnative 0.4.1 # llvm codegen fix
+CUDAdrv 0.5.1
 CUDArt
 CUBLAS
 CUFFT
 
-OpenCL 0.5.2
+OpenCL 0.6.0 #proper packed conversion
 CLBLAS 1.1.0
-CLFFT 0.4.0
+CLFFT 0.4.0 # 0.5.0
+
+Interpolations
+IterTools

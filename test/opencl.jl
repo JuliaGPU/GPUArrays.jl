@@ -1,6 +1,8 @@
 using Base.Test
+using GPUArrays
 using GPUArrays: free
 ctx = CLBackend.init()
+
 # more complex function for broadcast
 function test{T}(a::T, b)
     x = sqrt(sin(a) * b) / T(10.0)
@@ -44,32 +46,16 @@ end
     free(D); free(C); free(A); free(B)
 end
 
-if GPUArrays.is_fft_supported(:CLFFT)
-    @testset "fft Complex64" begin
-        for n = 1:3
-            @testset "N $n" begin
-                a = rand(Complex64, ntuple(i-> 40, n))
-                A = GPUArray(a)
-                fft!(A)
-                fft!(a)
-                @test all(isapprox.(Array(A), a))
-                ifft!(A)
-                ifft!(a)
-                @test all(isapprox.(Array(A), a))
-            end
-        end
-    end
-end
 
-function clmap!(f, out, b)
-    i = linear_index(out) # get the kernel index it gets scheduled on
+function clmap!(state, f, out, b)
+    i = linear_index(out, state) # get the kernel index it gets scheduled on
     out[i] = f(b[i])
     return
 end
 @testset "Custom kernel from Julia function" begin
     x = GPUArray(rand(Float32, 100))
     y = GPUArray(rand(Float32, 100))
-    gpu_call(x, clmap!, (sin, x, y))
+    gpu_call(clmap!, x, (sin, x, y))
     # same here, x is just passed to supply a kernel size!
     jy = Array(y)
     @test map!(sin, jy, jy) ≈ Array(x)
@@ -88,7 +74,7 @@ end
     source = GPUArray(rand(Float32, 1023, 11))
     dest = GPUArray(zeros(Float32, size(source)))
     f = (copy_source, :copy)
-    gpu_call(dest, f, (dest, source))
+    gpu_call(f, dest, (dest, source))
     @test Array(dest) == Array(source)
 end
 
@@ -98,7 +84,6 @@ end
     Agpu = GPUArray(A)
     @test Array(Agpu') == A'
 end
-
 
 for dims in ((4048,), (1024,1024), (77,), (1923, 209))
     for T in (Float32, Int32)

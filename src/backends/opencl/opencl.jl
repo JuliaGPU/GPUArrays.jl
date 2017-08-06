@@ -1,6 +1,5 @@
 module CLBackend
 
-using Compat
 using ..GPUArrays
 using OpenCL
 using OpenCL: cl
@@ -8,16 +7,14 @@ using OpenCL: cl
 using ..GPUArrays, StaticArrays
 #import CLBLAS, CLFFT
 
-import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index, free
+import GPUArrays: buffer, create_buffer, acc_mapreduce, mapidx
+import GPUArrays: Context, GPUArray, context, linear_index, free
 import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
 import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector, gpu_call
+import GPUArrays: default_buffer_type, broadcast_index, unsafe_reinterpret
 
 using Transpiler
-using Transpiler: CLTranspiler
-import Transpiler.CLTranspiler.cli
-import Transpiler.CLTranspiler.CLFunction
-import Transpiler.CLTranspiler.cli.get_global_id
+import Transpiler: cli, CLFunction, cli.get_global_id
 
 immutable CLContext <: Context
     device::cl.Device
@@ -75,7 +72,7 @@ let contexts = CLContext[]
     end
 end
 
-@compat const CLArray{T, N} = GPUArray{T, N, cl.Buffer{T}, CLContext}
+const CLArray{T, N} = GPUArray{T, N, B, CLContext} where B <: cl.Buffer
 
 #synchronize
 function synchronize{T, N}(x::CLArray{T, N})
@@ -88,97 +85,121 @@ function free{T, N}(x::CLArray{T, N})
     finalize(mem)
     nothing
 end
-# Constructor
-function Base.copy!{T, N}(dest::Array{T, N}, source::CLArray{T, N})
+
+linear_index(::cli.CLArray, state) = get_global_id(0) + Cuint(1)
+
+
+function cl_readbuffer(q, buf, dev_offset, hostref, nbytes)
+    n_evts  = UInt(0)
+    evt_ids = C_NULL
+    ret_evt = Ref{cl.CL_event}()
+    cl.@check cl.api.clEnqueueReadBuffer(
+        q.id, buf.id, cl.cl_bool(true),
+        dev_offset, nbytes, hostref,
+        n_evts, evt_ids, ret_evt
+    )
+end
+function cl_writebuffer(q, buf, dev_offset, hostref, nbytes)
+    n_evts  = UInt(0)
+    evt_ids = C_NULL
+    ret_evt = Ref{cl.CL_event}()
+    cl.@check cl.api.clEnqueueWriteBuffer(
+        q.id, buf.id, cl.cl_bool(true),
+        dev_offset, nbytes, hostref,
+        n_evts, evt_ids, ret_evt
+    )
+end
+
+function Base.copy!{T}(
+        dest::Array{T}, d_offset::Integer,
+        source::CLArray{T}, s_offset::Integer, amount::Integer
+    )
+    amount == 0 && return dest
+    s_offset = (s_offset - 1) * sizeof(T)
     q = context(source).queue
     cl.finish(q)
-    copy!(q, dest, buffer(source))
+    cl_readbuffer(q, buffer(source), unsigned(s_offset), Ref(dest, d_offset), amount * sizeof(T))
+    dest
 end
 
-function Base.copy!{T, N}(dest::CLArray{T, N}, source::Array{T, N})
+function Base.copy!{T}(
+        dest::CLArray{T}, d_offset::Integer,
+        source::Array{T}, s_offset::Integer, amount::Integer
+    )
+    amount == 0 && return dest
     q = context(dest).queue
     cl.finish(q)
-    copy!(q, buffer(dest), source)
-end
-
-# copy the contents of a buffer into another buffer
-function Base.copy!{T, N}(dst::CLArray{T, N}, src::CLArray{T, N})
-    q = context(dst).queue
-    cl.finish(q)
-    copy!(q, buffer(dst), buffer(src))
-end
-
-
-function create_buffer{T, N}(ctx::CLContext, A::AbstractArray{T, N}, flag = :rw)
-    cl.Buffer(T, ctx.context, (flag, :copy), hostbuf = A)
-end
-function create_buffer{T, N}(
-        ctx::CLContext, ::Type{T}, sz::NTuple{N, Int};
-        flag = :rw, kw_args...
-    )
-    cl.Buffer(T, ctx.context, flag, prod(sz))
-end
-
-function Base.similar{T, N, N2, ET}(x::CLArray{T, N}, ::Type{ET}, sz::Tuple{Vararg{Int, N2}}; kw_args...)
-    ctx = context(x)
-    b = create_buffer(ctx, ET, sz; kw_args...)
-    GPUArray{ET, N2, typeof(b), typeof(ctx)}(b, sz, ctx)
-end
-# The implementation of prod in base doesn't play very well with current
-# transpiler. TODO figure out what Core._apply maps to!
-_prod{T}(x::NTuple{1, T}) = x[1]
-_prod{T}(x::NTuple{2, T}) = x[1] * x[2]
-_prod{T}(x::NTuple{3, T}) = x[1] * x[2] * x[3]
-
-linear_index(::cli.CLArray) = get_global_id(0) + 1
-
-###########################################################
-# Broadcast
-for i = 0:10
-    args = ntuple(x-> Symbol("arg_", x), i)
-    fargs = ntuple(x-> :(broadcast_index($(args[x]), sz, i)), i)
-    @eval begin
-        function broadcast_kernel(A, f, sz, $(args...))
-            # TODO I'm very sure, that we can tile this better
-            # +1, Julia is 1 based indexed, and we (currently awkwardly) try to preserve this semantic
-            i = get_global_id(0) + 1
-            A[i] = f($(fargs...))
-            return
-        end
-        function mapidx_kernel{F}(A, f::F, $(args...))
-            i = get_global_id(0) + 1
-            f(i, A, $(args...))
-            return
-        end
+    d_offset = (d_offset - 1) * sizeof(T)
+    buff = buffer(dest)
+    clT = eltype(buff)
+    # element type has different padding from cl type in julia
+    # for fixedsize arrays we use vload/vstore, so we can use it packed
+    if sizeof(clT) != sizeof(T) && !Transpiler.is_fixedsize_array(T)
+        # TODO only convert the range in the offset, or maybe convert elements and directly upload?
+        # depends a bit on the overhead ov cl_writebuffer
+        source = map(cl.packed_convert, source)
     end
+    cl_writebuffer(q, buff, unsigned(d_offset), Ref(source, s_offset), amount * sizeof(clT))
+    dest
 end
+
+
+function Base.copy!{T}(
+        dest::CLArray{T}, d_offset::Integer,
+        src::CLArray{T}, s_offset::Integer, amount::Integer
+    )
+    amount == 0 && return dest
+    q = context(dest).queue
+    cl.finish(q)
+    d_offset = (d_offset - 1) * sizeof(T)
+    s_offset = (s_offset - 1) * sizeof(T)
+    cl.enqueue_copy_buffer(
+        q, buffer(src), buffer(dest),
+        Csize_t(amount * sizeof(T)), Csize_t(s_offset), Csize_t(d_offset),
+        nothing
+    )
+    dest
+end
+
+
+default_buffer_type{T, N}(::Type, ::Type{Tuple{T, N}}, ::CLContext) = cl.Buffer{T}
+
+
+
+function (AT::Type{<: CLArray{T, N}})(
+        size::NTuple{N, Int};
+        context = current_context(),
+        flag = :rw, kw_args...
+    ) where {T, N}
+    ctx = context.context
+    # element type has different padding from cl type in julia
+    # for fixedsize arrays we use vload/vstore, so we can use it packed
+    clT = if !Transpiler.is_fixedsize_array(T)
+        cl.packed_convert(T)
+    else
+        T
+    end
+    buffsize = prod(size)
+    buff = buffsize == 0 ? cl.Buffer(clT, ctx, flag, 1) : cl.Buffer(clT, ctx, flag, buffsize)
+    GPUArray{T, N, typeof(buff), typeof(context)}(buff, size, context)
+end
+
+function unsafe_reinterpret(::Type{T}, A::CLArray{ET}, dims::Tuple) where {T, ET}
+    buff = buffer(A)
+    newbuff = cl.Buffer{T}(buff.id, true, prod(dims))
+    ctx = context(A)
+    GPUArray{T, length(dims), typeof(newbuff), typeof(ctx)}(newbuff, dims, ctx)
+end
+
 
 # extend the private interface for the compilation types
-CLTranspiler._to_cl_types{T, N}(arg::CLArray{T, N}) = cli.CLArray{T, N}
-CLTranspiler._to_cl_types{T}(x::LocalMemory{T}) = cli.LocalMemory{T}
+Transpiler._to_cl_types{T, N}(arg::CLArray{T, N}) = cli.CLArray{T, N}
+Transpiler._to_cl_types{T}(x::LocalMemory{T}) = cli.LocalMemory{T}
 
-CLTranspiler.cl_convert{T, N}(x::CLArray{T, N}) = buffer(x)
-CLTranspiler.cl_convert{T}(x::LocalMemory{T}) = cl.LocalMem(T, x.size)
-
-function acc_broadcast!{F <: Function, T, N}(f::F, A::CLArray{T, N}, args::Tuple)
-    ctx = context(A)
-    sz = map(Int32, size(A))
-    q = ctx.queue
-    cl.finish(q)
-    clfunc = CLFunction(broadcast_kernel, (A, f, sz, args...), q)
-    clfunc((A, f, sz, args...), length(A))
-    A
-end
-
-
-function mapidx{F <: Function, N, T, N2}(f::F, A::CLArray{T, N2}, args::NTuple{N, Any})
-    ctx = context(A)
-    q = ctx.queue
-    cl.finish(q)
-    cl_args = (A, f, args...)
-    clfunc = CLFunction(mapidx_kernel, cl_args, q)
-    clfunc(cl_args, length(A))
-end
+Transpiler._to_cl_types(x::Ref{<: CLArray}) = Transpiler._to_cl_types(x[])
+Transpiler.cl_convert(x::Ref{<: CLArray}) = Transpiler.cl_convert(x[])
+Transpiler.cl_convert(x::CLArray) = buffer(x)
+Transpiler.cl_convert{T}(x::LocalMemory{T}) = cl.LocalMem(T, x.size)
 
 function CLFunction{T, N}(A::CLArray{T, N}, f, args...)
     ctx = context(A)
@@ -189,10 +210,15 @@ function (clfunc::CLFunction{T}){T, T2, N}(A::CLArray{T2, N}, args...)
     clfunc(args, length(A))
 end
 
-function gpu_call{T, N}(A::CLArray{T, N}, f, args, globalsize = length(A), localsize = nothing)
+function gpu_call{T, N}(f, A::CLArray{T, N}, args, globalsize = length(A), localsize = nothing)
     ctx = GPUArrays.context(A)
-    clfunc = CLFunction(f, args, ctx.queue)
-    clfunc(args, globalsize, localsize)
+    _args = if !isa(f, Tuple{String, Symbol})
+        (0f0, args...)# include "state"
+    else
+        args
+    end
+    clfunc = CLFunction(f, _args, ctx.queue)
+    clfunc(_args, globalsize, localsize)
 end
 
 ###################
@@ -214,10 +240,8 @@ if is_fft_supported(:CLFFT)
     include("fft.jl")
 end
 
-using Transpiler.CLTranspiler: cli
-using Transpiler.CLTranspiler.cli: get_local_id, get_global_id, barrier
-using Transpiler.CLTranspiler.cli: CLK_LOCAL_MEM_FENCE, get_group_id
-using Transpiler.CLTranspiler.cli: get_local_size, get_global_size
+using Transpiler.cli: get_local_id, get_global_id, barrier,  CLK_LOCAL_MEM_FENCE
+using Transpiler.cli: get_local_size, get_global_size, get_group_id
 
 using OpenCL
 
@@ -257,7 +281,7 @@ for i = 0:10
     fargs = ntuple(x-> :(broadcast_index($(args[x]), length, global_index)), i)
     @eval begin
         function reduce_kernel(f, op, v0, A, tmp_local, length, result, $(args...))
-            global_index = get_global_id(0) + 1
+            global_index = get_global_id(0) + Cuint(1)
             local_v0 = v0
             # Loop sequentially over chunks of input vector
             while (global_index <= length)
@@ -268,20 +292,20 @@ for i = 0:10
 
             # Perform parallel reduction
             local_index = get_local_id(0)
-            tmp_local[local_index + 1] = local_v0
+            tmp_local[local_index + Cuint(1)] = local_v0
             barrier(CLK_LOCAL_MEM_FENCE)
-            offset = div(get_local_size(0), 2)
+            offset = div(get_local_size(0), Cuint(2))
             while offset > 0
                 if (local_index < offset)
-                    other = tmp_local[local_index + offset + 1]
-                    mine = tmp_local[local_index + 1];
-                    tmp_local[local_index + 1] = op(mine, other)
+                    other = tmp_local[local_index + offset + Cuint(1)]
+                    mine = tmp_local[local_index + Cuint(1)];
+                    tmp_local[local_index + Cuint(1)] = op(mine, other)
                 end
                 barrier(CLK_LOCAL_MEM_FENCE)
-                offset = div(offset, 2)
+                offset = div(offset, Cuint(2))
             end
-            if local_index == 0
-                result[get_group_id(0) + 1] = tmp_local[1]
+            if local_index == Cuint(0)
+                result[get_group_id(0) + Cuint(1)] = tmp_local[1]
             end
             return
         end
@@ -297,10 +321,12 @@ function acc_mapreduce{T, OT, N}(
     out = similar(A, OT, (group_size,))
     fill!(out, v0)
     lmem = GPUArrays.LocalMemory{OT}(block_size)
-    args = (f, op, v0, A, lmem, Int32(length(A)), out, rest...)
+    args = (f, op, v0, A, lmem, Cuint(length(A)), out, rest...)
+
     func = GPUArrays.CLFunction(A, reduce_kernel, args...)
     func(args, group_size * block_size, (block_size,))
-    reduce(op, Array(out))
+    x = reduce(op, Array(out))
+    x
 end
 
 

@@ -2,38 +2,50 @@ module GLBackend
 
 using ..GPUArrays
 
-import GPUArrays: buffer, create_buffer, acc_broadcast!
-import GPUArrays: Context, GPUArray, context, broadcast_index
+import GPUArrays: buffer, create_buffer, acc_broadcast!, synchronize, free
+import GPUArrays: Context, GPUArray, context, broadcast_index, default_buffer_type
 
 import GLAbstraction, GLWindow, GLFW
-using ModernGL
+using ModernGL, StaticArrays
+using Transpiler, Sugar
+import Transpiler: gli, GLMethod, to_gl_types, glsl_gensym, GLIO
+import Base: copy!, convert
+
 const gl = GLAbstraction
 
-include("compilation.jl")
 
 immutable GLContext <: Context
-    window::GLFW.Window
+    # There are sadly many types of contexts from different packages.
+    # We can't add those packages as a dependency, just to type this field
+    window
+    program_cache::Dict{Any, Any}
 end
+GLContext(window) = GLContext(window, Dict{Any, Any}())
 Base.show(io::IO, ctx::GLContext) = print(io, "GLContext")
 
-@compat const GLArrayBuff{T, N} = GPUArray{T, N, gl.GLBuffer{T}, GLContext}
-@compat const GLArrayTex{T, N} = GPUArray{T, N, gl.Texture{T, N}, GLContext}
-@compat const GLArray{T, N} = Union{GLArrayBuff{T, N}, GLArrayTex{T, N}}
+const GLBuffer{T, N} = GPUArray{T, N, gl.GLBuffer{T}, GLContext}
+const GLSampler{T, N} = GPUArray{T, N, gl.Texture{T, N}, GLContext}
+const GLArray{T, N, Buffer} = GPUArray{T, N, Buffer, GLContext}
 
 
-function any_context()
-    window = GLWindow.create_glcontext(major = 4, minor = 3, visible = false)
-    GLContext(window)
-end
 
-global all_contexts, current_context, init
+
+global all_contexts, current_context, init, any_context
 let contexts = GLContext[]
+    function any_context()
+        if isempty(contexts)
+            window = GLWindow.create_glcontext(major = 3, minor = 3, visible = false)
+            GLContext(window)
+        else
+            last(contexts) # TODO check if is open (all context creating library need to implement isopen first)
+        end
+    end
     all_contexts() = copy(contexts)::Vector{GLContext}
     current_context() = last(contexts)::GLContext
     function init(; ctx = any_context())
         init(ctx)
     end
-    init(ctx::GLWindow.Screen) = init(GLContext(GLWindow.nativewindow(ctx)))
+    init(ctx) = init(GLContext(ctx))
     function init(ctx::GLContext)
         GPUArrays.make_current(ctx)
         push!(contexts, ctx)
@@ -41,114 +53,78 @@ let contexts = GLContext[]
     end
 end
 
-function create_buffer{T,N}(ctx::GLContext, ::Type{T}, sz::NTuple{N, Int}; kw_args...)
-    gl.Texture(T, sz; kw_args...)
+
+
+#synchronize
+function synchronize(x::GLArray)
+    # TODO figure out more fine grained solutions
+    glFinish()
 end
 
-function glTexSubImage{N}(tex, offset::NTuple{N, Int}, width::NTuple{N, Int}, data)
-    glfun = N == 1 ? glTexSubImage1D : N == 2 ? glTexSubImage2D : N==3 ? glTexSubImage3D : error("Dim $N not supported")
-    glfun(tex.texturetype, 0, offset..., width..., tex.format, tex.pixeltype, data)
-end
-function Base.unsafe_copy!{ET, ND}(
-        dest::gl.Texture{ET, ND},
-        source::Array{ET, ND}
-    )
-    gl.update!(dest, source)
-    nothing
-end
-function Base.unsafe_copy!{ET, ND}(
-        dest::gl.Texture{ET, ND},
-        source::gl.GLBuffer{ET},
-        offset, widths
-    )
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, source.id)
-    # Select the appropriate texture
-    gl.bind(dest)
-    glTexSubImage(dest, offset, widths, C_NULL)
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0)
-    gl.bind(dest, 0)
-    nothing
+function free(x::GLArray)
+    synchronize(x)
+    gl.free(buffer(x))
 end
 
-function Base.unsafe_copy!{ET, ND}(
-        dest::GLArrayTex{ET, ND},
-        source::GLArrayBuff{ET, ND}
+function default_buffer_type{T, N}(
+        ::Type, ::Type{Tuple{T, N}}, ::GLContext
     )
-    unsafe_copy!(buffer(dest), buffer(source), ntuple(x->0, ND), size(source))
+    gl.GLBuffer{T}
+end
+function default_buffer_type{T, N}(
+        ::Type{<: GPUArray{FT, FN, gl.Texture{FT, FN}} where {FT, FN}},
+        ::Type{Tuple{T, N}}, ::GLContext
+    )
+    gl.Texture{T, N}
+end
+# default_buffer_type{T, N}(::Tuple{T, 2}, ::GLContext) = gl.GLBuffer{T, 1}
+# default_buffer_type{T, N}(::Tuple{T, 3}, ::GLContext) = gl.GLBuffer{T, 1}
+
+
+function (AT::Type{GLArray{T, N, Buffer}}){T, N, Buffer <: gl.GLBuffer}(
+        size::NTuple{N, Int};
+        context = current_context(),
+        usage = GL_STATIC_READ, kw_args...
+    )
+    buff = gl.GLBuffer(T, prod(size); usage = usage, kw_args...)
+    AT(buff, size, context)
+end
+
+function (AT::Type{GLArray{T, N, Buffer}}){T, N, Buffer <: gl.Texture}(
+        size::NTuple{N, Int};
+        context = current_context(), kw_args...
+    )
+    tex = gl.Texture(T, size; kw_args...)
+    AT(tex, size, context)
 end
 
 function Base.convert{ET, ND}(
-        ::Type{GLArrayTex{ET, ND}},
-        A::GLArrayBuff{ET, ND}
+        ::Type{GLSampler{ET, ND}},
+        A::GLBuffer{ET, ND}
     )
-    texB = GPUArray(gl.Texture(ET, size(A)), size(A), context(A))
-    unsafe_copy!(texB, A)
+    texB = GLSampler{ET, ND}(size(A), context = context(A))
+    copy!(buffer(texB), buffer(A))
     texB
 end
-
+function copy!{T, N}(
+        dest::GLSampler{T, N}, dest_range::CartesianRange{CartesianIndex{N}},
+        src::Array{T, N}, src_range::CartesianRange{CartesianIndex{N}},
+    )
+    copy!(buffer(dest), dest_range, src, src_range)
+end
 
 ################################################################################
 # Broadcast
 
-#Broadcast
-@generated function broadcast_index{T, N}(arg::gli.GLArray{T, N}, shape, idx)
-    iexpr = Expr(:tuple)
-    for i = 1:N
-        push!(iexpr.args, :(sz[$i] <= shape[$i] ? idx[$i] : 1))
-    end
-    quote
-        sz = size(arg)
-        arg[$iexpr]
-    end
-end
-broadcast_index(arg, shape, idx) = arg
+include("glutils.jl")
 
-
-for N = 1:3
-    for i=0:6
-        args = ntuple(x-> Symbol("arg_", x), i)
-        fargs = ntuple(x-> :(broadcast_index($(args[x]), sz, idx)), i)
-        @eval begin
-            function broadcast_kernel{T}(A::gli.GLArray{T, $N}, f, $(args...))
-                idx =  NTuple{2, Int}(GlobalInvocationID())
-                sz  = size(A)
-                A[idx] = f($(fargs...))
-                return
-            end
-        end
-    end
+immutable TransformFeedbackProgram{T, VBO, UNIFORMS, SAMPLERS, N}
+    program::GLuint
+    uniforms::Nullable{UniformBuffer{UNIFORMS, N}}
 end
 
 
-size3d{T}(A::GLArrayTex{T, 1}) = (size(A, 1), 1, 1)
-size3d{T}(A::GLArrayTex{T, 2}) = (size(A)..., 1)
-size3d{T}(A::GLArrayTex{T, 3}) = size(A)
-
-function acc_broadcast!{F <: Function, T, N}(f::F, A::GLArrayTex{T, N}, args::Tuple)
-    glfunc = CLFunction(broadcast_kernel, (A, f, args...))
-    glfunc((A, f, args...), size3d(A))
-end
-
-
-# TODO We tread Float64 as the default and map it to Float32 in glsl. HACK ALERT
-# We mainly do this, because of 1.0 being Float64 as default
-to_glsl_types(::Type{Float32}) = Float64
-to_glsl_types{T}(arg::T) = to_glsl_types(T)
-to_glsl_types{T}(::Type{T}) = T
-function to_glsl_types{T <: GPUArrays.AbstractAccArray}(arg::T)
-    if isa(buffer(arg), gl.Texture)
-        et = to_glsl_types(eltype(arg))
-        return gli.GLArray{et, ndims(arg)}
-    else
-        error("Not implemented yet: $T")
-        return typeof(arg)
-    end
-end
-function to_glsl_types(args::Union{Vector, Tuple})
-    map(to_glsl_types, args)
-end
-
-function bindlocation{T, N}(A::GLArrayTex{T, N}, i)
+function bindlocation{T, N}(A::GLSampler{T, N}, i)
     t = buffer(A)
     glBindImageTexture(i, t.id, 0, GL_FALSE, 0, GL_READ_WRITE, t.internalformat)
 end
@@ -166,17 +142,239 @@ function bindlocation(t::Function, i)
 end
 
 
-# implement BLAS backend
+function (tfp::TransformFeedbackProgram{T}){T}(
+        A::GLBuffer{T}, args
+    )
+    buffer_loc = 0
+    uniforms = []
+    glUseProgram(tfp.program)
+    vao = Ref{GLuint}()
+    glGenVertexArrays(1, vao)
+    glBindVertexArray(vao[])
+    for elem in args
+        if isa(elem, GLBuffer)
+            buff = buffer(elem)
+            GLAbstraction.bind(buff)
+            glEnableVertexAttribArray(buffer_loc)
+            glVertexAttribPointer(
+                buffer_loc,
+                GLAbstraction.cardinality(buff),
+                GLAbstraction.julia2glenum(eltype(buff)),
+                GL_FALSE, 0, C_NULL
+            )
+            buffer_loc += 1
+        else
+            push!(uniforms, elem)
+        end
+    end
+    if !isnull(tfp.uniforms)
+        get(tfp.uniforms)[] = (uniforms...,)
+    end
+    glEnable(GL_RASTERIZER_DISCARD)
+    glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, buffer(A).id)
+    glBeginTransformFeedback(GL_POINTS)
+    glDrawArrays(GL_POINTS, 0, length(A))
+    glEndTransformFeedback()
+    glBindVertexArray(0)
+    nothing
+end
 
-function blas_module(A::GLContext)
-    if blas_supported(CLContext)
-        CUBLAS
-    elseif blas_supported(CUContext)
-        CUBLAS
-    else
-        BLAS # performance error ?!
+
+function TransformFeedbackProgram{T}(context, kernel, out::Type{T}, args)
+    key = (Symbol(kernel), (out, args...))
+    get!(context.program_cache, key) do
+        accessors = []
+        uniforms = []
+        samplers = []
+        vbos = []
+        argtypes = []
+        names = []
+        # figure out how to access the args
+        for (i, elem) in enumerate(args)
+            name = "arg$i"
+            globalsym = glsl_gensym(string("local", name))
+            push!(names, globalsym)
+            accessor = globalsym
+            argtype = elem
+            wasref = false
+            if elem <: Ref
+                elem = eltype(elem) # unpack
+                wasref = true
+            end
+            if elem <: GLBuffer
+                push!(vbos, globalsym => eltype(elem))
+                if !wasref # already set otherwise
+                    argtype = eltype(elem)
+                end
+            elseif isa(elem, GLSampler)
+                error("Sampler not implemented right now!")
+                # push!(samplers, elem)
+                # push!(accessors, globalsym)
+            else
+                isbits(elem) || error("Only Ref, isbits Scalar, GLSampler and GLBuffer are supported for opengl broadcast. Found: $(typeof(elem))")
+                push!(uniforms, globalsym => elem)
+            end
+            push!(accessors, accessor)
+            push!(argtypes, argtype)
+        end
+
+        m = GLMethod((kernel, Tuple{argtypes...,}))
+
+        io = GLIO(IOBuffer(), m)
+
+        println(io, "#version 330")
+        Transpiler.print_dependencies(io, m)
+
+        # # Vertex in block
+        println(io, "// vertex input:")
+        idx = 0
+        for (name, t) in vbos
+            print(io, "layout (location = $idx) in ")
+            Transpiler.show_type(io, t)
+            print(io, ' ')
+            Transpiler.show_name(io, name)
+            println(io, ';')
+            idx += 1
+        end
+        uniform_types = last.(uniforms)
+        Transpiler.show_uniforms(io, first.(uniforms), uniform_types)
+        # print out value
+        outsym = glsl_gensym("output")
+        println(io)
+        print(io, "out ")
+        Transpiler.show_type(io, eltype(T))
+        println(io, " $outsym;")
+        println(io)
+        if !Sugar.isintrinsic(m) # broadcastet function might be intrinsic
+            println(io, Sugar.getsource!(m))
+        end
+        println(io)
+        println(io, "// vertex main function:")
+        slotstart = length(Sugar.slottypes(m))
+        println(io, "void main(){")
+            print(io, "    $outsym = ")
+            fname = Symbol(Sugar.functionname(io, m.signature...))
+            func_prec = Base.operator_precedence(fname)
+            if func_prec > 0
+                print(io, join(accessors, " $fname "))
+                println(io, ";")
+            else
+                print(io, fname)
+                print(io, '(')
+                print(io, join(accessors, ", "))
+                println(io, ");")
+            end
+        println(io, '}')
+        vsource = take!(io.io)
+        vshader = GLAbstraction.compile_shader(vsource, GL_VERTEX_SHADER, Symbol(kernel))
+        program = glCreateProgram()
+        glAttachShader(program, vshader.id)
+        outvar = ["$outsym"]
+        glTransformFeedbackVaryings(program, 1, outvar, GL_INTERLEAVED_ATTRIBS)
+        glLinkProgram(program)
+        if !GLAbstraction.islinked(program)
+            println("ERROR IN SHADER: ")
+            write(STDOUT, vsource)
+            println(GLAbstraction.getinfolog(program))
+        end
+
+        buffer = if isempty(uniform_types)
+            et = Tuple{}; n = 0
+            Nullable{UniformBuffer{et, n}}()
+        else
+            et = Tuple{uniform_types...}; n = 1
+            Nullable(UniformBuffer(Tuple{uniform_types...}, 1))
+        end
+        TransformFeedbackProgram{T, Tuple{last.(vbos)...}, et, Void, n}(program, buffer)
     end
 end
 
 
+function acc_broadcast!(kernel, A::GLBuffer, args)
+    typs = map(typeof, args)
+    tfp = TransformFeedbackProgram(context(A), kernel, eltype(A), typs)
+    tfp(A, args)
 end
+
+
+
+# implement BLAS backend
+
+end
+
+using .GLBackend
+export GLBackend
+#
+# using ModernGL, GLAbstraction, GLWindow
+# w = create_glcontext()
+#
+# vertex_src = """
+# #version 330
+# // dependant type declarations
+# // dependant function declarations
+# // vertex input:
+# layout (location = 0) in float _gensymed_localarg1;
+# layout (location = 1) in float _gensymed_localarg2;
+# // uniform inputs:
+#
+# out float _gensymed_output;
+#
+# float test(float a, float b)
+# {
+#     float y;
+#     float x;
+#     x = sqrt(sin(a) * b) / float(10.0);
+#     y = float(33.0) * x + cos(b);
+#     return y * float(10.0);
+# }
+#
+# // vertex main function:
+# void main(){
+#     _gensymed_output = test(_gensymed_localarg1, _gensymed_localarg2);
+# }
+# """
+# shader = GLAbstraction.compile_shader(Vector{UInt8}(vertex_src), GL_VERTEX_SHADER, :test).id
+# GLAbstraction.iscompiled(shader)
+#
+#
+# program = glCreateProgram()
+# glAttachShader(program, shader)
+# feedbackVaryings = ["_gensymed_output"]
+# glTransformFeedbackVaryings(program, 1, feedbackVaryings, GL_INTERLEAVED_ATTRIBS)
+#
+# glLinkProgram(program)
+# GLAbstraction.islinked(program)
+#
+# glUseProgram(program)
+# vao = Ref{GLuint}()
+# glGenVertexArrays(1, vao)
+# glBindVertexArray(vao[])
+#
+# data = rand(Float32, 1000)
+# vbo = Ref{GLuint}()
+# glGenBuffers(1, vbo);
+# glBindBuffer(GL_ARRAY_BUFFER, vbo[])
+# glBufferData(GL_ARRAY_BUFFER, sizeof(data), data, GL_STATIC_DRAW)
+# glEnableVertexAttribArray(0)
+# glVertexAttribPointer(0, 1, GL_FLOAT, GL_FALSE, 0, C_NULL)
+#
+# data2 = rand(Float32, 1000)
+# vbo2 = Ref{GLuint}()
+# glGenBuffers(1, vbo2);
+# glBindBuffer(GL_ARRAY_BUFFER, vbo2[])
+# glBufferData(GL_ARRAY_BUFFER, sizeof(data2), data2, GL_STATIC_DRAW)
+# glEnableVertexAttribArray(1)
+# glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 0, C_NULL)
+#
+# dest = GLBuffer(Float32, 1000, usage = GL_STATIC_READ);
+#
+# glEnable(GL_RASTERIZER_DISCARD)
+# glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, dest.id)
+# glBeginTransformFeedback(GL_POINTS)
+# glDrawArrays(GL_POINTS, 0, length(dest))
+# glEndTransformFeedback()
+# glBindVertexArray(0)
+# glFinish()
+# x = GLAbstraction.gpu_data(dest)
+#
+# test.(data, data2) ≈ x

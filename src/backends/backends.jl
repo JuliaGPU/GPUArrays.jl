@@ -59,6 +59,8 @@ function init(sym::Symbol, args...; kw_args...)
         CUBackend.init(args...; kw_args...)
     elseif sym == :opencl
         CLBackend.init(args...; kw_args...)
+    elseif sym == :opengl
+        GLBackend.init(args...; kw_args...)
     else
         error("$sym not a supported backend. Try one of: $(supported_backends())")
     end

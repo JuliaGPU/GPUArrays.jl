@@ -33,13 +33,25 @@ for elty in (Float64, Float32)
                 n::Integer, DA::$elty,
                 DX::AbstractAccArray{$elty, N}, incx::Integer
             )
-            ctx = context(A)
+            ctx = context(DX)
             blasmod = blas_module(ctx)
             blasmod.scal!(n, DA, blasbuffer(ctx, DX), incx)
             DX
         end
     end
 end
+
+function Base.scale!(X::AbstractAccArray{T}, s::Real) where T <: BLAS.BlasComplex
+    R = typeof(real(zero(T)))
+    buff = reinterpret(R, vec(X))
+    BLAS.scal!(2*length(X), R(s), buff, 1)
+    X
+end
+function Base.scale!(X::AbstractAccArray{T}, s::Real) where T <: Union{Float32, Float64}
+    BLAS.scal!(length(X), T(s), X, 1)
+    X
+end
+
 
 for elty in (Float32, Float64, Complex64, Complex128)
     @eval begin

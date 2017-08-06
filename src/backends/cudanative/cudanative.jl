@@ -1,13 +1,14 @@
-
 module CUBackend
 
-using ..GPUArrays, CUDAnative, StaticArrays, Compat
+using ..GPUArrays, CUDAnative, StaticArrays
 
 import CUDAdrv, CUDArt #, CUFFT
 
-import GPUArrays: buffer, create_buffer, acc_broadcast!, acc_mapreduce, mapidx
-import GPUArrays: Context, GPUArray, context, broadcast_index, linear_index, gpu_call
-import GPUArrays: synchronize, free
+import GPUArrays: buffer, create_buffer, acc_mapreduce
+import GPUArrays: Context, GPUArray, context, linear_index, gpu_call
+import GPUArrays: blas_module, blasbuffer, is_blas_supported, hasblas
+import GPUArrays: default_buffer_type, broadcast_index, is_fft_supported, unsafe_reinterpret
+
 
 using CUDAdrv: CuDefaultStream
 
@@ -30,9 +31,9 @@ function any_context()
     CUContext(ctx, dev)
 end
 
-#@compat const GLArrayImg{T, N} = GPUArray{T, N, gl.Texture{T, N}, GLContext}
-@compat const CUArray{T, N, B} = GPUArray{T, N, B, CUContext} #, GLArrayImg{T, N}}
-@compat const CUArrayBuff{T, N} = CUArray{T, N, CUDAdrv.CuArray{T, N}}
+#const GLArrayImg{T, N} = GPUArray{T, N, gl.Texture{T, N}, GLContext}
+const CUArray{T, N, B} = GPUArray{T, N, B, CUContext} #, GLArrayImg{T, N}}
+const CUArrayBuff{T, N} = CUArray{T, N, CUDAdrv.CuArray{T, N}}
 
 
 global init, all_contexts, current_context
@@ -46,91 +47,115 @@ let contexts = CUContext[]
     end
 end
 # synchronize
-function synchronize{T, N}(x::CUArray{T, N})
+function GPUArrays.synchronize{T, N}(x::CUArray{T, N})
     CUDAdrv.synchronize(context(x).ctx) # TODO figure out the diverse ways of synchronization
 end
 
-
-function free{T, N}(x::CUArray{T, N})
-    synchronize(x)
+function GPUArrays.free{T, N}(x::CUArray{T, N})
+    GPUArrays.synchronize(x)
     Base.finalize(buffer(x))
     nothing
 end
 
-function create_buffer{T, N}(ctx::CUContext, ::Type{T}, sz::NTuple{N, Int}; kw_args...)
-    CUDAdrv.CuArray{T}(sz)
-end
-function Base.copy!{T,N}(dest::Array{T,N}, source::CUArray{T,N})
-    copy!(dest, buffer(source))
-end
-function Base.copy!{T,N}(dest::CUArray{T,N}, source::Array{T,N})
-    copy!(buffer(dest), source)
-end
-function Base.copy!{T,N}(dest::CUArray{T,N}, source::CUArray{T,N})
-    copy!(buffer(dest), buffer(source))
+
+default_buffer_type{T, N}(::Type, ::Type{Tuple{T, N}}, ::CUContext) = CUDAdrv.CuArray{T, N}
+
+function (AT::Type{CUArray{T, N, Buffer}}){T, N, Buffer <: CUDAdrv.CuArray}(
+        size::NTuple{N, Int};
+        context = current_context(),
+        kw_args...
+    )
+    # cuda doesn't allow a size of 0, but since the length of the underlying buffer
+    # doesn't matter, with can just initilize it to 0
+    buff = prod(size) == 0 ? CUDAdrv.CuArray{T}((1,)) : CUDAdrv.CuArray{T}(size)
+    AT(buff, size, context)
 end
 
-function Base.similar{T, N, ET}(x::CUArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
-    ctx = context(x)
-    b = create_buffer(ctx, ET, sz; kw_args...)
-    GPUArray{ET, N, typeof(b), typeof(ctx)}(b, sz, ctx)
+function unsafe_reinterpret(::Type{T}, A::CUArray{ET}, dims::NTuple{N, Integer}) where {T, ET, N}
+    buff = buffer(A)
+    newbuff = CUDAdrv.CuArray{T, N}(dims, convert(CUDAdrv.OwnedPtr{T}, pointer(buff)))
+    ctx = context(A)
+    GPUArray{T, length(dims), typeof(newbuff), typeof(ctx)}(newbuff, dims, ctx)
+end
+
+
+function Base.copy!{T}(
+        dest::Array{T}, d_offset::Integer,
+        source::CUDAdrv.CuArray{T}, s_offset::Integer, amount::Integer
+    )
+    amount == 0 && return dest
+    d_offset = d_offset
+    s_offset = s_offset - 1
+    device_ptr = pointer(source)
+    sptr = CUDAdrv.OwnedPtr{T}(device_ptr.ptr + (sizeof(T) * s_offset), device_ptr.ctx)
+    CUDAdrv.Mem.download(Ref(dest, d_offset), sptr, sizeof(T) * (amount))
+    dest
+end
+function Base.copy!{T}(
+        dest::CUDAdrv.CuArray{T}, d_offset::Integer,
+        source::Array{T}, s_offset::Integer, amount::Integer
+    )
+    amount == 0 && return dest
+    d_offset = d_offset - 1
+    s_offset = s_offset
+    device_ptr = pointer(dest)
+    sptr = CUDAdrv.OwnedPtr{T}(device_ptr.ptr + (sizeof(T) * d_offset), device_ptr.ctx)
+    CUDAdrv.Mem.upload(sptr, Ref(source, s_offset), sizeof(T) * (amount))
+    dest
+end
+
+
+function Base.copy!{T}(
+        dest::CUDAdrv.CuArray{T}, d_offset::Integer,
+        source::CUDAdrv.CuArray{T}, s_offset::Integer, amount::Integer
+    )
+    d_offset = d_offset - 1
+    s_offset = s_offset - 1
+    d_ptr = pointer(dest)
+    s_ptr = pointer(source)
+    dptr = CUDAdrv.OwnedPtr{T}(d_ptr.ptr + (sizeof(T) * d_offset), d_ptr.ctx)
+    sptr = CUDAdrv.OwnedPtr{T}(s_ptr.ptr + (sizeof(T) * s_offset), s_ptr.ctx)
+    CUDAdrv.Mem.transfer(sptr, dptr, sizeof(T) * (amount))
+    dest
 end
 
 function thread_blocks_heuristic(A::AbstractArray)
-    thread_blocks_heuristic(size(A))
+    thread_blocks_heuristic(length(A))
 end
 
-function thread_blocks_heuristic{N}(s::NTuple{N, Int})
-    len = prod(s)
+thread_blocks_heuristic{N}(s::NTuple{N, Integer}) = thread_blocks_heuristic(prod(s))
+function thread_blocks_heuristic(len::Integer)
     threads = min(len, 1024)
     blocks = ceil(Int, len/threads)
     blocks, threads
 end
 
-@inline function linear_index(::CUDAnative.CuDeviceArray)
-    (blockIdx().x - UInt32(1)) * blockDim().x + threadIdx().x
+@inline function linear_index(::CUDAnative.CuDeviceArray, state)
+    Cuint((blockIdx().x - Cuint(1)) * blockDim().x + threadIdx().x)
 end
 
 
 unpack_cu_array(x) = x
 unpack_cu_array(x::Scalar) = unpack_cu_array(getfield(x, 1))
 unpack_cu_array{T,N}(x::CUArray{T,N}) = buffer(x)
-
-@inline function call_cuda(A::CUArray, kernel, rest...)
-    blocks, thread = thread_blocks_heuristic(A)
-    args = map(unpack_cu_array, rest)
-    @cuda (blocks, thread) kernel(args...)
-end
+unpack_cu_array(x::Ref{<:GPUArrays.AbstractAccArray}) = unpack_cu_array(x[])
 
 # TODO hook up propperly with CUDAdrv... This is a dirty adhoc solution
 # to be consistent with the OpenCL backend
 immutable CUFunction{T}
     kernel::T
 end
-# TODO find a future for the kernel string compilation part
-compile_lib = Pkg.dir("CUDAdrv", "examples", "compilation", "library.jl")
-has_nvcc = try
-    success(`nvcc --version`)
-catch
-    false
-end
-if isfile(compile_lib) && has_nvcc
-    include(compile_lib)
+
+if success(`nvcc --version`)
+    include("compilation.jl")
     hasnvcc() = true
 else
     hasnvcc() = false
-    if !has_nvcc
-        warn("Couldn't find nvcc, please add it to your path.
-            This will disable the ability to compile a CUDA kernel from a string"
-        )
-    end
-    if !isfile(compile_lib)
-        warn("Couldn't find cuda compilation lib in default location.
-        This will disable the ability to compile a CUDA kernel from a string
-        To fix, install CUDAdrv in default location."
-        )
-    end
+    warn("Couldn't find nvcc, please add it to your path.
+        This will disable the ability to compile a CUDA kernel from a string"
+    )
 end
+
 function CUFunction{T, N}(A::CUArray{T, N}, f::Function, args...)
     CUFunction(f) # this is mainly for consistency with OpenCL
 end
@@ -161,10 +186,14 @@ function (f::CUFunction{F}){F <: CUDAdrv.CuFunction, T, N}(A::CUArray{T, N}, arg
     )
 end
 
-function gpu_call{T, N}(A::CUArray{T, N}, f::Function, args, globalsize = size(A), localsize = nothing)
-    call_cuda(A, f, args...)
+function gpu_call{T, N}(f::Function, A::CUArray{T, N}, args, globalsize = length(A), localsize = nothing)
+    blocks, thread = thread_blocks_heuristic(globalsize)
+    args = map(unpack_cu_array, args)
+    #cu_kernel, rewritten = CUDAnative.rewrite_for_cudanative(kernel, map(typeof, args))
+    #println(CUDAnative.@code_typed kernel(args...))
+    @cuda (blocks, thread) f(0f0, args...)
 end
-function gpu_call{T, N}(A::CUArray{T, N}, f::Tuple{String, Symbol}, args, globalsize = size(A), localsize = nothing)
+function gpu_call{T, N}(f::Tuple{String, Symbol}, A::CUArray{T, N}, args, globalsize = size(A), localsize = nothing)
     func = CUFunction(A, f, args...)
     # TODO cache
     func(A, args) # TODO pass through local/global size
@@ -177,58 +206,33 @@ end
 
 for i = 0:10
     args = ntuple(x-> Symbol("arg_", x), i)
-    fargs = ntuple(x-> :(broadcast_index(which[$x], $(args[x]), sz, i)), i)
     fargs2 = ntuple(x-> :(broadcast_index($(args[x]), sz, i)), i)
     @eval begin
-        function broadcast_kernel(A, f, sz, which, $(args...))
-            i = linear_index(A)
-            @inbounds if i <= length(A)
-                A[i] = f($(fargs...))
-            end
-            nothing
-        end
-        function mapidx_kernel{F}(A, f::F, $(args...))
-            i = linear_index(A)
-            if i <= length(A)
-                f(i, A, $(args...))
-            end
-            nothing
-        end
+
         function reduce_kernel{F <: Function, OP <: Function,T1, T2, N}(
                 out::AbstractArray{T2,1}, f::F, op::OP, v0::T2,
                 A::AbstractArray{T1, N}, $(args...)
             )
             #reduce multiple elements per thread
 
-            i = (blockIdx().x - UInt32(1)) * blockDim().x + threadIdx().x
-            step = blockDim().x * gridDim().x
-            sz = size(A)
+            i = (CUDAnative.blockIdx().x - UInt32(1)) * CUDAnative.blockDim().x + CUDAnative.threadIdx().x
+            step = CUDAnative.blockDim().x * CUDAnative.gridDim().x
+            sz = Cuint.(size(A))
             result = v0
             while i <= length(A)
                 @inbounds result = op(result, f(A[i], $(fargs2...)))
                 i += step
             end
             result = reduce_block(result, op, v0)
-            if threadIdx().x == UInt32(1)
-                @inbounds out[blockIdx().x] = result
+            if CUDAnative.threadIdx().x == UInt32(1)
+                @inbounds out[CUDAnative.blockIdx().x] = result
             end
             return
         end
     end
 end
 
-function acc_broadcast!{F <: Function, N}(f::F, A::CUArray, args::NTuple{N, Any})
-    which = map(args) do arg
-        if isa(arg, AbstractArray) && !isa(arg, Scalar)
-            return Val{true}()
-        end
-        Val{false}()
-    end
-    call_cuda(A, broadcast_kernel, A, f, map(UInt32, size(A)), which, args...)
-end
-function mapidx{F <: Function, N, T, N2}(f::F, A::CUArray{T, N2}, args::NTuple{N, Any})
-    call_cuda(A, mapidx_kernel, A, f, args...)
-end
+
 #################################
 # Reduction
 
@@ -240,27 +244,27 @@ function CUDAnative.shfl_down(
     )
     (
         RGB{Float32}(
-            shfl_down(val[1].r, srclane, width),
-            shfl_down(val[1].g, srclane, width),
-            shfl_down(val[1].b, srclane, width),
+            CUDAnative.shfl_down(val[1].r, srclane, width),
+            CUDAnative.shfl_down(val[1].g, srclane, width),
+            CUDAnative.shfl_down(val[1].b, srclane, width),
         ),
-        shfl_down(val[2], srclane, width)
+        CUDAnative.shfl_down(val[2], srclane, width)
     )
 end
 
 function reduce_warp{T, F<:Function}(val::T, op::F)
     offset = CUDAnative.warpsize() ÷ UInt32(2)
     while offset > UInt32(0)
-        val = op(val, shfl_down(val, offset))
+        val = op(val, CUDAnative.shfl_down(val, offset))
         offset ÷= UInt32(2)
     end
     return val
 end
 
 @inline function reduce_block{T, F <: Function}(val::T, op::F, v0::T)::T
-    shared = @cuStaticSharedMem(T, 32)
-    wid  = div(threadIdx().x - UInt32(1), CUDAnative.warpsize()) + UInt32(1)
-    lane = rem(threadIdx().x - UInt32(1), CUDAnative.warpsize()) + UInt32(1)
+    shared = CUDAnative.@cuStaticSharedMem(T, 32)
+    wid  = div(CUDAnative.threadIdx().x - UInt32(1), CUDAnative.warpsize()) + UInt32(1)
+    lane = rem(CUDAnative.threadIdx().x - UInt32(1), CUDAnative.warpsize()) + UInt32(1)
 
      # each warp performs partial reduction
     val = reduce_warp(val, op)
@@ -270,10 +274,10 @@ end
         @inbounds shared[wid] = val
     end
     # wait for all partial reductions
-    sync_threads()
+    CUDAnative.sync_threads()
     # read from shared memory only if that warp existed
     @inbounds begin
-        val = (threadIdx().x <= fld(blockDim().x, CUDAnative.warpsize())) ? shared[lane] : v0
+        val = (threadIdx().x <= fld(CUDAnative.blockDim().x, CUDAnative.warpsize())) ? shared[lane] : v0
     end
     if wid == 1
         # final reduce within first warp
@@ -323,17 +327,30 @@ end
 
 ########################################
 # CUBLAS
-# using CUBLAS
-# import CUDArt
-#
-# # implement blas interface
-# blas_module(::CUContext) = CUBLAS
-# function blasbuffer(ctx::CUContext, A)
-#     buff = buffer(A)
-#     devptr = pointer(buff)
-#     device = CUDAdrv.device(devptr.ctx).handle
-#     CUDArt.CudaArray(CUDArt.CudaPtr(devptr.ptr), size(A), Int(device))
-# end
+
+function to_cudart(A::CUArray)
+    ctx = context(A)
+    buff = buffer(A)
+    devptr = pointer(buff)
+    device = CUDAdrv.device(devptr.ctx).handle
+    CUDArt.CudaArray(CUDArt.CudaPtr(devptr.ptr, ctx.ctx), size(A), Int(device))
+end
+
+if is_blas_supported(:CUBLAS)
+    using CUBLAS
+    import CUDArt
+    #
+    # # implement blas interface
+    hasblas(::CUContext) = true
+    blas_module(::CUContext) = CUBLAS
+    blasbuffer(ctx::CUContext, A) = to_cudart(A)
+
+end
+
+if is_fft_supported(:CUFFT)
+    include("fft.jl")
+end
+
 #
 # function convert{T <: CUArray}(t::T, A::CUDArt.CudaArray)
 #     ctx = context(t)
