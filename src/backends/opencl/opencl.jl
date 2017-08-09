@@ -74,6 +74,9 @@ end
 
 const CLArray{T, N} = GPUArray{T, N, B, CLContext} where B <: cl.Buffer
 
+include("compilation.jl")
+
+
 #synchronize
 function synchronize{T, N}(x::CLArray{T, N})
     cl.finish(context(x).queue) # TODO figure out the diverse ways of synchronization
@@ -192,14 +195,7 @@ function unsafe_reinterpret(::Type{T}, A::CLArray{ET}, dims::Tuple) where {T, ET
 end
 
 
-# extend the private interface for the compilation types
-Transpiler._to_cl_types{T, N}(arg::CLArray{T, N}) = cli.CLArray{T, N}
-Transpiler._to_cl_types{T}(x::LocalMemory{T}) = cli.LocalMemory{T}
 
-Transpiler._to_cl_types(x::Ref{<: CLArray}) = Transpiler._to_cl_types(x[])
-Transpiler.cl_convert(x::Ref{<: CLArray}) = Transpiler.cl_convert(x[])
-Transpiler.cl_convert(x::CLArray) = buffer(x)
-Transpiler.cl_convert{T}(x::LocalMemory{T}) = cl.LocalMem(T, x.size)
 
 function CLFunction{T, N}(A::CLArray{T, N}, f, args...)
     ctx = context(A)
