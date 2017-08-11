@@ -151,6 +151,9 @@ Times in a table:
 
 # Installation
 
+Recently I added a lot of features and bug fixes to the master branch.
+Please check that out first and see [pull #37](https://github.com/JuliaGPU/GPUArrays.jl/pull/37) for a list of new features.
+
 For the cudanative backend, you need to install [CUDAnative.jl manually](https://github.com/JuliaGPU/CUDAnative.jl/#installation).
 The cudanative backend only works on 0.6, while the other backends also support Julia 0.5.
 Make sure to have CUDA and OpenCL driver installed correctly.
