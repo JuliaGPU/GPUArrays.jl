@@ -33,7 +33,7 @@ end
 Will result in one GPU kernel call to a function that combines the operations without any extra allocations.
 This allows GPUArrays to offer a lot of functionality with minimal code.
 
-Also, when compiling Julia to the GPU, we can use all the cool features from Julia, e.g.
+Also, when compiling Julia for the GPU, we can use all the cool features from Julia, e.g.
 higher order functions, multiple dispatch, meta programming and generated functions.
 Checkout the examples, to see how this can be used to emit specialized code while not loosing flexibility:
 [unrolling](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/juliaset.jl),
