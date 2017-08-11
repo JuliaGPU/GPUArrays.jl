@@ -214,24 +214,14 @@ import Base: copy!, getindex, setindex!
 @inline unpack_buffer(x::Ref{<: AbstractAccArray}) = unpack_buffer(x[])
 
 function to_cartesian(A, indices::Tuple)
-    start = CartesianIndex(ntuple(length(indices)) do i
-        val = indices[i]
-        isa(val, Integer) && return val
-        isa(val, UnitRange) && return first(val)
-        isa(val, Colon) && return 1
+    idx = map(indices) do val
+        isa(val, Int) && return val:val
+        isa(val, UnitRange) && return val
+        isa(val, Base.Slice) && return val.indices
         error("GPU indexing only defined for integers or unit ranges. Found: $val")
-    end)
-    stop = CartesianIndex(ntuple(length(indices)) do i
-        val = indices[i]
-        isa(val, Integer) && return val
-        isa(val, UnitRange) && return last(val)
-        isa(val, Colon) && return size(A, i)
-        error("GPU indexing only defined for integers or unit ranges. Found: $val")
-    end)
-    CartesianRange(start, stop)
+    end
+    CartesianRange(idx)
 end
-
-crange(start, stop) = CartesianRange(CartesianIndex(start), CartesianIndex(stop))
 
 #Hmmm... why is this not part of the Array constructors???
 #TODO Figure out or issue THEM JULIA CORE PEOPLE SO HARD ... or PR? Who'd know
@@ -240,7 +230,11 @@ function array_convert{T, N}(t::Type{Array{T, N}}, x::Array)
 end
 
 
-array_convert{T, N}(t::Type{Array{T, N}}, x::T) = [x]
+function array_convert{T, N}(t::Type{Array{T, N}}, x::T)
+    a = t(ntuple(i -> 1, N))
+    a[1] = x
+    return a
+end
 
 function array_convert{T, N, T2}(t::Type{Array{T, N}}, x::T2)
     arr = collect(x) # iterator
@@ -265,13 +259,13 @@ for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArr
                 dest::$D{T, N}, rdest::NTuple{N, UnitRange},
                 src::$S{T, N}, ssrc::NTuple{N, UnitRange},
             )
-            drange = crange(start.(rdest), last.(rdest))
-            srange = crange(start.(ssrc), last.(ssrc))
+            drange = CartesianRange(rdest)
+            srange = CartesianRange(ssrc)
             copy!(dest, drange, src, srange)
         end
         function copy!{T}(
-                dest::$D{T, 1}, d_range::CartesianRange{CartesianIndex{1}},
-                src::$S{T, 1}, s_range::CartesianRange{CartesianIndex{1}},
+                dest::$D{T, 1}, d_range::CartesianRange{1},
+                src::$S{T, 1}, s_range::CartesianRange{1},
             )
             amount = length(d_range)
             if length(s_range) != amount
@@ -283,8 +277,8 @@ for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArr
             copy!(dest, d_offset, src, s_offset, amount)
         end
         # function copy!{T, N}(
-        #         dest::$D{T, N}, rdest::CartesianRange{CartesianIndex{N}},
-        #         src::$S{T, N}, ssrc::CartesianRange{CartesianIndex{N}},
+        #         dest::$D{T, N}, rdest::CartesianRange{N},
+        #         src::$S{T, N}, ssrc::CartesianRange{N},
         #     )
         #     copy!(unpack_buffer(dest), rdest, unpack_buffer(src), ssrc)
         # end
@@ -315,48 +309,50 @@ function copy_kernel!(state, dest, dest_offsets, src, src_offsets, shape, shape_
 end
 
 function copy!{T, N}(
-        dest::AbstractAccArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
-        src::AbstractAccArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
+        dest::AbstractAccArray{T, N}, destcrange::CartesianRange{N},
+        src::AbstractAccArray{T, N}, srccrange::CartesianRange{N}
     )
     shape = size(destcrange)
     if shape != size(srccrange)
         throw(DimensionMismatch("Ranges don't match their size. Found: $shape, $(size(srccrange))"))
     end
     len = length(destcrange)
-    dest_offsets = Cuint.(destcrange.start.I .- 1)
-    src_offsets = Cuint.(srccrange.start.I .- 1)
-    ui_shape = Cuint.(shape)
-    gpu_call(
-        copy_kernel!, dest,
-        (dest, dest_offsets, src, src_offsets, ui_shape, Cuint.(size(dest)), Cuint.(size(src)), Cuint(len)),
-        len
-    )
+    if len > 0
+        dest_offsets = Cuint.(first.(destcrange.indices) .- 1)
+        src_offsets = Cuint.(first.(srccrange.indices) .- 1)
+        ui_shape = Cuint.(shape)
+        gpu_call(
+            copy_kernel!, dest,
+            (dest, dest_offsets, src, src_offsets, ui_shape, Cuint.(size(dest)), Cuint.(size(src)), Cuint(len)),
+            len
+        )
+    end
     dest
 end
 
 
 function copy!{T, N}(
-        dest::AbstractAccArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
-        src::AbstractArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
+        dest::AbstractAccArray{T, N}, destcrange::CartesianRange{N},
+        src::AbstractArray{T, N}, srccrange::CartesianRange{N}
     )
     # Is this efficient? Maybe!
     # TODO: compare to a pure intrinsic copy implementation!
     # this would mean looping over linear sections of memory and
     # use copy!(dest, offset::Integer, buffer(src), offset::Integer, amout::Integer)
     src_gpu = typeof(dest)(map(idx-> src[idx], srccrange))
-    nrange = CartesianRange(one(CartesianIndex{N}), CartesianIndex(size(src_gpu)))
+    nrange = CartesianRange(ntuple(i -> 1:size(src_gpu, i), Val{N}))
     copy!(dest, destcrange, src_gpu, nrange)
     dest
 end
 
 
 function copy!{T, N}(
-        dest::AbstractArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
-        src::AbstractAccArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
+        dest::AbstractArray{T, N}, destcrange::CartesianRange{N},
+        src::AbstractAccArray{T, N}, srccrange::CartesianRange{N}
     )
     # Is this efficient? Maybe!
     dest_gpu = similar(src, size(destcrange))
-    nrange = CartesianRange(one(CartesianIndex{N}), CartesianIndex(size(dest_gpu)))
+    nrange = CartesianRange(ntuple(i -> 1:size(dest_gpu, i), Val{N}))
     copy!(dest_gpu, nrange, src, srccrange)
     copy!(dest, destcrange, Array(dest_gpu), nrange)
     dest
@@ -365,32 +361,30 @@ end
 
 Base.copy(x::AbstractAccArray) = identity.(x)
 
-indexlength(A, i, array::AbstractArray) = length(array)
-indexlength(A, i, array::Number) = 1
-indexlength(A, i, array::Colon) = size(A, i)
-
 function Base.setindex!{T, N}(A::AbstractAccArray{T, N}, value, indexes...)
+    cindexes = Base.to_indices(A, indexes)
+    checkbounds(A, cindexes...)
     # similarly, value should always be a julia array
-    shape = ntuple(Val{N}) do i
-        indexlength(A, i, indexes[i])
-    end
     if !isa(value, T) # TODO, shape check errors for x[1:3] = 1
-        Base.setindex_shape_check(value, indexes...)
+        Base.setindex_shape_check(value, cindexes...)
     end
-    checkbounds(A, indexes...)
     v = array_convert(Array{T, N}, value)
     # since you shouldn't update GPUArrays with single indices, we simplify the interface
     # by always mapping to ranges
-    ranges_dest = to_cartesian(A, indexes)
-    ranges_src = CartesianRange(size(v))
+    ranges_dest = to_cartesian(A, cindexes)
+    shape = map(length, cindexes)
+    if shape != size(v)
+        @show shape
+        @show size(v)
+    end
+    ranges_src = CartesianRange(shape)
 
     copy!(A, ranges_dest, v, ranges_src)
-    return
+    return A
 end
 
 function Base.getindex{T, N}(A::AbstractAccArray{T, N}, indexes...)
     cindexes = Base.to_indices(A, indexes)
-    # similarly, value should always be a julia array
     # We shouldn't really bother about checkbounds performance, since setindex/getindex will always be relatively slow
     checkbounds(A, cindexes...)
 

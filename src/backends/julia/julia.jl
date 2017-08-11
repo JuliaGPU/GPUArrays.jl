@@ -179,7 +179,6 @@ function gpu_call(f, A::JLArray, args, globalsize = length(A), local_size = 0)
     return
 end
 
-include("fft.jl")
 hasblas(::JLContext) = true
 
 end #JLBackend
