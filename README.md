@@ -162,3 +162,6 @@ Pkg.build("GPUArrays") # should print out information about what backends are ad
 # Test it!
 Pkg.test("GPUArrays")
 ```
+If a backend is not supported by the hardware, you will see build errors while running `Pkg.add("GPUArrays")`.
+Since GPUArrays selects only working backends when running `Pkg.build("GPUArrays")`
+**these errors can be ignored**.
