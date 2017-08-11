@@ -162,6 +162,7 @@ The rest should work automatically:
 
 ```Julia
 Pkg.add("GPUArrays")
+Pkg.checkout("GPUArrays") # optional but recommended to checkout master branch
 Pkg.build("GPUArrays") # should print out information about what backends are added
 # Test it!
 Pkg.test("GPUArrays")
