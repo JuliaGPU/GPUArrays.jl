@@ -75,11 +75,12 @@ end
 broadcast(f, ::GPUArray...)
 broadcast!(f, dest::GPUArray, ::GPUArray...)
 
-# calls `f` on args, with queues, block heuristics and context taken from `array`
+# calls `f` on args, with queues and context taken from `array`
 # f can be a julia function or a tuple (String, Symbol),
-# being a C kernel source string + the name of the kernel function
+# being a C kernel source string + the name of the kernel function.
+# first argument needs to be an untyped arg for global state. This can be mostly ignored, but needs to be passed to 
+# e.g. `linear_index(array::GPUArray, state)`, which gives you a linear, per thread index into `array` on all backends.
 gpu_call(array::GPUArray, f, args::Tuple)
-
 ```
 Example for [gpu_call](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/custom_kernels.jl)
 
