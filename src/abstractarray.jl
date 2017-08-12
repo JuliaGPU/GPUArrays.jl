@@ -270,8 +270,8 @@ for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArr
             copy!(dest, drange, src, srange)
         end
         function copy!{T}(
-                dest::$D{T, 1}, d_range::CartesianRange{CartesianIndex{1}},
-                src::$S{T, 1}, s_range::CartesianRange{CartesianIndex{1}},
+                dest::$D{T}, d_range::CartesianRange{CartesianIndex{1}},
+                src::$S{T}, s_range::CartesianRange{CartesianIndex{1}},
             )
             amount = length(d_range)
             if length(s_range) != amount
@@ -395,7 +395,7 @@ function Base.getindex{T, N}(A::AbstractAccArray{T, N}, indexes...)
     checkbounds(A, cindexes...)
 
     shape = map(length, cindexes)
-    result = Array{T, N}(shape)
+    result = Array{T, length(shape)}(shape)
     ranges_src = to_cartesian(A, cindexes)
     ranges_dest = CartesianRange(shape)
     copy!(result, ranges_dest, A, ranges_src)
