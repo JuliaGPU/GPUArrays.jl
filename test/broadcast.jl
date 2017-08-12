@@ -79,12 +79,16 @@ end
 
 @allbackends "vec 3" backend begin
     N = 20
+
     xc = map(x-> ntuple(i-> rand(Float32), Val{3}), 1:N)
     yc = map(x-> ntuple(i-> rand(Float32), Val{3}), 1:N)
+
     x = GPUArray(xc)
     y = GPUArray(yc)
+
     res1c = zeros(Float32, N)
     res2c = similar(xc)
+
     res1 = GPUArray(res1c)
     res2 = GPUArray(res2c)
 
