@@ -140,3 +140,16 @@ end
     Af0 = reinterpret(Float32, A, (20, 10))
     @test Array(Af0) == af0
 end
+
+function ntuple_test(state, result, ::Val{N}) where N
+    result[1] = ntuple(Val{N}) do i
+        Float32(i) * 77f0
+    end
+    return
+end
+
+@allbackends "ntuple test" backend begin
+    result = GPUArray(Vector{NTuple{3, Float32}}(1))
+    gpu_call(ntuple_test, result, (result, Val{3}()))
+    @test result[1] == (77, 2*77, 3*77)
+end
