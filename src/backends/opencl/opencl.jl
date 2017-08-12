@@ -5,7 +5,6 @@ using OpenCL
 using OpenCL: cl
 
 using ..GPUArrays, StaticArrays
-#import CLBLAS, CLFFT
 
 import GPUArrays: buffer, create_buffer, acc_mapreduce, mapidx
 import GPUArrays: Context, GPUArray, context, linear_index, free
@@ -14,7 +13,7 @@ import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector, gpu_c
 import GPUArrays: default_buffer_type, broadcast_index, unsafe_reinterpret
 
 using Transpiler
-import Transpiler: cli, CLFunction, cli.get_global_id
+import Transpiler: cli, cli.get_global_id
 
 immutable CLContext <: Context
     device::cl.Device
