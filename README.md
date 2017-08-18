@@ -35,7 +35,7 @@ This allows GPUArrays to offer a lot of functionality with minimal code.
 
 Also, when compiling Julia for the GPU, we can use all the cool features from Julia, e.g.
 higher order functions, multiple dispatch, meta programming and generated functions.
-Checkout the examples, to see how this can be used to emit specialized code while not loosing flexibility:
+Checkout the examples, to see how this can be used to emit specialized code while not losing flexibility:
 [unrolling](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/juliaset.jl),
 [vector loads/stores](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/vectorload.jl)
 
@@ -44,7 +44,7 @@ In theory, we could go as far as inspecting user defined callbacks (we can get t
 
 ### Automatic Differentiation
 
-Because of neuronal netorks, automatic differentiation is super hyped right now!
+Because of neural networks, automatic differentiation is super hyped right now!
 Julia offers a couple of packages for that, e.g. [ReverseDiff](https://github.com/JuliaDiff/ReverseDiff.jl).
 It heavily relies on Julia's strength to specialize generic code and dispatch to different implementations depending on the Array type, allowing an almost overheadless automatic differentiation.
 Making this work with GPUArrays will be a bit more involved, but the
