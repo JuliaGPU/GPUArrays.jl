@@ -88,8 +88,9 @@ function free{T, N}(x::CLArray{T, N})
     nothing
 end
 
-linear_index(::cli.CLArray, state) = get_global_id(0) + Cuint(1)
-
+function linear_index(::cli.CLArray, state)
+    (get_local_size(0)*get_group_id(0) + get_local_id(0)) + Cuint(1)
+end
 
 function cl_readbuffer(q, buf, dev_offset, hostref, nbytes)
     n_evts  = UInt(0)
@@ -205,6 +206,14 @@ function (clfunc::CLFunction{T}){T, T2, N}(A::CLArray{T2, N}, args...)
     clfunc(args, length(A))
 end
 
+function thread_blocks_heuristic(len::Integer)
+    threads = min(len, 256)
+    blocks = ceil(Int, len/threads)
+    blocks = blocks * threads
+    blocks, threads
+end
+
+
 function gpu_call{T, N}(f, A::CLArray{T, N}, args, globalsize = length(A), localsize = nothing)
     ctx = GPUArrays.context(A)
     _args = if !isa(f, Tuple{String, Symbol})
@@ -213,7 +222,8 @@ function gpu_call{T, N}(f, A::CLArray{T, N}, args, globalsize = length(A), local
         args
     end
     clfunc = CLFunction(f, _args, ctx.queue)
-    clfunc(_args, globalsize, localsize)
+    blocks, thread = thread_blocks_heuristic(globalsize)
+    clfunc(_args, blocks, thread)
 end
 
 ###################

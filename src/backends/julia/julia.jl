@@ -117,9 +117,8 @@ for i = 0:7
     fargs = ntuple(x-> :(broadcast_index(args[$x], sz, i)), i)
     fidxargs = ntuple(x-> :(args[$x]), i)
     @eval begin
-
         function mapidx{F, T, N}(f::F, data::JLArray{T, N}, args::NTuple{$i, Any})
-            for i in eachindex(data)
+            @threads for i in eachindex(data)
                 f(i, data, $(fidxargs...))
             end
         end
@@ -168,7 +167,7 @@ function gpu_call(f, A::JLArray, args, globalsize = length(A), local_size = 0)
         parallel_kernel(0, len, f, unpacked_args)
         return
     end
-    for id = 1:n
+    @threads for id = 1:n
         parallel_kernel((id - 1) * width, width, f, unpacked_args)
     end
     len_floored = width * n
