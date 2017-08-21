@@ -9,7 +9,7 @@ Matcha 0.0.2
 CUDAnative 0.4.1 # llvm codegen fix
 CUDAdrv 0.5.1
 CUDArt
-CUBLAS
+CUBLAS 0.2.0 # for CUDAdrv support
 CUFFT
 
 OpenCL 0.6.0 #proper packed conversion
