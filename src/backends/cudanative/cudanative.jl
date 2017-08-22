@@ -293,7 +293,7 @@ function acc_mapreduce{T, OT, N}(
     )
     dev = context(A).device
     @assert(CUDAdrv.capability(dev) >= v"3.0", "Current CUDA reduce implementation requires a newer GPU")
-    threads = 512
+    threads = 256
     blocks = min((length(A) + threads - 1) ÷ threads, 1024)
     out = similar(buffer(A), OT, (blocks,))
     args = map(unpack_cu_array, rest)
