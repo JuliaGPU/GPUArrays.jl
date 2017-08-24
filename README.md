@@ -3,11 +3,14 @@
 [![Build Status](https://travis-ci.org/JuliaGPU/GPUArrays.jl.svg?branch=master)](https://travis-ci.org/JuliaGPU/GPUArrays.jl)
 [![Build status](https://ci.appveyor.com/api/projects/status/2aa4bvmq7e9rh338/branch/master?svg=true)](https://ci.appveyor.com/project/SimonDanisch/gpuarrays-jl-8n74h/branch/master)
 
+[Benchmarks](https://github.com/JuliaGPU/GPUBenchmarks.jl/blob/master/results/results.md)
+
 GPU Array package for Julia's various GPU backends.
 The compilation for the GPU is done with [CUDAnative.jl](https://github.com/JuliaGPU/CUDAnative.jl/)
 and for OpenCL [Transpiler.jl](https://github.com/SimonDanisch/Transpiler.jl) is used.
 In the future it's planned to replace the transpiler by a similar approach
 CUDAnative.jl is using (via LLVM + SPIR-V).
+
 
 # Why another GPU array package in yet another language?
 
