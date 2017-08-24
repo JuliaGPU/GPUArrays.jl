@@ -3,8 +3,8 @@ using GPUArrays.CLBackend
 CLBackend.init()
 
 
-function clmap!(f, out, b)
-    i = linear_index(out) # get the kernel index it gets scheduled on
+function clmap!(state, f, out, b)
+    i = linear_index(out, state) # get the kernel index it gets scheduled on
     out[i] = f(b[i])
     return
 end
@@ -13,8 +13,8 @@ end
 x = GPUArray(rand(Float32, 100))
 y = GPUArray(rand(Float32, 100))
 # same here, x is just passed to supply a kernel size!
-gpu_call(x, clmap!, (sin, x, y))
-map!(sin, Array(y)) ≈ Array(x)
+gpu_call(clmap!, x, (sin, x, y))
+sin.(Array(y)) ≈ Array(x)
 
 # you can also use a kernel source string, directly with OpenCL code.
 # note, that you loose all features, like automatically including dependant functions
@@ -51,13 +51,11 @@ o_buff = similar(q_buff, UInt16)
 
 # you need to pass the name of the kernel you'd like to compile
 # It will as well need the "guiding array"
-gpu_call(o_buff, (source, :julia), (q_buff, o_buff, UInt16(200)))
+gpu_call((source, :julia), o_buff, (q_buff, o_buff, UInt16(200)))
 # save out image!
 using FileIO, Colors
 x = Array(o_buff)
-# if this is the CUDA backend, we could also calculate the maximum on the GPU
-# for opencl, mapreduce is not implemented yet
-x /= maximum(x)
+x ./= maximum(x)
 save("test.jpg", Gray.(x))
 
 
@@ -73,10 +71,10 @@ y = GPUArray(rand(Float32, 100))
 # Note, that we need to use the sin of CUDAnative.
 # This necessity will hopefully be removed soon
 # same here, x is just passed to supply a kernel size!
-gpu_call(x, clmap!, (CUDAnative.sin, x, y))
+gpu_call(clmap!, x, (CUDAnative.sin, x, y))
 
 yjl = Array(y)
-map!(sin, yjl, yjl) ≈ Array(x)
+sin.(yjl) ≈ Array(x)
 
 source = """
 __global__ void copy(const float *input, float *output)
@@ -85,5 +83,5 @@ __global__ void copy(const float *input, float *output)
     output[i] = input[i];
 }
 """
-gpu_call(x, (source, :copy), (x, y))
+gpu_call((source, :copy), x, (x, y))
 Array(x) == Array(y)
