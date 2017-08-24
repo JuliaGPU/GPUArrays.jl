@@ -132,6 +132,9 @@ for i = 0:7
             @inbounds arr[threadid] = r
         end
         function acc_mapreduce{T, N}(f, op, v0, A::JLArray{T, N}, args::NTuple{$i, Any})
+            if length(A) <= 10^6 && $i == 0
+                return mapreduce(f, op, v0, buffer(A))
+            end
             n = Base.Threads.nthreads()
             arr = Vector{typeof(op(v0, v0))}(n)
             slice = ceil(Int, length(A) / n)

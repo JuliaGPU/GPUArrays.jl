@@ -71,21 +71,19 @@ catch e
     false
 end
 
-# TODO add back OpenGL backend.. Currently not supported due too many driver bugs
-# in OpenGL implementation
-# try
-#     using GLAbstraction, GLWindow
-#     # we need at least OpenGL 4.1
-#     ctx = GLWindow.create_glcontext("test", resolution = (10, 10), major = 3, minor = 3)
-#     if ctx.handle != C_NULL
-#         info("opengl added as backend!")
-#         push!(supported_backends, :opengl)
-#     else
-#         error("Not a high enough version of OpenGL available. Try upgrading the video driver!")
-#     end
-# catch e
-#     info("OpenGL not added as backend: $e")
-# end
+try
+    using GLAbstraction, GLWindow
+    # we need at least OpenGL 3.3
+    ctx = GLWindow.create_glcontext("test", resolution = (10, 10), major = 3, minor = 3)
+    if ctx.handle != C_NULL
+        info("opengl added as backend!")
+        push!(supported_backends, :opengl)
+    else
+        error("Not a high enough version of OpenGL available. Try upgrading the video driver!")
+    end
+catch e
+    info("OpenGL not added as backend: $e")
+end
 
 
 supported_blas_libs = [:BLAS]
