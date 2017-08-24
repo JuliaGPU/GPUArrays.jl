@@ -504,3 +504,24 @@ function Base.reshape(a::AbstractAccArray{T}, dims::NTuple{N,Int}) where T where
     end
     unsafe_reinterpret(T, a, dims)
 end
+
+
+function mapreducedim_kernel(state, f, op, R::AbstractArray{T1, N}, A::AbstractArray{T, N}, slice_size, sizeA, dim) where {T1, T, N}
+    ilin = Cuint(linear_index(R, state))
+    accum = zero(T1)
+    @inbounds for i = Cuint(1):slice_size
+        idx = ifelse.(ntuple(Cuint, Val{N}) .== dim, i, ilin)
+        i2d = gpu_sub2ind(sizeA, idx)
+        accum = op(accum, f(A[i2d]))
+    end
+    R[ilin] = accum
+    return
+end
+function Base._mapreducedim!(f, op, R::AbstractAccArray, A::AbstractAccArray)
+    sizeR = size(R)
+    @assert count(x-> x == 1, sizeR) == (ndims(R) - 1) "Not implemented"
+    dim = findfirst(x-> x == 1, sizeR)
+    slice_size = size(A, dim)
+    gpu_call(mapreducedim_kernel, R, (f, op, R, A, Cuint(slice_size), Cuint.(size(A)), Cuint(dim)))
+    return R
+end

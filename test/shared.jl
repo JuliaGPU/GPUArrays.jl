@@ -153,3 +153,23 @@ end
     gpu_call(ntuple_test, result, (result, Val{3}()))
     @test result[1] == (77, 2*77, 3*77)
 end
+
+
+@allbackends "mapreduce" backend begin
+    if backend != :opencl
+        y = rand(Float32, 40, 40)
+        x = GPUArray(y)
+        @test sum(y, 2) ≈ Array(sum(x, 2))
+        @test sum(y, 1) ≈ Array(sum(x, 1))
+
+        y = rand(Float32, 40, 10)
+        x = GPUArray(y)
+        @test sum(y, 2) ≈ Array(sum(x, 2))
+        @test sum(y, 1) ≈ Array(sum(x, 1))
+
+        y = rand(Float32, 10, 40)
+        x = GPUArray(y)
+        @test sum(y, 2) ≈ Array(sum(x, 2))
+        @test sum(y, 1) ≈ Array(sum(x, 1))
+    end
+end
