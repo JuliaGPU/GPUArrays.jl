@@ -58,34 +58,25 @@ There is also [ReverseDiffSource](https://github.com/JuliaDiff/ReverseDiffSource
 
 Current backends: OpenCL, CUDA, Julia Threaded
 
-Planned backends: OpenGL, Vulkan
-
 Implemented for all backends:
 
 ```Julia
 map(f, ::GPUArray...)
 map!(f, dest::GPUArray, ::GPUArray...)
 
-# maps
-mapidx(f, A::GPUArray, args...) do idx, a, args...
-    # e.g
-    if idx < length(A)
-        a[idx+1] = a[idx]
-    end
-end
-
-
 broadcast(f, ::GPUArray...)
 broadcast!(f, dest::GPUArray, ::GPUArray...)
 
-# calls `f` on args, with queues and context taken from `array`
-# f can be a julia function or a tuple (String, Symbol),
-# being a C kernel source string + the name of the kernel function.
-# first argument needs to be an untyped arg for global state. This can be mostly ignored, but needs to be passed to 
-# e.g. `linear_index(array::GPUArray, state)`, which gives you a linear, per thread index into `array` on all backends.
-gpu_call(array::GPUArray, f, args::Tuple)
+mapreduce(f, op, ::GPUArray...) # so support for sum/mean/minimum etc comes for free
+
+getindex, setindex!, push!, append!, splice!, append!, copy!, reinterpret, convert
+
+From (CL/CU)FFT
+fft!/fft/ifft/ifft! and the matching plan_fft functions.
+From (CL/CU)BLAS
+gemm!, scal!, gemv! and the high level functions that are implemented with these, like A * B, A_mul_B!, etc.
 ```
-Example for [gpu_call](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/custom_kernels.jl)
+
 
 # Usage
 
@@ -122,6 +113,7 @@ function kernel(state, arg1, arg2, arg3) # args get splatted into the kernel cal
     return #kernel must return void
 end
 ```
+Example for [gpu_call](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/custom_kernels.jl)
 
 # Currently supported subset of Julia Code
 
@@ -129,22 +121,18 @@ working with immutable isbits (not containing pointers) type should be completel
 non allocating code (so no constructs like `x = [1, 2, 3]`). Note that tuples are isbits, so this works x = (1, 2, 3).
 Transpiler/OpenCL has problems with putting GPU arrays on the gpu into a struct - so no views and actually no multidimensional indexing. For that `size` is needed which would need to be part of the array struct. A fix for that is in sight, though.
 
-| CLContext: FirePro w9100 | 0.0013 s| 7831 | 789.8|
-
 # TODO / up for grabs
 
-* stencil operations
+* stencil operations, convolutions
 * more tests and benchmarks
 * tests, that only switch the backend but use the same code
 * performance improvements!!
-* implement push!, append!, resize!, getindex, setindex!
 * interop between OpenCL, CUDA and OpenGL is there as a protype, but needs proper hooking up via `Base.copy!` / `convert`
-* share implementation of broadcast etc between backends. Currently they don't, since there are still subtle differences which should be eliminated over time!
 
 
 # Installation
 
-I recently added a lot of features and bug fixes to the master branch.
+I recently added a lot of features and bug fixes to the master branch, so you might want to check that out (`Pkg.checkout("GPUArrays")`).
 
 For the cudanative backend, you need to install [CUDAnative.jl manually](https://github.com/JuliaGPU/CUDAnative.jl/#installation) and it works only on osx + linux with a julia source build.
 Make sure to have either CUDA and/or OpenCL drivers installed correctly.
