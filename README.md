@@ -102,43 +102,33 @@ function test(a, b)
     Complex64(sin(a / b))
 end
 complex_c = test.(c, b)
-fft!(complex_c) # fft!/ifft! is currently implemented for JLBackend and CLBackend
+fft!(complex_c) # fft!/ifft!/plan_fft, plan_ifft, plan_fft!, plan_ifft!
 
+"""
+When you program with GPUArrays, you can just write normal julia functions, feed them to gpu_call and depending on what backend you choose it will use Transpiler.jl or CUDAnative.
+"""
+#Signature, global_size == cuda blocks, local size == cuda threads
+gpu_call(kernel::Function, DispatchDummy::GPUArray, args::Tuple, global_size = length(DispatchDummy), local_size = nothing)
+with kernel looking like this:
+
+function kernel(state, arg1, arg2, arg3) # args get splatted into the kernel call
+    # state gets always passed as the first argument and is needed to offer the same 
+    # functionality across backends, even though they have very different ways of of getting e.g. the thread index
+    # arg1 can be any gpu array - this is needed to dispatch to the correct intrinsics.
+    # if you call gpu_call without any further modifications to global/local size, this should give you a linear index into 
+    # DispatchDummy
+    idx = linear_index(state, arg1::GPUArray) 
+    arg1[idx] = arg2[idx] + arg3[idx]
+    return #kernel must return void
+end
 ```
 
-CLFFT, CUFFT, CLBLAS and CUBLAS will soon be supported.
-A prototype of generic support of these libraries can be found in [blas.jl](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/src/backends/blas.jl).
-The OpenCL backend already supports mat mul via `CLBLAS.gemm!` and `fft!`/`ifft!`.
-CUDAnative could support these easily as well, but we currently run into problems with the interactions of `CUDAdrv` and `CUDArt`.
+# Currently supported subset of Julia Code
 
+working with immutable isbits (not containing pointers) type should be completely supported
+non allocating code (so no constructs like `x = [1, 2, 3]`). Note that tuples are isbits, so this works x = (1, 2, 3).
+Transpiler/OpenCL has problems with putting GPU arrays on the gpu into a struct - so no views and actually no multidimensional indexing. For that `size` is needed which would need to be part of the array struct. A fix for that is in sight, though.
 
-# Benchmarks
-
-We have only benchmarked Blackscholes and not much time has been spent to optimize our kernels yet.
-So please treat these numbers with care!
-
-[source](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/blackscholes.jl)
-
-![blackscholes](https://cdn.rawgit.com/JuliaGPU/GPUArrays.jl/91678a36/examples/blackscholes.svg)
-
-Interestingly, on the GTX950, the CUDAnative backend outperforms the OpenCL backend by a factor of 10.
-This is most likely due to the fact, that LLVM is great at unrolling and vectorizing loops,
-while it seems that the nvidia OpenCL compiler isn't. So with our current primitive kernel,
-quite a bit of performance is missed out with OpenCL right now!
-This can be fixed by putting more effort into emitting specialized kernels, which should
-be straightforward with Julia's great meta programming and `@generated` functions.
-
-
-Times in a table:
-
-| Backend | Time (s) for N = 10^7 | OP/s in million | Speedup |
-| ---- | ---- | ---- | ---- |
-| JLContext i3-4130 CPU @ 3.40GHz 1 threads | 1.0085 s|   10 |  1.0|
-| JLContext i7-6700 CPU @ 3.40GHz 1 threads | 0.8773 s|   11 |  1.1|
-| CLContext: i7-6700 CPU @ 3.40GHz 8 threads | 0.2093 s|   48 |  4.8|
-| JLContext i7-6700 CPU @ 3.40GHz 8 threads | 0.1981 s|   50 |  5.1|
-| CLContext: GeForce GTX 950 | 0.0301 s|  332 | 33.5|
-| CUContext: GeForce GTX 950 | 0.0032 s| 3124 | 315.0|
 | CLContext: FirePro w9100 | 0.0013 s| 7831 | 789.8|
 
 # TODO / up for grabs
@@ -155,7 +145,6 @@ Times in a table:
 # Installation
 
 I recently added a lot of features and bug fixes to the master branch.
-Please check that out first and see [pull #37](https://github.com/JuliaGPU/GPUArrays.jl/pull/37) for a list of new features.
 
 For the cudanative backend, you need to install [CUDAnative.jl manually](https://github.com/JuliaGPU/CUDAnative.jl/#installation) and it works only on osx + linux with a julia source build.
 Make sure to have either CUDA and/or OpenCL drivers installed correctly.
