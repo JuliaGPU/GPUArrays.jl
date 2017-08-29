@@ -5,8 +5,8 @@ using Base.Test
     if GPUArrays.hasblas(GPUArrays.current_context())
         @testset "matmul" begin
             for T in (Float32, Float64) # TODO complex
-                A, B = rand(T, 33, 33), rand(T, 33, 33)
-                X = rand(T, 33)
+                A, B = rand(T, 15, 15), rand(T, 15, 15)
+                X = rand(T, 15)
                 C = A * B
                 D = A * X
                 Agpu, Bgpu, Xgpu = GPUArray(A), GPUArray(B), GPUArray(X)
@@ -19,7 +19,7 @@ using Base.Test
     end
     for T in (Complex64, Float32)
         @testset "scale!" begin
-            x = rand(T, 20, 77)
+            x = rand(T, 13, 23)
             A = GPUArray(x)
 
             scale!(A, 77f0)

@@ -18,6 +18,11 @@ macro allbackends(title, backendname::Symbol, block)
                     $(esc(backendname)) = backend
                     $(esc(block))
                 end
+                if backend == :cudanative
+                    println("GPUMem: ", CUDAdrv.Mem.used() / 10^6)
+                    gc()
+                    println("    gc: ", CUDAdrv.Mem.used() / 10^6)
+                end
             end
         end
     end
@@ -29,26 +34,29 @@ end
 
 # Only test supported backends!
 for backend in supported_backends()
-    if backend in (:opencl, :cudanative, :julia)
+    if backend in (:opencl, :julia, :cudanative)
         @testset "$backend" begin
             include("$(backend).jl")
         end
+        gc()
     end
 end
 
 @testset "BLAS" begin
     include("blas.jl")
 end
+gc()
 
 @testset "Shared" begin
     include("shared.jl")
 end
-
+gc()
 @testset "Array/Vector Operations" begin
     include("indexing.jl")
     include("vector.jl")
 end
-
+gc()
 @testset "FFT" begin
     include("fft.jl")
 end
+gc()
