@@ -146,7 +146,7 @@ immutable CUFunction{T}
     kernel::T
 end
 
-if success(`nvcc --version`)
+if try success(`nvcc --version`); catch false; end
     include("compilation.jl")
     hasnvcc() = true
 else
