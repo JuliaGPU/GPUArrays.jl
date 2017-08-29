@@ -45,9 +45,6 @@ for T in (Float32, Int32)
     end
 end
 
-using GPUArrays
-CLBackend.init()
-
 for T in (Float32, Int32)
     @allbackends "issue #42 with $T" backend begin
         Ac = rand(Float32, 2, 2)
