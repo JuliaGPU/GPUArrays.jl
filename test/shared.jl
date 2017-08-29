@@ -156,20 +156,18 @@ end
 
 
 @allbackends "mapreduce" backend begin
-    if backend != :opencl
-        y = rand(Float32, 40, 40)
-        x = GPUArray(y)
-        @test sum(y, 2) ≈ Array(sum(x, 2))
-        @test sum(y, 1) ≈ Array(sum(x, 1))
+    y = rand(Float32, 40, 40)
+    x = GPUArray(y)
+    @test sum(y, 2) ≈ Array(sum(x, 2))
+    @test sum(y, 1) ≈ Array(sum(x, 1))
 
-        y = rand(Float32, 40, 10)
-        x = GPUArray(y)
-        @test sum(y, 2) ≈ Array(sum(x, 2))
-        @test sum(y, 1) ≈ Array(sum(x, 1))
+    y = rand(Float32, 40, 10)
+    x = GPUArray(y)
+    @test sum(y, 2) ≈ Array(sum(x, 2))
+    @test sum(y, 1) ≈ Array(sum(x, 1))
 
-        y = rand(Float32, 10, 40)
-        x = GPUArray(y)
-        @test sum(y, 2) ≈ Array(sum(x, 2))
-        @test sum(y, 1) ≈ Array(sum(x, 1))
-    end
+    y = rand(Float32, 10, 40)
+    x = GPUArray(y)
+    @test sum(y, 2) ≈ Array(sum(x, 2))
+    @test sum(y, 1) ≈ Array(sum(x, 1))
 end

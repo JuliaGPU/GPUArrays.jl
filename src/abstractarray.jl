@@ -506,11 +506,12 @@ function Base.reshape(a::AbstractAccArray{T}, dims::NTuple{N,Int}) where T where
 end
 
 
+
 function mapreducedim_kernel(state, f, op, R::AbstractArray{T1, N}, A::AbstractArray{T, N}, slice_size, sizeA, dim) where {T1, T, N}
     ilin = Cuint(linear_index(R, state))
     accum = zero(T1)
     @inbounds for i = Cuint(1):slice_size
-        idx = ifelse.(ntuple(Cuint, Val{N}) .== dim, i, ilin)
+        idx = N == dim ? (ilin, i) : (i, ilin)
         i2d = gpu_sub2ind(sizeA, idx)
         accum = op(accum, f(A[i2d]))
     end
