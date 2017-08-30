@@ -18,11 +18,9 @@ macro allbackends(title, backendname::Symbol, block)
                     $(esc(backendname)) = backend
                     $(esc(block))
                 end
-                if backend == :cudanative
-                    println("GPUMem: ", CUDAdrv.Mem.used() / 10^6)
-                    gc()
-                    println("    gc: ", CUDAdrv.Mem.used() / 10^6)
-                end
+                info("GPUMem: ", CUDAdrv.Mem.used() / 10^6)
+                gc()
+                info("    gc: ", CUDAdrv.Mem.used() / 10^6)
             end
         end
     end
