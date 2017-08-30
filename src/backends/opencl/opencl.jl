@@ -5,7 +5,6 @@ using OpenCL
 using OpenCL: cl
 
 using ..GPUArrays, StaticArrays
-#import CLBLAS, CLFFT
 
 import GPUArrays: buffer, create_buffer, acc_mapreduce, mapidx
 import GPUArrays: Context, GPUArray, context, linear_index, free
@@ -14,7 +13,7 @@ import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector, gpu_c
 import GPUArrays: default_buffer_type, broadcast_index, unsafe_reinterpret
 
 using Transpiler
-import Transpiler: cli, CLFunction, cli.get_global_id
+import Transpiler: cli, cli.get_global_id
 
 immutable CLContext <: Context
     device::cl.Device
@@ -74,6 +73,9 @@ end
 
 const CLArray{T, N} = GPUArray{T, N, B, CLContext} where B <: cl.Buffer
 
+include("compilation.jl")
+
+
 #synchronize
 function synchronize{T, N}(x::CLArray{T, N})
     cl.finish(context(x).queue) # TODO figure out the diverse ways of synchronization
@@ -86,8 +88,9 @@ function free{T, N}(x::CLArray{T, N})
     nothing
 end
 
-linear_index(::cli.CLArray, state) = get_global_id(0) + Cuint(1)
-
+function linear_index(::cli.CLArray, state)
+    (get_local_size(0)*get_group_id(0) + get_local_id(0)) + Cuint(1)
+end
 
 function cl_readbuffer(q, buf, dev_offset, hostref, nbytes)
     n_evts  = UInt(0)
@@ -192,14 +195,7 @@ function unsafe_reinterpret(::Type{T}, A::CLArray{ET}, dims::Tuple) where {T, ET
 end
 
 
-# extend the private interface for the compilation types
-Transpiler._to_cl_types{T, N}(arg::CLArray{T, N}) = cli.CLArray{T, N}
-Transpiler._to_cl_types{T}(x::LocalMemory{T}) = cli.LocalMemory{T}
 
-Transpiler._to_cl_types(x::Ref{<: CLArray}) = Transpiler._to_cl_types(x[])
-Transpiler.cl_convert(x::Ref{<: CLArray}) = Transpiler.cl_convert(x[])
-Transpiler.cl_convert(x::CLArray) = buffer(x)
-Transpiler.cl_convert{T}(x::LocalMemory{T}) = cl.LocalMem(T, x.size)
 
 function CLFunction{T, N}(A::CLArray{T, N}, f, args...)
     ctx = context(A)
@@ -210,6 +206,14 @@ function (clfunc::CLFunction{T}){T, T2, N}(A::CLArray{T2, N}, args...)
     clfunc(args, length(A))
 end
 
+function thread_blocks_heuristic(len::Integer)
+    threads = min(len, 256)
+    blocks = ceil(Int, len/threads)
+    blocks = blocks * threads
+    blocks, threads
+end
+
+
 function gpu_call{T, N}(f, A::CLArray{T, N}, args, globalsize = length(A), localsize = nothing)
     ctx = GPUArrays.context(A)
     _args = if !isa(f, Tuple{String, Symbol})
@@ -218,7 +222,8 @@ function gpu_call{T, N}(f, A::CLArray{T, N}, args, globalsize = length(A), local
         args
     end
     clfunc = CLFunction(f, _args, ctx.queue)
-    clfunc(_args, globalsize, localsize)
+    blocks, thread = thread_blocks_heuristic(globalsize)
+    clfunc(_args, blocks, thread)
 end
 
 ###################

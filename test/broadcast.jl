@@ -63,6 +63,44 @@ test(idx, A) = A[idx] * 2f0
     u0c = rand(Float32, 32, 32)
     u0 = GPUArray(u0c)
     @test Array(abs.(u0)) ≈ abs.(u0c)
+
+    #########
+    # issue #41
+    Ac = rand(Float32, 32, 32)
+    uprev = GPUArray(Ac)
+    k1 = GPUArray(Ac)
+    k2 = GPUArray(Ac)
+    k3 = GPUArray(Ac)
+    k4 = GPUArray(Ac)
+    dt = 1.2f0
+    b1 = 1.3f0
+    b2 = 1.4f0
+    b3 = 1.5f0
+    b4 = 1.6f0
+    # The first issue is likely https://github.com/JuliaLang/julia/issues/22255
+    # since GPUArrays adds some arguments to the function, it becomes longer longer, hitting the 12
+    # so this wont fix for now
+    #@. utilde = uprev + dt*(b1*k1 + b2*k2 + b3*k3 + b4*k4)
+
+    duprev = GPUArray(Ac)
+    ku = GPUArray(Ac)
+    u = similar(duprev)
+    uc = similar(Ac)
+    if backend == :cudanative
+        # Not sure what's wrong with CUDAnative - since it works with OpenCL, it should all be clean
+        # non erroring type stable code...
+        #= CUDAnative error
+        error compiling broadcast_kernel!: error compiling #5: error compiling Type:
+        error compiling string: emit_builtin_call for strings/io.jl:120 requires the runtime language feature, which is disabled
+        Looks like it tries to compile a call to error?
+        =#
+        fract = Float32(1//2)
+        @. u = uprev + dt*duprev + dt^2*(fract*ku)
+    else
+        @. u = uprev + dt*duprev + dt^2*(1//2*ku)
+    end
+    @. uc = Ac + dt*Ac + dt^2*(1//2*Ac)
+    @test Array(u) ≈ uc
 end
 
 function testv3_1(a, b)
@@ -79,12 +117,16 @@ end
 
 @allbackends "vec 3" backend begin
     N = 20
+
     xc = map(x-> ntuple(i-> rand(Float32), Val{3}), 1:N)
     yc = map(x-> ntuple(i-> rand(Float32), Val{3}), 1:N)
+
     x = GPUArray(xc)
     y = GPUArray(yc)
+
     res1c = zeros(Float32, N)
     res2c = similar(xc)
+
     res1 = GPUArray(res1c)
     res2 = GPUArray(res2c)
 

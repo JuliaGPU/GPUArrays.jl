@@ -7,6 +7,14 @@ function jltest(a, b)
     y*10f0
 end
 
+function log_gpu_mem()
+    if :cudanative in supported_backends()
+        info("GPUMem: ", CUDAdrv.Mem.used() / 10^6)
+        gc()
+        info("    gc: ", CUDAdrv.Mem.used() / 10^6)
+    end
+end
+
 macro allbackends(title, backendname::Symbol, block)
     quote
         for backend in supported_backends()
@@ -16,6 +24,7 @@ macro allbackends(title, backendname::Symbol, block)
                     $(esc(backendname)) = backend
                     $(esc(block))
                 end
+                log_gpu_mem()
             end
         end
     end
@@ -27,26 +36,29 @@ end
 
 # Only test supported backends!
 for backend in supported_backends()
-    if backend in (:opencl, :cudanative, :julia)
+    if backend in (:opencl, :julia, :cudanative)
         @testset "$backend" begin
             include("$(backend).jl")
         end
+        log_gpu_mem()
     end
 end
 
 @testset "BLAS" begin
     include("blas.jl")
 end
+log_gpu_mem()
 
 @testset "Shared" begin
     include("shared.jl")
 end
-
+log_gpu_mem()
 @testset "Array/Vector Operations" begin
     include("indexing.jl")
     include("vector.jl")
 end
-
+log_gpu_mem()
 @testset "FFT" begin
     include("fft.jl")
 end
+log_gpu_mem()

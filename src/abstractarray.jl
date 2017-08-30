@@ -270,8 +270,8 @@ for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArr
             copy!(dest, drange, src, srange)
         end
         function copy!{T}(
-                dest::$D{T, 1}, d_range::CartesianRange{CartesianIndex{1}},
-                src::$S{T, 1}, s_range::CartesianRange{CartesianIndex{1}},
+                dest::$D{T}, d_range::CartesianRange{CartesianIndex{1}},
+                src::$S{T}, s_range::CartesianRange{CartesianIndex{1}},
             )
             amount = length(d_range)
             if length(s_range) != amount
@@ -395,7 +395,7 @@ function Base.getindex{T, N}(A::AbstractAccArray{T, N}, indexes...)
     checkbounds(A, cindexes...)
 
     shape = map(length, cindexes)
-    result = Array{T, N}(shape)
+    result = Array{T, length(shape)}(shape)
     ranges_src = to_cartesian(A, cindexes)
     ranges_dest = CartesianRange(shape)
     copy!(result, ranges_dest, A, ranges_src)
@@ -503,4 +503,26 @@ function Base.reshape(a::AbstractAccArray{T}, dims::NTuple{N,Int}) where T where
         throw(DimensionMismatch("new dimensions $(dims) must be consistent with array size $(length(a))"))
     end
     unsafe_reinterpret(T, a, dims)
+end
+
+
+
+function mapreducedim_kernel(state, f, op, R::AbstractArray{T1, N}, A::AbstractArray{T, N}, slice_size, sizeA, dim) where {T1, T, N}
+    ilin = Cuint(linear_index(R, state))
+    accum = zero(T1)
+    @inbounds for i = Cuint(1):slice_size
+        idx = N == dim ? (ilin, i) : (i, ilin)
+        i2d = gpu_sub2ind(sizeA, idx)
+        accum = op(accum, f(A[i2d]))
+    end
+    R[ilin] = accum
+    return
+end
+function Base._mapreducedim!(f, op, R::AbstractAccArray, A::AbstractAccArray)
+    sizeR = size(R)
+    @assert count(x-> x == 1, sizeR) == (ndims(R) - 1) "Not implemented"
+    dim = findfirst(x-> x == 1, sizeR)
+    slice_size = size(A, dim)
+    gpu_call(mapreducedim_kernel, R, (f, op, R, A, Cuint(slice_size), Cuint.(size(A)), Cuint(dim)))
+    return R
 end

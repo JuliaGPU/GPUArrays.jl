@@ -40,7 +40,14 @@ global init, all_contexts, current_context
 let contexts = CUContext[]
     all_contexts() = copy(contexts)::Vector{CUContext}
     current_context() = last(contexts)::CUContext
-    function init(;ctx = any_context())
+    function init(;ctx = nothing)
+        ctx = if ctx == nothing
+            if isempty(contexts)
+                any_context()
+            else
+                current_context()
+            end
+        end
         GPUArrays.make_current(ctx)
         push!(contexts, ctx)
         ctx
@@ -125,7 +132,7 @@ end
 
 thread_blocks_heuristic{N}(s::NTuple{N, Integer}) = thread_blocks_heuristic(prod(s))
 function thread_blocks_heuristic(len::Integer)
-    threads = min(len, 1024)
+    threads = min(len, 256)
     blocks = ceil(Int, len/threads)
     blocks, threads
 end
@@ -146,7 +153,7 @@ immutable CUFunction{T}
     kernel::T
 end
 
-if success(`nvcc --version`)
+if try success(`nvcc --version`); catch false; end
     include("compilation.jl")
     hasnvcc() = true
 else
@@ -293,7 +300,7 @@ function acc_mapreduce{T, OT, N}(
     )
     dev = context(A).device
     @assert(CUDAdrv.capability(dev) >= v"3.0", "Current CUDA reduce implementation requires a newer GPU")
-    threads = 512
+    threads = 256
     blocks = min((length(A) + threads - 1) ÷ threads, 1024)
     out = similar(buffer(A), OT, (blocks,))
     args = map(unpack_cu_array, rest)
@@ -304,25 +311,6 @@ function acc_mapreduce{T, OT, N}(
     # TODO actually benchmark this theory
     reduce(op, Array(out))
 end
-
-
-#  TODO figure out how interact with CUDArt and CUDAdr
-#GFFT = GPUArray(Complex64, div(size(G,1),2)+1, size(G,2))
-# function Base.fft!(A::CUArray)
-#     G, GFFT = CUFFT.RCpair(A)
-#     fft!(G, GFFT)
-# end
-# function Base.fft!(out::CUArray, A::CUArray)
-#     plan(out, A)(out, A, true)
-# end
-#
-# function Base.ifft!(A::CUArray)
-#     G, GFFT = CUFFT.RCpair(A)
-#     ifft!(G, GFFT)
-# end
-# function Base.ifft!(out::CUArray, A::CUArray)
-#     plan(out, A)(out, A, false)
-# end
 
 
 ########################################
@@ -343,8 +331,7 @@ if is_blas_supported(:CUBLAS)
     # # implement blas interface
     hasblas(::CUContext) = true
     blas_module(::CUContext) = CUBLAS
-    blasbuffer(ctx::CUContext, A) = to_cudart(A)
-
+    blasbuffer(ctx::CUContext, A) = buffer(A)
 end
 
 if is_fft_supported(:CUFFT)

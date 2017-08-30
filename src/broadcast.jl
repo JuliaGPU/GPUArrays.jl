@@ -175,7 +175,7 @@ function mapidx{N}(f, A::AbstractAccArray, args::NTuple{N, Any})
     gpu_call(mapidx_kernel, A, (f, A, Cuint(length(A)), args...))
 end
 # Base functions that are sadly not fit for the the GPU yet (they only work for Int64)
-@pure @noinline function gpu_ind2sub{N, T}(dims::NTuple{N}, ind::T)
+@pure @inline function gpu_ind2sub{N, T}(dims::NTuple{N}, ind::T)
     _ind2sub(NTuple{N, T}(dims), ind - T(1))
 end
 @pure @inline _ind2sub{T}(::Tuple{}, ind::T) = (ind + T(1),)
@@ -214,7 +214,7 @@ end
 @generated function newindex{N, T}(I, ilin::T, keep::NTuple{N}, Idefault, size)
     exprs = Expr(:tuple)
     for i = 1:N
-        push!(exprs.args, :(Bool(keep[$i]) ? T(I[$i]) : T(Idefault[$i])))
+        push!(exprs.args, :(T(Bool(keep[$i]) ? T(I[$i]) : T(Idefault[$i]))))
     end
     :(Base.@_inline_meta; gpu_sub2ind(size, $exprs))
 end

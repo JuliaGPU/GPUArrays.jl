@@ -41,7 +41,7 @@ function cu_cndf2(x)
 end
 
 for T in (Float32,)
-    N = 1023
+    N = 60
     sptprice   = T[42.0 for i = 1:N]
     initStrike = T[40.0 + (i / N) for i = 1:N]
     rate       = T[0.5 for i = 1:N]
@@ -67,8 +67,8 @@ for T in (Float32,)
 end
 
 @allbackends "mapidx" backend begin
-    a = rand(Complex64, 1025)
-    b = rand(Complex64, 1025)
+    a = rand(Complex64, 77)
+    b = rand(Complex64, 77)
     A = GPUArray(a)
     B = GPUArray(b)
     off = Cuint(1)
@@ -128,7 +128,7 @@ end
 end
 
 @allbackends "reinterpret" backend begin
-    a = rand(Complex64, 1077)
+    a = rand(Complex64, 22)
     A = GPUArray(a)
     af0 = reinterpret(Float32, a)
     Af0 = reinterpret(Float32, A)
@@ -139,4 +139,36 @@ end
     af0 = reinterpret(Float32, a, (20, 10))
     Af0 = reinterpret(Float32, A, (20, 10))
     @test Array(Af0) == af0
+end
+
+function ntuple_test(state, result, ::Val{N}) where N
+    result[1] = ntuple(Val{N}) do i
+        Float32(i) * 77f0
+    end
+    return
+end
+
+@allbackends "ntuple test" backend begin
+    result = GPUArray(Vector{NTuple{3, Float32}}(1))
+    gpu_call(ntuple_test, result, (result, Val{3}()))
+    @test result[1] == (77, 2*77, 3*77)
+end
+
+
+@allbackends "mapreduce" backend begin
+    N = 18
+    y = rand(Float32, N, N)
+    x = GPUArray(y)
+    @test sum(y, 2) ≈ Array(sum(x, 2))
+    @test sum(y, 1) ≈ Array(sum(x, 1))
+
+    y = rand(Float32, N, 10)
+    x = GPUArray(y)
+    @test sum(y, 2) ≈ Array(sum(x, 2))
+    @test sum(y, 1) ≈ Array(sum(x, 1))
+
+    y = rand(Float32, 10, N)
+    x = GPUArray(y)
+    @test sum(y, 2) ≈ Array(sum(x, 2))
+    @test sum(y, 1) ≈ Array(sum(x, 1))
 end

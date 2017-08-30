@@ -96,13 +96,13 @@ function cumap!(state, f, out, b)
 end
 
 @testset "Custom kernel from Julia function" begin
-    x = GPUArray(rand(Float32, 100))
-    y = GPUArray(rand(Float32, 100))
+    x = GPUArray(rand(Float32, 20))
+    y = GPUArray(rand(Float32, 20))
     gpu_call(cumap!, x, (cu.sin, x, y))
     jy = Array(y)
     @test map!(sin, jy, jy) ≈ Array(x)
 end
-
+#
 # if CUBackend.hasnvcc()
 #     @testset "Custom kernel from string function" begin
 #         x = GPUArray(rand(Float32, 100))
