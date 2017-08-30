@@ -11,7 +11,7 @@ import GPUArrays: Context, GPUArray, context, linear_index, free
 import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
 import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector, gpu_call
 import GPUArrays: default_buffer_type, broadcast_index, unsafe_reinterpret
-import GPUArrays: is_opencl, is_gpu, is_cpu
+import GPUArrays: is_gpu, is_cpu, name, threads, blocks, global_memory, local_memory
 
 using Transpiler
 import Transpiler: cli, cli.get_global_id
@@ -55,12 +55,19 @@ function Base.show(io::IO, ctx::CLContext)
 end
 
 
-function devices()
-    cl.devices()
-end
-is_opencl(ctx::CLContext) = true
-is_gpu(ctx::CLContext) = cl.info(ctx.device, :device_type) == :gpu
-is_cpu(ctx::CLContext) = cl.info(ctx.device, :device_type) == :cpu
+devices() = cl.devices()
+
+is_gpu(dev::cl.Device) = cl.info(dev, :device_type) == :gpu
+is_cpu(dev::cl.Device) = cl.info(dev, :device_type) == :cpu
+
+name(dev::cl.Device) = cl.info(dev, :name)
+
+threads(dev::cl.Device) = cl.info(dev, :max_work_group_size) |> Int
+blocks(dev::cl.Device) = cl.info(dev, :max_work_item_size)
+
+global_memory(dev::cl.Device) = cl.info(dev, :global_mem_size) |> Int
+local_memory(dev::cl.Device) = cl.info(dev, :local_mem_size) |> Int
+
 
 
 global init, all_contexts, current_context

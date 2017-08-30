@@ -6,9 +6,10 @@ import CUDAdrv, CUDArt #, CUFFT
 
 import GPUArrays: buffer, create_buffer, acc_mapreduce
 import GPUArrays: Context, GPUArray, context, linear_index, gpu_call
-import GPUArrays: blas_module, blasbuffer, is_blas_supported, hasblas
+import GPUArrays: blas_module, blasbuffer, is_blas_supported, hasblas, init
 import GPUArrays: default_buffer_type, broadcast_index, is_fft_supported, unsafe_reinterpret
-
+import GPUArrays: is_gpu, name, threads, blocks, global_memory, local_memory, new_context
+using GPUArrays: device_summary
 
 using CUDAdrv: CuDefaultStream
 
@@ -23,36 +24,83 @@ immutable CUContext <: Context
     device::CUDAdrv.CuDevice
 end
 
-Base.show(io::IO, ctx::CUContext) = print(io, "CUContext")
-
-function any_context()
-    dev = CUDAdrv.CuDevice(0)
-    ctx = CUDAdrv.CuContext(dev)
-    CUContext(ctx, dev)
+function Base.show(io::IO, ctx::CUContext)
+    println(io, "CUDAnative context with:")
+    device_summary(io, ctx.device)
 end
+
+
+devices() = CUDAdrv.devices()
+is_gpu(dev::CUDAdrv.CuDevice) = true
+name(dev::CUDAdrv.CuDevice) = CUDAdrv.name(dev)
+threads(dev::CUDAdrv.CuDevice) = CUDAdrv.attribute(dev, CUDAdrv.MAX_THREADS_PER_BLOCK)
+
+function blocks(dev::CUDAdrv.CuDevice)
+    (
+        CUDAdrv.attribute(dev, CUDAdrv.MAX_BLOCK_DIM_X),
+        CUDAdrv.attribute(dev, CUDAdrv.MAX_BLOCK_DIM_Y),
+        CUDAdrv.attribute(dev, CUDAdrv.MAX_BLOCK_DIM_Z),
+    )
+end
+
+global_memory(dev::CUDAdrv.CuDevice) = CUDAdrv.totalmem(dev)
+local_memory(dev::CUDAdrv.CuDevice) = CUDAdrv.attribute(dev, CUDAdrv.TOTAL_CONSTANT_MEMORY)
+
 
 #const GLArrayImg{T, N} = GPUArray{T, N, gl.Texture{T, N}, GLContext}
 const CUArray{T, N, B} = GPUArray{T, N, B, CUContext} #, GLArrayImg{T, N}}
 const CUArrayBuff{T, N} = CUArray{T, N, CUDAdrv.CuArray{T, N}}
 
 
-global init, all_contexts, current_context
-let contexts = CUContext[]
-    all_contexts() = copy(contexts)::Vector{CUContext}
-    current_context() = last(contexts)::CUContext
-    function init(;ctx = nothing)
-        ctx = if ctx == nothing
-            if isempty(contexts)
-                any_context()
-            else
-                current_context()
-            end
+global init, all_contexts, current_context, current_device
+
+let contexts = Dict{CUDAdrv.CuDevice, CUContext}(), active_device = CUDAdrv.CuDevice[]
+
+    all_contexts() = values(contexts)
+    function current_device()
+        if isempty(active_device)
+            push!(active_device, CUDAnative.default_device[])
         end
-        GPUArrays.make_current(ctx)
-        push!(contexts, ctx)
+        active_device[]
+    end
+    current_context() = contexts[current_device()]
+    function init(dev::CUDAdrv.CuDevice = current_device())
+        if isempty(active_device)
+            push!(active_device, dev)
+        else
+            active_device[] = dev
+        end
+        ctx = get!(()-> new_context(dev), contexts, dev)
+        CUDAdrv.activate(ctx.ctx)
         ctx
     end
+
+    function destroy!(context::CUContext)
+        # don't destroy primary device context
+        dev = context.device
+        if haskey(contexts, dev) && contexts[dev] == context
+            error("Trying to destroy primary device context which is prohibited. Please use reset!(context)")
+        end
+        CUDAdrv.destroy!(context.ctx)
+        return
+    end
 end
+
+function reset!(context::CUContext)
+    dev = context.device
+    CUDAdrv.destroy!(context.ctx)
+    context.ctx = CUDAdrv.CuContext(dev)
+    return
+end
+
+function new_context(dev::CUDAdrv.CuDevice = current_device())
+    cuctx = CUDAdrv.CuContext(dev)
+    ctx = CUContext(cuctx, dev)
+    CUDAdrv.activate(cuctx)
+    return ctx
+end
+
+
 # synchronize
 function GPUArrays.synchronize{T, N}(x::CUArray{T, N})
     CUDAdrv.synchronize(context(x).ctx) # TODO figure out the diverse ways of synchronization

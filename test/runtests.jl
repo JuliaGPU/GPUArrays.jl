@@ -64,3 +64,6 @@ log_gpu_mem()
     include("fft.jl")
 end
 log_gpu_mem()
+
+
+using GPUArrays

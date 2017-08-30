@@ -7,6 +7,7 @@ import GPUArrays: buffer, create_buffer, Context, context, mapidx, unpack_buffer
 import GPUArrays: AbstractAccArray, AbstractSampler, acc_mapreduce, gpu_call
 import GPUArrays: hasblas, blas_module, blasbuffer, default_buffer_type
 import GPUArrays: unsafe_reinterpret, broadcast_index, linear_index
+import GPUArrays: is_cpu, name, threads, blocks, global_memory
 
 import Base.Threads: @threads
 
@@ -25,6 +26,16 @@ let contexts = JLContext[]
         ctx
     end
 end
+
+immutable JLDevice end
+
+threads(x::JLDevice) = Base.Threads.nthreads()
+global_memory(x::JLDevice) = Sys.total_memory()
+free_global_memory(x::JLDevice) = Sys.free_memory()
+name(x::JLDevice) = Sys.cpu_info()[1].model # TODO,one could have multiple CPUs ?
+is_cpu(::JLDevice) = true
+
+devices() = (JLDevice(),)
 
 
 immutable Sampler{T, N, Buffer} <: AbstractSampler{T, N}
