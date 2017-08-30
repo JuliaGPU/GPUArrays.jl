@@ -2,7 +2,7 @@ julia 0.6
 StaticArrays
 ColorTypes
 
-Transpiler 0.2
+Transpiler 0.3
 Sugar 0.3
 Matcha 0.0.2
 

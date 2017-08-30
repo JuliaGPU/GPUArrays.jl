@@ -1,5 +1,3 @@
-#TODO remove before merging
-Pkg.checkout("Transpiler")
 using GPUArrays
 using Base.Test
 srand(42) # set random seed for reproducability
