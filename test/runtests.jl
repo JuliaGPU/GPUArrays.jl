@@ -7,6 +7,8 @@ function jltest(a, b)
     y*10f0
 end
 
+
+
 function log_gpu_mem()
     if :cudanative in supported_backends()
         info("GPUMem: ", CUDAdrv.Mem.used() / 10^6)
@@ -15,17 +17,16 @@ function log_gpu_mem()
     end
 end
 
-macro allbackends(title, backendname::Symbol, block)
+macro allbackends(title, ctxname::Symbol, block)
     quote
-        for backend in supported_backends()
-            if backend in (:opencl, :cudanative, :julia)
-                @testset "$($(esc(title))) $backend" begin
-                    ctx = GPUArrays.init(backend)
-                    $(esc(backendname)) = backend
-                    $(esc(block))
-                end
-                log_gpu_mem()
+        for device in GPUArrays.all_devices()
+            dname = GPUArrays.name(device)
+            @testset "$($(esc(title))) $dname" begin
+                ctx = GPUArrays.init(device)
+                $(esc(ctxname)) = ctx
+                $(esc(block))
             end
+            log_gpu_mem()
         end
     end
 end
@@ -34,9 +35,10 @@ end
     include("broadcast.jl")
 end
 
+
 # Only test supported backends!
 for backend in supported_backends()
-    if backend in (:opencl, :julia, :cudanative)
+    if backend in (:opencl, :threaded, :cudanative)
         @testset "$backend" begin
             include("$(backend).jl")
         end

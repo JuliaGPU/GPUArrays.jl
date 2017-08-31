@@ -52,6 +52,9 @@ end
     _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, iter)
     return C
 end
+function broadcast_t(f::Any, ::Type{Any}, ::Any, ::Any, A::GPUArrays.AbstractAccArray, args::Vararg{Any,N}) where N
+    error("Return type couldn't be inferred for broadcast. Func: $f, $(typeof(A)), $args")
+end
 
 function _broadcast!(
         func, out::AbstractAccArray,
@@ -66,6 +69,8 @@ function _broadcast!(
     gpu_call(broadcast_kernel!, out, (func, out, shape, Cuint.(length(out)), descriptor_tuple, A, Bs...))
     out
 end
+
+
 
 function Base.foreach(func, over::AbstractAccArray, Bs...)
     shape = Cuint.(size(over))

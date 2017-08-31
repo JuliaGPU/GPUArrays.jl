@@ -2,9 +2,9 @@ info("""
 This process will figure out which acceleration Packages you have installed
 and therefore which backends GPUArrays can offer.
 Theoretically available:
-:cudanative, :julia, :opencl
+:cudanative, :threaded, :opencl
 
-:julia is the default backend, which should always work.
+:threaded is the default backend, which should always work.
 Just start Julia with:
 `JULIA_NUM_THREADS=8 julia -O3` to get it some threads.
 8 is just an example and should be chosen depending on the processor you have.
@@ -13,7 +13,7 @@ acceleration, you might as well want optimization level 3!
 In the future, OpenCL, CUDA and OpenGL will be added as another backend.
 """)
 
-supported_backends = [:julia]
+supported_backends = [:threaded]
 
 cudanative_dir = get(ENV, "CUDANATIVE_PATH", Pkg.dir("CUDAnative"))
 install_cudanative = true
@@ -41,7 +41,8 @@ if !isdir(cudanative_dir)
 end
 
 # Julia will always be available
-info("julia added as a backend.")
+info("threaded backend added.")
+
 test_kernel() = nothing
 try
     using CUDAnative, CUDAdrv

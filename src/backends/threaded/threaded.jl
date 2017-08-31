@@ -7,24 +7,50 @@ import GPUArrays: buffer, create_buffer, Context, context, mapidx, unpack_buffer
 import GPUArrays: AbstractAccArray, AbstractSampler, acc_mapreduce, gpu_call
 import GPUArrays: hasblas, blas_module, blasbuffer, default_buffer_type
 import GPUArrays: unsafe_reinterpret, broadcast_index, linear_index
+import GPUArrays: is_cpu, name, threads, blocks, global_memory
+import GPUArrays: new_context, init, free_global_memory
 
 import Base.Threads: @threads
 
 immutable JLContext <: Context
     nthreads::Int
 end
+# TODO,one could have multiple CPUs ?
+immutable JLDevice <: Context
+    index::Int
+end
 
-global current_context, make_current, init
-let contexts = JLContext[]
-    all_contexts() = copy(contexts)::Vector{JLContext}
-    current_context() = last(contexts)::JLContext
-    function init()
-        ctx = JLContext(Base.Threads.nthreads())
-        GPUArrays.make_current(ctx)
-        push!(contexts, ctx)
+
+global all_contexts, current_context, current_device
+let contexts = Dict{JLDevice, JLContext}(), active_device = JLDevice[]
+    all_contexts() = values(contexts)
+    function current_device()
+        if isempty(active_device)
+            push!(active_device, JLDevice(0))
+        end
+        active_device[]
+    end
+    current_context() = contexts[current_device()]
+    function GPUArrays.init(dev::JLDevice)
+        GPUArrays.setbackend!(JLBackend)
+        if isempty(active_device)
+            push!(active_device, dev)
+        else
+            active_device[] = dev
+        end
+        ctx = get!(()-> new_context(dev), contexts, dev)
         ctx
     end
 end
+
+new_context(dev::JLDevice) = JLContext(Threads.nthreads())
+threads(x::JLDevice) = Base.Threads.nthreads()
+global_memory(x::JLDevice) = Sys.total_memory()
+free_global_memory(x::JLDevice) = Sys.free_memory()
+name(x::JLDevice) = Sys.cpu_info()[1].model
+is_cpu(::JLDevice) = true
+
+devices() = (JLDevice(0),)
 
 
 immutable Sampler{T, N, Buffer} <: AbstractSampler{T, N}
@@ -98,8 +124,8 @@ Base.@propagate_inbounds Base.setindex!{T, N}(A::JLArray{T, N}, val, i::Integer)
 Base.IndexStyle{T, N}(::Type{JLArray{T, N}}) = IndexLinear()
 
 function Base.show(io::IO, ctx::JLContext)
-    cpu = Sys.cpu_info()
-    print(io, "JLContext $(cpu[1].model) with $(ctx.nthreads) threads")
+    println("Threaded Julia Context with:")
+    GPUArrays.device_summary(io, JLDevice(0))
 end
 ##############################################
 # Implement BLAS interface
@@ -158,7 +184,7 @@ linear_index(A::AbstractArray, state) = state
         return
     end
 end
-function gpu_call(f, A::JLArray, args, globalsize = length(A), local_size = 0)
+function gpu_call(f, A::JLArray, args::Tuple, globalsize = length(A), local_size = 0)
     unpacked_args = unpack_buffer.(args)
     n = nthreads(A)
     len = prod(globalsize)

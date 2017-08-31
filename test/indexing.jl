@@ -2,7 +2,7 @@ using GPUArrays, StaticArrays
 using Base.Test
 
 for T in (Float32, Int32, SVector{3, Float32})
-    @allbackends "Indexing with $T" backend begin
+    @allbackends "Indexing with $T" ctx begin
         x = rand(T, 32)
         src = GPUArray(x)
         for (i, xi) in enumerate(x)
@@ -14,7 +14,7 @@ for T in (Float32, Int32, SVector{3, Float32})
 end
 
 for T in (Float32, Int32)
-    @allbackends "Indexing with $T" backend begin
+    @allbackends "Indexing with $T" ctx begin
         x = zeros(T, 7)
         src = GPUArray(x)
         for i = 1:7
@@ -30,7 +30,7 @@ for T in (Float32, Int32)
 end
 
 for T in (Float32, Int32)
-    @allbackends "Indexing with $T" backend begin
+    @allbackends "Indexing with $T" ctx begin
         x = zeros(T, 7)
         src = GPUArray(x)
         for i = 1:7
@@ -46,7 +46,7 @@ for T in (Float32, Int32)
 end
 
 for T in (Float32, Int32)
-    @allbackends "issue #42 with $T" backend begin
+    @allbackends "issue #42 with $T" ctx begin
         Ac = rand(Float32, 2, 2)
         A = GPUArray(Ac)
         @test A[1] == Ac[1]
