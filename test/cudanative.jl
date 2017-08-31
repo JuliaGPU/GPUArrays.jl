@@ -1,7 +1,7 @@
 using GPUArrays
 using GPUArrays: free
 using CUDAnative, Base.Test
-cuctx = CUBackend.init()
+cuctx = GPUArrays.init(:cudanative)
 const cu = CUDAnative
 
 # more complex function for broadcast
@@ -56,36 +56,6 @@ end
     D .= A .* B .+ (0.5f0*im)
     @test all(x-> x ≈ (2f0*im * angle(10f0*im) + (0.5f0*im)), Array(D))
     free(D); free(C); free(A); free(B)
-end
-
-# @testset "fft Complex64" begin
-#     A = rand(Float32, 7,6)
-#     # Move data to GPU
-#     B = GPUArray(A)
-#     # Allocate space for the output (transformed array)
-#     # Compute the FFT
-#     fft!(B)
-#     # Copy the result to main memory
-#     # Compare against Julia's rfft
-#     @test_approx_eq rfft(A) Array(B)
-#     # Now compute the inverse transform
-#     ifft!(B)
-#     @test_approx_eq A Array(B)
-# end
-
-@testset "mapreduce" begin
-    @testset "inbuilds using mapreduce (sum maximum minimum prod)" begin
-        for dims in ((4048,), (1024,1024), (77,), (1923,209))
-            for T in (Float32, Int32)
-                range = T <: Integer ? (T(-10):T(10)) : T
-                A = GPUArray(rand(range, dims))
-                @test sum(A) ≈ sum(Array(A))
-                @test maximum(A) ≈ maximum(Array(A))
-                @test minimum(A) ≈ minimum(Array(A))
-                @test prod(A) ≈ prod(Array(A))
-            end
-        end
-    end
 end
 
 

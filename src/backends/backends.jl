@@ -56,9 +56,28 @@ end
 
 ################################
 # Device selection functions for e.g. devices(filterfuncs)
+is_gpu(ctx::Context) = is_gpu(ctx.device)
+is_cpu(ctx::Context) = is_cpu(ctx.device)
+has_atleast(ctx::Context, attribute, value) = has_atleast(ctx.device, attribute, value)
+
 is_gpu(device) = false
 is_cpu(device) = false
 has_atleast(device, attribute, value) = attribute(ctx_or_device) >= value
+
+
+#################################
+# Context filter functions
+# Works for context objects as well but is overloaded in the backends
+is_opencl(ctx::Symbol) = ctx == :opencl
+is_cudanative(ctx::Symbol) =  ctx == :cudanative
+is_julia(ctx::Symbol) =  ctx == :julia
+is_opengl(ctx::Symbol) =  ctx == :opengl
+
+is_opencl(ctx) = false
+is_cudanative(ctx) = false
+is_julia(ctx) = false
+is_opengl(ctx) = false
+
 
 """
 Creates a new context from `device` without caching the resulting context.
@@ -67,11 +86,12 @@ function new_context(device)
     error("Device $device not supported")
 end
 
-# BLAS support
-hasblas(x) = false
-include("blas.jl")
-include("supported_backends.jl")
-include("shared.jl")
+"""
+Resets a context freeing all resources and creating a new context.
+"""
+function reset!(context)
+    error("Context $context not supported")
+end
 
 function backend_module(sym::Symbol)
     if sym in supported_backends()
@@ -89,7 +109,9 @@ function backend_module(sym::Symbol)
     end
 end
 function init(sym::Symbol, args...; kw_args...)
-    backend_module(sym).init(args...; kw_args...)
+    mod = backend_module(sym)
+    setbackend!(mod)
+    init(args...; kw_args...)
 end
 
 function init(filterfuncs::Function...; kw_args...)
@@ -97,8 +119,16 @@ function init(filterfuncs::Function...; kw_args...)
     if isempty(devices)
         error("No device found for: $(join(string.(filterfuncs), " "))")
     end
-    current_backend().init(first(devices))
+    init(first(devices))
 end
+
+# BLAS support
+hasblas(x) = false
+include("blas.jl")
+include("supported_backends.jl")
+include("shared.jl")
+
+
 
 active_backends() = backend_module.(supported_backends())
 
@@ -182,3 +212,6 @@ function forall_devices(f, filterfuncs...)
         f(ctx)
     end
 end
+
+
+export is_cudanative, is_julia, is_opencl

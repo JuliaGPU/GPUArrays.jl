@@ -19,15 +19,14 @@ end
 
 macro allbackends(title, backendname::Symbol, block)
     quote
-        for backend in supported_backends()
-            if backend in (:opencl, :cudanative, :julia)
-                @testset "$($(esc(title))) $backend" begin
-                    ctx = GPUArrays.init(backend)
-                    $(esc(backendname)) = backend
-                    $(esc(block))
-                end
-                log_gpu_mem()
+        for device in GPUArrays.all_devices()
+            dname = GPUArrays.name(device)
+            @testset "$($(esc(title))) $dname" begin
+                ctx = GPUArrays.init(device)
+                $(esc(backendname)) = ctx
+                $(esc(block))
             end
+            log_gpu_mem()
         end
     end
 end

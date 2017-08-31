@@ -3,7 +3,7 @@ using Base.Test
 
 test(idx, A) = A[idx] * 2f0
 
-@allbackends "broadcast" backend begin
+@allbackends "broadcast" ctx begin
     N = 10
     idx = GPUArray(rand(Cuint(1):Cuint(N), 2*N))
     y = Base.RefValue(GPUArray(rand(Float32, 2*N)))
@@ -86,7 +86,7 @@ test(idx, A) = A[idx] * 2f0
     ku = GPUArray(Ac)
     u = similar(duprev)
     uc = similar(Ac)
-    if backend == :cudanative
+    if is_cudanative(ctx)
         # Not sure what's wrong with CUDAnative - since it works with OpenCL, it should all be clean
         # non erroring type stable code...
         #= CUDAnative error
@@ -115,7 +115,7 @@ function testv3_2(a, b)
     return y
 end
 
-@allbackends "vec 3" backend begin
+@allbackends "vec 3" ctx begin
     N = 20
 
     xc = map(x-> ntuple(i-> rand(Float32), Val{3}), 1:N)

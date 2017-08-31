@@ -84,16 +84,3 @@ end
     Agpu = GPUArray(A)
     @test Array(Agpu') == A'
 end
-
-for dims in ((4048,), (1024,1024), (77,), (1923, 209))
-    for T in (Float32, Int32)
-        @testset "mapreduce $T $dims" begin
-            range = T <: Integer ? (T(-2):T(2)) : T
-            A = GPUArray(rand(range, dims))
-            @test sum(A) ≈ sum(Array(A))
-            @test maximum(A) ≈ maximum(Array(A))
-            @test minimum(A) ≈ minimum(Array(A))
-            @test prod(A) ≈ prod(Array(A))
-        end
-    end
-end

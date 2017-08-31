@@ -20,7 +20,6 @@ end
 #=
 Interface for accessing the lower level
 =#
-
 buffer(A::AbstractAccArray) = A.buffer
 context(A::AbstractAccArray) = A.context
 default_buffer_type(typ, context) = error("Found unsupported context: $context")
@@ -66,7 +65,6 @@ function Base.similar{N, ET}(x::AbstractAccArray, ::Type{ET}, sz::NTuple{N, Int}
 end
 
 
-using Compat.TypeUtils
 function Base.similar{T <: GPUArray, ET, N}(
         ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
         context::Context = current_context(), kw_args...
@@ -74,9 +72,6 @@ function Base.similar{T <: GPUArray, ET, N}(
     bt = default_buffer_type(T, Tuple{ET, N}, context)
     GPUArray{ET, N, bt, typeof(context)}(sz; context = context)
 end
-
-
-
 
 
 
