@@ -74,8 +74,8 @@ gemm!, scal!, gemv! and the high level functions that are implemented with these
 # Usage
 
 A backend will be initialized by default,
-but can be explicitly set with opencl(), cudanative(), threaded().
-There is also GPUArrays.init(device_symbol, filterfuncs...), which can be used to programatically
+but can be explicitly set with `opencl()`, `cudanative()`, `threaded()`.
+There is also `GPUArrays.init(device_symbol, filterfuncs...)`, which can be used to programmatically
 initialize a backend.
 Filterfuncs can be used to select a device like this (`opencl()`, etc also support those):
 ```Julia
