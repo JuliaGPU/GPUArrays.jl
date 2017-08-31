@@ -4,7 +4,7 @@ using Base.Test
 @allbackends "BLAS" backend begin
     if GPUArrays.hasblas(GPUArrays.current_context())
         @testset "matmul" begin
-            for T in (Float32, Float64) # TODO complex
+            for T in (Float32,) # TODO complex float64
                 A, B = rand(T, 15, 15), rand(T, 15, 15)
                 X = rand(T, 15)
                 C = A * B
