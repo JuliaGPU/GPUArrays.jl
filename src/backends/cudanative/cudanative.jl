@@ -209,15 +209,8 @@ immutable CUFunction{T}
     kernel::T
 end
 
-if try success(`$(CUDArt.toolchain_nvcc) --version`); catch false; end
-    include("compilation.jl")
-    hasnvcc() = true
-else
-    hasnvcc() = false
-    warn("Couldn't find nvcc, please add it to your path.
-        This will disable the ability to compile a CUDA kernel from a string"
-    )
-end
+hasnvcc() = true
+
 
 function CUFunction{T, N}(A::CUArray{T, N}, f::Function, args...)
     CUFunction(f) # this is mainly for consistency with OpenCL
@@ -226,7 +219,7 @@ function CUFunction{T, N}(A::CUArray{T, N}, f::Tuple{String, Symbol}, args...)
     source, name = f
     kernel_name = string(name)
     ctx = context(A)
-    kernel = _compile(ctx.device, kernel_name, source, "from string")
+    kernel = CUDArt._compile(ctx.device, kernel_name, source, "from string")
     CUFunction(kernel) # this is mainly for consistency with OpenCL
 end
 function (f::CUFunction{F}){F <: Function, T, N}(A::CUArray{T, N}, args...)
