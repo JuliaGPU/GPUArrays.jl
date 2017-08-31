@@ -77,7 +77,7 @@ let contexts = Dict{cl.Device, CLContext}(), active_device = cl.Device[]
         ctx
     end
 
-    function destroy!(context::CLContext)
+    function GPUArrays.destroy!(context::CLContext)
         # don't destroy primary device context
         dev = context.device
         if haskey(contexts, dev) && contexts[dev] == context

@@ -83,7 +83,7 @@ let contexts = Dict{CUDAdrv.CuDevice, CUContext}(), active_device = CUDAdrv.CuDe
         ctx
     end
 
-    function destroy!(context::CUContext)
+    function GPUArrays.destroy!(context::CUContext)
         # don't destroy primary device context
         dev = context.device
         if haskey(contexts, dev) && contexts[dev] == context

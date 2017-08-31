@@ -13,6 +13,7 @@ end
 
 #interface
 function create_buffer(ctx, array) end
+
 """
 Blocks until all operations are finished on `A`
 """
@@ -35,14 +36,39 @@ free(x::AbstractArray) = nothing
 #=
 Functions to select contexts
 =#
-
+"""
+Hardware threads of device
+"""
 threads(device) = 0
-blocks(device) = 0
+
+"""
+Blocks that group together hardware threads
+"""
+blocks(device) = 1
+"""
+Global memory, e.g. VRAM or RAM of device
+"""
 global_memory(device) = 0
+
+"""
+Free global memory. Isn't supported for AMD cards right now, in which case it returns NaN,
+so don't rely on the output of this function.
+"""
 free_global_memory(device) = NaN
+
+"""
+Block local memory
+"""
 local_memory(device) = 0
+
+"""
+Hardware name of a device
+"""
 name(device) = "Undefined"
 
+"""
+Summarizes all features of a device and prints it to `io`
+"""
 function device_summary(io::IO, device)
     println(io, "Device: ", name(device))
     for (n, f) in (:threads => threads, :blocks => blocks)
@@ -56,8 +82,20 @@ end
 
 ################################
 # Device selection functions for e.g. devices(filterfuncs)
+"""
+Returns true if `device` is a gpu
+"""
 is_gpu(device) = false
+
+"""
+Returns true if `device` is a cpu
+"""
 is_cpu(device) = false
+
+"""
+Checks a device for a certain attribute and returns true if it has at least `value`.
+Can be used with e.g. `threads`, `blocks`, `global_memory`, `local_memory`
+"""
 has_atleast(device, attribute, value) = attribute(ctx_or_device) >= value
 
 
@@ -74,18 +112,42 @@ is_cudanative(ctx) = false
 is_julia(ctx) = false
 is_opengl(ctx) = false
 
+const filterfuncs = """
+Device can be filtered by passing `filter_funcs`, e.g. :
+`is_gpu`, `is_cpu`, `(dev)-> has_atleast(dev, threads, 512)`
+"""
 
+"""
+Initializes the opencl backend with a default device.
+$filterfuncs
+"""
 opencl(filterfuncs...) = init(:opencl, filterfuncs...)
+
+"""
+Initializes the cudanative backend with a default device.
+$filterfuncs
+"""
 cudanative(filterfuncs...) = init(:cudanative, filterfuncs...)
+"""
+Initializes the threaded backend with a default device.
+$filterfuncs
+"""
 threaded(filterfuncs...) = init(:threaded, filterfuncs...)
 
-export opencl, cudanative, threaded
+
 
 """
 Creates a new context from `device` without caching the resulting context.
 """
 function new_context(device)
     error("Device $device not supported")
+end
+
+"""
+Destroys context, freeing all it's resources.
+"""
+function destroy!(context)
+    error("Device $context not supported")
 end
 
 """
@@ -162,14 +224,17 @@ Context gets destroyed afterwards. Note, that creating a temporary context is ex
 """
 function on_device(f, device = current_device())
     ctx = new_context(device)
-    f(ctx)
-    destroy!(ctx)
+    try
+        f(ctx)
+    finally
+        destroy!(ctx)
+    end
     return
 end
 
 """
 Returns all devices for the current backend.
-Can be filtered by passing `filter_funcs`, e.g. `is_gpu`, `is_cpu`, `(dev)-> has_atleast(dev, threads, 512)`
+$filterfuncs
 """
 function available_devices(filter_funcs...)
     result = []
@@ -184,7 +249,7 @@ end
 
 """
 Returns all devices from `backends = active_backends()`.
-Can be filtered by passing `filter_funcs`, e.g. `is_gpu`, `is_cpu`, `dev-> has_atleast(dev, threads, 512)`
+$filterfuncs
 """
 function all_devices(filter_funcs...; backends = active_backends())
     result = []
@@ -198,15 +263,6 @@ function all_devices(filter_funcs...; backends = active_backends())
     result
 end
 
-"""
-Iterates through all backends and calls `f` after initializing the current one!
-"""
-function perbackend(f)
-    for backend in supported_backends()
-        ctx = GPUArrays.init(backend)
-        f(ctx)
-    end
-end
 
 """
 Iterates through all available devices and calls `f(context)` after initializing the standard context for that device.
@@ -219,4 +275,5 @@ function forall_devices(f, filterfuncs...)
 end
 
 
-export is_cudanative, is_julia, is_opencl
+export is_cudanative, is_julia, is_opencl, on_device
+export opencl, cudanative, threaded
