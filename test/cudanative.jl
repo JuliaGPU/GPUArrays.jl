@@ -1,7 +1,8 @@
 using GPUArrays
 using GPUArrays: free
 using CUDAnative, Base.Test
-cuctx = CUBackend.init()
+
+cuctx = cudanative()
 const cu = CUDAnative
 
 # more complex function for broadcast
@@ -58,36 +59,6 @@ end
     free(D); free(C); free(A); free(B)
 end
 
-# @testset "fft Complex64" begin
-#     A = rand(Float32, 7,6)
-#     # Move data to GPU
-#     B = GPUArray(A)
-#     # Allocate space for the output (transformed array)
-#     # Compute the FFT
-#     fft!(B)
-#     # Copy the result to main memory
-#     # Compare against Julia's rfft
-#     @test_approx_eq rfft(A) Array(B)
-#     # Now compute the inverse transform
-#     ifft!(B)
-#     @test_approx_eq A Array(B)
-# end
-
-@testset "mapreduce" begin
-    @testset "inbuilds using mapreduce (sum maximum minimum prod)" begin
-        for dims in ((4048,), (1024,1024), (77,), (1923,209))
-            for T in (Float32, Int32)
-                range = T <: Integer ? (T(-10):T(10)) : T
-                A = GPUArray(rand(range, dims))
-                @test sum(A) ≈ sum(Array(A))
-                @test maximum(A) ≈ maximum(Array(A))
-                @test minimum(A) ≈ minimum(Array(A))
-                @test prod(A) ≈ prod(Array(A))
-            end
-        end
-    end
-end
-
 
 function cumap!(state, f, out, b)
     i = linear_index(out, state) # get the kernel index it gets scheduled on
@@ -102,20 +73,20 @@ end
     jy = Array(y)
     @test map!(sin, jy, jy) ≈ Array(x)
 end
-#
-# if CUBackend.hasnvcc()
-#     @testset "Custom kernel from string function" begin
-#         x = GPUArray(rand(Float32, 100))
-#         y = GPUArray(rand(Float32, 100))
-#         source = """
-#         __global__ void copy(const float *input, float *output)
-#         {
-#             int i = blockIdx.x * blockDim.x + threadIdx.x;
-#             output[i] = input[i];
-#         }
-#         """
-#         f = (source, :copy)
-#         gpu_call(f, x, (x, y))
-#         @test Array(x) == Array(y)
-#     end
-# end
+
+if CUBackend.hasnvcc()
+    @testset "Custom kernel from string function" begin
+        x = GPUArray(rand(Float32, 100))
+        y = GPUArray(rand(Float32, 100))
+        source = """
+        __global__ void copy(const float *input, float *output)
+        {
+            int i = blockIdx.x * blockDim.x + threadIdx.x;
+            output[i] = input[i];
+        }
+        """
+        f = (source, :copy)
+        gpu_call(f, x, (x, y))
+        @test Array(x) == Array(y)
+    end
+end

@@ -14,7 +14,9 @@ CUDAnative.jl is using (via LLVM + SPIR-V).
 
 # Why another GPU array package in yet another language?
 
-Julia offers countless advantages for a GPU array package.
+Julia offers great advantages for programming the GPU.
+This [blog post](http://mikeinnes.github.io/2017/08/24/cudanative.html) outlines a few of those.
+
 E.g., we can use Julia's JIT to generate optimized kernels for map/broadcast operations.
 
 This works even for things like complex arithmetic, since we can compile what's already in Julia Base.
@@ -45,15 +47,6 @@ Checkout the examples, to see how this can be used to emit specialized code whil
 In theory, we could go as far as inspecting user defined callbacks (we can get the complete AST), count operations and estimate register usage and use those numbers to optimize our kernels!
 
 
-### Automatic Differentiation
-
-Because of neural networks, automatic differentiation is super hyped right now!
-Julia offers a couple of packages for that, e.g. [ReverseDiff](https://github.com/JuliaDiff/ReverseDiff.jl).
-It heavily relies on Julia's strength to specialize generic code and dispatch to different implementations depending on the Array type, allowing an almost overheadless automatic differentiation.
-Making this work with GPUArrays will be a bit more involved, but the
-first [prototype](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/logreg.jl) looks already promising!
-There is also [ReverseDiffSource](https://github.com/JuliaDiff/ReverseDiffSource.jl), which should already work for simple functions.
-
 # Scope
 
 Current backends: OpenCL, CUDA, Julia Threaded
@@ -80,10 +73,33 @@ gemm!, scal!, gemv! and the high level functions that are implemented with these
 
 # Usage
 
+A backend will be initialized by default,
+but can be explicitly set with `opencl()`, `cudanative()`, `threaded()`.
+There is also `GPUArrays.init(device_symbol, filterfuncs...)`, which can be used to programmatically
+initialize a backend.
+Filterfuncs can be used to select a device like this (`opencl()`, etc also support those):
+```Julia
+Pkg.init(:cudanative, is_gpu, dev-> has_atleast(dev, threads, 512))
+```
+You can also temporarily create a context on the currently selected backend with this construct:
+```Julia
+on_device([device = GPUArrays.current_device()]) do context
+    A = GPUArray(rand(Float32, 32, 32))
+    c = A .+ A
+end
+```
+Or you can run some code on all currently available devices like this:
+
+```Julia
+forall_devices(filterfuncs...) do context
+    A = GPUArray(rand(Float32, 32, 32))
+    c = A .+ A
+end
+```
+
+
 ```Julia
 using GPUArrays
-# A backend will be initialized by default on first call to the GPUArray constructor
-# But can be explicitely called like e.g.: CLBackend.init(), CUBackend.init(), JLBackend.init()
 
 a = GPUArray(rand(Float32, 32, 32)) # can be constructed from any Julia Array
 b = similar(a) # similar and other Julia.Base operations are defined
@@ -103,12 +119,12 @@ gpu_call(kernel::Function, DispatchDummy::GPUArray, args::Tuple, global_size = l
 with kernel looking like this:
 
 function kernel(state, arg1, arg2, arg3) # args get splatted into the kernel call
-    # state gets always passed as the first argument and is needed to offer the same 
+    # state gets always passed as the first argument and is needed to offer the same
     # functionality across backends, even though they have very different ways of of getting e.g. the thread index
     # arg1 can be any gpu array - this is needed to dispatch to the correct intrinsics.
-    # if you call gpu_call without any further modifications to global/local size, this should give you a linear index into 
+    # if you call gpu_call without any further modifications to global/local size, this should give you a linear index into
     # DispatchDummy
-    idx = linear_index(state, arg1::GPUArray) 
+    idx = linear_index(state, arg1::GPUArray)
     arg1[idx] = arg2[idx] + arg3[idx]
     return #kernel must return void
 end

@@ -1,21 +1,9 @@
 using GPUArrays
 using Base.Test
-JLBackend.init()
 
-@testset "mapreduce" begin
-    @testset "inbuilds using mapreduce (sum maximum minimum prod)" begin
-        for dims in ((4048,), (1024,1024), (77,), (1923,209))
-            for T in (Float32, Int32)
-                range = T <: Integer ? (T(-2):T(2)) : T
-                A = GPUArray(rand(range, dims))
-                @test sum(A) ≈ sum(Array(A))
-                @test maximum(A) ≈ maximum(Array(A))
-                @test minimum(A) ≈ minimum(Array(A))
-                @test prod(A) ≈ prod(Array(A))
-            end
-        end
-    end
-end
+ctx = threaded()
+
+
 
 @testset "broadcast Float32" begin
     A = GPUArray(rand(Float32, 40, 40))

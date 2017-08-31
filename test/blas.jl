@@ -1,8 +1,8 @@
 using GPUArrays
 using Base.Test
 
-@allbackends "BLAS" backend begin
-    if GPUArrays.hasblas(GPUArrays.current_context())
+@allbackends "BLAS" ctx begin
+    if GPUArrays.hasblas(ctx)
         @testset "matmul" begin
             for T in (Float32,) # TODO complex float64
                 A, B = rand(T, 15, 15), rand(T, 15, 15)

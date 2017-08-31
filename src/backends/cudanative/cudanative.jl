@@ -4,11 +4,12 @@ using ..GPUArrays, CUDAnative, StaticArrays
 
 import CUDAdrv, CUDArt #, CUFFT
 
-import GPUArrays: buffer, create_buffer, acc_mapreduce
-import GPUArrays: Context, GPUArray, context, linear_index, gpu_call
-import GPUArrays: blas_module, blasbuffer, is_blas_supported, hasblas
+import GPUArrays: buffer, create_buffer, acc_mapreduce, is_cudanative
+import GPUArrays: Context, GPUArray, context, linear_index, gpu_call, free_global_memory
+import GPUArrays: blas_module, blasbuffer, is_blas_supported, hasblas, init
 import GPUArrays: default_buffer_type, broadcast_index, is_fft_supported, unsafe_reinterpret
-
+import GPUArrays: is_gpu, name, threads, blocks, global_memory, local_memory, new_context
+using GPUArrays: device_summary
 
 using CUDAdrv: CuDefaultStream
 
@@ -22,37 +23,92 @@ immutable CUContext <: Context
     ctx::CUDAdrv.CuContext
     device::CUDAdrv.CuDevice
 end
-
-Base.show(io::IO, ctx::CUContext) = print(io, "CUContext")
-
-function any_context()
-    dev = CUDAdrv.CuDevice(0)
-    ctx = CUDAdrv.CuContext(dev)
-    CUContext(ctx, dev)
+is_cudanative(ctx::CUContext) = true
+function Base.show(io::IO, ctx::CUContext)
+    println(io, "CUDAnative context with:")
+    device_summary(io, ctx.device)
 end
+
+
+devices() = CUDAdrv.devices()
+is_gpu(dev::CUDAdrv.CuDevice) = true
+name(dev::CUDAdrv.CuDevice) = string("CU ", CUDAdrv.name(dev))
+threads(dev::CUDAdrv.CuDevice) = CUDAdrv.attribute(dev, CUDAdrv.MAX_THREADS_PER_BLOCK)
+
+function blocks(dev::CUDAdrv.CuDevice)
+    (
+        CUDAdrv.attribute(dev, CUDAdrv.MAX_BLOCK_DIM_X),
+        CUDAdrv.attribute(dev, CUDAdrv.MAX_BLOCK_DIM_Y),
+        CUDAdrv.attribute(dev, CUDAdrv.MAX_BLOCK_DIM_Z),
+    )
+end
+
+free_global_memory(dev::CUDAdrv.CuDevice) = CUDAdrv.Mem.info()[1]
+global_memory(dev::CUDAdrv.CuDevice) = CUDAdrv.totalmem(dev)
+local_memory(dev::CUDAdrv.CuDevice) = CUDAdrv.attribute(dev, CUDAdrv.TOTAL_CONSTANT_MEMORY)
+
 
 #const GLArrayImg{T, N} = GPUArray{T, N, gl.Texture{T, N}, GLContext}
 const CUArray{T, N, B} = GPUArray{T, N, B, CUContext} #, GLArrayImg{T, N}}
 const CUArrayBuff{T, N} = CUArray{T, N, CUDAdrv.CuArray{T, N}}
 
 
-global init, all_contexts, current_context
-let contexts = CUContext[]
-    all_contexts() = copy(contexts)::Vector{CUContext}
-    current_context() = last(contexts)::CUContext
-    function init(;ctx = nothing)
-        ctx = if ctx == nothing
-            if isempty(contexts)
-                any_context()
-            else
-                current_context()
-            end
+global all_contexts, current_context, current_device
+
+let contexts = Dict{CUDAdrv.CuDevice, CUContext}(), active_device = CUDAdrv.CuDevice[]
+
+    all_contexts() = values(contexts)
+    function current_device()
+        if isempty(active_device)
+            push!(active_device, CUDAnative.default_device[])
         end
-        GPUArrays.make_current(ctx)
-        push!(contexts, ctx)
+        active_device[]
+    end
+    function current_context()
+        dev = current_device()
+        get!(contexts, dev) do
+            new_context(dev)
+        end
+    end
+
+    function GPUArrays.init(dev::CUDAdrv.CuDevice)
+        GPUArrays.setbackend!(CUBackend)
+        if isempty(active_device)
+            push!(active_device, dev)
+        else
+            active_device[] = dev
+        end
+        ctx = get!(()-> new_context(dev), contexts, dev)
+        CUDAdrv.activate(ctx.ctx)
         ctx
     end
+
+    function GPUArrays.destroy!(context::CUContext)
+        # don't destroy primary device context
+        dev = context.device
+        if haskey(contexts, dev) && contexts[dev] == context
+            error("Trying to destroy primary device context which is prohibited. Please use reset!(context)")
+        end
+        CUDAdrv.destroy!(context.ctx)
+        return
+    end
 end
+
+function reset!(context::CUContext)
+    dev = context.device
+    CUDAdrv.destroy!(context.ctx)
+    context.ctx = CUDAdrv.CuContext(dev)
+    return
+end
+
+function new_context(dev::CUDAdrv.CuDevice)
+    cuctx = CUDAdrv.CuContext(dev)
+    ctx = CUContext(cuctx, dev)
+    CUDAdrv.activate(cuctx)
+    return ctx
+end
+
+
 # synchronize
 function GPUArrays.synchronize{T, N}(x::CUArray{T, N})
     CUDAdrv.synchronize(context(x).ctx) # TODO figure out the diverse ways of synchronization
@@ -153,15 +209,8 @@ immutable CUFunction{T}
     kernel::T
 end
 
-if try success(`nvcc --version`); catch false; end
-    include("compilation.jl")
-    hasnvcc() = true
-else
-    hasnvcc() = false
-    warn("Couldn't find nvcc, please add it to your path.
-        This will disable the ability to compile a CUDA kernel from a string"
-    )
-end
+hasnvcc() = true
+
 
 function CUFunction{T, N}(A::CUArray{T, N}, f::Function, args...)
     CUFunction(f) # this is mainly for consistency with OpenCL
@@ -170,7 +219,7 @@ function CUFunction{T, N}(A::CUArray{T, N}, f::Tuple{String, Symbol}, args...)
     source, name = f
     kernel_name = string(name)
     ctx = context(A)
-    kernel = _compile(ctx.device, kernel_name, source, "from string")
+    kernel = CUDArt._compile(ctx.device, kernel_name, source, "from string")
     CUFunction(kernel) # this is mainly for consistency with OpenCL
 end
 function (f::CUFunction{F}){F <: Function, T, N}(A::CUArray{T, N}, args...)
@@ -180,27 +229,31 @@ function (f::CUFunction{F}){F <: Function, T, N}(A::CUArray{T, N}, args...)
         f.kernel, map(unpack_cu_array, args)...
     )
 end
-function cu_convert{T, N}(x::CUArray{T, N})
-    pointer(buffer(x))
-end
-cu_convert(x) = x
+
+cudacall_types(x::CUArray{T, N}) where {T, N} = Ptr{T}
+cudacall_types(x::T) where T = T
+
+cudacall_convert(x) = x
+cudacall_convert(x::CUArray{T, N}) where {T, N} = pointer(buffer(x))
 
 function (f::CUFunction{F}){F <: CUDAdrv.CuFunction, T, N}(A::CUArray{T, N}, args)
     griddim, blockdim = thread_blocks_heuristic(A)
-    CUDAdrv.launch(
-        f.kernel, CUDAdrv.CuDim3(griddim...), CUDAdrv.CuDim3(blockdim...), 0, CuDefaultStream(),
-        map(cu_convert, args)
+    typs = Tuple{cudacall_types.(args)...}
+    cuargs = cudacall_convert.(args)
+    CUDAdrv.cudacall(
+        f.kernel, CUDAdrv.CuDim3(griddim...), CUDAdrv.CuDim3(blockdim...),
+        typs, cuargs...
     )
 end
 
-function gpu_call{T, N}(f::Function, A::CUArray{T, N}, args, globalsize = length(A), localsize = nothing)
+function gpu_call{T, N}(f::Function, A::CUArray{T, N}, args::Tuple, globalsize = length(A), localsize = nothing)
     blocks, thread = thread_blocks_heuristic(globalsize)
     args = map(unpack_cu_array, args)
     #cu_kernel, rewritten = CUDAnative.rewrite_for_cudanative(kernel, map(typeof, args))
     #println(CUDAnative.@code_typed kernel(args...))
     @cuda (blocks, thread) f(0f0, args...)
 end
-function gpu_call{T, N}(f::Tuple{String, Symbol}, A::CUArray{T, N}, args, globalsize = size(A), localsize = nothing)
+function gpu_call{T, N}(f::Tuple{String, Symbol}, A::CUArray{T, N}, args::Tuple, globalsize = size(A), localsize = nothing)
     func = CUFunction(A, f, args...)
     # TODO cache
     func(A, args) # TODO pass through local/global size

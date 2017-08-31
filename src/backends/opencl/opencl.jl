@@ -6,70 +6,97 @@ using OpenCL: cl
 
 using ..GPUArrays, StaticArrays
 
-import GPUArrays: buffer, create_buffer, acc_mapreduce, mapidx
-import GPUArrays: Context, GPUArray, context, linear_index, free
+import GPUArrays: buffer, create_buffer, acc_mapreduce, mapidx, is_opencl
+import GPUArrays: Context, GPUArray, context, linear_index, free, init
 import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
 import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector, gpu_call
-import GPUArrays: default_buffer_type, broadcast_index, unsafe_reinterpret
+import GPUArrays: default_buffer_type, broadcast_index, unsafe_reinterpret, reset!
+import GPUArrays: is_gpu, is_cpu, name, threads, blocks, global_memory, local_memory
+using GPUArrays: device_summary
 
 using Transpiler
 import Transpiler: cli, cli.get_global_id
 
-immutable CLContext <: Context
+
+type CLContext <: Context
     device::cl.Device
     context::cl.Context
     queue::cl.CmdQueue
-    function CLContext(device_type = nothing)
-        device = if device_type == nothing
-            devlist = cl.devices(:gpu)
-            dev = if isempty(devlist)
-                devlist = cl.devices(:cpu)
-                if isempty(devlist)
-                    error("no device found to be supporting opencl")
-                else
-                    first(devlist)
-                end
-            else
-                first(devlist)
-            end
-            dev
-        else
-            # if device type supplied by user, assume it's actually existant!
-            devlist = cl.devices(device_type)
-            if isempty(devlist)
-                error("Can't find OpenCL device for $device_type")
-            end
-            first(devlist)
-        end
+    function CLContext(device::cl.Device)
         ctx = cl.Context(device)
         queue = cl.CmdQueue(ctx)
         new(device, ctx, queue)
     end
 end
+
+is_opencl(ctx::CLContext) = true
+
 function Base.show(io::IO, ctx::CLContext)
-    name = replace(ctx.device[:name], r"\s+", " ")
-    print(io, "CLContext: $name")
+    println(io, "OpenCL context with:")
+    device_summary(io, ctx.device)
 end
 
-global init, all_contexts, current_context
-let contexts = CLContext[]
-    all_contexts() = copy(contexts)::Vector{CLContext}
-    current_context() = last(contexts)::CLContext
-    function init(;device_type = nothing, ctx = nothing)
-        context = if ctx == nothing
-            if isempty(contexts)
-                CLContext(device_type)
-            else
-                current_context()
-            end
-        else
-            ctx
+
+devices() = cl.devices()
+
+is_gpu(dev::cl.Device) = cl.info(dev, :device_type) == :gpu
+is_cpu(dev::cl.Device) = cl.info(dev, :device_type) == :cpu
+
+name(dev::cl.Device) = string("CL ", cl.info(dev, :name))
+
+threads(dev::cl.Device) = cl.info(dev, :max_work_group_size) |> Int
+blocks(dev::cl.Device) = cl.info(dev, :max_work_item_size)
+
+global_memory(dev::cl.Device) = cl.info(dev, :global_mem_size) |> Int
+local_memory(dev::cl.Device) = cl.info(dev, :local_mem_size) |> Int
+
+
+global all_contexts, current_context, current_device
+let contexts = Dict{cl.Device, CLContext}(), active_device = cl.Device[]
+    all_contexts() = values(contexts)
+    function current_device()
+        if isempty(active_device)
+            push!(active_device, CUDAnative.default_device[])
         end
-        GPUArrays.make_current(context)
-        push!(contexts, context)
-        context
+        active_device[]
+    end
+    function current_context()
+        dev = current_device()
+        get!(contexts, dev) do
+            new_context(dev)
+        end
+    end
+    function GPUArrays.init(dev::cl.Device)
+        GPUArrays.setbackend!(CLBackend)
+        if isempty(active_device)
+            push!(active_device, dev)
+        else
+            active_device[] = dev
+        end
+        ctx = get!(()-> new_context(dev), contexts, dev)
+        ctx
+    end
+
+    function GPUArrays.destroy!(context::CLContext)
+        # don't destroy primary device context
+        dev = context.device
+        if haskey(contexts, dev) && contexts[dev] == context
+            error("Trying to destroy primary device context which is prohibited. Please use reset!(context)")
+        end
+        finalize(context.ctx)
+        return
     end
 end
+
+function reset!(context::CLContext)
+    device = context.device
+    finalize(context.context)
+    context.context = cl.Context(device)
+    context.queue = cl.CmdQueue(context.context)
+    return
+end
+
+new_context(dev::cl.Device) = CLContext(dev)
 
 const CLArray{T, N} = GPUArray{T, N, B, CLContext} where B <: cl.Buffer
 
@@ -214,7 +241,7 @@ function thread_blocks_heuristic(len::Integer)
 end
 
 
-function gpu_call{T, N}(f, A::CLArray{T, N}, args, globalsize = length(A), localsize = nothing)
+function gpu_call{T, N}(f, A::CLArray{T, N}, args::Tuple, globalsize = length(A), localsize = nothing)
     ctx = GPUArrays.context(A)
     _args = if !isa(f, Tuple{String, Symbol})
         (0f0, args...)# include "state"
