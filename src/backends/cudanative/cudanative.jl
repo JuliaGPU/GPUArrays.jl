@@ -5,7 +5,7 @@ using ..GPUArrays, CUDAnative, StaticArrays
 import CUDAdrv, CUDArt #, CUFFT
 
 import GPUArrays: buffer, create_buffer, acc_mapreduce, is_cudanative
-import GPUArrays: Context, GPUArray, context, linear_index, gpu_call
+import GPUArrays: Context, GPUArray, context, linear_index, gpu_call, free_global_memory
 import GPUArrays: blas_module, blasbuffer, is_blas_supported, hasblas, init
 import GPUArrays: default_buffer_type, broadcast_index, is_fft_supported, unsafe_reinterpret
 import GPUArrays: is_gpu, name, threads, blocks, global_memory, local_memory, new_context
@@ -32,7 +32,7 @@ end
 
 devices() = CUDAdrv.devices()
 is_gpu(dev::CUDAdrv.CuDevice) = true
-name(dev::CUDAdrv.CuDevice) = CUDAdrv.name(dev)
+name(dev::CUDAdrv.CuDevice) = string("CU ", CUDAdrv.name(dev))
 threads(dev::CUDAdrv.CuDevice) = CUDAdrv.attribute(dev, CUDAdrv.MAX_THREADS_PER_BLOCK)
 
 function blocks(dev::CUDAdrv.CuDevice)
@@ -43,6 +43,7 @@ function blocks(dev::CUDAdrv.CuDevice)
     )
 end
 
+free_global_memory(dev::CUDAdrv.CuDevice) = CUDAdrv.Mem.info()[1]
 global_memory(dev::CUDAdrv.CuDevice) = CUDAdrv.totalmem(dev)
 local_memory(dev::CUDAdrv.CuDevice) = CUDAdrv.attribute(dev, CUDAdrv.TOTAL_CONSTANT_MEMORY)
 
@@ -71,6 +72,7 @@ let contexts = Dict{CUDAdrv.CuDevice, CUContext}(), active_device = CUDAdrv.CuDe
     end
 
     function GPUArrays.init(dev::CUDAdrv.CuDevice)
+        GPUArrays.setbackend!(CUBackend)
         if isempty(active_device)
             push!(active_device, dev)
         else

@@ -1,7 +1,8 @@
 using Base.Test
 using GPUArrays
 using GPUArrays: free
-ctx = CLBackend.init()
+
+ctx = opencl()
 
 # more complex function for broadcast
 function test{T}(a::T, b)

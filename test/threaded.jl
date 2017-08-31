@@ -1,7 +1,7 @@
 using GPUArrays
 using Base.Test
 
-GPUArrays.init(:julia)
+ctx = threaded()
 
 
 

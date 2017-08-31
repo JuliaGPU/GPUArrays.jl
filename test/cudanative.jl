@@ -1,7 +1,8 @@
 using GPUArrays
 using GPUArrays: free
 using CUDAnative, Base.Test
-cuctx = GPUArrays.init(:cudanative)
+
+cuctx = cudanative()
 const cu = CUDAnative
 
 # more complex function for broadcast

@@ -32,6 +32,7 @@ let contexts = Dict{JLDevice, JLContext}(), active_device = JLDevice[]
     end
     current_context() = contexts[current_device()]
     function GPUArrays.init(dev::JLDevice)
+        GPUArrays.setbackend!(JLBackend)
         if isempty(active_device)
             push!(active_device, dev)
         else
@@ -183,7 +184,7 @@ linear_index(A::AbstractArray, state) = state
         return
     end
 end
-function gpu_call(f, A::JLArray, args, globalsize = length(A), local_size = 0)
+function gpu_call(f, A::JLArray, args::Tuple, globalsize = length(A), local_size = 0)
     unpacked_args = unpack_buffer.(args)
     n = nthreads(A)
     len = prod(globalsize)

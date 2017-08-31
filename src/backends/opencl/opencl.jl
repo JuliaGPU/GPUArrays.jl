@@ -42,7 +42,7 @@ devices() = cl.devices()
 is_gpu(dev::cl.Device) = cl.info(dev, :device_type) == :gpu
 is_cpu(dev::cl.Device) = cl.info(dev, :device_type) == :cpu
 
-name(dev::cl.Device) = cl.info(dev, :name)
+name(dev::cl.Device) = string("CL ", cl.info(dev, :name))
 
 threads(dev::cl.Device) = cl.info(dev, :max_work_group_size) |> Int
 blocks(dev::cl.Device) = cl.info(dev, :max_work_item_size)
@@ -67,6 +67,7 @@ let contexts = Dict{cl.Device, CLContext}(), active_device = cl.Device[]
         end
     end
     function GPUArrays.init(dev::cl.Device)
+        GPUArrays.setbackend!(CLBackend)
         if isempty(active_device)
             push!(active_device, dev)
         else

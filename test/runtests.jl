@@ -1,5 +1,3 @@
-#TODO remove before merging
-Pkg.checkout("Transpiler")
 using GPUArrays
 using Base.Test
 srand(42) # set random seed for reproducability
@@ -9,6 +7,8 @@ function jltest(a, b)
     y*10f0
 end
 
+
+
 function log_gpu_mem()
     if :cudanative in supported_backends()
         info("GPUMem: ", CUDAdrv.Mem.used() / 10^6)
@@ -17,13 +17,13 @@ function log_gpu_mem()
     end
 end
 
-macro allbackends(title, backendname::Symbol, block)
+macro allbackends(title, ctxname::Symbol, block)
     quote
         for device in GPUArrays.all_devices()
             dname = GPUArrays.name(device)
             @testset "$($(esc(title))) $dname" begin
                 ctx = GPUArrays.init(device)
-                $(esc(backendname)) = ctx
+                $(esc(ctxname)) = ctx
                 $(esc(block))
             end
             log_gpu_mem()
@@ -35,9 +35,10 @@ end
     include("broadcast.jl")
 end
 
+
 # Only test supported backends!
 for backend in supported_backends()
-    if backend in (:opencl, :julia, :cudanative)
+    if backend in (:opencl, :threaded, :cudanative)
         @testset "$backend" begin
             include("$(backend).jl")
         end
@@ -63,6 +64,3 @@ log_gpu_mem()
     include("fft.jl")
 end
 log_gpu_mem()
-
-
-using GPUArrays

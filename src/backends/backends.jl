@@ -56,10 +56,6 @@ end
 
 ################################
 # Device selection functions for e.g. devices(filterfuncs)
-is_gpu(ctx::Context) = is_gpu(ctx.device)
-is_cpu(ctx::Context) = is_cpu(ctx.device)
-has_atleast(ctx::Context, attribute, value) = has_atleast(ctx.device, attribute, value)
-
 is_gpu(device) = false
 is_cpu(device) = false
 has_atleast(device, attribute, value) = attribute(ctx_or_device) >= value
@@ -70,7 +66,7 @@ has_atleast(device, attribute, value) = attribute(ctx_or_device) >= value
 # Works for context objects as well but is overloaded in the backends
 is_opencl(ctx::Symbol) = ctx == :opencl
 is_cudanative(ctx::Symbol) =  ctx == :cudanative
-is_julia(ctx::Symbol) =  ctx == :julia
+is_julia(ctx::Symbol) =  ctx == :threaded
 is_opengl(ctx::Symbol) =  ctx == :opengl
 
 is_opencl(ctx) = false
@@ -78,6 +74,12 @@ is_cudanative(ctx) = false
 is_julia(ctx) = false
 is_opengl(ctx) = false
 
+
+opencl(filterfuncs...) = init(:opencl, filterfuncs...)
+cudanative(filterfuncs...) = init(:cudanative, filterfuncs...)
+threaded(filterfuncs...) = init(:threaded, filterfuncs...)
+
+export opencl, cudanative, threaded
 
 """
 Creates a new context from `device` without caching the resulting context.
@@ -95,7 +97,7 @@ end
 
 function backend_module(sym::Symbol)
     if sym in supported_backends()
-        if sym == :julia
+        if sym == :threaded
             JLBackend
         elseif sym == :cudanative
             CUBackend
@@ -109,13 +111,16 @@ function backend_module(sym::Symbol)
     end
 end
 function init(sym::Symbol, args...; kw_args...)
-    mod = backend_module(sym)
+    init(backend_module(sym), args...; kw_args...)
+end
+function init(mod::Module, args...; kw_args...)
     setbackend!(mod)
     init(args...; kw_args...)
 end
 
 function init(filterfuncs::Function...; kw_args...)
     devices = available_devices(filterfuncs...)
+    devices = sort(devices, by = is_gpu) # prioritize gpu devices
     if isempty(devices)
         error("No device found for: $(join(string.(filterfuncs), " "))")
     end
@@ -140,7 +145,7 @@ current_context() = current_backend().current_context()
 
 """
 Sets the current backend to be used globally. Accepts the symbols:
-:cudanative, :opencl, :julia.
+:cudanative, :opencl, :threaded.
 """
 function setbackend!(backend::Symbol)
     setbackend!(backend_module(backend))
