@@ -209,7 +209,7 @@ immutable CUFunction{T}
     kernel::T
 end
 
-if try success(`nvcc --version`); catch false; end
+if try success(`$(CUDArt.toolchain_nvcc) --version`); catch false; end
     include("compilation.jl")
     hasnvcc() = true
 else
@@ -236,16 +236,20 @@ function (f::CUFunction{F}){F <: Function, T, N}(A::CUArray{T, N}, args...)
         f.kernel, map(unpack_cu_array, args)...
     )
 end
-function cu_convert{T, N}(x::CUArray{T, N})
-    pointer(buffer(x))
-end
-cu_convert(x) = x
+
+cudacall_types(x::CUArray{T, N}) where {T, N} = Ptr{T}
+cudacall_types(x::T) where T = T
+
+cudacall_convert(x) = x
+cudacall_convert(x::CUArray{T, N}) where {T, N} = pointer(buffer(x))
 
 function (f::CUFunction{F}){F <: CUDAdrv.CuFunction, T, N}(A::CUArray{T, N}, args)
     griddim, blockdim = thread_blocks_heuristic(A)
-    CUDAdrv.launch(
-        f.kernel, CUDAdrv.CuDim3(griddim...), CUDAdrv.CuDim3(blockdim...), 0, CuDefaultStream(),
-        map(cu_convert, args)
+    typs = Tuple{cudacall_types.(args)...}
+    cuargs = cudacall_convert.(args)
+    CUDAdrv.cudacall(
+        f.kernel, CUDAdrv.CuDim3(griddim...), CUDAdrv.CuDim3(blockdim...),
+        typs, cuargs...
     )
 end
 
