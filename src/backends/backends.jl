@@ -182,7 +182,7 @@ end
 
 function init(filterfuncs::Function...; kw_args...)
     devices = available_devices(filterfuncs...)
-    devices = sort(devices, by = is_gpu) # prioritize gpu devices
+    devices = sort(devices, by = x-> !is_gpu(x)) # prioritize gpu devices
     if isempty(devices)
         error("No device found for: $(join(string.(filterfuncs), " "))")
     end

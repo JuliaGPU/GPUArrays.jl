@@ -56,7 +56,8 @@ let contexts = Dict{cl.Device, CLContext}(), active_device = cl.Device[]
     all_contexts() = values(contexts)
     function current_device()
         if isempty(active_device)
-            push!(active_device, CUDAnative.default_device[])
+            devs = sort(devices(), by = x-> !is_gpu(x))
+            push!(active_device, first(devs))
         end
         active_device[]
     end
