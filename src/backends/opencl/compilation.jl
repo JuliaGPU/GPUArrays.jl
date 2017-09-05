@@ -56,6 +56,7 @@ function CLFunction{T}(f::Function, args::T, queue)
     cltypes = to_cl_types(args)
     get!(cl_compiled_functions, (ctx.id, f, cltypes)) do # TODO make this faster
         source, method, fname = Transpiler.kernel_source(f, cltypes)
+        # println(source)
         options = "-cl-denorms-are-zero -cl-mad-enable -cl-unsafe-math-optimizations"
         if version > v"1.2"
             options *= " -cl-std=CL1.2"

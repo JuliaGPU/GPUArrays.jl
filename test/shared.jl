@@ -1,4 +1,5 @@
 import SpecialFunctions: erfc
+using GPUArrays: gpu_sub2ind
 
 function blackscholes(sptprice, strike, rate, volatility, time)
     logterm = log( sptprice / strike)
@@ -165,13 +166,9 @@ end
     @test result[1] == (x, 2*x, 3*x)
 end
 
-using GPUArrays
-using GPUArrays: gpu_sub2ind
-
-threaded()
 function cartesian_iter(state, A, res, Asize)
     for i in CartesianRange(CartesianIndex(Asize))
-        idx = gpu_sub2ind(Asize, Cuint.(i.I))
+        idx = gpu_sub2ind(Asize, i.I)
         res[idx] = A[idx]
     end
     return
@@ -181,8 +178,8 @@ end
     Ac = rand(Float32, 32, 32)
     A = GPUArray(Ac)
     result = zeros(A)
-    gpu_call(cartesian_iter, result, (A, result, Cuint.(size(A))))
-    @test Array(result) == Ac
+    gpu_call(cartesian_iter, result, (A, result, Cint.(size(A))))
+    Array(result) == Ac
 end
 
 
