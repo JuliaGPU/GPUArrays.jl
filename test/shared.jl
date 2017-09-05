@@ -148,10 +148,41 @@ function ntuple_test(state, result, ::Val{N}) where N
     return
 end
 
+function ntuple_closure(state, result, ::Val{N}, testval) where N
+    result[1] = ntuple(Val{N}) do i
+        Float32(i) * testval
+    end
+    return
+end
+
+
 @allbackends "ntuple test" backend begin
     result = GPUArray(Vector{NTuple{3, Float32}}(1))
     gpu_call(ntuple_test, result, (result, Val{3}()))
     @test result[1] == (77, 2*77, 3*77)
+    x = 88f0
+    gpu_call(ntuple_closure, result, (result, Val{3}(), x))
+    @test result[1] == (x, 2*x, 3*x)
+end
+
+using GPUArrays
+using GPUArrays: gpu_sub2ind
+
+threaded()
+function cartesian_iter(state, A, res, Asize)
+    for i in CartesianRange(CartesianIndex(Asize))
+        idx = gpu_sub2ind(Asize, Cuint.(i.I))
+        res[idx] = A[idx]
+    end
+    return
+end
+
+@allbackends "cartesian iteration" backend begin
+    Ac = rand(Float32, 32, 32)
+    A = GPUArray(Ac)
+    result = zeros(A)
+    gpu_call(cartesian_iter, result, (A, result, Cuint.(size(A))))
+    @test Array(result) == Ac
 end
 
 

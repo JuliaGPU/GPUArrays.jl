@@ -8,7 +8,6 @@ function jltest(a, b)
 end
 
 
-
 function log_gpu_mem()
     if :cudanative in supported_backends()
         info("GPUMem: ", CUDAdrv.Mem.used() / 10^6)

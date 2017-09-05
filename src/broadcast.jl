@@ -23,6 +23,7 @@ end
 function broadcast!(f::typeof(identity), A::AbstractAccArray, val::Number)
     valconv = convert(eltype(A), val)
     gpu_call(const_kernel2, A, (A, valconv, Cuint(length(A))))
+    A
 end
 
 @inline function broadcast_t(
@@ -66,7 +67,7 @@ function _broadcast!(
     descriptor_tuple = ntuple(length(args)) do i
         BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
     end
-    gpu_call(broadcast_kernel!, out, (func, out, shape, Cuint.(length(out)), descriptor_tuple, A, Bs...))
+    gpu_call(broadcast_kernel!, out, (func, out, shape, Cuint(length(out)), descriptor_tuple, A, Bs...))
     out
 end
 
@@ -210,7 +211,7 @@ function _sub2ind(inds, L, ind, i::IT, I::IT...) where IT
 end
 
 # don't do anything for empty tuples
-@pure newindex(I, ilin, keep::Tuple{}, Idefault::Tuple{}, size::Tuple{}) = Cuint(0)
+@pure newindex(I, ilin, keep::Tuple{}, Idefault::Tuple{}, size::Tuple{}) = Cuint(1)
 
 # optimize for 1D arrays
 @pure newindex(I::NTuple{1}, ilin, keep::NTuple{1}, Idefault, size) = ilin
