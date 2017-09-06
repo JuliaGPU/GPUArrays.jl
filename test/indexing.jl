@@ -54,3 +54,9 @@ for T in (Float32, Int32)
         @test A[1, 1] == Ac[1, 1]
     end
 end
+
+x = CuArray{Float64}()
+x .= 1
+@test collect(x)[] == 1
+x /= 2
+@test collect(x)[] == 0.5

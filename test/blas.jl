@@ -28,3 +28,11 @@ using Base.Test
         end
     end
 end
+
+
+@testset "BLAS" begin
+  testf(*, rand(5, 5), rand(5, 5))
+  testf(*, rand(5, 5), rand(5))
+  testf(A_mul_Bt, rand(5, 5), rand(5, 5))
+  testf(At_mul_B, rand(5, 5), rand(5, 5))
+end

@@ -17,17 +17,17 @@ end
     end
     return
 end
-function broadcast!(f, A::AbstractAccArray)
+function broadcast!(f, A::GPUArray)
     gpu_call(const_kernel, A, (A, f, Cuint(length(A))))
 end
-function broadcast!(f::typeof(identity), A::AbstractAccArray, val::Number)
+function broadcast!(f::typeof(identity), A::GPUArray, val::Number)
     valconv = convert(eltype(A), val)
     gpu_call(const_kernel2, A, (A, valconv, Cuint(length(A))))
     A
 end
 
 @inline function broadcast_t(
-        f, ::Type{T}, shape, iter, A::AbstractAccArray, Bs::Vararg{Any,N}
+        f, ::Type{T}, shape, iter, A::GPUArray, Bs::Vararg{Any,N}
     ) where {N, T}
     C = similar(A, T, shape)
     keeps, Idefaults = map_newindexer(shape, A, Bs)
@@ -35,7 +35,7 @@ end
     return C
 end
 @inline function broadcast_t(
-        f, ::Type{T}, shape, iter, A::AbstractAccArray, B::AbstractAccArray, rest::Vararg{Any,N}
+        f, ::Type{T}, shape, iter, A::GPUArray, B::GPUArray, rest::Vararg{Any,N}
     ) where {N, T}
     C = similar(A, T, shape)
     Bs = (B, rest...)
@@ -45,7 +45,7 @@ end
 end
 
 @inline function broadcast_t(
-        f, T, shape, iter, A::Any, B::AbstractAccArray, rest::Vararg{Any, N}
+        f, T, shape, iter, A::Any, B::GPUArray, rest::Vararg{Any, N}
     ) where N
     C = similar(B, T, shape)
     Bs = (B, rest...)
@@ -53,12 +53,12 @@ end
     _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, iter)
     return C
 end
-function broadcast_t(f::Any, ::Type{Any}, ::Any, ::Any, A::GPUArrays.AbstractAccArray, args::Vararg{Any,N}) where N
+function broadcast_t(f::Any, ::Type{Any}, ::Any, ::Any, A::GPUArrays.GPUArray, args::Vararg{Any,N}) where N
     error("Return type couldn't be inferred for broadcast. Func: $f, $(typeof(A)), $args")
 end
 
 function _broadcast!(
-        func, out::AbstractAccArray,
+        func, out::GPUArray,
         keeps::K, Idefaults::ID,
         A::AT, Bs::BT, ::Type{Val{N}}, unused2 # we don't need those arguments
     ) where {N, K, ID, AT, BT}
@@ -73,7 +73,7 @@ end
 
 
 
-function Base.foreach(func, over::AbstractAccArray, Bs...)
+function Base.foreach(func, over::GPUArray, Bs...)
     shape = Cuint.(size(over))
     keeps, Idefaults = map_newindexer(shape, over, Bs)
     args = (over, Bs...)
@@ -85,7 +85,7 @@ function Base.foreach(func, over::AbstractAccArray, Bs...)
 end
 
 
-arg_length(x::AbstractAccArray) = Cuint.(size(x))
+arg_length(x::GPUArray) = Cuint.(size(x))
 arg_length(x) = ()
 
 abstract type BroadcastDescriptor{Typ} end
@@ -98,7 +98,7 @@ end
 
 function BroadcastDescriptor(val, keep, idefault)
     N = length(keep)
-    typ = if isa(val, Ref{<: AbstractAccArray})
+    typ = if isa(val, Ref{<: GPUArray})
         Any # special case ref, so we can upload it unwrapped already!
     else
         Broadcast.containertype(val)
@@ -177,7 +177,7 @@ for N = 0:10
 
 end
 
-function mapidx{N}(f, A::AbstractAccArray, args::NTuple{N, Any})
+function mapidx{N}(f, A::GPUArray, args::NTuple{N, Any})
     gpu_call(mapidx_kernel, A, (f, A, Cuint(length(A)), args...))
 end
 # Base functions that are sadly not fit for the the GPU yet (they only work for Int64)

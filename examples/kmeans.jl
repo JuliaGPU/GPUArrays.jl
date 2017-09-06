@@ -1,6 +1,6 @@
 using Colors, ColorVectorSpace, FileIO
 using GPUArrays
-import GPUArrays: mapidx, AbstractAccArray
+import GPUArrays: mapidx, GPUArray
 
 @inline euclidian(a::AbstractFloat, b::AbstractFloat) = abs(a - b)
 @inline function euclidian(a::Colorant, b::Colorant)
@@ -45,7 +45,7 @@ function clustersmoved(prev_means, thrr_means)
         UInt32(0), prev_means, thrr_means
     )
 end
-function kmeans{T <: AbstractAccArray}(A::T, initialmeans, iter = 10)
+function kmeans{T <: GPUArray}(A::T, initialmeans, iter = 10)
     means = identity.(initialmeans)
     n = length(A); CT = eltype(T); ET = eltype(CT); k = length(means)
     labels = map(x-> UInt8(0), A)

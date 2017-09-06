@@ -9,7 +9,7 @@ using ..GPUArrays, StaticArrays
 import GPUArrays: buffer, create_buffer, acc_mapreduce, mapidx, is_opencl
 import GPUArrays: Context, GPUArray, context, linear_index, free, init
 import GPUArrays: blasbuffer, blas_module, is_blas_supported, is_fft_supported
-import GPUArrays: synchronize, hasblas, LocalMemory, AccMatrix, AccVector, gpu_call
+import GPUArrays: synchronize, hasblas, LocalMemory, GPUMatrix, GPUVector, gpu_call
 import GPUArrays: default_buffer_type, broadcast_index, unsafe_reinterpret, reset!
 import GPUArrays: is_gpu, is_cpu, name, threads, blocks, global_memory, local_memory
 using GPUArrays: device_summary
@@ -123,15 +123,11 @@ function synchronize{T, N}(x::CLArray{T, N})
     cl.finish(context(x).queue) # TODO figure out the diverse ways of synchronization
 end
 
-function free{T, N}(x::CLArray{T, N})
-    synchronize(x)
-    mem = buffer(x)
-    finalize(mem)
-    nothing
-end
-
-function linear_index(::cli.CLArray, state)
-    (get_local_size(0)*get_group_id(0) + get_local_id(0)) + Cuint(1)
+for (f, fcl) in (:blockidx => get_group_id, :blockdim => get_local_size, :threadidx => get_local_id)
+    for (i, sym) in enumerate((:x, :y, :z))
+        fname = Symbol(string(f, '_', sym))
+        @eval $fname(A)::Cuint = $fcl($(i-1)) + Cuint(1)
+    end
 end
 
 function cl_readbuffer(q, buf, dev_offset, hostref, nbytes)

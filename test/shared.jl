@@ -126,6 +126,9 @@ end
     z = rand(Float32, 10, 10)
     c = GPUArray(z)
     @test hcat(x, z) == Array(hcat(a, c))
+    
+    testf(hcat, rand(3, 3), rand(3, 3))
+    testf(vcat, rand(3, 3), rand(3, 3))
 end
 
 @allbackends "reinterpret" backend begin
@@ -183,33 +186,18 @@ end
 end
 
 
-@allbackends "mapreduce" backend begin
-    N = 18
-    y = rand(Float32, N, N)
-    x = GPUArray(y)
-    @test sum(y, 2) ≈ Array(sum(x, 2))
-    @test sum(y, 1) ≈ Array(sum(x, 1))
 
-    y = rand(Float32, N, 10)
-    x = GPUArray(y)
-    @test sum(y, 2) ≈ Array(sum(x, 2))
-    @test sum(y, 1) ≈ Array(sum(x, 1))
 
-    y = rand(Float32, 10, N)
-    x = GPUArray(y)
-    @test sum(y, 2) ≈ Array(sum(x, 2))
-    @test sum(y, 1) ≈ Array(sum(x, 1))
-
-    @testset "inbuilds using mapreduce (sum maximum minimum prod)" begin
-        for dims in ((4048,), (1024,1024), (77,), (1923,209))
-            for T in (Float32, Int32)
-                range = T <: Integer ? (T(-2):T(2)) : T
-                A = GPUArray(rand(range, dims))
-                @test sum(A) ≈ sum(Array(A))
-                @test maximum(A) ≈ maximum(Array(A))
-                @test minimum(A) ≈ minimum(Array(A))
-                @test prod(A) ≈ prod(Array(A))
-            end
-        end
-    end
+function clmap!(state, f, out, b)
+    i = linear_index(out, state) # get the kernel index it gets scheduled on
+    out[i] = f(b[i])
+    return
+end
+@testset "Custom kernel from Julia function" begin
+    x = GPUArray(rand(Float32, 100))
+    y = GPUArray(rand(Float32, 100))
+    gpu_call(clmap!, x, (sin, x, y))
+    # same here, x is just passed to supply a kernel size!
+    jy = Array(y)
+    @test map!(sin, jy, jy) ≈ Array(x)
 end

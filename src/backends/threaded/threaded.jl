@@ -4,7 +4,7 @@ using ..GPUArrays
 using StaticArrays, Interpolations
 
 import GPUArrays: buffer, create_buffer, Context, context, mapidx, unpack_buffer
-import GPUArrays: AbstractAccArray, AbstractSampler, acc_mapreduce, gpu_call
+import GPUArrays: GPUArray, AbstractSampler, acc_mapreduce, gpu_call
 import GPUArrays: hasblas, blas_module, blasbuffer, default_buffer_type
 import GPUArrays: unsafe_reinterpret, broadcast_index, linear_index
 import GPUArrays: is_cpu, name, threads, blocks, global_memory

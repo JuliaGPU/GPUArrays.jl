@@ -201,7 +201,7 @@ end
 unpack_cu_array(x) = x
 unpack_cu_array(x::Scalar) = unpack_cu_array(getfield(x, 1))
 unpack_cu_array{T,N}(x::CUArray{T,N}) = buffer(x)
-unpack_cu_array(x::Ref{<:GPUArrays.AbstractAccArray}) = unpack_cu_array(x[])
+unpack_cu_array(x::Ref{<:GPUArrays.GPUArray}) = unpack_cu_array(x[])
 
 # TODO hook up propperly with CUDAdrv... This is a dirty adhoc solution
 # to be consistent with the OpenCL backend

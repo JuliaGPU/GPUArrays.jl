@@ -80,27 +80,23 @@ ctx = opencl()
     # The first issue is likely https://github.com/JuliaLang/julia/issues/22255
     # since GPUArrays adds some arguments to the function, it becomes longer longer, hitting the 12
     # so this wont fix for now
-    #@. utilde = uprev + dt*(b1*k1 + b2*k2 + b3*k3 + b4*k4)
-    #
-    # duprev = GPUArray(Ac)
-    # ku = GPUArray(Ac)
-    # u = similar(duprev)
-    # uc = similar(Ac)
-    # if is_cudanative(ctx)
-    #     # Not sure what's wrong with CUDAnative - since it works with OpenCL, it should all be clean
-    #     # non erroring type stable code...
-    #     #= CUDAnative error
-    #     error compiling broadcast_kernel!: error compiling #5: error compiling Type:
-    #     error compiling string: emit_builtin_call for strings/io.jl:120 requires the runtime language feature, which is disabled
-    #     Looks like it tries to compile a call to error?
-    #     =#
-    #     fract = Float32(1//2)
-    #     @. u = uprev + dt*duprev + dt^2*(fract*ku)
-    # else
-    #     @. u = uprev + dt*duprev + dt^2*(1//2*ku)
-    # end
-    # @. uc = Ac + dt*Ac + dt^2*(1//2*Ac)
-    # @test Array(u) ≈ uc
+    @. utilde = uprev + dt*(b1*k1 + b2*k2 + b3*k3 + b4*k4)
+
+    duprev = GPUArray(Ac)
+    ku = GPUArray(Ac)
+    u = similar(duprev)
+    uc = similar(Ac)
+    fract = Float32(1//2)
+    @. u = uprev + dt*duprev + dt^2*(fract*ku)
+    @. uc = Ac + dt*Ac + dt^2*(fract*Ac)
+    @test Array(u) ≈ uc
+
+    testf((x)       -> fill!(x, 1),  rand(3,3))
+    testf((x, y)    -> map(+, x, y), rand(2, 3), rand(2, 3))
+    testf((x)       -> sin.(x),      rand(2, 3))
+    testf((x)       -> 2x,      rand(2, 3))
+    testf((x, y)    -> x .+ y,       rand(2, 3), rand(1, 3))
+    testf((z, x, y) -> z .= x .+ y,  rand(2, 3), rand(2, 3), rand(2))
 end
 
 function testv3_1(a, b)
@@ -137,4 +133,47 @@ end
     res2 .= testv3_2.(x, y)
     res2c .= testv3_2.(xc, yc)
     @test all(map((a,b)->all((1,2,3) .≈ (1,2,3)),Array(res2), res2c))
+end
+
+# more complex function for broadcast
+function test{T}(a::T, b)
+    x = sqrt(sin(a) * b) / T(10.0)
+    y = T(33.0)x + cos(b)
+    y * T(10.0)
+end
+
+@testset "broadcast Float32" begin
+    A = GPUArray(rand(Float32, 40, 40))
+
+    A .= identity.(10f0)
+    @test all(x-> x == 10f0, Array(A))
+
+    A .= identity.(0.5f0)
+    B = test.(A, 10f0)
+    @test all(x-> x ≈ test(0.5f0, 10f0), Array(B))
+    A .= identity.(2f0)
+    C = (*).(A, 10f0)
+    @test all(x-> x == 20f0, Array(C))
+    D = (*).(A, B)
+    @test all(x-> x ≈ test(0.5f0, 10f0) * 2, Array(D))
+    D .= (+).((*).(A, B), 10f0)
+    @test all(x-> x ≈ test(0.5f0, 10f0) * 2 + 10f0, Array(D))
+    free(D); free(C); free(A); free(B)
+end
+
+@testset "broadcast Complex64" begin
+    A = GPUArray(fill(10f0*im, 40, 40))
+    A .= identity.(10f0*im)
+    @test all(x-> x == 10f0*im, Array(A))
+
+    B = angle.(A)
+    @test all(x-> x ≈ angle(10f0*im), Array(B))
+    A .= identity.(2f0*im)
+    C = (*).(A, (2f0*im))
+    @test all(x-> x ≈ 2f0*im * 2f0*im, Array(C))
+    D = (*).(A, B)
+    @test all(x-> x ≈ angle(10f0*im) * 2f0*im, Array(D))
+    D .= (+).((*).(A, B), (0.5f0*im))
+    @test all(x-> x ≈ (2f0*im * angle(10f0*im) + (0.5f0*im)), Array(D))
+    free(D); free(C); free(A); free(B)
 end

@@ -66,20 +66,10 @@ function convolution_kernel(state, A::AbstractArray{T}, out, K, Asize, Ksize) wh
     out[ilin] = accum
     return
 end
-ctx = opencl(is_gpu)
-# ctx = threaded()
-img = RGB{Float32}.(load(homedir()*"/test.jpg"));
 
-a = GPUArray(img);
-out = similar(a);
-k = GPUArray(Float32.(collect(Kernel.gaussian(3))));
+
 function conv!(a, out, k)
     gpu_call(convolution_kernel, a, (a, out, k, Cuint.(size(a)), Cuint.(size(k))))
     GPUArrays.synchronize(out)
     out
 end
-imgc = similar(img)
-@btime conv!($a, $out, $k);
-@btime
-@which imfilter!(imgc, img, (Kernel.gaussian(3)))
-Array(out)

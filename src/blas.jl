@@ -39,7 +39,7 @@ for elty in (Float64, Float32)
     @eval begin
         function Base.BLAS.scal!{N}(
                 n::Integer, DA::$elty,
-                DX::AbstractAccArray{$elty, N}, incx::Integer
+                DX::GPUArray{$elty, N}, incx::Integer
             )
             ctx = context(DX)
             blasmod = blas_module(ctx)
@@ -49,13 +49,13 @@ for elty in (Float64, Float32)
     end
 end
 
-function Base.scale!(X::AbstractAccArray{T}, s::Real) where T <: BLAS.BlasComplex
+function Base.scale!(X::GPUArray{T}, s::Real) where T <: BLAS.BlasComplex
     R = typeof(real(zero(T)))
     buff = reinterpret(R, vec(X))
     BLAS.scal!(2*length(X), R(s), buff, 1)
     X
 end
-function Base.scale!(X::AbstractAccArray{T}, s::Real) where T <: Union{Float32, Float64}
+function Base.scale!(X::GPUArray{T}, s::Real) where T <: Union{Float32, Float64}
     BLAS.scal!(length(X), T(s), X, 1)
     X
 end
@@ -63,7 +63,7 @@ end
 
 for elty in (Float32, Float64, Complex64, Complex128)
     @eval begin
-        function Base.BLAS.gemv!(trans::Char, alpha::($elty), A::AccVecOrMat{$elty}, X::AccVector{$elty}, beta::($elty), Y::AccVector{$elty})
+        function Base.BLAS.gemv!(trans::Char, alpha::($elty), A::AccVecOrMat{$elty}, X::GPUVector{$elty}, beta::($elty), Y::GPUVector{$elty})
             m, n = size(A, 1), size(A, 2)
             if trans == 'N' && (length(X) != n || length(Y) != m)
                 throw(DimensionMismatch("A has dimensions $(size(A)), X has length $(length(X)) and Y has length $(length(Y))"))
