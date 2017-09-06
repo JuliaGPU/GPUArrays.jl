@@ -383,6 +383,14 @@ function Base.setindex!{T, N}(A::AbstractAccArray{T, N}, value, indexes...)
     return
 end
 
+
+
+
+
+function Base.getindex{T}(A::AbstractAccArray{T, 0})
+    Array(A)[]
+end
+
 function Base.getindex{T, N}(A::AbstractAccArray{T, N}, indexes...)
     cindexes = Base.to_indices(A, indexes)
     # similarly, value should always be a julia array
@@ -515,6 +523,11 @@ function mapreducedim_kernel(state, f, op, R::AbstractArray{T1, N}, A::AbstractA
 end
 function Base._mapreducedim!(f, op, R::AbstractAccArray, A::AbstractAccArray)
     sizeR = size(R)
+    if all(x-> x == 1, sizeR)
+        x = mapreduce(f, op, A)
+        copy!(R, reshape([x], sizeR))
+        return R
+    end
     @assert count(x-> x == 1, sizeR) == (ndims(R) - 1) "Not implemented"
     dim = findfirst(x-> x == 1, sizeR)
     slice_size = size(A, dim)

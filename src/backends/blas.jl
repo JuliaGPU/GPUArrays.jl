@@ -18,6 +18,14 @@ for T in (Float32, Float64, Complex64, Complex128)
             )
             ctx = context(A)
             blasmod = blas_module(ctx)
+            if transA == 'T' && is_opencl(ctx)
+                transA = 'N'
+                A = A'
+            end
+            if transB == 'T' && is_opencl(ctx)
+                transB = 'N'
+                B = B'
+            end
             result = blasmod.gemm!(
                 transA, transB, alpha,
                 blasbuffer(ctx, A), blasbuffer(ctx, B), beta, blasbuffer(ctx, C)

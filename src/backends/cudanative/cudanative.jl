@@ -150,7 +150,7 @@ function Base.copy!{T}(
     d_offset = d_offset
     s_offset = s_offset - 1
     device_ptr = pointer(source)
-    sptr = CUDAdrv.OwnedPtr{T}(device_ptr.ptr + (sizeof(T) * s_offset), device_ptr.ctx)
+    sptr = device_ptr + (sizeof(T) * s_offset)
     CUDAdrv.Mem.download(Ref(dest, d_offset), sptr, sizeof(T) * (amount))
     dest
 end
@@ -162,7 +162,7 @@ function Base.copy!{T}(
     d_offset = d_offset - 1
     s_offset = s_offset
     device_ptr = pointer(dest)
-    sptr = CUDAdrv.OwnedPtr{T}(device_ptr.ptr + (sizeof(T) * d_offset), device_ptr.ctx)
+    sptr = device_ptr.ptr + (sizeof(T) * d_offset)
     CUDAdrv.Mem.upload(sptr, Ref(source, s_offset), sizeof(T) * (amount))
     dest
 end
@@ -299,17 +299,14 @@ end
 # TODO do this correctly in CUDAnative/Base
 using ColorTypes
 
-function CUDAnative.shfl_down(
-        val::Tuple{RGB{Float32}, UInt32}, srclane::Integer, width::Integer = Int32(32)
-    )
-    (
-        RGB{Float32}(
-            CUDAnative.shfl_down(val[1].r, srclane, width),
-            CUDAnative.shfl_down(val[1].g, srclane, width),
-            CUDAnative.shfl_down(val[1].b, srclane, width),
-        ),
-        CUDAnative.shfl_down(val[2], srclane, width)
-    )
+@generated function CUDAnative.shfl_down(
+        val::T, srclane::Integer, width::Integer = Int32(32)
+    ) where T
+    constr = Expr(:new, T)
+    for fname in fieldnames(T)
+        push!(constr.args, :(CUDAnative.shfl_down(getfield(val, $(QuoteNode(fname))), srclane, width)))
+    end
+    constr
 end
 
 function reduce_warp{T, F<:Function}(val::T, op::F)

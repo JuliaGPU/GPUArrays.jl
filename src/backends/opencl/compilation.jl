@@ -51,12 +51,19 @@ end
 
 function CLFunction{T}(f::Function, args::T, queue)
     ctx = cl.context(queue)
+    device = first(cl.devices(ctx))
+    version = cl_version(device)
     cltypes = to_cl_types(args)
-    get!(cl_compiled_functions, (f, cltypes)) do # TODO make this faster
+    get!(cl_compiled_functions, (ctx.id, f, cltypes)) do # TODO make this faster
         source, method, fname = Transpiler.kernel_source(f, cltypes)
+        # println(source)
+        options = "-cl-denorms-are-zero -cl-mad-enable -cl-unsafe-math-optimizations"
+        if version > v"1.2"
+            options *= " -cl-std=CL1.2"
+        end
         p = cl.build!(
             cl.Program(ctx, source = source),
-            options = "-cl-denorms-are-zero -cl-mad-enable -cl-unsafe-math-optimizations"
+            options = options
         )
         k = cl.Kernel(p, fname)
         CLFunction{T}(k, queue, method, source)

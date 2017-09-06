@@ -267,10 +267,10 @@ end
 """
 Iterates through all available devices and calls `f(context)` after initializing the standard context for that device.
 """
-function forall_devices(f, filterfuncs...)
-    for device in all_devices(filterfunc...)
+function forall_devices(func, filterfuncs...)
+    for device in all_devices(filterfuncs...)
         ctx = init(device)
-        f(ctx)
+        func(ctx)
     end
 end
 

@@ -33,16 +33,30 @@ is_opencl(ctx::CLContext) = true
 
 function Base.show(io::IO, ctx::CLContext)
     println(io, "OpenCL context with:")
+    println(io, "CL version: ", cl.info(ctx.device, :version))
     device_summary(io, ctx.device)
 end
 
 
-devices() = cl.devices()
+function devices()
+    filter(cl.devices()) do dev
+        !(
+            contains(cl.info(dev, :version), "AMD-APP (2348.3)") ||
+            contains(cl.info(dev, :version), "(Build 10)")
+        )
+    end
+end
 
 is_gpu(dev::cl.Device) = cl.info(dev, :device_type) == :gpu
 is_cpu(dev::cl.Device) = cl.info(dev, :device_type) == :cpu
 
 name(dev::cl.Device) = string("CL ", cl.info(dev, :name))
+function cl_version(dev::cl.Device)
+    ver_str = cl.info(dev, :version)
+    vmatch = match(r"\d.\d", ver_str)
+    major, minor = parse.(Int, split(vmatch.match, '.'))
+    VersionNumber(major, minor)
+end
 
 threads(dev::cl.Device) = cl.info(dev, :max_work_group_size) |> Int
 blocks(dev::cl.Device) = cl.info(dev, :max_work_item_size)

@@ -36,7 +36,7 @@ end
     @test all(x-> x == 10f0*im, Array(A))
 
     B = angle.(A)
-    @test all(x-> x == angle(10f0*im), Array(B))
+    @test all(x-> x ≈ angle(10f0*im), Array(B))
     A .= identity.(2f0*im)
     C = (*).(A, (2f0*im))
     @test all(x-> x ≈ 2f0*im * 2f0*im, Array(C))
