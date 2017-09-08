@@ -1,3 +1,24 @@
+#############################
+# map
+
+allequal(x) = true
+allequal(x, y, z...) = x == y && allequal(y, z...)
+function Base.map!(f, y::GPUArray, xs::GPUArray...)
+  @assert allequal(size.((y, xs...))...)
+  return y .= f.(xs...)
+end
+function Base.map(f, y::GPUArray, xs::GPUArray...)
+  @assert allequal(size.((y, xs...))...)
+  return f.(y, xs...)
+end
+
+# Break ambiguities with base
+Base.map!(f, y::GPUArray) =
+  invoke(map!, Tuple{Any,GPUArray,Vararg{GPUArray}}, f, y)
+Base.map!(f, y::GPUArray, x::GPUArray) =
+  invoke(map!, Tuple{Any,GPUArray,Vararg{GPUArray}}, f, y, x)
+Base.map!(f, y::GPUArray, x1::GPUArray, x2::GPUArray) =
+  invoke(map!, Tuple{Any,GPUArray,Vararg{GPUArray}}, f, y, x1, x2)
 
 #############################
 # reduce
@@ -66,3 +87,7 @@ function Base._mapreducedim!(f, op, R::GPUArray, A::GPUArray)
     gpu_call(mapreducedim_kernel, R, (f, op, R, A, Cuint(slice_size), Cuint.(size(A)), Cuint(dim)))
     return R
 end
+
+
+any(pred, A::GPUArray) = Bool(mapreduce(isnan, |, Cint(0), (u)))
+count(pred, A::GPUArray) = Int(mapreduce(pred, +, Cuint(0), A))

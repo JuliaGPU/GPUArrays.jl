@@ -1,37 +1,3 @@
-
-function Base.fill!{T, N}(A::GPUArray{T, N}, val)
-    valconv = T(val)
-    gpu_call(const_kernel2, A, (A, valconv, Cuint(length(A))))
-    A
-end
-function Base.rand{T <: GPUArray, ET}(::Type{T}, ::Type{ET}, size...)
-    T(rand(ET, size...))
-end
-
-function count(pred, A::GPUArray)
-    Int(mapreduce(pred, +, Cuint(0), A))
-end
-
-allequal(x) = true
-allequal(x, y, z...) = x == y && allequal(y, z...)
-function Base.map!(f, y::GPUArray, xs::GPUArray...)
-  @assert allequal(size.((y, xs...))...)
-  return y .= f.(xs...)
-end
-function Base.map(f, y::GPUArray, xs::GPUArray...)
-  @assert allequal(size.((y, xs...))...)
-  return f.(y, xs...)
-end
-
-# Break ambiguities with base
-Base.map!(f, y::GPUArray) =
-  invoke(map!, Tuple{Any,GPUArray,Vararg{GPUArray}}, f, y)
-Base.map!(f, y::GPUArray, x::GPUArray) =
-  invoke(map!, Tuple{Any,GPUArray,Vararg{GPUArray}}, f, y, x)
-Base.map!(f, y::GPUArray, x1::GPUArray, x2::GPUArray) =
-  invoke(map!, Tuple{Any,GPUArray,Vararg{GPUArray}}, f, y, x1, x2)
-
-
 function Base.permutedims!(dest::GPUArray, src::GPUArray, perm)
   gpu_call(kernel, dest, (dest, src, perm)) do state, dest, src, perm
     I = @gpuindex dest
