@@ -79,7 +79,8 @@ There is also `GPUArrays.init(device_symbol, filterfuncs...)`, which can be used
 initialize a backend.
 Filterfuncs can be used to select a device like this (`opencl()`, etc also support those):
 ```Julia
-Pkg.init(:cudanative, is_gpu, dev-> has_atleast(dev, threads, 512))
+import GPUArrays: is_gpu, has_atleast, threads
+GPUArrays.init(:cudanative, is_gpu, dev -> has_atleast(dev, threads, 512))
 ```
 You can also temporarily create a context on the currently selected backend with this construct:
 ```Julia
