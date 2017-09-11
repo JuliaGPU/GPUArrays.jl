@@ -123,12 +123,7 @@ function synchronize{T, N}(x::CLArray{T, N})
     cl.finish(context(x).queue) # TODO figure out the diverse ways of synchronization
 end
 
-for (f, fcl) in (:blockidx => get_group_id, :blockdim => get_local_size, :threadidx => get_local_id)
-    for (i, sym) in enumerate((:x, :y, :z))
-        fname = Symbol(string(f, '_', sym))
-        @eval $fname(A)::Cuint = $fcl($(i-1)) + Cuint(1)
-    end
-end
+
 
 function cl_readbuffer(q, buf, dev_offset, hostref, nbytes)
     n_evts  = UInt(0)

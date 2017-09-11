@@ -10,8 +10,8 @@ end
 """
 linear index in a GPU kernel
 """
-@inline function linear_index(state, Array::T) where T
-    Cuint((blockidx_x() - Cuint(1)) * blockdim_x() + threadidx_x())
+@inline function linear_index(state, A::T) where T
+    Cuint((blockidx_x(A) - Cuint(1)) * blockdim_x(A) + threadidx_x(A))
 end
 
 """
@@ -22,20 +22,25 @@ function synchronize(A::GPUArray)
     # makes it easier to write generic code that also works for AbstractArrays
 end
 
+
+@inline function synchronize_threads(A)
+    CUDAnative.__syncthreads()
+end
+
 macro linearidx(A, statesym = :state)
-  quote
-    A = $(esc(A))
-    i = linear_index($(esc(statesym)), A)
-    i > length(A) && return
-    i
-  end
+    quote
+        A = $(esc(A))
+        i = linear_index($(esc(statesym)), A)
+        i > length(A) && return
+        i
+    end
 end
 macro cartesianidx(A, statesym = :state)
-  quote
-    A = $(esc(A))
-    i = @linearidx(A, $(esc(statesym)))
-    gpu_ind2sub(A, i)
-  end
+    quote
+        A = $(esc(A))
+        i = @linearidx(A, $(esc(statesym)))
+        gpu_ind2sub(A, i)
+    end
 end
 
 
