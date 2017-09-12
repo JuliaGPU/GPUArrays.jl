@@ -1,34 +1,25 @@
 
-
-# all backends need to define a blas_module function to map to the correct library
-blas_module(A::AccVecOrMat) = blas_module(context(A))
-
 # Interface that needs to be overwritten by backend
 # Slightly difference behavior from buffer, since not all blas backends work directly with
 # the gpu array buffer
-function blasbuffer(ctx, A)
-    error("$ctx doesn't support BLAS operations with $(typeof(A))")
+function blas_module(A)
+    error("$(typeof(A)) doesn't support BLAS operations")
 end
+function blasbuffer(A)
+    error("$(typeof(A)) doesn't support BLAS operations")
+end
+
 for T in (Float32, Float64, Complex64, Complex128)
     @eval begin
         function Base.BLAS.gemm!(
                 transA::Char, transB::Char, alpha::$T,
-                A::AccVecOrMat{$T}, B::AccVecOrMat{$T},
-                beta::$T, C::AccVecOrMat{$T}
+                A::GPUVecOrMat{$T}, B::GPUVecOrMat{$T},
+                beta::$T, C::GPUVecOrMat{$T}
             )
-            ctx = context(A)
-            blasmod = blas_module(ctx)
-            if transA == 'T' && is_opencl(ctx)
-                transA = 'N'
-                A = A'
-            end
-            if transB == 'T' && is_opencl(ctx)
-                transB = 'N'
-                B = B'
-            end
+            blasmod = blas_module(A)
             result = blasmod.gemm!(
                 transA, transB, alpha,
-                blasbuffer(ctx, A), blasbuffer(ctx, B), beta, blasbuffer(ctx, C)
+                blasbuffer(A), blasbuffer(B), beta, blasbuffer(C)
             )
             C
         end
@@ -41,9 +32,8 @@ for elty in (Float64, Float32)
                 n::Integer, DA::$elty,
                 DX::GPUArray{$elty, N}, incx::Integer
             )
-            ctx = context(DX)
-            blasmod = blas_module(ctx)
-            blasmod.scal!(n, DA, blasbuffer(ctx, DX), incx)
+            blasmod = blas_module(DX)
+            blasmod.scal!(n, DA, blasbuffer(DX), incx)
             DX
         end
     end
@@ -63,7 +53,7 @@ end
 
 for elty in (Float32, Float64, Complex64, Complex128)
     @eval begin
-        function Base.BLAS.gemv!(trans::Char, alpha::($elty), A::AccVecOrMat{$elty}, X::GPUVector{$elty}, beta::($elty), Y::GPUVector{$elty})
+        function Base.BLAS.gemv!(trans::Char, alpha::($elty), A::GPUVecOrMat{$elty}, X::GPUVector{$elty}, beta::($elty), Y::GPUVector{$elty})
             m, n = size(A, 1), size(A, 2)
             if trans == 'N' && (length(X) != n || length(Y) != m)
                 throw(DimensionMismatch("A has dimensions $(size(A)), X has length $(length(X)) and Y has length $(length(Y))"))

@@ -5,8 +5,8 @@ using StaticArrays
 
 ctx = CLBackend.init()
 # Simple example, of how we can use Types to specialize our kernel code
-function vectormap!{N, T}(f, out, a, b, V::Type{SVector{N, T}})
-    i = linear_index(out) # get the kernel index it gets scheduled on
+function vectormap!{N, T}(state, f, out, a, b, V::Type{SVector{N, T}})
+    i = linear_index(state) # get the kernel index it gets scheduled on
     vec = f(vload(V, a, i), vload(V, b, i))
     vstore(vec, out, i)
     return
@@ -14,8 +14,9 @@ end
 
 # a helper function to benchmark the different sizes
 function testv{N}(f, out, a, b, ::Val{N})
-    gpu_call(out, vectormap!, (f, out, a, b, SVector{N, Float32}), length(out) ÷ N)
+    gpu_call(vectormap!, out, (f, out, a, b, SVector{N, Float32}), length(out) ÷ N)
     GPUArrays.synchronize(out)
+    out
 end
 # the implementation from GPUArrays
 testn(f, out, a, b) = (out .= f.(a, b); GPUArrays.synchronize(out))

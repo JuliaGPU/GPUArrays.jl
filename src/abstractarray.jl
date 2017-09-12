@@ -1,3 +1,5 @@
+import Base: show, showcompact, similar, convert, _reshape, map!, copy!, map, copy
+
 # Dense GPU Array
 abstract type GPUArray{T, N} <: DenseArray{T, N} end
 
@@ -8,95 +10,24 @@ const GPUVector{T} = GPUArray{T, 1}
 const GPUMatrix{T} = GPUArray{T, 2}
 const GPUVecOrMat{T} = Union{GPUArray{T, 1}, GPUArray{T, 2}}
 
-#=
-Interface for accessing the lower level
-=#
-buffer(A::GPUArray) = A.buffer
-context(A::GPUArray) = A.context
-default_buffer_type(typ, context) = error("Found unsupported context: $context")
-
 # GPU Local Memory
-immutable LocalMemory{T} <: GPUArray{T, 1}
+struct LocalMemory{T} <: GPUArray{T, 1}
     size::Int
+    (::Type{LocalMemory{T}})(x::Integer) where T = new{T}(x)
 end
-
-
-"""
-linear index in a GPU kernel
-"""
-function linear_index end
-
 
 #=
 AbstractArray interface
 =#
-Base.eltype{T}(::GPUArray{T}) = T
-Base.size(A::GPUArray) = A.size
 
-function Base.show(io::IO, mt::MIME"text/plain", A::GPUArray)
+function show(io::IO, mt::MIME"text/plain", A::GPUArray)
+    print(io, "GPU: ")
     show(io, mt, Array(A))
 end
-function Base.showcompact(io::IO, mt::MIME"text/plain", A::GPUArray)
+function showcompact(io::IO, mt::MIME"text/plain", A::GPUArray)
     showcompact(io, mt, Array(A))
 end
 
-function Base.similar{T <: GPUArray}(x::T)
-    similar(x, eltype(x), size(x))
-end
-function Base.similar{T <: GPUArray, ET}(x::T, ::Type{ET}; kw_args...)
-    similar(x, ET, size(x); kw_args...)
-end
-function Base.similar{T <: GPUArray, N}(x::T, dims::NTuple{N, Int}; kw_args...)
-    similar(x, eltype(x), dims; kw_args...)
-end
-function Base.similar{N, ET}(x::GPUArray, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
-    similar(typeof(x), ET, sz, context = context(x); kw_args...)
-end
-
-
-function Base.similar{T <: GPUArray, ET, N}(
-        ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
-        context::Context = current_context(), kw_args...
-    )
-    bt = default_buffer_type(T, Tuple{ET, N}, context)
-    GPUArray{ET, N, bt, typeof(context)}(sz; context = context)
-end
-
-
-
-#=
-Host to Device data transfers
-=#
-function (::Type{A}){A <: GPUArray}(x::AbstractArray)
-    A(collect(x))
-end
-function (::Type{A}){A <: GPUArray}(x::Array; kw_args...)
-    out = similar(A, eltype(x), size(x); kw_args...)
-    copy!(out, x)
-    out
-end
-Base.convert{A <: GPUArray}(::Type{A}, x::AbstractArray) = A(x)
-Base.convert{A <: GPUArray}(::Type{A}, x::A) = x
-
-#=
-Device to host data transfers
-=#
-function (::Type{Array}){T, N}(device_array::GPUArray{T, N})
-    Array{T, N}(device_array)
-end
-function (AT::Type{Array{T, N}}){T, N}(device_array::GPUArray)
-    convert(AT, Array(device_array))
-end
-function (AT::Type{Array{T, N}}){T, N}(device_array::GPUArray{T, N})
-    hostarray = similar(AT, size(device_array))
-    copy!(hostarray, device_array)
-    hostarray
-end
-
-
-######################################
-# Broadcast
-include("broadcast.jl")
 
 ############################################
 # serialization
@@ -119,7 +50,7 @@ function Base.deserialize{T <: GPUArray}(s::BaseSerializer, ::Type{T})
 end
 
 @inline unpack_buffer(x) = x
-@inline unpack_buffer(x::GPUArray) = buffer(x)
+@inline unpack_buffer(x::GPUArray) = pointer(x)
 @inline unpack_buffer(x::Ref{<: GPUArray}) = unpack_buffer(x[])
 
 function to_cartesian(A, indices::Tuple)
@@ -142,22 +73,7 @@ end
 
 crange(start, stop) = CartesianRange(CartesianIndex(start), CartesianIndex(stop))
 
-#Hmmm... why is this not part of the Array constructors???
-#TODO Figure out or issue THEM JULIA CORE PEOPLE SO HARD ... or PR? Who'd know
-function array_convert{T, N}(t::Type{Array{T, N}}, x::Array)
-    convert(t, x)
-end
 
-
-array_convert{T, N}(t::Type{Array{T, N}}, x::T) = [x]
-
-function array_convert{T, N, T2}(t::Type{Array{T, N}}, x::T2)
-    arr = collect(x) # iterator
-    dims = ntuple(Val{N}) do i
-        ifelse(ndims(arr) >= i, size(arr, i), 1)
-    end
-    return reshape(map(T, arr), dims) # broadcast dims
-end
 
 for (D, S) in ((GPUArray, AbstractArray), (AbstractArray, GPUArray), (GPUArray, GPUArray))
     @eval begin
@@ -191,12 +107,6 @@ for (D, S) in ((GPUArray, AbstractArray), (AbstractArray, GPUArray), (GPUArray, 
             s_offset = first(s_range)[1]
             copy!(dest, d_offset, src, s_offset, amount)
         end
-        # function copy!{T, N}(
-        #         dest::$D{T, N}, rdest::CartesianRange{CartesianIndex{N}},
-        #         src::$S{T, N}, ssrc::CartesianRange{CartesianIndex{N}},
-        #     )
-        #     copy!(unpack_buffer(dest), rdest, unpack_buffer(src), ssrc)
-        # end
         function copy!{T, N}(
                 dest::$D{T, N}, src::$S{T, N}
             )
@@ -210,9 +120,8 @@ for (D, S) in ((GPUArray, AbstractArray), (AbstractArray, GPUArray), (GPUArray, 
     end
 end
 
-
 function copy_kernel!(state, dest, dest_offsets, src, src_offsets, shape, shape_dest, shape_source, length)
-    i = linear_index(dest, state)
+    i = linear_index(state)
     if i <= length
         # TODO can this be done faster and smarter?
         idx = gpu_ind2sub(shape, i)
@@ -271,7 +180,7 @@ function copy!{T, N}(
     dest
 end
 
-Base.copy(x::GPUArray) = identity.(x)
+copy(x::GPUArray) = identity.(x)
 
 #=
 reinterpret taken from julia base/array.jl
@@ -320,9 +229,8 @@ function reinterpret(::Type{T}, a::GPUArray{S}, dims::NTuple{N,Int}) where T whe
     unsafe_reinterpret(T, a, dims)
 end
 
-function Base.reshape(a::GPUArray{T}, dims::NTuple{N,Int}) where T where N
-    if prod(dims) != length(a)
-        throw(DimensionMismatch("new dimensions $(dims) must be consistent with array size $(length(a))"))
-    end
-    unsafe_reinterpret(T, a, dims)
+function _reshape(A::GPUArray{T}, dims::Dims) where T
+    n = Base._length(A)
+    prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
+    return unsafe_reinterpret(T, A, dims)
 end

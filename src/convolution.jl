@@ -50,7 +50,7 @@ using GPUArrays, ImageFiltering, FileIO, Colors, ColorVectorSpace, BenchmarkTool
 using GPUArrays: is_gpu, gpu_ind2sub, gpu_sub2ind
 
 function convolution_kernel(state, A::AbstractArray{T}, out, K, Asize, Ksize) where T
-    ilin = linear_index(A, state)
+    ilin = linear_index(state)
     idx = gpu_ind2sub(Asize, ilin)
     if idx[1] >= Asize[1] - Ksize[1] || idx[2] >= Asize[2] - Ksize[2]
         return

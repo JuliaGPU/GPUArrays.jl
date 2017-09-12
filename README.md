@@ -124,7 +124,7 @@ function kernel(state, arg1, arg2, arg3) # args get splatted into the kernel cal
     # arg1 can be any gpu array - this is needed to dispatch to the correct intrinsics.
     # if you call gpu_call without any further modifications to global/local size, this should give you a linear index into
     # DispatchDummy
-    idx = linear_index(state, arg1::GPUArray)
+    idx = linear_index(state)
     arg1[idx] = arg2[idx] + arg3[idx]
     return #kernel must return void
 end

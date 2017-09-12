@@ -1,3 +1,14 @@
+array_convert{T, N}(t::Type{Array{T, N}}, x::Array) = convert(t, x)
+array_convert{T, N}(t::Type{Array{T, N}}, x::T) = [x]
+
+function array_convert{T, N, T2}(t::Type{Array{T, N}}, x::T2)
+    arr = collect(x) # iterator
+    dims = ntuple(Val{N}) do i
+        ifelse(ndims(arr) >= i, size(arr, i), 1)
+    end
+    return reshape(map(T, arr), dims) # broadcast dims
+end
+
 indexlength(A, i, array::AbstractArray) = length(array)
 indexlength(A, i, array::Number) = 1
 indexlength(A, i, array::Colon) = size(A, i)

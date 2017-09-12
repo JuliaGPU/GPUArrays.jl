@@ -126,7 +126,7 @@ end
     z = rand(Float32, 10, 10)
     c = GPUArray(z)
     @test hcat(x, z) == Array(hcat(a, c))
-    
+
     testf(hcat, rand(3, 3), rand(3, 3))
     testf(vcat, rand(3, 3), rand(3, 3))
 end
@@ -189,7 +189,7 @@ end
 
 
 function clmap!(state, f, out, b)
-    i = linear_index(out, state) # get the kernel index it gets scheduled on
+    i = linear_index(state) # get the kernel index it gets scheduled on
     out[i] = f(b[i])
     return
 end

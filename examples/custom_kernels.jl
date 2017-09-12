@@ -4,7 +4,7 @@ CLBackend.init()
 
 
 function clmap!(state, f, out, b)
-    i = linear_index(out, state) # get the kernel index it gets scheduled on
+    i = linear_index(state) # get the kernel index it gets scheduled on
     out[i] = f(b[i])
     return
 end

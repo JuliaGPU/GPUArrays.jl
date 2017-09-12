@@ -1,4 +1,3 @@
-
 #############################
 # reduce
 
@@ -43,7 +42,7 @@ end
 
 
 function mapreducedim_kernel(state, f, op, R::AbstractArray{T1, N}, A::AbstractArray{T, N}, slice_size, sizeA, dim) where {T1, T, N}
-    ilin = Cuint(linear_index(R, state))
+    ilin = Cuint(linear_index(state))
     accum = zero(T1)
     @inbounds for i = Cuint(1):slice_size
         idx = N == dim ? (ilin, i) : (i, ilin)

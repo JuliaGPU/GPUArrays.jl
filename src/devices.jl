@@ -118,6 +118,11 @@ function on_device(f, device = current_device())
     return
 end
 
+const filterfuncs = """
+Device can be filtered by passing `filter_funcs`, e.g. :
+`is_gpu`, `is_cpu`, `(dev)-> has_atleast(dev, threads, 512)`
+"""
+
 """
 Returns all devices for the current backend.
 $filterfuncs

@@ -4,21 +4,23 @@ using Base.Broadcast: map_newindexer
 using Base: @propagate_inbounds, @pure
 
 @inline function const_kernel(state, A, op, len)
-    idx = linear_index(A, state)
+    idx = linear_index(state)
     @inbounds if idx <= len
         A[idx] = op()
     end
     return
 end
 @inline function const_kernel2(state, A, x, len)
-    idx = linear_index(A, state)
+    idx = linear_index(state)
     @inbounds if idx <= len
         A[idx] = x
     end
     return
 end
+
 function broadcast!(f, A::GPUArray)
     gpu_call(const_kernel, A, (A, f, Cuint(length(A))))
+    A
 end
 function broadcast!(f::typeof(identity), A::GPUArray, val::Number)
     valconv = convert(eltype(A), val)
@@ -151,7 +153,7 @@ for N = 0:10
         end
 
         @inline function broadcast_kernel!(state, func, B, shape, len, descriptor, $(args...))
-            ilin = linear_index(B, state)
+            ilin = linear_index(state)
             if ilin <= len
                 @inbounds B[ilin] = apply_broadcast(ilin, state, func, shape, len, descriptor, $(args...))
             end
@@ -159,7 +161,7 @@ for N = 0:10
         end
 
         function foreach_kernel(state, func, shape, len, descriptor, A, $(args...))
-            ilin = linear_index(A, state)
+            ilin = linear_index(state)
             if ilin <= len
                 apply_broadcast(ilin, state, func, shape, len, descriptor, A, $(args...))
             end
@@ -167,7 +169,7 @@ for N = 0:10
         end
 
         function mapidx_kernel(state, f, A, len, $(args...))
-            i = linear_index(A, state)
+            i = linear_index(state)
             @inbounds if i <= len
                 f(i, A, $(args...))
             end
