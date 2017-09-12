@@ -65,3 +65,7 @@ function Base._mapreducedim!(f, op, R::GPUArray, A::GPUArray)
     gpu_call(mapreducedim_kernel, R, (f, op, R, A, Cuint(slice_size), Cuint.(size(A)), Cuint(dim)))
     return R
 end
+
+
+any(pred, A::GPUArray) = Bool(mapreduce(isnan, |, Cint(0), (u)))
+count(pred, A::GPUArray) = Int(mapreduce(pred, +, Cuint(0), A))

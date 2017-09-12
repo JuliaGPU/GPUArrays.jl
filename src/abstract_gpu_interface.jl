@@ -36,6 +36,11 @@ function device(A::GPUArray)
     # makes it easier to write generic code that also works for AbstractArrays
 end
 
+
+@inline function synchronize_threads(A)
+    CUDAnative.__syncthreads()
+end
+
 macro linearidx(A, statesym = :state)
   quote
     A = $(esc(A))
@@ -45,11 +50,11 @@ macro linearidx(A, statesym = :state)
   end
 end
 macro cartesianidx(A, statesym = :state)
-  quote
-    A = $(esc(A))
-    i = @linearidx(A, $(esc(statesym)))
-    gpu_ind2sub(A, i)
-  end
+    quote
+        A = $(esc(A))
+        i = @linearidx(A, $(esc(statesym)))
+        gpu_ind2sub(A, i)
+    end
 end
 
 
