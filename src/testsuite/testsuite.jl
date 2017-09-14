@@ -8,6 +8,7 @@ module TestSuite
 using Base.Test
 
 toarray(T, x::Tuple{X, Vararg{Int}}) where X = fill(first(x), Base.tail(x))
+toarray(::Type{T}, x::NTuple{N, Int}) where {T <: Integer, N} = rand(T(1):T(10), x)
 toarray(T, x::NTuple{N, Int}) where N = rand(T, x)
 toarray(T, x) = x
 togpu(T, x::AbstractArray) = T(x)
@@ -27,7 +28,7 @@ function against_base(f, Typ, sizes...)
     @test res_jl ≈ Array(res_gpu)
 end
 
-export against_base
+
 
 
 include("blas.jl")
@@ -37,6 +38,10 @@ include("fft.jl")
 # include("interface_tests.jl")
 include("linalg.jl")
 # include("vector.jl")
+
+function supported_eltypes()
+    (Float32, Float64, Int32, Int64, Complex64, Complex128)
+end
 
 """
 Runs the test suite on array type `Typ`
@@ -48,5 +53,7 @@ function run_tests(Typ)
     run_fft(Typ)
     run_linalg(Typ)
 end
+
+export against_base, run_tests, supported_eltypes
 
 end

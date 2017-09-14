@@ -1,6 +1,7 @@
 using GPUArrays
 using Base.Test, GPUArrays.TestSuite
 
+
 function run_broadcasting(Typ)
     @testset "broadcast" begin
         test_broadcast(Typ)
@@ -8,7 +9,7 @@ function run_broadcasting(Typ)
     end
 end
 
-test_idx(idx, A) = A[idx] * 2f0
+test_idx(idx, A::AbstractArray{T}) where T = A[idx] * T(2)
 
 function testv3_1(a, b)
     x = a .* b
@@ -34,76 +35,80 @@ end
 
 
 function test_broadcast(Typ)
-    N = 10
-    T = Typ{Float32}
-    @testset "broadcast" begin
-        @testset "RefValue" begin
-            idx = Typ(rand(Cuint(1):Cuint(N), 2*N))
-            y = Base.RefValue(Typ(rand(Float32, 2*N)))
-            result = Typ(zeros(Float32, 2*N))
+    for ET in supported_eltypes()
+        N = 10
+        T = Typ{ET}
+        @testset "broadcast" begin
+            @testset "RefValue" begin
+                idx = Typ(rand(Cuint(1):Cuint(N), 2*N))
+                y = Base.RefValue(Typ(TestSuite.toarray(ET, (2*N,))))
+                result = Typ(zeros(ET, 2*N))
 
-            result .= test_idx.(idx, y)
-            res1 = Array(result)
-            res2 = similar(res1)
-            res2 .= test_idx.(Array(idx), Base.RefValue(Array(y[])))
-            @test res2 == res1
-        end
-        @testset "Tuple" begin
-            against_base(T, (3, N), (3, N), (N,), (N,), (N,)) do out, arr, a, b, c
-                res2 = broadcast!(out, arr, (a, b, c)) do xx, yy
-                    xx + sum(yy)
+                result .= test_idx.(idx, y)
+                res1 = Array(result)
+                res2 = similar(res1)
+                res2 .= test_idx.(Array(idx), Base.RefValue(Array(y[])))
+                @test res2 == res1
+            end
+            @testset "Tuple" begin
+                against_base(T, (3, N), (3, N), (N,), (N,), (N,)) do out, arr, a, b, c
+                    res2 = broadcast!(out, arr, (a, b, c)) do xx, yy
+                        xx + sum(yy)
+                    end
                 end
             end
-        end
-        ############
-        # issue #27
-        against_base((a, b)-> a .+ b, T, (4, 5, 3), (1, 5, 3))
-        against_base((a, b)-> a .+ b, T, (4, 5, 3), (1, 5, 1))
+            ############
+            # issue #27
+            against_base((a, b)-> a .+ b, T, (4, 5, 3), (1, 5, 3))
+            against_base((a, b)-> a .+ b, T, (4, 5, 3), (1, 5, 1))
 
-        ############
-        # issue #22
-        dim = (32, 32)
-        against_base(T, dim, dim, dim) do tmp, a1, a2
-            tmp .=  a1 .+ a2 .* 2f0
-        end
+            ############
+            # issue #22
+            dim = (32, 32)
+            against_base(T, dim, dim, dim) do tmp, a1, a2
+                tmp .=  a1 .+ a2 .* ET(2)
+            end
 
-        ############
-        # issue #21
-        against_base((a1, a2)-> muladd.(2f0, a1, a2), T, dim, dim)
+            ############
+            # issue #21
+            if ET in (Float32, Float64)
+                against_base((a1, a2)-> muladd.(ET(2), a1, a2), T, dim, dim)
+                #########
+                # issue #41
+                # The first issue is likely https://github.com/JuliaLang/julia/issues/22255
+                # since GPUArrays adds some arguments to the function, it becomes longer longer, hitting the 12
+                # so this wont fix for now
+                against_base(T, dim, dim, dim, dim, dim, dim) do a1, a2, a3, a4, a5, a6
+                    @. a1 = a2 + (1.2) *((1.3)*a3 + (1.4)*a4 + (1.5)*a5 + (1.6)*a6)
+                end
 
-        ###########
-        # issue #20
-        against_base(a-> abs.(a), T, dim)
+                against_base(T, dim, dim, dim, dim) do u, uprev, duprev, ku
+                    fract = ET(1//2)
+                    dt = ET(1.4)
+                    @. u = uprev + dt*duprev + dt^2*(fract*ku)
+                end
+                against_base((x) -> sin.(x), T, (2, 3))
+            end
 
-        #########
-        # issue #41
-        # The first issue is likely https://github.com/JuliaLang/julia/issues/22255
-        # since GPUArrays adds some arguments to the function, it becomes longer longer, hitting the 12
-        # so this wont fix for now
-        against_base(T, dim, dim, dim, dim, dim, dim) do a1, a2, a3, a4, a5, a6
-            @. a1 = a2 + 1.2f0*(1.3f0*a3 + 1.4f0*a4 + 1.5f0*a5 + 1.6f0*a6)
-        end
+            ###########
+            # issue #20
+            against_base(a-> abs.(a), T, dim)
 
-        against_base(T, dim, dim, dim, dim) do u, uprev, duprev, ku
-            fract = Float32(1//2)
-            dt = 1.4f0
-            @. u = uprev + dt*duprev + dt^2*(fract*ku)
-        end
 
-        against_base((x) -> fill!(x, 1), T, (3,3))
-        against_base((x, y) -> map(+, x, y), T, (2, 3), (2, 3))
-        against_base((x) -> sin.(x), T, (2, 3))
-        against_base((x) -> 2x, T, (2, 3))
-        against_base((x, y) -> x .+ y, T, (2, 3), (1, 3))
-        against_base((z, x, y) -> z .= x .+ y, T, (2, 3), (2, 3), (2,))
 
-        for ET in (Float32, Complex64)
+            against_base((x) -> fill!(x, 1), T, (3,3))
+            against_base((x, y) -> map(+, x, y), T, (2, 3), (2, 3))
+
+            against_base((x) -> 2x, T, (2, 3))
+            against_base((x, y) -> x .+ y, T, (2, 3), (1, 3))
+            against_base((z, x, y) -> z .= x .+ y, T, (2, 3), (2, 3), (2,))
+
             T = Typ{ET}
-            against_base(A -> A .= identity.(10f0), T, (40, 40))
-            against_base(A -> test_kernel.(A, 10f0), T, (40, 40))
-            against_base(A -> A .* 10f0, T, (40, 40))
+            against_base(A -> A .= identity.(ET(10)), T, (40, 40))
+            against_base(A -> test_kernel.(A, ET(10)), T, (40, 40))
+            against_base(A -> A .* ET(10), T, (40, 40))
             against_base((A, B) -> A .* B, T, (40, 40), (40, 40))
-            against_base((A, B) -> A .* B .+ 10f0, T, (40, 40), (40, 40))
+            against_base((A, B) -> A .* B .+ ET(10), T, (40, 40), (40, 40))
         end
     end
 end

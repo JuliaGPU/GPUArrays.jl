@@ -76,6 +76,8 @@ is_cudanative(ctx) = false
 is_julia(ctx) = false
 is_opengl(ctx) = false
 
+supports_double(ctx) = false 
+
 
 
 #=
