@@ -42,18 +42,18 @@ end
 end
 
 macro linearidx(A, statesym = :state)
-  quote
-    A = $(esc(A))
-    i = linear_index($(esc(statesym)))
-    i > length(A) && return
-    i
-  end
+    quote
+        x1 = $(esc(A))
+        i1 = linear_index($(esc(statesym)))
+        i1 > length(x1) && return
+        i1
+    end
 end
 macro cartesianidx(A, statesym = :state)
     quote
-        A = $(esc(A))
-        i = @linearidx(A, $(esc(statesym)))
-        gpu_ind2sub(A, i)
+        x = $(esc(A))
+        i2 = @linearidx(x, $(esc(statesym)))
+        gpu_ind2sub(x, i2)
     end
 end
 

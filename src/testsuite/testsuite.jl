@@ -1,4 +1,8 @@
 export TestSuite
+
+"""
+Abstract test suite that can be used for all packages inheriting from GPUArray
+"""
 module TestSuite
 
 using Base.Test
@@ -24,5 +28,25 @@ function against_base(f, Typ, sizes...)
 end
 
 export against_base
+
+
+include("blas.jl")
+include("broadcasting.jl")
+include("construction.jl")
+include("fft.jl")
+# include("interface_tests.jl")
+include("linalg.jl")
+# include("vector.jl")
+
+"""
+Runs the test suite on array type `Typ`
+"""
+function run_tests(Typ)
+    run_blas(Typ)
+    run_broadcasting(Typ)
+    run_construction(Typ)
+    run_fft(Typ)
+    run_linalg(Typ)
+end
 
 end

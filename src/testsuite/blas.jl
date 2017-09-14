@@ -1,10 +1,8 @@
-module BLAS
-
 using GPUArrays
 using GPUArrays.TestSuite
 using Base.Test
 
-function main(Typ)
+function run_blas(Typ)
     @testset "BLAS" begin
         T = Typ{Float32}
         @testset "matmul" begin
@@ -19,6 +17,4 @@ function main(Typ)
             end
         end
     end
-end
-
 end

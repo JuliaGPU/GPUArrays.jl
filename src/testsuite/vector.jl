@@ -1,9 +1,9 @@
 using GPUArrays, Base.Test
 
-@allbackends "vector interface" backend begin
-    if backend in ( :opencl,)
+function run_vectors(Typ)
+    @testset "vector interface"
         a = Float32[]
-        x = GPUArray(a)
+        x = Typ(a)
         @test length(x) == 0
         push!(x, 12f0)
         @test length(x) == 1
@@ -11,7 +11,7 @@ using GPUArrays, Base.Test
 
 
         a = Float32[0]
-        x = GPUArray(a)
+        x = Typ(a)
         @test length(x) == 1
         @test length(GPUArrays.buffer(x)) == 1
         push!(x, 12)

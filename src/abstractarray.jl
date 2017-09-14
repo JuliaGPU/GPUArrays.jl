@@ -1,4 +1,4 @@
-import Base: show, showcompact, similar, convert, _reshape, map!, copy!, map, copy
+import Base: show, showcompact, similar, convert, _reshape, map!, copy!, map, copy, showarray
 
 # Dense GPU Array
 abstract type GPUArray{T, N} <: DenseArray{T, N} end
@@ -20,9 +20,9 @@ end
 AbstractArray interface
 =#
 
-function show(io::IO, mt::MIME"text/plain", A::GPUArray)
+function showarray(io::IO, A::GPUArray, repr::Bool)
     print(io, "GPU: ")
-    show(io, mt, Array(A))
+    showarray(io, Array(A), repr)
 end
 function showcompact(io::IO, mt::MIME"text/plain", A::GPUArray)
     showcompact(io, mt, Array(A))

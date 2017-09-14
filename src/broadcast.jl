@@ -87,6 +87,7 @@ function Base.foreach(func, over::GPUArray, Bs...)
 end
 
 
+arg_length(x::Tuple) = (Cuint(length(x)),)
 arg_length(x::GPUArray) = Cuint.(size(x))
 arg_length(x) = ()
 
@@ -100,11 +101,7 @@ end
 
 function BroadcastDescriptor(val, keep, idefault)
     N = length(keep)
-    typ = if isa(val, Ref{<: GPUArray})
-        Any # special case ref, so we can upload it unwrapped already!
-    else
-        Broadcast.containertype(val)
-    end
+    typ = Broadcast.containertype(val)
     BroadcastDescriptorN{typ, N}(arg_length(val), Cuint.(keep), Cuint.(idefault))
 end
 
@@ -113,6 +110,17 @@ end
     )
     A[I]
 end
+@propagate_inbounds @inline function _broadcast_getindex(
+        ::BroadcastDescriptor{Tuple}, A, I
+    )
+    A[I]
+end
+@propagate_inbounds @inline function _broadcast_getindex(
+        ::BroadcastDescriptor{Array}, A::Ref, I
+    )
+    A[]
+end
+
 @inline _broadcast_getindex(any, A, I) = A
 
 for N = 0:10
@@ -181,35 +189,6 @@ end
 
 function mapidx{N}(f, A::GPUArray, args::NTuple{N, Any})
     gpu_call(mapidx_kernel, A, (f, A, Cuint(length(A)), args...))
-end
-# Base functions that are sadly not fit for the the GPU yet (they only work for Int64)
-@pure @inline function gpu_ind2sub{N, T}(dims::NTuple{N}, ind::T)
-    _ind2sub(NTuple{N, T}(dims), ind - T(1))
-end
-@pure @inline _ind2sub{T}(::Tuple{}, ind::T) = (ind + T(1),)
-@pure @inline function _ind2sub{T}(indslast::NTuple{1}, ind::T)
-    ((ind + T(1)),)
-end
-@pure @inline function _ind2sub{T}(inds, ind::T)
-    r1 = inds[1]
-    indnext = div(ind, r1)
-    f = T(1); l = r1
-    (ind-l*indnext+f, _ind2sub(Base.tail(inds), indnext)...)
-end
-
-@pure function gpu_sub2ind{N, T}(dims::NTuple{N}, I::NTuple{N, T})
-    Base.@_inline_meta
-    _sub2ind(NTuple{N, T}(dims), T(1), T(1), I...)
-end
-_sub2ind(x, L, ind) = ind
-function _sub2ind{T}(::Tuple{}, L, ind, i::T, I::T...)
-    Base.@_inline_meta
-    ind + (i - T(1)) * L
-end
-function _sub2ind(inds, L, ind, i::IT, I::IT...) where IT
-    Base.@_inline_meta
-    r1 = inds[1]
-    _sub2ind(Base.tail(inds), L * r1, ind + (i - IT(1)) * L, I...)
 end
 
 # don't do anything for empty tuples

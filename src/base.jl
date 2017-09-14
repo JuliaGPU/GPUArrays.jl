@@ -1,4 +1,5 @@
 import Base: count, map!, permutedims!, cat_t, vcat, hcat
+using Base: @pure
 
 count(pred, A::GPUArray) = Int(mapreduce(pred, +, Cuint(0), A))
 
@@ -20,16 +21,6 @@ map!(f, y::GPUArray, x::GPUArray) =
     invoke(map!, Tuple{Any,GPUArray, Vararg{GPUArray}}, f, y, x)
 map!(f, y::GPUArray, x1::GPUArray, x2::GPUArray) =
     invoke(map!, Tuple{Any,GPUArray, Vararg{GPUArray}}, f, y, x1, x2)
-
-
-function permutedims!(dest::GPUArray, src::GPUArray, perm)
-    gpu_call(dest, (dest, src, perm)) do state, dest, src, perm
-        I = @cartesianidx dest
-        @inbounds dest[I...] = src[genperm(I, perm)...]
-        return
-    end
-    return dest
-end
 
 
 @generated function nindex(i::Int, ls::NTuple{N}) where N
@@ -63,3 +54,37 @@ end
 
 vcat(xs::GPUArray...) = cat(1, xs...)
 hcat(xs::GPUArray...) = cat(2, xs...)
+
+
+# Base functions that are sadly not fit for the the GPU yet (they only work for Int64)
+@pure @inline function gpu_ind2sub{T}(A::AbstractArray, ind::T)
+    _ind2sub(size(A), ind - T(1))
+end
+@pure @inline function gpu_ind2sub{N, T}(dims::NTuple{N}, ind::T)
+    _ind2sub(NTuple{N, T}(dims), ind - T(1))
+end
+@pure @inline _ind2sub{T}(::Tuple{}, ind::T) = (ind + T(1),)
+@pure @inline function _ind2sub{T}(indslast::NTuple{1}, ind::T)
+    ((ind + T(1)),)
+end
+@pure @inline function _ind2sub{T}(inds, ind::T)
+    r1 = inds[1]
+    indnext = div(ind, r1)
+    f = T(1); l = r1
+    (ind-l*indnext+f, _ind2sub(Base.tail(inds), indnext)...)
+end
+
+@pure function gpu_sub2ind{N, T}(dims::NTuple{N}, I::NTuple{N, T})
+    Base.@_inline_meta
+    _sub2ind(NTuple{N, T}(dims), T(1), T(1), I...)
+end
+_sub2ind(x, L, ind) = ind
+function _sub2ind{T}(::Tuple{}, L, ind, i::T, I::T...)
+    Base.@_inline_meta
+    ind + (i - T(1)) * L
+end
+function _sub2ind(inds, L, ind, i::IT, I::IT...) where IT
+    Base.@_inline_meta
+    r1 = inds[1]
+    _sub2ind(Base.tail(inds), L * r1, ind + (i - IT(1)) * L, I...)
+end

@@ -1,17 +1,15 @@
-module Construction
-
 using GPUArrays
 using Base.Test, GPUArrays.TestSuite
 
-function main(Typ)
+function run_construction(Typ)
     @testset "Construction" begin
-        construction(Typ)
+        constructors(Typ)
         conversion(Typ)
         value_constructor(Typ)
     end
 end
 
-function construction(Typ)
+function constructors(Typ)
     @testset "similar + constructor" begin
         B = Typ{Float32}(10)
         @test size(B) == (10,)
@@ -120,6 +118,4 @@ function value_constructor(Typ)
         @test Array(x3) ≈ x
 
     end
-end
-
 end

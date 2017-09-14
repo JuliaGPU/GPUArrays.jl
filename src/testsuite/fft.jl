@@ -1,10 +1,8 @@
-module FFTSuite
-
 using GPUArrays
 using GPUArrays.TestSuite
 using Base.Test
 
-function main(Typ)
+function run_fft(Typ)
     T = Typ{Complex64}
     for n = 1:3
         @testset "FFT with ND = $n" begin
@@ -16,7 +14,4 @@ function main(Typ)
             against_base(ifft, T, dims)
         end
     end
-end
-
-
 end

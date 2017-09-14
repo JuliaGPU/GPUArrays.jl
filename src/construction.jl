@@ -36,13 +36,10 @@ function rand{T <: GPUArray, ET}(::Type{T}, ::Type{ET}, size...)
     T(rand(ET, size...))
 end
 
-
-
 (T::Type{<: GPUArray})(dims::Integer...) = T(dims)
 (T::Type{<: GPUArray{X} where X})(dims::NTuple{N, Integer}) where N = similar(T, eltype(T), dims)
 
 similar(x::X, ::Type{T}, size::Base.Dims{N}) where {X <: GPUArray, T, N} = similar(X, T, size)
-
 
 function convert(AT::Type{<: GPUArray{T, N}}, A::DenseArray{T, N}) where {T, N}
     copy!(AT(Base.size(A)), A)

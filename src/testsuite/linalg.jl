@@ -1,9 +1,7 @@
-module LinalgSuite
-
 using GPUArrays
 using Base.Test, GPUArrays.TestSuite
 
-function main(Typ)
+function run_linalg(Typ)
     T = Typ{Float32}
     @testset "Linalg" begin
         # @testset "transpose" begin
@@ -14,7 +12,4 @@ function main(Typ)
             against_base(x -> permutedims(x, (2, 1, 3)), T, (4, 5, 6))
         end
     end
-end
-using CLArrays
-main(CLArray)
 end

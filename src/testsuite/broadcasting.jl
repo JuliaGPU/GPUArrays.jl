@@ -1,12 +1,10 @@
-module Broadcasting
-
 using GPUArrays
 using Base.Test, GPUArrays.TestSuite
 
-function main(Typ)
+function run_broadcasting(Typ)
     @testset "broadcast" begin
-        test_vec3(Typ)
         test_broadcast(Typ)
+        test_vec3(Typ)
     end
 end
 
@@ -36,20 +34,27 @@ end
 
 
 function test_broadcast(Typ)
+    N = 10
+    T = Typ{Float32}
     @testset "broadcast" begin
-        N = 10
-        T = Typ{Float32}
+        @testset "RefValue" begin
+            idx = Typ(rand(Cuint(1):Cuint(N), 2*N))
+            y = Base.RefValue(Typ(rand(Float32, 2*N)))
+            result = Typ(zeros(Float32, 2*N))
 
-        idx = Typ(rand(Cuint(1):Cuint(N), 2*N))
-        y = Base.RefValue(Typ(rand(Float32, 2*N)))
-        result = Typ(zeros(Float32, 2*N))
-
-        result .= test_idx.(idx, y)
-        res1 = Array(result)
-        res2 = similar(res1)
-        res2 .= test_idx.(Array(idx), Base.RefValue(Array(y[])))
-        @test res2 == res1
-
+            result .= test_idx.(idx, y)
+            res1 = Array(result)
+            res2 = similar(res1)
+            res2 .= test_idx.(Array(idx), Base.RefValue(Array(y[])))
+            @test res2 == res1
+        end
+        @testset "Tuple" begin
+            against_base(T, (3, N), (3, N), (N,), (N,), (N,)) do out, arr, a, b, c
+                res2 = broadcast!(out, arr, (a, b, c)) do xx, yy
+                    xx + sum(yy)
+                end
+            end
+        end
         ############
         # issue #27
         against_base((a, b)-> a .+ b, T, (4, 5, 3), (1, 5, 3))
@@ -128,10 +133,3 @@ function test_vec3(Typ)
         @test all(map((a,b)-> all((1,2,3) .≈ (1,2,3)), Array(res2), res2c))
     end
 end
-
-
-
-end
-
-using Broadcasting
-Broadcasting.main(CLArray)
