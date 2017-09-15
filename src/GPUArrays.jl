@@ -14,6 +14,7 @@ include("linalg.jl")
 include("mapreduce.jl")
 include("vectors.jl")
 include("testsuite/testsuite.jl")
+include("jlbackend.jl")
 
 export GPUArray, gpu_call, thread_blocks_heuristic
 export linear_index, @linearidx, @cartesianidx

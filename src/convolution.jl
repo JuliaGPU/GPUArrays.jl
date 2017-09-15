@@ -1,4 +1,3 @@
-
 function convolution_kernel(
         imgSrc::AbstractArray{T},
         kernelValues,
@@ -45,9 +44,6 @@ function convolution_kernel(
     imgConvolved[ii+wBy2, jj+wBy2] = P[idX+wBy2][idY+wBy2]
 end
 
-
-using GPUArrays, ImageFiltering, FileIO, Colors, ColorVectorSpace, BenchmarkTools
-using GPUArrays: is_gpu, gpu_ind2sub, gpu_sub2ind
 
 function convolution_kernel(state, A::AbstractArray{T}, out, K, Asize, Ksize) where T
     ilin = linear_index(state)

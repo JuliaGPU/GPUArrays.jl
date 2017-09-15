@@ -1,5 +1,3 @@
-ctx = opencl(is_gpu)
-# ctx = threaded()
 img = RGB{Float32}.(load(homedir()*"/test.jpg"));
 
 a = GPUArray(img);

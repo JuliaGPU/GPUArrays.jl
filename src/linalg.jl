@@ -1,6 +1,3 @@
-# using GPUArrays, CLArrays, OpenCL
-# import Transpiler: cli
-# # TODO generalize to CUDAnative
 # function transpose_kernel!(
 #         state, At, A, width, height, A_local, ::Val{BLOCK}
 #     ) where BLOCK

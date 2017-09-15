@@ -37,7 +37,7 @@ function device(A::GPUArray)
 end
 
 
-@inline function synchronize_threads(A)
+@inline function synchronize_threads(state)
     CUDAnative.__syncthreads()
 end
 
