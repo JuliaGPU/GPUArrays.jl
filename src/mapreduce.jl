@@ -1,5 +1,9 @@
 #############################
 # reduce
+# functions in base implemented with a direct loop need to be overloaded to use mapreduce
+any(pred, A::GPUArray) = Bool(mapreduce(pred, |, Cint(0), (u)))
+count(pred, A::GPUArray) = Int(mapreduce(pred, +, Cuint(0), A))
+
 
 # hack to get around of fetching the first element of the GPUArray
 # as a startvalue, which is a bit complicated with the current reduce implementation
@@ -28,8 +32,7 @@ function Base.mapreduce{T, N}(f::Function, op::Function, A::GPUArray{T, N})
     v0 = startvalue(op, OT) # TODO do this better
     mapreduce(f, op, v0, A)
 end
-
-
+function acc_mapreduce end
 function Base.mapreduce(f, op, v0, A::GPUArray, B::GPUArray, C::Number)
     acc_mapreduce(f, op, v0, A, (B, C))
 end
@@ -65,7 +68,3 @@ function Base._mapreducedim!(f, op, R::GPUArray, A::GPUArray)
     gpu_call(mapreducedim_kernel, R, (f, op, R, A, Cuint(slice_size), Cuint.(size(A)), Cuint(dim)))
     return R
 end
-
-
-any(pred, A::GPUArray) = Bool(mapreduce(isnan, |, Cint(0), (u)))
-count(pred, A::GPUArray) = Int(mapreduce(pred, +, Cuint(0), A))

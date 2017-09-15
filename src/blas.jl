@@ -62,13 +62,28 @@ for elty in (Float32, Float64, Complex64, Complex128)
             elseif trans == 'T' && (length(X) != m || length(Y) != n)
                 throw(DimensionMismatch("A.' has dimensions $n, $m, X has length $(length(X)) and Y has length $(length(Y))"))
             end
-            ctx = context(A)
-            blasmod = blas_module(ctx)
+            blasmod = blas_module(A)
             blasmod.gemv!(
                 trans, alpha,
-                blasbuffer(ctx, A), blasbuffer(ctx, X), beta, blasbuffer(ctx, Y)
+                blasbuffer(A), blasbuffer(X), beta, blasbuffer(Y)
             )
             Y
+        end
+    end
+end
+
+
+for elty in (Float32, Float64, Complex64, Complex128)
+    @eval begin
+        function Base.BLAS.axpy!(
+                alpha::Number, x::GPUArray{$elty}, y::GPUArray{$elty}
+            )
+            if length(x) != length(y)
+                throw(DimensionMismatch("x has length $(length(x)), but y has length $(length(y))"))
+            end
+            blasmod = blas_module(A)
+            blasmod.axpy!($elty(alpha), blasbuffer(dx), blasbuffer(dx))
+            y
         end
     end
 end

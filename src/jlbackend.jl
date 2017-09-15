@@ -78,6 +78,10 @@ function gpu_call(f, A::JLArray, args::Tuple, blocks = nothing, threads = C_NULL
 end
 
 # "intrinsics"
+struct JLDevice end
+device(x::JLArray) = JLDevice()
+threads(dev::JLDevice) = 256
+
 
 @inline synchronize_threads(::JLState) = nothing
 
