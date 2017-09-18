@@ -1,4 +1,6 @@
 using GPUArrays
+import Base: rand, rand!
+
 function TausStep(z::Unsigned, S1::Integer, S2::Integer, S3::Integer, M::Unsigned)
     b = (((z << S1) ⊻ z) >> S2)
     return (((z & M) << S3) ⊻ b)
@@ -44,7 +46,7 @@ let rand_state_dict = Dict()
         end
     end
 end
-function Base.rand!(A::GPUArray{T}) where T <: AbstractFloat
+function rand!(A::GPUArray{T}) where T <: AbstractFloat
     rstates = cached_state(A)
     gpu_call(A, (rstates, A,)) do state, randstates, a
         idx = linear_index(state)
@@ -53,4 +55,11 @@ function Base.rand!(A::GPUArray{T}) where T <: AbstractFloat
         return
     end
     A
+end
+
+rand{T <: GPUArray, ET}(::Type{T}, ::Type{ET}, size...) = rand(T, ET, size)
+rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Integer}) where {T, N} = rand(A, T, size)
+function rand(X::Type{<: GPUArray}, ::Type{ET}, size...) where ET
+    A = similar(X, ET, size)
+    rand!(A)
 end

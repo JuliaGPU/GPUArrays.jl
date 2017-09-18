@@ -1,8 +1,6 @@
 import Base: count, map!, permutedims!, cat_t, vcat, hcat
 using Base: @pure
 
-count(pred, A::GPUArray) = Int(mapreduce(pred, +, Cuint(0), A))
-
 allequal(x) = true
 allequal(x, y, z...) = x == y && allequal(y, z...)
 function map!(f, y::GPUArray, xs::GPUArray...)
@@ -74,7 +72,7 @@ end
     (ind-l*indnext+f, _ind2sub(Base.tail(inds), indnext)...)
 end
 
-@pure function gpu_sub2ind{N, T}(dims::NTuple{N}, I::NTuple{N, T})
+@pure function gpu_sub2ind{N, N2, T}(dims::NTuple{N}, I::NTuple{N2, T})
     Base.@_inline_meta
     _sub2ind(NTuple{N, T}(dims), T(1), T(1), I...)
 end

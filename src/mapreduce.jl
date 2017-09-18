@@ -3,6 +3,8 @@
 # functions in base implemented with a direct loop need to be overloaded to use mapreduce
 any(pred, A::GPUArray) = Bool(mapreduce(pred, |, Cint(0), (u)))
 count(pred, A::GPUArray) = Int(mapreduce(pred, +, Cuint(0), A))
+Base.countnz(A::GPUArray) = Int(mapreduce(x-> x != 0, +, Cuint(0), A))
+Base.countnz(A::GPUArray, dim) = Int(mapreducedim(x-> x != 0, +, Cuint(0), A, dim))
 
 
 # hack to get around of fetching the first element of the GPUArray
@@ -67,4 +69,71 @@ function Base._mapreducedim!(f, op, R::GPUArray, A::GPUArray)
     slice_size = size(A, dim)
     gpu_call(mapreducedim_kernel, R, (f, op, R, A, Cuint(slice_size), Cuint.(size(A)), Cuint(dim)))
     return R
+end
+
+
+import GPUArrays: acc_mapreduce
+using Transpiler.cli: get_local_id, get_global_id, barrier, CLK_LOCAL_MEM_FENCE
+using Transpiler.cli: get_local_size, get_global_size, get_group_id
+using GPUArrays: blockdim_x, blockidx_x, threadidx_x, synchronize, synchronize_threads, device, global_size
+using GPUArrays: linear_index, global_size, blockidx_x, blockdim_x, threadidx_x
+
+for i = 0:10
+    args = ntuple(x-> Symbol("arg_", x), i)
+    fargs = ntuple(x-> :(broadcast_index($(args[x]), length, global_index)), i)
+    @eval begin
+        # http://developer.amd.com/resources/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
+        function reduce_kernel(state, f, op, v0, A, tmp_local, result, $(args...))
+            ui0 = Cuint(0); ui1 = Cuint(1); ui2 = Cuint(2)
+            global_index = linear_index(state)
+            acc = v0
+            # # Loop sequentially over chunks of input vector
+            while global_index <= length(A)
+                element = f(A[global_index], $(fargs...))
+                acc = op(acc, element)
+                global_index += global_size(state)
+            end
+            # Perform parallel reduction
+            local_index = threadidx_x(state) - ui1
+            tmp_local[local_index + ui1] = acc
+            synchronize_threads(state)
+
+            offset = blockdim_x(state) ÷ ui2
+            while offset > ui0
+                if (local_index < offset)
+                    other = tmp_local[local_index + offset + ui1]
+                    mine = tmp_local[local_index + ui1]
+                    tmp_local[local_index + ui1] = op(mine, other)
+                end
+                synchronize_threads(state)
+                offset = offset ÷ ui2
+            end
+            if local_index == ui0
+                result[blockidx_x(state)] = tmp_local[ui1]
+            end
+            return
+        end
+    end
+
+end
+
+to_cpu(x) = x
+to_cpu(x::GPUArray) = Array(x)
+
+function acc_mapreduce{T, OT, N}(
+        f, op, v0::OT, A::GPUArray{T, N}, rest::Tuple
+    )
+    dev = device(A)
+    blocksize = 80
+    threads = 256
+    if length(A) <= blocksize * threads
+        args = zip(Array(A), to_cpu.(rest)...)
+        return mapreduce(x-> f(x...), op, v0, args)
+    end
+    out = similar(A, OT, (blocksize,))
+    fill!(out, v0)
+    lmem = LocalMemory{OT}(threads)
+    args = (f, op, v0, A, lmem, out, rest...)
+    gpu_call(reduce_kernel, A, args, (blocksize * threads,), (threads,))
+    reduce(op, Array(out))
 end

@@ -2,11 +2,14 @@
 Abstraction over the GPU thread indexing functions.
 Uses CUDA like names
 =#
-for f in (:blockidx, :blockdim, :threadidx), sym in (:x, :y, :z)
-    fname = Symbol(string(f, '_', sym))
-    @eval $fname(state)::Cuint = error("Not implemented")
-    @eval export $fname
+for sym in (:x, :y, :z)
+    for f in (:blockidx, :blockdim, :threadidx, :griddim)
+        fname = Symbol(string(f, '_', sym))
+        @eval $fname(state)::Cuint = error("Not implemented")
+        @eval export $fname
+    end
 end
+
 """
 in CUDA terms `__synchronize`
 """
@@ -15,10 +18,13 @@ function synchronize_threads(state)
 end
 
 """
-linear index in a GPU kernel
+linear index in a GPU kernel (equal to  OpenCL.get_global_id)
 """
 @inline function linear_index(state)
     Cuint((blockidx_x(state) - Cuint(1)) * blockdim_x(state) + threadidx_x(state))
+end
+@inline function global_size(state)
+    griddim_x(state) * blockdim_x(state)
 end
 
 """
@@ -36,10 +42,10 @@ function device(A::GPUArray)
     # makes it easier to write generic code that also works for AbstractArrays
 end
 
-
-@inline function synchronize_threads(state)
-    CUDAnative.__syncthreads()
-end
+# 
+# @inline function synchronize_threads(state)
+#     CUDAnative.__syncthreads()
+# end
 
 macro linearidx(A, statesym = :state)
     quote

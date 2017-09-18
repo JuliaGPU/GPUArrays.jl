@@ -7,12 +7,25 @@ struct JLArray{T, N} <: GPUArray{T, N}
     size::NTuple{N, Int}
 end
 
+"""
+Thread group local memory
+"""
+immutable LocalMem{N, T}
+    x::NTuple{N, Vector{T}}
+end
+
 size(x::JLArray) = x.size
 pointer(x::JLArray) = pointer(x.data)
-to_device(x::JLArray) = x.data
-to_device(x::Tuple) = to_device.(x)
-to_device(x::RefValue{<: JLArray}) = RefValue(to_device(x[]))
-to_device(x) = x
+to_device(state, x::JLArray) = x.data
+to_device(state, x::Tuple) = to_device.(state, x)
+to_device(state, x::RefValue{<: JLArray}) = RefValue(to_device(state, x[]))
+to_device(state, x) = x
+# creates a `local` vector for each thread group
+to_device(state, x::LocalMemory{T}) where T = LocalMem(ntuple(i-> Vector{T}(x.size), blockdim_x(state)))
+
+to_blocks(state, x) = x
+# unpacks local memory for each block
+to_blocks(state, x::LocalMem) = x.x[blockidx_x(state)]
 
 function (::Type{JLArray{T, N}})(size::NTuple{N, Integer}) where {T, N}
     JLArray{T, N}(Array{T, N}(size), size)
@@ -47,31 +60,35 @@ end
 
 mutable struct JLState{N}
     blockdim::NTuple{N, Int}
-    threads::NTuple{N, Int}
+    griddim::NTuple{N, Int}
 
     blockidx::NTuple{N, Int}
     threadidx::NTuple{N, Int}
 end
-
 
 function gpu_call(f, A::JLArray, args::Tuple, blocks = nothing, threads = C_NULL)
     if blocks == nothing
         blocks, threads = thread_blocks_heuristic(length(A))
     elseif isa(blocks, Integer)
         blocks = (blocks,)
-        if threads == C_NULL
-            threads = (1,)
-        end
+    end
+    if threads == C_NULL
+        threads = (1,)
     end
     idx = ntuple(i-> 1, length(blocks))
     blockdim = ceil.(Int, blocks ./ threads)
-    state = JLState(threads, threads, idx, idx)
-    device_args = to_device.(args)
+    state = JLState(threads, blockdim, idx, idx)
+    device_args = to_device.(state, args)
+    tasks = Vector{Task}(threads...)
     for blockidx in CartesianRange(blockdim)
         state.blockidx = blockidx.I
+        block_args = to_blocks.(state, device_args)
         for threadidx in CartesianRange(threads)
-            state.threadidx = threadidx.I
-            f(state, device_args...)
+            thread_state = JLState(state.blockdim, state.griddim, state.blockidx, threadidx.I)
+            tasks[threadidx] = @async f(thread_state, block_args...)
+        end
+        for t in tasks
+            wait(t)
         end
     end
     return
@@ -83,11 +100,22 @@ device(x::JLArray) = JLDevice()
 threads(dev::JLDevice) = 256
 
 
-@inline synchronize_threads(::JLState) = nothing
+@inline function synchronize_threads(::JLState)
+    #=
+    All threads are getting started asynchronously,so a yield will
+    yield to the next execution of the same function, which should call yield
+    at the exact same point in the program, leading to a chain of yields  effectively syncing
+    the tasks (threads).
+    =#
+    yield()
+    return
+end
 
-for f in (:blockidx, :blockdim, :threadidx), (i, sym) in enumerate((:x, :y, :z))
-    fname = Symbol(string(f, '_', sym))
-    @eval $fname(state::JLState) = Cuint(state.$f[$i])
+for (i, sym) in enumerate((:x, :y, :z))
+    for f in (:blockidx, :blockdim, :threadidx, :griddim)
+        fname = Symbol(string(f, '_', sym))
+        @eval $fname(state::JLState) = Cuint(state.$f[$i])
+    end
 end
 
 blas_module(::JLArray) = Base.LinAlg.BLAS

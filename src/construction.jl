@@ -1,4 +1,4 @@
-import Base: fill!, rand, similar, eye, zeros, fill
+import Base: fill!, similar, eye, zeros, fill
 
 
 function fill(X::Type{<: GPUArray}, val, dims::Integer...)
@@ -30,10 +30,6 @@ function eye(T::Type{<: GPUArray}, dims::NTuple{2, Integer})
     res = zeros(T, dims)
     gpu_call(eyekernel, res, (res, Cuint(size(res, 1))), minimum(dims))
     res
-end
-
-function rand{T <: GPUArray, ET}(::Type{T}, ::Type{ET}, size...)
-    T(rand(ET, size...))
 end
 
 (T::Type{<: GPUArray})(dims::Integer...) = T(dims)

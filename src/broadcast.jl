@@ -27,6 +27,19 @@ function broadcast!(f::typeof(identity), A::GPUArray, val::Number)
     gpu_call(const_kernel2, A, (A, valconv, Cuint(length(A))))
     A
 end
+@inline function broadcast_t(f, T::Type{Bool}, shape, it, A::GPUArrays.GPUArray, Bs::Vararg{Any,N}) where N
+    C = similar(A, T, shape)
+    keeps, Idefaults = map_newindexer(shape, A, Bs)
+    _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, it)
+    return C
+end
+@inline function broadcast_t(f, T::Type{Bool}, shape, it, A::GPUArrays.GPUArray, B::GPUArrays.GPUArray, Bs::Vararg{Any,N}) where N
+    C = similar(A, T, shape)
+    Bs = (B, Bs...)
+    keeps, Idefaults = map_newindexer(shape, A, Bs)
+    _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, it)
+    return C
+end
 
 @inline function broadcast_t(
         f, ::Type{T}, shape, iter, A::GPUArray, Bs::Vararg{Any,N}
@@ -195,7 +208,13 @@ end
 @pure newindex(I, ilin, keep::Tuple{}, Idefault::Tuple{}, size::Tuple{}) = Cuint(1)
 
 # optimize for 1D arrays
-@pure newindex(I::NTuple{1}, ilin, keep::NTuple{1}, Idefault, size) = ilin
+@pure function newindex(I::NTuple{1}, ilin, keep::NTuple{1}, Idefault, size)
+    if Bool(keep[1])
+        return ilin
+    else
+        return Idefault[1]
+    end
+end
 
 # differently shaped arrays
 @generated function newindex{N, T}(I, ilin::T, keep::NTuple{N}, Idefault, size)

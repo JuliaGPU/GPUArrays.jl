@@ -16,7 +16,7 @@ include("vectors.jl")
 include("testsuite/testsuite.jl")
 include("jlbackend.jl")
 
-export GPUArray, gpu_call, thread_blocks_heuristic
+export GPUArray, gpu_call, thread_blocks_heuristic, global_size
 export linear_index, @linearidx, @cartesianidx
 
 end # module

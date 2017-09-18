@@ -234,3 +234,9 @@ function _reshape(A::GPUArray{T}, dims::Dims) where T
     prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
     return unsafe_reinterpret(T, A, dims)
 end
+#ambig
+function _reshape(A::GPUArray{T, 1}, dims::Tuple{Int}) where T
+    n = Base._length(A)
+    prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
+    return unsafe_reinterpret(T, A, dims)
+end

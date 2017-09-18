@@ -39,6 +39,7 @@ for elty in (Float64, Float32)
     end
 end
 
+Base.scale!(s::Real, X::GPUArray) = scale!(X, s)
 function Base.scale!(X::GPUArray{T}, s::Real) where T <: BLAS.BlasComplex
     R = typeof(real(zero(T)))
     buff = reinterpret(R, vec(X))
@@ -81,8 +82,8 @@ for elty in (Float32, Float64, Complex64, Complex128)
             if length(x) != length(y)
                 throw(DimensionMismatch("x has length $(length(x)), but y has length $(length(y))"))
             end
-            blasmod = blas_module(A)
-            blasmod.axpy!($elty(alpha), blasbuffer(dx), blasbuffer(dx))
+            blasmod = blas_module(x)
+            blasmod.axpy!($elty(alpha), blasbuffer(vec(x)), blasbuffer(vec(y)))
             y
         end
     end
