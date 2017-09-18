@@ -39,6 +39,8 @@ include("fft.jl")
 include("gpuinterface.jl")
 include("linalg.jl")
 include("mapreduce.jl")
+include("base.jl")
+include("indexing.jl")
 # include("vector.jl")
 
 function supported_eltypes()
@@ -50,12 +52,14 @@ Runs the test suite on array type `Typ`
 """
 function run_tests(Typ)
     run_gpuinterface(Typ)
+    run_base(Typ)
     run_blas(Typ)
     run_broadcasting(Typ)
     run_construction(Typ)
     run_fft(Typ)
     run_linalg(Typ)
     run_mapreduce(Typ)
+    run_indexing(Typ)
 end
 
 export against_base, run_tests, supported_eltypes

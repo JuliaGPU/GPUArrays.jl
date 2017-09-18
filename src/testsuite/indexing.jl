@@ -1,9 +1,7 @@
-module Indexing
-
 using GPUArrays, StaticArrays
 using Base.Test, GPUArrays.TestSuite
 
-function main(Typ)
+function run_indexing(Typ)
     @testset "indexing" begin
         for T in (Float32, Int32, SVector{3, Float32})
             @testset "Indexing with $T" begin
@@ -43,6 +41,4 @@ function main(Typ)
             end
         end
     end
-end
-
 end

@@ -21,22 +21,25 @@ map!(f, y::GPUArray, x1::GPUArray, x2::GPUArray) =
     invoke(map!, Tuple{Any,GPUArray, Vararg{GPUArray}}, f, y, x1, x2)
 
 
-@generated function nindex(i::Int, ls::NTuple{N}) where N
+@generated function nindex(i::T, ls::NTuple{N}) where {T, N}
     quote
         Base.@_inline_meta
-        $(foldr((n, els) -> :(i ≤ ls[$n] ? ($n, i) : (i -= ls[$n]; $els)), :(-1, -1), 1:N))
+        $(foldr(:($T(0), $T(0)), T(1):T(N)) do n, els
+            :(i ≤ ls[$n] ? ($T($n), i) : (i -= $T(ls[$n]); $els))
+        end)
     end
 end
-
-function catindex(dim, I::NTuple{N}, shapes) where N
-    @inbounds x, i = nindex(I[dim], getindex.(shapes, dim))
-    x, ntuple(n -> n == dim ? Cuint(i) : I[n], Val{N})
+function catindex(dim, I::NTuple{N, T}, shapes) where {T, N}
+    xi = nindex(I[dim], map(s-> s[dim], shapes))
+    x = xi[1]; i = xi[2]
+    x, ntuple(n -> n == dim ? i : I[n], Val{N})
 end
 
 function _cat(dim, dest, xs...)
-    gpu_call(kernel, dest, (dim, dest, xs)) do state, dim, dest, xs
+    gpu_call(dest, (Cuint(dim), dest, xs)) do state, dim, dest, xs
         I = @cartesianidx dest state
-        n, I′ = catindex(dim, I, size.(xs))
+        nI = catindex(dim, I, size.(xs))
+        n = nI[1]; I′ = nI[2]
         @inbounds dest[I...] = xs[n][I′...]
         return
     end
