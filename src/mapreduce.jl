@@ -71,13 +71,6 @@ function Base._mapreducedim!(f, op, R::GPUArray, A::GPUArray)
     return R
 end
 
-
-import GPUArrays: acc_mapreduce
-using Transpiler.cli: get_local_id, get_global_id, barrier, CLK_LOCAL_MEM_FENCE
-using Transpiler.cli: get_local_size, get_global_size, get_group_id
-using GPUArrays: blockdim_x, blockidx_x, threadidx_x, synchronize, synchronize_threads, device, global_size
-using GPUArrays: linear_index, global_size, blockidx_x, blockdim_x, threadidx_x
-
 for i = 0:10
     args = ntuple(x-> Symbol("arg_", x), i)
     fargs = ntuple(x-> :(broadcast_index($(args[x]), length, global_index)), i)
