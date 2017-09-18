@@ -30,8 +30,6 @@ function against_base(f, Typ, sizes...)
 end
 
 
-
-
 include("blas.jl")
 include("broadcasting.jl")
 include("construction.jl")
