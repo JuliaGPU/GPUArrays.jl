@@ -59,6 +59,7 @@ function to_cartesian(A, indices::Tuple)
         isa(val, Integer) && return val
         isa(val, UnitRange) && return first(val)
         isa(val, Colon) && return 1
+        isa(val, Base.Slice{Base.OneTo{Int}}) && return 1
         error("GPU indexing only defined for integers or unit ranges. Found: $val")
     end)
     stop = CartesianIndex(ntuple(length(indices)) do i
@@ -66,6 +67,7 @@ function to_cartesian(A, indices::Tuple)
         isa(val, Integer) && return val
         isa(val, UnitRange) && return last(val)
         isa(val, Colon) && return size(A, i)
+        isa(val, Base.Slice{Base.OneTo{Int}}) && return size(A, i)
         error("GPU indexing only defined for integers or unit ranges. Found: $val")
     end)
     CartesianRange(start, stop)
