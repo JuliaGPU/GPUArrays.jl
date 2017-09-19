@@ -64,6 +64,39 @@ mutable struct JLState{N}
 
     blockidx::NTuple{N, Int}
     threadidx::NTuple{N, Int}
+    localmem_counter::Int
+    localmems::Vector{Vector{Vector}}
+end
+
+function JLState(threads::NTuple{N}, blockdim::NTuple{N}) where N
+    idx = ntuple(i-> 1, Val{N})
+    blockcount = prod(blockdim)
+    lmems = [Vector{Vector}(0) for i in 1:blockcount]
+    JLState{N}(threads, blockdim, idx, idx, 0, lmems)
+end
+
+function JLState(state::JLState{N}, threadidx::NTuple{N}) where N
+    JLState{N}(
+        state.blockdim,
+        state.griddim,
+        state.blockidx,
+        threadidx,
+        0,
+        state.localmems
+    )
+end
+
+function LocalMemory(state::JLState, T, N)
+    state.localmem_counter += 1
+    lmems = state.localmems[blockidx_x(state)]
+    # first invokation in block
+    if length(lmems) < state.localmem_counter
+        lmem = zeros(T, N)
+        push!(lmems, lmem)
+        return lmem
+    else
+        return lmems[state.localmem_counter]
+    end
 end
 
 function gpu_call(f, A::JLArray, args::Tuple, blocks = nothing, threads = C_NULL)
@@ -77,14 +110,14 @@ function gpu_call(f, A::JLArray, args::Tuple, blocks = nothing, threads = C_NULL
     end
     idx = ntuple(i-> 1, length(blocks))
     blockdim = ceil.(Int, blocks ./ threads)
-    state = JLState(threads, blockdim, idx, idx)
+    state = JLState(threads, blockdim)
     device_args = to_device.(state, args)
     tasks = Vector{Task}(threads...)
     for blockidx in CartesianRange(blockdim)
         state.blockidx = blockidx.I
         block_args = to_blocks.(state, device_args)
         for threadidx in CartesianRange(threads)
-            thread_state = JLState(state.blockdim, state.griddim, state.blockidx, threadidx.I)
+            thread_state = JLState(state, threadidx.I)
             tasks[threadidx] = @async f(thread_state, block_args...)
         end
         for t in tasks

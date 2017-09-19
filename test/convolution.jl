@@ -1,10 +1,18 @@
-img = RGB{Float32}.(load(homedir()*"/test.jpg"));
+using GPUArrays, Colors, FileIO, ImageFiltering
+using CLArrays
+using GPUArrays: synchronize_threads
+import GPUArrays: LocalMemory
+using CLArrays
 
-a = GPUArray(img);
+
+img = RGB{Float32}.(load(homedir()*"/Desktop/backround.jpg"));
+
+a = CLArray(img);
 out = similar(a);
-k = GPUArray(Float32.(collect(Kernel.gaussian(3))));
+k = CLArray(Float32.(collect(Kernel.gaussian(3))));
 imgc = similar(img)
-@btime conv!($a, $out, $k);
-@btime
-@which imfilter!(imgc, img, (Kernel.gaussian(3)))
-Array(out)
+
+# convolution!(a, out, k);
+# Array(out)
+# outc = similar(img)
+# copy!(outc, out)

@@ -11,6 +11,14 @@ for sym in (:x, :y, :z)
 end
 
 """
+Creates a block local array pointer with `T` being the element type
+and `N` the length. Both T and N need to be static!
+"""
+function LocalMemory(state, T, N)
+    error("Not implemented")
+end
+
+"""
 in CUDA terms `__synchronize`
 """
 function synchronize_threads(state)
@@ -42,7 +50,7 @@ function device(A::GPUArray)
     # makes it easier to write generic code that also works for AbstractArrays
 end
 
-# 
+#
 # @inline function synchronize_threads(state)
 #     CUDAnative.__syncthreads()
 # end

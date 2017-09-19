@@ -76,8 +76,9 @@ for i = 0:10
     fargs = ntuple(x-> :(broadcast_index($(args[x]), length, global_index)), i)
     @eval begin
         # http://developer.amd.com/resources/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
-        function reduce_kernel(state, f, op, v0, A, tmp_local, result, $(args...))
+        function reduce_kernel(state, f, op, v0::T, A, ::Val{LMEM}, result, $(args...)) where {T, LMEM}
             ui0 = Cuint(0); ui1 = Cuint(1); ui2 = Cuint(2)
+            tmp_local = LocalMemory(state, T, LMEM)
             global_index = linear_index(state)
             acc = v0
             # # Loop sequentially over chunks of input vector
@@ -125,8 +126,7 @@ function acc_mapreduce{T, OT, N}(
     end
     out = similar(A, OT, (blocksize,))
     fill!(out, v0)
-    lmem = LocalMemory{OT}(threads)
-    args = (f, op, v0, A, lmem, out, rest...)
+    args = (f, op, v0, A, Val{threads}(), out, rest...)
     gpu_call(reduce_kernel, A, args, (blocksize * threads,), (threads,))
     reduce(op, Array(out))
 end
