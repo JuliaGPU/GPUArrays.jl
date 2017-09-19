@@ -106,13 +106,13 @@ function gpu_call(f, A::JLArray, args::Tuple, blocks = nothing, threads = C_NULL
         blocks = (blocks,)
     end
     if threads == C_NULL
-        threads = (1,)
+        threads = map(x-> 1, blocks)
     end
     idx = ntuple(i-> 1, length(blocks))
     blockdim = ceil.(Int, blocks ./ threads)
     state = JLState(threads, blockdim)
     device_args = to_device.(state, args)
-    tasks = Vector{Task}(threads...)
+    tasks = Vector{Task}(prod(threads))
     for blockidx in CartesianRange(blockdim)
         state.blockidx = blockidx.I
         block_args = to_blocks.(state, device_args)
@@ -131,6 +131,7 @@ end
 struct JLDevice end
 device(x::JLArray) = JLDevice()
 threads(dev::JLDevice) = 256
+blocks(dev::JLDevice) = (256, 256, 256)
 
 
 @inline function synchronize_threads(::JLState)
