@@ -21,40 +21,43 @@ map!(f, y::GPUArray, x1::GPUArray, x2::GPUArray) =
     invoke(map!, Tuple{Any,GPUArray, Vararg{GPUArray}}, f, y, x1, x2)
 
 
-@generated function nindex(i::T, ls::NTuple{N}) where {T, N}
-    quote
-        Base.@_inline_meta
-        $(foldr(:($T(0), $T(0)), T(1):T(N)) do n, els
-            :(i ≤ ls[$n] ? ($T($n), i) : (i -= $T(ls[$n]); $els))
-        end)
-    end
-end
-function catindex(dim, I::NTuple{N, T}, shapes) where {T, N}
-    xi = nindex(I[dim], map(s-> s[dim], shapes))
-    x = xi[1]; i = xi[2]
-    x, ntuple(n -> n == dim ? i : I[n], Val{N})
-end
+# TODO find out why this segfaults julia without stack trace on AMD
+# produces wrong results on Titan X and passes on GTX 950..........
 
-function _cat(dim, dest, xs...)
-    gpu_call(dest, (Cuint(dim), dest, xs)) do state, dim, dest, xs
-        I = @cartesianidx dest state
-        nI = catindex(dim, I, size.(xs))
-        n = nI[1]; I′ = nI[2]
-        @inbounds dest[I...] = xs[n][I′...]
-        return
-    end
-    return dest
-end
-
-function cat_t(dims::Integer, T::Type, x::GPUArray, xs::GPUArray...)
-    catdims = Base.dims2cat(dims)
-    shape = Base.cat_shape(catdims, (), size.((x, xs...))...)
-    dest = Base.cat_similar(x, T, shape)
-    _cat(dims, dest, x, xs...)
-end
-
-vcat(xs::GPUArray...) = cat(1, xs...)
-hcat(xs::GPUArray...) = cat(2, xs...)
+# @generated function nindex(i::T, ls::NTuple{N}) where {T, N}
+#     quote
+#         Base.@_inline_meta
+#         $(foldr(:($T(0), $T(0)), T(1):T(N)) do n, els
+#             :(i ≤ ls[$n] ? ($T($n), i) : (i -= $T(ls[$n]); $els))
+#         end)
+#     end
+# end
+# function catindex(dim, I::NTuple{N, T}, shapes) where {T, N}
+#     xi = nindex(I[dim], map(s-> s[dim], shapes))
+#     x = xi[1]; i = xi[2]
+#     x, ntuple(n -> n == dim ? i : I[n], Val{N})
+# end
+#
+# function _cat(dim, dest, xs...)
+#     gpu_call(dest, (Cuint(dim), dest, xs)) do state, dim, dest, xs
+#         I = @cartesianidx dest state
+#         nI = catindex(dim, I, size.(xs))
+#         n = nI[1]; I′ = nI[2]
+#         @inbounds dest[I...] = xs[n][I′...]
+#         return
+#     end
+#     return dest
+# end
+#
+# function cat_t(dims::Integer, T::Type, x::GPUArray, xs::GPUArray...)
+#     catdims = Base.dims2cat(dims)
+#     shape = Base.cat_shape(catdims, (), size.((x, xs...))...)
+#     dest = Base.cat_similar(x, T, shape)
+#     _cat(dims, dest, x, xs...)
+# end
+#
+# vcat(xs::GPUArray...) = cat(1, xs...)
+# hcat(xs::GPUArray...) = cat(2, xs...)
 
 
 # Base functions that are sadly not fit for the the GPU yet (they only work for Int64)
