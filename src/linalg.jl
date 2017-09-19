@@ -1,12 +1,14 @@
 function transpose_kernel!(
-        state, At, A, width, height, A_local, ::Val{BLOCK}
-    ) where BLOCK
+        state, At, A::AbstractArray{T}, width, height, ::Val{BLOCK}, ::Val{LMem}
+    ) where {BLOCK, LMem, T}
 
     ui1 = UInt32(1)
     bidx_x = blockidx_x(state) - ui1
     bidx_y = blockidx_y(state) - ui1
     tidx_x = threadidx_x(state) - ui1
     tidx_y = threadidx_y(state) - ui1
+
+    A_local = LocalMemory(state, T, LMem)
 
     base_idx_a = bidx_x * BLOCK + bidx_y * (BLOCK * width)
     base_idx_a_t = bidx_y * BLOCK + bidx_x * (BLOCK * height)
@@ -31,8 +33,8 @@ function Base.transpose!{T}(At::GPUArray{T, 2}, A::GPUArray{T, 2})
     dev = GPUArrays.device(A)
     block_size = max_block_size(dev, size(A)...)
     outsize = UInt32.(size(At))
-    lmem = GPUArrays.LocalMemory{T}(block_size * (block_size + 1))
-    args = (At, A, outsize..., lmem, Val{block_size}())
+    lmem = block_size * (block_size + 1)
+    args = (At, A, outsize..., Val{block_size}(), Val{lmem}())
     gpu_call(transpose_kernel!, At, args, (block_size, block_size))
     At
 end
