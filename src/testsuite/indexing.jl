@@ -3,15 +3,15 @@ using Base.Test, GPUArrays.TestSuite
 
 function run_indexing(Typ)
     @testset "indexing" begin
-        for T in (Float32, Int32, SVector{3, Float32})
+        for T in (Float32, Int32#=, SVector{3, Float32}=#)
             @testset "Indexing with $T" begin
                 x = rand(T, 32)
                 src = Typ(x)
                 for (i, xi) in enumerate(x)
                     @test src[i] == xi
                 end
-                @test src[1:3] == x[1:3]
-                @test src[3:end] == x[3:end]
+                @test Array(src[1:3]) == x[1:3]
+                @test Array(src[3:end]) == x[3:end]
             end
         end
 
