@@ -1,4 +1,4 @@
-import Base: fill!, similar, eye, zeros, fill
+import Base: fill!, similar, eye, zeros, ones, fill
 
 
 function fill(X::Type{<: GPUArray}, val, dims::Integer...)
@@ -16,10 +16,12 @@ function fill!{T, N}(A::GPUArray{T, N}, val)
 end
 
 zeros(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, zero(eltype(T)), dims)
+ones(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, one(eltype(T)), dims)
 
 function eyekernel(state, res::AbstractArray{T}, stride) where T
     i = linear_index(state)
-    ilin = (stride * (i - 1)) + i
+    i > stride && return
+    ilin = (stride * (i - Cuint(1))) + i
     @inbounds res[ilin] = one(T)
     return
 end

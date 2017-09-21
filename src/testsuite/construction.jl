@@ -101,6 +101,16 @@ function value_constructor(Typ)
             @test Array(x2) ≈ x
             @test Array(x3) ≈ x
 
+            x = ones(T, 2, 2)
+            x1 = ones(Typ{T}, 2, 2)
+            x2 = ones(Typ{T}, (2, 2))
+            x3 = ones(Typ{T, 2}, (2, 2))
+            @test Array(x1) ≈ x
+            @test Array(x2) ≈ x
+            @test Array(x3) ≈ x
+
+            fill!(x, 0)
+
             x1 = fill(Typ{T}, 0f0, 2, 2)
             x2 = fill(Typ{T}, T(0), (2, 2))
             x3 = fill(Typ{T, 2}, T(0), (2, 2))
@@ -114,6 +124,7 @@ function value_constructor(Typ)
             @test all(x-> x == Int32(77), Array(x2))
 
             x = eye(T, 2, 2)
+            
             x1 = eye(Typ{T, 2}, 2, 2)
             x2 = eye(Typ{T}, (2, 2))
             x3 = eye(Typ{T, 2}, (2, 2))

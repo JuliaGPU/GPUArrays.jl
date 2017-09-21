@@ -1,7 +1,7 @@
 using Base.Broadcast
 import Base.Broadcast: broadcast!, _broadcast!, broadcast_t
 using Base.Broadcast: map_newindexer
-using Base: @propagate_inbounds, @pure
+using Base: @propagate_inbounds, @pure, RefValue
 
 @inline function const_kernel(state, A, op, len)
     idx = linear_index(state)
@@ -72,17 +72,21 @@ function broadcast_t(f::Any, ::Type{Any}, ::Any, ::Any, A::GPUArrays.GPUArray, a
     error("Return type couldn't be inferred for broadcast. Func: $f, $(typeof(A)), $args")
 end
 
+deref(x) = x
+deref(x::RefValue) = (x[],) # RefValue doesn't work with CUDAnative
+
 function _broadcast!(
         func, out::GPUArray,
         keeps::K, Idefaults::ID,
         A::AT, Bs::BT, ::Type{Val{N}}, unused2 # we don't need those arguments
     ) where {N, K, ID, AT, BT}
+
     shape = Cuint.(size(out))
     args = (A, Bs...)
     descriptor_tuple = ntuple(length(args)) do i
         BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
     end
-    gpu_call(broadcast_kernel!, out, (func, out, shape, Cuint(length(out)), descriptor_tuple, A, Bs...))
+    gpu_call(broadcast_kernel!, out, (func, out, shape, Cuint(length(out)), descriptor_tuple, A,  deref.(Bs)...))
     out
 end
 
@@ -95,7 +99,7 @@ function Base.foreach(func, over::GPUArray, Bs...)
     descriptor_tuple = ntuple(length(args)) do i
         BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
     end
-    gpu_call(foreach_kernel, over, (func, shape, Cuint.(length(over)), descriptor_tuple, over, Bs...))
+    gpu_call(foreach_kernel, over, (func, shape, Cuint.(length(over)), descriptor_tuple, over, deref.(Bs)...))
     return
 end
 
@@ -110,6 +114,9 @@ immutable BroadcastDescriptorN{Typ, N} <: BroadcastDescriptor{Typ}
     size::NTuple{N, Cuint}
     keep::NTuple{N, Cuint}
     idefault::NTuple{N, Cuint}
+end
+function BroadcastDescriptor(val::RefValue, keep, idefault)
+    BroadcastDescriptorN{Tuple, 1}((Cuint(1),), (Cuint(0),), (Cuint(1),))
 end
 
 function BroadcastDescriptor(val, keep, idefault)

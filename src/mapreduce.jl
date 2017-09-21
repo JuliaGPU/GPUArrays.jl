@@ -1,10 +1,12 @@
+import Base: any, count, countnz
+
 #############################
 # reduce
 # functions in base implemented with a direct loop need to be overloaded to use mapreduce
 any(pred, A::GPUArray) = Bool(mapreduce(pred, |, Cint(0), (u)))
 count(pred, A::GPUArray) = Int(mapreduce(pred, +, Cuint(0), A))
-Base.countnz(A::GPUArray) = Int(mapreduce(x-> x != 0, +, Cuint(0), A))
-Base.countnz(A::GPUArray, dim) = Int(mapreducedim(x-> x != 0, +, Cuint(0), A, dim))
+countnz(A::GPUArray) = Int(mapreduce(x-> x != 0, +, Cuint(0), A))
+countnz(A::GPUArray, dim) = Int(mapreducedim(x-> x != 0, +, Cuint(0), A, dim))
 
 
 # hack to get around of fetching the first element of the GPUArray
@@ -79,7 +81,7 @@ for i = 0:10
         # http://developer.amd.com/resources/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
         function reduce_kernel(state, f, op, v0::T, A, ::Val{LMEM}, result, $(args...)) where {T, LMEM}
             ui0 = Cuint(0); ui1 = Cuint(1); ui2 = Cuint(2)
-            tmp_local = LocalMemory(state, T, LMEM)
+            tmp_local = @LocalMemory(state, T, LMEM)
             global_index = linear_index(state)
             acc = v0
             # # Loop sequentially over chunks of input vector
@@ -128,6 +130,6 @@ function acc_mapreduce{T, OT, N}(
     out = similar(A, OT, (blocksize,))
     fill!(out, v0)
     args = (f, op, v0, A, Val{threads}(), out, rest...)
-    gpu_call(reduce_kernel, A, args, (blocksize * threads,), (threads,))
+    gpu_call(reduce_kernel, A, args, ((blocksize,), (threads,)))
     reduce(op, Array(out))
 end

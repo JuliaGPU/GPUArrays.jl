@@ -65,13 +65,13 @@ mutable struct JLState{N}
     blockidx::NTuple{N, Int}
     threadidx::NTuple{N, Int}
     localmem_counter::Int
-    localmems::Vector{Vector{Vector}}
+    localmems::Vector{Vector{Array}}
 end
 
 function JLState(threads::NTuple{N}, blockdim::NTuple{N}) where N
     idx = ntuple(i-> 1, Val{N})
     blockcount = prod(blockdim)
-    lmems = [Vector{Vector}(0) for i in 1:blockcount]
+    lmems = [Vector{Array}(0) for i in 1:blockcount]
     JLState{N}(threads, blockdim, idx, idx, 0, lmems)
 end
 
@@ -86,12 +86,12 @@ function JLState(state::JLState{N}, threadidx::NTuple{N}) where N
     )
 end
 
-function LocalMemory(state::JLState, T, N)
+function LocalMemory(state::JLState, ::Type{T}, ::Val{N}, ::Val{C}) where {T, N, C}
     state.localmem_counter += 1
     lmems = state.localmems[blockidx_x(state)]
     # first invokation in block
     if length(lmems) < state.localmem_counter
-        lmem = zeros(T, N)
+        lmem = zeros(T, N...)
         push!(lmems, lmem)
         return lmem
     else
@@ -99,24 +99,25 @@ function LocalMemory(state::JLState, T, N)
     end
 end
 
-function gpu_call(f, A::JLArray, args::Tuple, blocks = nothing, threads = C_NULL)
-    if blocks == nothing
-        blocks, threads = thread_blocks_heuristic(length(A))
-    elseif isa(blocks, Integer)
-        blocks = (blocks,)
-    end
-    if threads == C_NULL
-        threads = map(x-> 1, blocks)
-    end
+function (::Type{AbstractDeviceArray})(ptr::Array, shape::NTuple{N, Integer}) where N
+    reshape(ptr, Int.(shape))
+end
+function (::Type{AbstractDeviceArray})(ptr::Array, shape::Vararg{Integer, N}) where N
+    reshape(ptr, Int.(shape))
+end
+
+
+function _gpu_call(f, A::JLArray, args::Tuple, blocks_threads::Tuple{T, T}) where T <: NTuple{N, Integer} where N
+    blocks, threads = blocks_threads
     idx = ntuple(i-> 1, length(blocks))
-    blockdim = ceil.(Int, blocks ./ threads)
+    blockdim = blocks
     state = JLState(threads, blockdim)
     device_args = to_device.(state, args)
-    tasks = Vector{Task}(prod(threads))
+    tasks = Array{Task}(threads...)
     for blockidx in CartesianRange(blockdim)
         state.blockidx = blockidx.I
         block_args = to_blocks.(state, device_args)
-        for threadidx in CartesianRange(threads)
+        for threadidx in CartesianRange(Int.(threads))
             thread_state = JLState(state, threadidx.I)
             tasks[threadidx] = @async f(thread_state, block_args...)
         end

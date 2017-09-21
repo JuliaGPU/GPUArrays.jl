@@ -49,6 +49,7 @@ end
 Runs the test suite on array type `Typ`
 """
 function run_tests(Typ)
+    GPUArrays.allowslow(false)
     run_gpuinterface(Typ)
     run_base(Typ)
     run_blas(Typ)

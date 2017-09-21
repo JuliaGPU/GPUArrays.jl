@@ -51,14 +51,6 @@ function run_base(Typ)
             @test Array(A) ≈ a
         end
 
-        @testset "muladd & abs" begin
-            a = rand(Float32, 32) - 0.5f0
-            A = Typ(a)
-            x = abs.(A)
-            @test Array(x) == abs.(a)
-            y = muladd.(A, 2f0, x)
-            @test Array(y) == muladd(a, 2f0, abs.(a))
-        end
 
         @testset "copy!" begin
             x = zeros(Float32, 10, 10)
@@ -79,7 +71,9 @@ function run_base(Typ)
             copy!(a, r1, y, r2)
             @test Array(a) == x
         end
-
+        GPUArrays.allowslow(true)
+        # right now in CLArrays we fallback to geindex since on some hardware
+        # somehow the vcat kernel segfaults -.-
         @testset "vcat + hcat" begin
             x = zeros(Float32, 10, 10)
             y = rand(Float32, 20, 10)
@@ -93,6 +87,7 @@ function run_base(Typ)
             against_base(hcat, Typ{Float32}, (3, 3), (3, 3))
             against_base(vcat, Typ{Float32}, (3, 3), (3, 3))
         end
+        GPUArrays.allowslow(false)
 
         @testset "reinterpret" begin
             a = rand(Complex64, 22)
@@ -111,10 +106,10 @@ function run_base(Typ)
         @testset "ntuple test" begin
             result = Typ(Vector{NTuple{3, Float32}}(1))
             gpu_call(ntuple_test, result, (result, Val{3}()))
-            @test result[1] == (77, 2*77, 3*77)
+            @test Array(result)[1] == (77, 2*77, 3*77)
             x = 88f0
             gpu_call(ntuple_closure, result, (result, Val{3}(), x))
-            @test result[1] == (x, 2*x, 3*x)
+            @test Array(result)[1] == (x, 2*x, 3*x)
         end
 
         @testset "cartesian iteration" begin
@@ -128,9 +123,9 @@ function run_base(Typ)
         @testset "Custom kernel from Julia function" begin
             x = Typ(rand(Float32, 100))
             y = Typ(rand(Float32, 100))
-            gpu_call(clmap!, x, (sin, x, y))
+            gpu_call(clmap!, x, (-, x, y))
             jy = Array(y)
-            @test map!(sin, jy, jy) ≈ Array(x)
+            @test map!(-, jy, jy) ≈ Array(x)
         end
         T = Typ{Float32}
         @testset "map" begin

@@ -1,5 +1,8 @@
-using GPUArrays
+using GPUArrays, Base.Test
 using GPUArrays: JLArray
 using GPUArrays.TestSuite
 
-TestSuite.run_tests(JLArray)
+
+@testset "Julia reference implementation:" begin
+    TestSuite.run_tests(JLArray)
+end

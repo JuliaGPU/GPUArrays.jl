@@ -3,6 +3,7 @@ module GPUArrays
 
 include("abstractarray.jl")
 include("abstract_gpu_interface.jl")
+include("ondevice.jl")
 include("base.jl")
 include("construction.jl")
 include("blas.jl")
