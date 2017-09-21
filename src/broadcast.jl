@@ -19,12 +19,12 @@ end
 end
 
 function broadcast!(f, A::GPUArray)
-    gpu_call(const_kernel, A, (A, f, Cuint(length(A))))
+    gpu_call(const_kernel, A, (A, f, UInt32(length(A))))
     A
 end
 function broadcast!(f::typeof(identity), A::GPUArray, val::Number)
     valconv = convert(eltype(A), val)
-    gpu_call(const_kernel2, A, (A, valconv, Cuint(length(A))))
+    gpu_call(const_kernel2, A, (A, valconv, UInt32(length(A))))
     A
 end
 @inline function broadcast_t(f, T::Type{Bool}, shape, it, A::GPUArrays.GPUArray, Bs::Vararg{Any,N}) where N
@@ -81,48 +81,48 @@ function _broadcast!(
         A::AT, Bs::BT, ::Type{Val{N}}, unused2 # we don't need those arguments
     ) where {N, K, ID, AT, BT}
 
-    shape = Cuint.(size(out))
+    shape = UInt32.(size(out))
     args = (A, Bs...)
     descriptor_tuple = ntuple(length(args)) do i
         BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
     end
-    gpu_call(broadcast_kernel!, out, (func, out, shape, Cuint(length(out)), descriptor_tuple, A,  deref.(Bs)...))
+    gpu_call(broadcast_kernel!, out, (func, out, shape, UInt32(length(out)), descriptor_tuple, A,  deref.(Bs)...))
     out
 end
 
 
 
 function Base.foreach(func, over::GPUArray, Bs...)
-    shape = Cuint.(size(over))
+    shape = UInt32.(size(over))
     keeps, Idefaults = map_newindexer(shape, over, Bs)
     args = (over, Bs...)
     descriptor_tuple = ntuple(length(args)) do i
         BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
     end
-    gpu_call(foreach_kernel, over, (func, shape, Cuint.(length(over)), descriptor_tuple, over, deref.(Bs)...))
+    gpu_call(foreach_kernel, over, (func, shape, UInt32.(length(over)), descriptor_tuple, over, deref.(Bs)...))
     return
 end
 
 
-arg_length(x::Tuple) = (Cuint(length(x)),)
-arg_length(x::GPUArray) = Cuint.(size(x))
+arg_length(x::Tuple) = (UInt32(length(x)),)
+arg_length(x::GPUArray) = UInt32.(size(x))
 arg_length(x) = ()
 
 abstract type BroadcastDescriptor{Typ} end
 
 immutable BroadcastDescriptorN{Typ, N} <: BroadcastDescriptor{Typ}
-    size::NTuple{N, Cuint}
-    keep::NTuple{N, Cuint}
-    idefault::NTuple{N, Cuint}
+    size::NTuple{N, UInt32}
+    keep::NTuple{N, UInt32}
+    idefault::NTuple{N, UInt32}
 end
 function BroadcastDescriptor(val::RefValue, keep, idefault)
-    BroadcastDescriptorN{Tuple, 1}((Cuint(1),), (Cuint(0),), (Cuint(1),))
+    BroadcastDescriptorN{Tuple, 1}((UInt32(1),), (UInt32(0),), (UInt32(1),))
 end
 
 function BroadcastDescriptor(val, keep, idefault)
     N = length(keep)
     typ = Broadcast.containertype(val)
-    BroadcastDescriptorN{typ, N}(arg_length(val), Cuint.(keep), Cuint.(idefault))
+    BroadcastDescriptorN{typ, N}(arg_length(val), UInt32.(keep), UInt32.(idefault))
 end
 
 @propagate_inbounds @inline function _broadcast_getindex(
@@ -208,11 +208,11 @@ for N = 0:10
 end
 
 function mapidx{N}(f, A::GPUArray, args::NTuple{N, Any})
-    gpu_call(mapidx_kernel, A, (f, A, Cuint(length(A)), args...))
+    gpu_call(mapidx_kernel, A, (f, A, UInt32(length(A)), args...))
 end
 
 # don't do anything for empty tuples
-@pure newindex(I, ilin, keep::Tuple{}, Idefault::Tuple{}, size::Tuple{}) = Cuint(1)
+@pure newindex(I, ilin, keep::Tuple{}, Idefault::Tuple{}, size::Tuple{}) = UInt32(1)
 
 # optimize for 1D arrays
 @pure function newindex(I::NTuple{1}, ilin, keep::NTuple{1}, Idefault, size)

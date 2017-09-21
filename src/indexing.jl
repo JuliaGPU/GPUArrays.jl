@@ -38,7 +38,7 @@ Base.setindex!(xs::GPUArray, v, i::Integer) = xs[i] = convert(eltype(xs), v)
 using Base.Cartesian
 to_index(a, x) = x
 to_index(::A, x::Array{ET}) where {A, ET} = copy!(similar(A, ET, size(x)), x)
-to_index(a, x::UnitRange{<: Integer}) = convert(UnitRange{Cuint}, x)
+to_index(a, x::UnitRange{<: Integer}) = convert(UnitRange{UInt32}, x)
 to_index(a, x::Base.LogicalIndex) = error("Logical indexing not implemented")
 
 @generated function index_kernel(state, dest::AbstractArray, src::AbstractArray, idims, Is)
@@ -59,6 +59,6 @@ function Base._unsafe_getindex!(dest::GPUArray, src::GPUArray, Is::Union{Real, A
         return dest
     end
     idims = map(length, Is)
-    gpu_call(index_kernel, dest, (dest, src, Cuint.(idims), map(x-> to_index(dest, x), Is)))
+    gpu_call(index_kernel, dest, (dest, src, UInt32.(idims), map(x-> to_index(dest, x), Is)))
     return dest
 end

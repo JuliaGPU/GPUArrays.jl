@@ -39,7 +39,7 @@ map!(f, y::GPUArray, x1::GPUArray, x2::GPUArray) =
 # end
 #
 # function _cat(dim, dest, xs...)
-#     gpu_call(dest, (Cuint(dim), dest, xs)) do state, dim, dest, xs
+#     gpu_call(dest, (UInt32(dim), dest, xs)) do state, dim, dest, xs
 #         I = @cartesianidx dest state
 #         nI = catindex(dim, I, size.(xs))
 #         n = nI[1]; I′ = nI[2]

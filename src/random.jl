@@ -26,7 +26,7 @@ function next_rand(::Type{FT}, state::NTuple{4, T}) where {FT, T <: Unsigned}
     )
 end
 
-function gpu_rand(::Type{T}, state, randstate::AbstractVector{NTuple{4, Cuint}}) where T
+function gpu_rand(::Type{T}, state, randstate::AbstractVector{NTuple{4, UInt32}}) where T
     threadid = GPUArrays.threadidx_x(state)
     stateful_rand = next_rand(T, randstate[threadid])
     randstate[threadid] = stateful_rand[1]
@@ -40,8 +40,8 @@ let rand_state_dict = Dict()
         dev = GPUArrays.device(x)
         get!(rand_state_dict, dev) do
             N = GPUArrays.threads(dev)
-            res = similar(x, NTuple{4, Cuint}, N)
-            copy!(res, [ntuple(i-> rand(Cuint), 4) for i=1:N])
+            res = similar(x, NTuple{4, UInt32}, N)
+            copy!(res, [ntuple(i-> rand(UInt32), 4) for i=1:N])
             res
         end
     end

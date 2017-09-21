@@ -4,9 +4,9 @@ import Base: any, count, countnz
 # reduce
 # functions in base implemented with a direct loop need to be overloaded to use mapreduce
 any(pred, A::GPUArray) = Bool(mapreduce(pred, |, Cint(0), (u)))
-count(pred, A::GPUArray) = Int(mapreduce(pred, +, Cuint(0), A))
-countnz(A::GPUArray) = Int(mapreduce(x-> x != 0, +, Cuint(0), A))
-countnz(A::GPUArray, dim) = Int(mapreducedim(x-> x != 0, +, Cuint(0), A, dim))
+count(pred, A::GPUArray) = Int(mapreduce(pred, +, UInt32(0), A))
+countnz(A::GPUArray) = Int(mapreduce(x-> x != 0, +, UInt32(0), A))
+countnz(A::GPUArray, dim) = Int(mapreducedim(x-> x != 0, +, UInt32(0), A, dim))
 
 
 # hack to get around of fetching the first element of the GPUArray
@@ -49,10 +49,10 @@ end
 
 
 function mapreducedim_kernel(state, f, op, R::AbstractArray{T1, N}, A::AbstractArray{T, N}, slice_size, sizeA, dim) where {T1, T, N}
-    ilin = Cuint(linear_index(state))
+    ilin = UInt32(linear_index(state))
     ilin > length(R) && return
     accum = zero(T1)
-    @inbounds for i = Cuint(1):slice_size
+    @inbounds for i = UInt32(1):slice_size
         idx = N == dim ? (ilin, i) : (i, ilin)
         i2d = gpu_sub2ind(sizeA, idx)
         accum = op(accum, f(A[i2d]))
@@ -70,7 +70,7 @@ function Base._mapreducedim!(f, op, R::GPUArray, A::GPUArray)
     @assert count(x-> x == 1, sizeR) == (ndims(R) - 1) "Not implemented"
     dim = findfirst(x-> x == 1, sizeR)
     slice_size = size(A, dim)
-    gpu_call(mapreducedim_kernel, R, (f, op, R, A, Cuint(slice_size), Cuint.(size(A)), Cuint(dim)))
+    gpu_call(mapreducedim_kernel, R, (f, op, R, A, UInt32(slice_size), UInt32.(size(A)), UInt32(dim)))
     return R
 end
 
@@ -80,7 +80,7 @@ for i = 0:10
     @eval begin
         # http://developer.amd.com/resources/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
         function reduce_kernel(state, f, op, v0::T, A, ::Val{LMEM}, result, $(args...)) where {T, LMEM}
-            ui0 = Cuint(0); ui1 = Cuint(1); ui2 = Cuint(2)
+            ui0 = UInt32(0); ui1 = UInt32(1); ui2 = UInt32(2)
             tmp_local = @LocalMemory(state, T, LMEM)
             global_index = linear_index(state)
             acc = v0

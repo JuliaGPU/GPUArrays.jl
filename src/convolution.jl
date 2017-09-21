@@ -7,7 +7,7 @@
 #         ::Val{BLOCK_SIZE},
 #         ::Val{LOCAL_WIDTH}
 #     ) where {T, BLOCK_SIZE, LOCAL_WIDTH}
-#     ui1 = Cuint(1); ui0 = Cuint(0)
+#     ui1 = UInt32(1); ui0 = UInt32(0)
 #     w = kernel_width
 #     wBy2 = w >> ui1 #w divided by 2
 #     #Goes up to 15x15 filters
@@ -54,8 +54,8 @@ function convolution_kernel(state, A::AbstractArray{T}, out, K, Asize, Ksize) wh
     end
     accum = zero(T)
     kw, kh = Ksize[1], Ksize[2]
-    for ix = Cuint(0):(kw - Cuint(1))
-        for jy = Cuint(0):(kh - Cuint(1))
+    for ix = UInt32(0):(kw - UInt32(1))
+        for jy = UInt32(0):(kh - UInt32(1))
             temp = A[gpu_sub2ind(Asize, idx .+ (ix, jy))]
             accum += temp * K[ix + kw*jy + 1]
         end
@@ -66,7 +66,7 @@ end
 
 
 function convolution!(a, out, k)
-    gpu_call(convolution_kernel, a, (a, out, k, Cuint.(size(a)), Cuint.(size(k))))
+    gpu_call(convolution_kernel, a, (a, out, k, UInt32.(size(a)), UInt32.(size(k))))
     GPUArrays.synchronize(out)
     out
 end

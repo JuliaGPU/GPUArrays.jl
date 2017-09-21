@@ -5,7 +5,7 @@ Uses CUDA like names
 for sym in (:x, :y, :z)
     for f in (:blockidx, :blockdim, :threadidx, :griddim)
         fname = Symbol(string(f, '_', sym))
-        @eval $fname(state)::Cuint = error("Not implemented")
+        @eval $fname(state)::UInt32 = error("Not implemented")
         @eval export $fname
     end
 end
@@ -23,7 +23,7 @@ end
 linear index in a GPU kernel (equal to  OpenCL.get_global_id)
 """
 @inline function linear_index(state)
-    Cuint((blockidx_x(state) - Cuint(1)) * blockdim_x(state) + threadidx_x(state))
+    UInt32((blockidx_x(state) - UInt32(1)) * blockdim_x(state) + threadidx_x(state))
 end
 @inline function global_size(state)
     griddim_x(state) * blockdim_x(state)
@@ -72,9 +72,9 @@ Calls function `f` on the GPU.
 and supplies queues and contexts.
 Calls kernel with `kernel(state, args...)`, where state is dependant on the backend
 and can be used for e.g getting an index into A with `linear_index(state)`.
-Optionally, lunch configuration can be supplied in the following way:
+Optionally, launch configuration can be supplied in the following way:
 
-    1) A single integer, indicating how many work items (total number of threads) you want to lunch.
+    1) A single integer, indicating how many work items (total number of threads) you want to launch.
         in this case `linear_index(state)` will be a number in the range 1:configuration
     2) Pass a tuple of integer tuples to define blocks and threads per blocks!
 
@@ -94,10 +94,10 @@ function gpu_call(f, A::GPUArray, args::Tuple, configuration = length(A))
         end
         map(x-> Int.(x), configuration) # make sure it all has the same int type
     else
-        error("""Please lunch a gpu kernel with a valid configuration.
+        error("""Please launch a gpu kernel with a valid configuration.
             Found: $configurations
             Configuration needs to be:
-            1) A single integer, indicating how many work items (total number of threads) you want to lunch.
+            1) A single integer, indicating how many work items (total number of threads) you want to launch.
                 in this case `linear_index(state)` will be a number in the range 1:configuration
             2) Pass a tuple of integer tuples to define blocks and threads per blocks!
                 `linear_index` will be inbetween 1:prod((blocks..., threads...))

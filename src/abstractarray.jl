@@ -143,12 +143,12 @@ function copy!{T, N}(
         throw(DimensionMismatch("Ranges don't match their size. Found: $shape, $(size(srccrange))"))
     end
     len = length(destcrange)
-    dest_offsets = Cuint.(destcrange.start.I .- 1)
-    src_offsets = Cuint.(srccrange.start.I .- 1)
-    ui_shape = Cuint.(shape)
+    dest_offsets = UInt32.(destcrange.start.I .- 1)
+    src_offsets = UInt32.(srccrange.start.I .- 1)
+    ui_shape = UInt32.(shape)
     gpu_call(
         copy_kernel!, dest,
-        (dest, dest_offsets, src, src_offsets, ui_shape, Cuint.(size(dest)), Cuint.(size(src)), Cuint(len)),
+        (dest, dest_offsets, src, src_offsets, ui_shape, UInt32.(size(dest)), UInt32.(size(src)), UInt32(len)),
         len
     )
     dest

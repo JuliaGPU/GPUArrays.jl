@@ -27,7 +27,7 @@ function transpose_blocks!(
         state, odata::AbstractArray{T}, idata, ::Val{SHMEM}, ::Val{TDIM}, ::Val{BLOCK_ROWS}, ::Val{NROW}
     ) where {T, SHMEM, TDIM, BLOCK_ROWS, NROW}
 
-    ui1 = Cuint(1)
+    ui1 = UInt32(1)
     tile = @LocalMemory(state, T, SHMEM)
     bidx_x = blockidx_x(state) - ui1
     bidx_y = blockidx_y(state) - ui1
@@ -38,15 +38,15 @@ function transpose_blocks!(
     y = bidx_y * TDIM + tidx_y + ui1
     dims = size(idata)
 
-    (x <= dims[2] && (y + (BLOCK_ROWS * Cuint(3))) <= dims[1]) || return
+    (x <= dims[2] && (y + (BLOCK_ROWS * UInt32(3))) <= dims[1]) || return
 
-    for j = Cuint(0):Cuint(3)
+    for j = UInt32(0):UInt32(3)
         j0 = j * BLOCK_ROWS
         tile[tidx_x + ui1, tidx_y + j0 + ui1] = idata[y + j0, x]
     end
 
     synchronize_threads(state)
-    for j = Cuint(0):Cuint(3)
+    for j = UInt32(0):UInt32(3)
         j0 = j * BLOCK_ROWS
         odata[x, y + j0] = tile[tidx_x + ui1, tidx_y + j0 + ui1]
     end
@@ -56,9 +56,9 @@ end
 function transpose!{T}(At::GPUArray{T, 2}, A::GPUArray{T, 2})
     if size(A, 1) == size(A, 2) && all(x-> x % 32 == 0, size(A))
         outsize = UInt32.(size(At))
-        TDIM = Cuint(32); BLOCK_ROWS = Cuint(8)
+        TDIM = UInt32(32); BLOCK_ROWS = UInt32(8)
         nrows = TDIM ÷ BLOCK_ROWS
-        shmemdim = (TDIM, (TDIM + Cuint(1)))
+        shmemdim = (TDIM, (TDIM + UInt32(1)))
         static_params = map(x-> Val{x}(), (shmemdim, TDIM, BLOCK_ROWS, nrows))
         args = (At, A, static_params...)
 
@@ -82,7 +82,7 @@ function genperm(I::NTuple{N}, perm::NTuple{N}) where N
 end
 
 function permutedims!(dest::GPUArray, src::GPUArray, perm)
-    perm = Cuint.((perm...,))
+    perm = UInt32.((perm...,))
     gpu_call(dest, (dest, src, perm)) do state, dest, src, perm
         I = @cartesianidx dest state
         @inbounds dest[I...] = src[genperm(I, perm)...]
