@@ -39,9 +39,12 @@ end
 
 similar(x::X, ::Type{T}, size::Base.Dims{N}) where {X <: GPUArray, T, N} = similar(X, T, size)
 
+convert(AT::Type{<: GPUArray{T, N}}, A::GPUArray{T, N}) where {T, N} = A
+
 function convert(AT::Type{<: GPUArray{T, N}}, A::DenseArray{T, N}) where {T, N}
     copy!(AT(Base.size(A)), A)
 end
+
 function convert(AT::Type{<: GPUArray{T1}}, A::DenseArray{T2}) where {T1, T2}
     copy!(similar(AT, T1, size(A)), T1.(A))
 end
