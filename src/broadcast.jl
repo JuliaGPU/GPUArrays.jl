@@ -104,6 +104,7 @@ function Base.foreach(func, over::GPUArray, Bs...)
 end
 
 
+arg_length(x::Array) = error("No array in GPU Broadcast supported. Try converting it to a gpu array")
 arg_length(x::Tuple) = (UInt32(length(x)),)
 arg_length(x::GPUArray) = UInt32.(size(x))
 arg_length(x) = ()
