@@ -3,3 +3,5 @@
 *.jl.mem
 /src/backends/supported_backends.jl
 juliaset.png
+docs/build/
+docs/site/
