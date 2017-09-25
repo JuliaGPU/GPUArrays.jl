@@ -32,14 +32,14 @@ end
 """
 Blocks until all operations are finished on `A`
 """
-function synchronize(A::GPUArray)
+function synchronize(A::AbstractArray)
     # fallback is a noop, for backends not needing synchronization. This
     # makes it easier to write generic code that also works for AbstractArrays
 end
 """
 Gets the device associated to the Array `A`
 """
-function device(A::GPUArray)
+function device(A::AbstractArray)
     # fallback is a noop, for backends not needing synchronization. This
     # makes it easier to write generic code that also works for AbstractArrays
 end

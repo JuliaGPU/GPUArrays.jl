@@ -17,6 +17,7 @@ include("vectors.jl")
 include("convolution.jl")
 include("testsuite/testsuite.jl")
 include("jlbackend.jl")
+include("random.jl")
 
 export GPUArray, gpu_call, thread_blocks_heuristic, global_size
 export linear_index, @linearidx, @cartesianidx, convolution!
