@@ -1,32 +1,48 @@
 using Base.Broadcast
 import Base.Broadcast: broadcast!, _broadcast!, broadcast_t
 using Base.Broadcast: map_newindexer
-using Base: @propagate_inbounds, @pure
+using Base: @propagate_inbounds, @pure, RefValue
 
 @inline function const_kernel(state, A, op, len)
-    idx = linear_index(A, state)
+    idx = linear_index(state)
     @inbounds if idx <= len
         A[idx] = op()
     end
     return
 end
 @inline function const_kernel2(state, A, x, len)
-    idx = linear_index(A, state)
+    idx = linear_index(state)
     @inbounds if idx <= len
         A[idx] = x
     end
     return
 end
-function broadcast!(f, A::AbstractAccArray)
-    gpu_call(const_kernel, A, (A, f, Cuint(length(A))))
+
+function broadcast!(f, A::GPUArray)
+    gpu_call(const_kernel, A, (A, f, UInt32(length(A))))
+    A
 end
-function broadcast!(f::typeof(identity), A::AbstractAccArray, val::Number)
+function broadcast!(f::typeof(identity), A::GPUArray, val::Number)
     valconv = convert(eltype(A), val)
-    gpu_call(const_kernel2, A, (A, valconv, Cuint(length(A))))
+    gpu_call(const_kernel2, A, (A, valconv, UInt32(length(A))))
+    A
+end
+@inline function broadcast_t(f, T::Type{Bool}, shape, it, A::GPUArrays.GPUArray, Bs::Vararg{Any,N}) where N
+    C = similar(A, T, shape)
+    keeps, Idefaults = map_newindexer(shape, A, Bs)
+    _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, it)
+    return C
+end
+@inline function broadcast_t(f, T::Type{Bool}, shape, it, A::GPUArrays.GPUArray, B::GPUArrays.GPUArray, Bs::Vararg{Any,N}) where N
+    C = similar(A, T, shape)
+    Bs = (B, Bs...)
+    keeps, Idefaults = map_newindexer(shape, A, Bs)
+    _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, it)
+    return C
 end
 
 @inline function broadcast_t(
-        f, ::Type{T}, shape, iter, A::AbstractAccArray, Bs::Vararg{Any,N}
+        f, ::Type{T}, shape, iter, A::GPUArray, Bs::Vararg{Any,N}
     ) where {N, T}
     C = similar(A, T, shape)
     keeps, Idefaults = map_newindexer(shape, A, Bs)
@@ -34,7 +50,7 @@ end
     return C
 end
 @inline function broadcast_t(
-        f, ::Type{T}, shape, iter, A::AbstractAccArray, B::AbstractAccArray, rest::Vararg{Any,N}
+        f, ::Type{T}, shape, iter, A::GPUArray, B::GPUArray, rest::Vararg{Any,N}
     ) where {N, T}
     C = similar(A, T, shape)
     Bs = (B, rest...)
@@ -44,7 +60,7 @@ end
 end
 
 @inline function broadcast_t(
-        f, T, shape, iter, A::Any, B::AbstractAccArray, rest::Vararg{Any, N}
+        f, T, shape, iter, A::Any, B::GPUArray, rest::Vararg{Any, N}
     ) where N
     C = similar(B, T, shape)
     Bs = (B, rest...)
@@ -52,57 +68,62 @@ end
     _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, iter)
     return C
 end
-function broadcast_t(f::Any, ::Type{Any}, ::Any, ::Any, A::GPUArrays.AbstractAccArray, args::Vararg{Any,N}) where N
+function broadcast_t(f::Any, ::Type{Any}, ::Any, ::Any, A::GPUArrays.GPUArray, args::Vararg{Any,N}) where N
     error("Return type couldn't be inferred for broadcast. Func: $f, $(typeof(A)), $args")
 end
 
+deref(x) = x
+deref(x::RefValue) = (x[],) # RefValue doesn't work with CUDAnative
+
 function _broadcast!(
-        func, out::AbstractAccArray,
+        func, out::GPUArray,
         keeps::K, Idefaults::ID,
         A::AT, Bs::BT, ::Type{Val{N}}, unused2 # we don't need those arguments
     ) where {N, K, ID, AT, BT}
-    shape = Cuint.(size(out))
+
+    shape = UInt32.(size(out))
     args = (A, Bs...)
     descriptor_tuple = ntuple(length(args)) do i
         BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
     end
-    gpu_call(broadcast_kernel!, out, (func, out, shape, Cuint.(length(out)), descriptor_tuple, A, Bs...))
+    gpu_call(broadcast_kernel!, out, (func, out, shape, UInt32(length(out)), descriptor_tuple, A,  deref.(Bs)...))
     out
 end
 
 
 
-function Base.foreach(func, over::AbstractAccArray, Bs...)
-    shape = Cuint.(size(over))
+function Base.foreach(func, over::GPUArray, Bs...)
+    shape = UInt32.(size(over))
     keeps, Idefaults = map_newindexer(shape, over, Bs)
     args = (over, Bs...)
     descriptor_tuple = ntuple(length(args)) do i
         BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
     end
-    gpu_call(foreach_kernel, over, (func, shape, Cuint.(length(over)), descriptor_tuple, over, Bs...))
+    gpu_call(foreach_kernel, over, (func, shape, UInt32.(length(over)), descriptor_tuple, over, deref.(Bs)...))
     return
 end
 
 
-arg_length(x::AbstractAccArray) = Cuint.(size(x))
+arg_length(x::Array) = error("No array in GPU Broadcast supported. Try converting it to a gpu array")
+arg_length(x::Tuple) = (UInt32(length(x)),)
+arg_length(x::GPUArray) = UInt32.(size(x))
 arg_length(x) = ()
 
 abstract type BroadcastDescriptor{Typ} end
 
 immutable BroadcastDescriptorN{Typ, N} <: BroadcastDescriptor{Typ}
-    size::NTuple{N, Cuint}
-    keep::NTuple{N, Cuint}
-    idefault::NTuple{N, Cuint}
+    size::NTuple{N, UInt32}
+    keep::NTuple{N, UInt32}
+    idefault::NTuple{N, UInt32}
+end
+function BroadcastDescriptor(val::RefValue, keep, idefault)
+    BroadcastDescriptorN{Tuple, 1}((UInt32(1),), (UInt32(0),), (UInt32(1),))
 end
 
 function BroadcastDescriptor(val, keep, idefault)
     N = length(keep)
-    typ = if isa(val, Ref{<: AbstractAccArray})
-        Any # special case ref, so we can upload it unwrapped already!
-    else
-        Broadcast.containertype(val)
-    end
-    BroadcastDescriptorN{typ, N}(arg_length(val), Cuint.(keep), Cuint.(idefault))
+    typ = Broadcast.containertype(val)
+    BroadcastDescriptorN{typ, N}(arg_length(val), UInt32.(keep), UInt32.(idefault))
 end
 
 @propagate_inbounds @inline function _broadcast_getindex(
@@ -110,6 +131,17 @@ end
     )
     A[I]
 end
+@propagate_inbounds @inline function _broadcast_getindex(
+        ::BroadcastDescriptor{Tuple}, A, I
+    )
+    A[I]
+end
+@propagate_inbounds @inline function _broadcast_getindex(
+        ::BroadcastDescriptor{Array}, A::Ref, I
+    )
+    A[]
+end
+
 @inline _broadcast_getindex(any, A, I) = A
 
 for N = 0:10
@@ -150,7 +182,7 @@ for N = 0:10
         end
 
         @inline function broadcast_kernel!(state, func, B, shape, len, descriptor, $(args...))
-            ilin = linear_index(B, state)
+            ilin = linear_index(state)
             if ilin <= len
                 @inbounds B[ilin] = apply_broadcast(ilin, state, func, shape, len, descriptor, $(args...))
             end
@@ -158,7 +190,7 @@ for N = 0:10
         end
 
         function foreach_kernel(state, func, shape, len, descriptor, A, $(args...))
-            ilin = linear_index(A, state)
+            ilin = linear_index(state)
             if ilin <= len
                 apply_broadcast(ilin, state, func, shape, len, descriptor, A, $(args...))
             end
@@ -166,7 +198,7 @@ for N = 0:10
         end
 
         function mapidx_kernel(state, f, A, len, $(args...))
-            i = linear_index(A, state)
+            i = linear_index(state)
             @inbounds if i <= len
                 f(i, A, $(args...))
             end
@@ -176,44 +208,21 @@ for N = 0:10
 
 end
 
-function mapidx{N}(f, A::AbstractAccArray, args::NTuple{N, Any})
-    gpu_call(mapidx_kernel, A, (f, A, Cuint(length(A)), args...))
-end
-# Base functions that are sadly not fit for the the GPU yet (they only work for Int64)
-@pure @inline function gpu_ind2sub{N, T}(dims::NTuple{N}, ind::T)
-    _ind2sub(NTuple{N, T}(dims), ind - T(1))
-end
-@pure @inline _ind2sub{T}(::Tuple{}, ind::T) = (ind + T(1),)
-@pure @inline function _ind2sub{T}(indslast::NTuple{1}, ind::T)
-    ((ind + T(1)),)
-end
-@pure @inline function _ind2sub{T}(inds, ind::T)
-    r1 = inds[1]
-    indnext = div(ind, r1)
-    f = T(1); l = r1
-    (ind-l*indnext+f, _ind2sub(Base.tail(inds), indnext)...)
-end
-
-@pure function gpu_sub2ind{N, T}(dims::NTuple{N}, I::NTuple{N, T})
-    Base.@_inline_meta
-    _sub2ind(NTuple{N, T}(dims), T(1), T(1), I...)
-end
-_sub2ind(x, L, ind) = ind
-function _sub2ind{T}(::Tuple{}, L, ind, i::T, I::T...)
-    Base.@_inline_meta
-    ind + (i - T(1)) * L
-end
-function _sub2ind(inds, L, ind, i::IT, I::IT...) where IT
-    Base.@_inline_meta
-    r1 = inds[1]
-    _sub2ind(Base.tail(inds), L * r1, ind + (i - IT(1)) * L, I...)
+function mapidx{N}(f, A::GPUArray, args::NTuple{N, Any})
+    gpu_call(mapidx_kernel, A, (f, A, UInt32(length(A)), args...))
 end
 
 # don't do anything for empty tuples
-@pure newindex(I, ilin, keep::Tuple{}, Idefault::Tuple{}, size::Tuple{}) = Cuint(0)
+@pure newindex(I, ilin, keep::Tuple{}, Idefault::Tuple{}, size::Tuple{}) = UInt32(1)
 
 # optimize for 1D arrays
-@pure newindex(I::NTuple{1}, ilin, keep::NTuple{1}, Idefault, size) = ilin
+@pure function newindex(I::NTuple{1}, ilin, keep::NTuple{1}, Idefault, size)
+    if Bool(keep[1])
+        return ilin
+    else
+        return Idefault[1]
+    end
+end
 
 # differently shaped arrays
 @generated function newindex{N, T}(I, ilin::T, keep::NTuple{N}, Idefault, size)

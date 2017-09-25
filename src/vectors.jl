@@ -1,5 +1,6 @@
 import Base: copy!, splice!, append!, push!, setindex!, start, next, done
 import Base: getindex, map, length, eltype, endof, ndims, size, resize!
+
 resize!(A::GPUArray, newdims::Int...) = resize!(A, newdims)
 function resize!{T}(A::GPUArray{T, 1}, newdims::NTuple{1, Int})
     newdims == size(A) && return A
@@ -48,7 +49,7 @@ function grow_dimensions(
     return max(new_dim, additonal_size + _size)
 end
 
-const GPUVector{T} = GPUArray{T, 1}
+
 
 push!{T}(v::GPUVector{T}, x) = push!(v, convert(T, x))
 push!{T}(v::GPUVector{T}, x::T) = append!(v, [x])
