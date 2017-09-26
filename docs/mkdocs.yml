@@ -3,7 +3,7 @@ repo_url:         https://github.com/JuliaGPU/GPUArrays.jl
 site_description: Abstract GPU Array implementation
 site_author:      JuliaGPU
 
-theme: readthedocs
+theme: cinder
 
 extra_css:
   - assets/Documenter.css

@@ -17,8 +17,9 @@ You can use the reference implementation by using the `GPUArrays.JLArray` type.
 
 The functions that are currently part of the interface:
 
-The low level dim + idx function, with a similar naming as in CUDA (with `*` indicating `(x, y, z)`):
+The low level dim + idx function, with a similar naming scheme as in CUDA:
 ```Julia
+# with * being either of x, y or z
 blockidx_*(state), blockdim_*(state), threadidx_*(state), griddim_*(state)
 # Known in OpenCL as:
 get_group_id,      get_local_size,    get_local_id,       get_num_groups
@@ -26,7 +27,6 @@ get_group_id,      get_local_size,    get_local_id,       get_num_groups
 
 ```@docs
 gpu_call(f, A::GPUArray, args::Tuple, configuration = length(A))
-
 
 linear_index(state)
 
@@ -36,11 +36,9 @@ global_size(state)
 
 @cartesianidx(A, statesym = :state)
 
-
 synchronize_threads(state)
 
-
 device(A::AbstractArray)
-synchronize(A::AbstractArray)
 
+synchronize(A::AbstractArray)
 ```
