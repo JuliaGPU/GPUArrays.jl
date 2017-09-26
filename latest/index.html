@@ -56,6 +56,9 @@
     <li class="toctree-l2"><a href="#gpuarrays-documentation">GPUArrays Documentation</a></li>
     
 
+    <li class="toctree-l2"><a href="#abstract-gpu-interface">Abstract GPU interface</a></li>
+    
+
     </ul>
 	    </li>
           
@@ -96,15 +99,35 @@
               
                 <p><a id='GPUArrays-Documentation-1'></a></p>
 <h1 id="gpuarrays-documentation">GPUArrays Documentation</h1>
-<p><a id='GPUArrays.gpu_call' href='#GPUArrays.gpu_call'>#</a>
-<strong><code>GPUArrays.gpu_call</code></strong> &mdash; <em>Function</em>.</p>
-<p>Calls function <code>f</code> on the GPU. <code>A</code> must be an GPUArray and will help to dispatch to the correct GPU backend and supplies queues and contexts. Calls kernel with <code>kernel(state, args...)</code>, where state is dependant on the backend and can be used for e.g getting an index into A with <code>linear_index(state)</code>. Optionally, launch configuration can be supplied in the following way:</p>
-<pre><code>1) A single integer, indicating how many work items (total number of threads) you want to launch.
-    in this case `linear_index(state)` will be a number in the range 1:configuration
-2) Pass a tuple of integer tuples to define blocks and threads per blocks!
+<p><a id='Abstract-GPU-interface-1'></a></p>
+<h1 id="abstract-gpu-interface">Abstract GPU interface</h1>
+<p>GPUArrays supports different platforms like CUDA and OpenCL, which all have different names for function that offer the same functionality on the hardware. E.g. how to call a function on the GPU, how to get the thread index etc. GPUArrays offers an abstract interface for these functions which are overloaded by the packages like <a href="https://github.com/JuliaGPU/CLArrays.jl">CLArrays</a> and <a href="https://github.com/JuliaGPU/CuArrays.jl">CuArrays</a>. This makes it possible to write generic code that can be run on all hardware. GPUArrays itself even contains a pure Julia implementation of this interface. The julia reference implementation is also a great way to debug your GPU code, since it offers many more errors and debugging information compared to the GPU backends - which mostly silently error or give cryptic errors (so far). You can use the reference implementation by using the <code>GPUArrays.JLArray</code> type.</p>
+<p>The functions that are currently part of the interface:</p>
+<p>The low level dim + idx function, with a similar naming as in CUDA (with <code>*</code> indicating <code>(x, y, z)</code>):</p>
+<pre><code class="Julia">blockidx_*(state), blockdim_*(state), threadidx_*(state), griddim_*(state)
+# Known in OpenCL as:
+get_group_id,      get_local_size,    get_local_id,       get_num_groups
 </code></pre>
 
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/f8b2d7bbae2b740506b86a749e9d02c20385690c/src/abstract_gpu_interface.jl#L69-L81' class='documenter-source'>source</a><br></p>
+<pre><code>gpu_call(f, A::GPUArray, args::Tuple, configuration = length(A))
+
+
+linear_index(state)
+
+global_size(state)
+
+@linearidx(A, statesym = :state)
+
+@cartesianidx(A, statesym = :state)
+
+
+synchronize_threads(state)
+
+
+device(A::AbstractArray)
+synchronize(A::AbstractArray)
+
+</code></pre>
               
             </div>
           </div>
@@ -146,5 +169,5 @@
 
 <!--
 MkDocs version : 0.16.3
-Build Date UTC : 2017-09-25 23:14:44
+Build Date UTC : 2017-09-26 14:09:13
 -->
