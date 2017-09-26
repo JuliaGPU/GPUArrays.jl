@@ -19,7 +19,10 @@ function synchronize_threads(state)
     error("Not implemented")
 end
 
+
 """
+    inear_index(state)
+
 linear index in a GPU kernel (equal to  OpenCL.get_global_id)
 """
 @inline function linear_index(state)
