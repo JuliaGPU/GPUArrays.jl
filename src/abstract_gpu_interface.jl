@@ -25,30 +25,10 @@ linear index in a GPU kernel (equal to  OpenCL.get_global_id)
 @inline function linear_index(state)
     UInt32((blockidx_x(state) - UInt32(1)) * blockdim_x(state) + threadidx_x(state))
 end
-@inline function global_size(state)
-    griddim_x(state) * blockdim_x(state)
-end
 
 """
-Blocks until all operations are finished on `A`
+Macro form of `linear_index`, which returns when out of bounds
 """
-function synchronize(A::AbstractArray)
-    # fallback is a noop, for backends not needing synchronization. This
-    # makes it easier to write generic code that also works for AbstractArrays
-end
-"""
-Gets the device associated to the Array `A`
-"""
-function device(A::AbstractArray)
-    # fallback is a noop, for backends not needing synchronization. This
-    # makes it easier to write generic code that also works for AbstractArrays
-end
-
-#
-# @inline function synchronize_threads(state)
-#     CUDAnative.__syncthreads()
-# end
-
 macro linearidx(A, statesym = :state)
     quote
         x1 = $(esc(A))
@@ -57,6 +37,11 @@ macro linearidx(A, statesym = :state)
         i1
     end
 end
+
+
+"""
+Like `@linearidx`, but returns an N-dimensional `NTuple{ndim(A), Cuint}` as index
+"""
 macro cartesianidx(A, statesym = :state)
     quote
         x = $(esc(A))
@@ -64,6 +49,36 @@ macro cartesianidx(A, statesym = :state)
         gpu_ind2sub(x, i2)
     end
 end
+
+"""
+Global size == blockdim * griddim == total number of kernel execution
+"""
+@inline function global_size(state)
+    # TODO nd version
+    griddim_x(state) * blockdim_x(state)
+end
+
+
+"""
+Gets the device associated to the Array `A`
+"""
+function device(A::AbstractArray)
+    # fallback is a noop, for backends not needing synchronization. This
+    # makes it easier to write generic code that also works for AbstractArrays
+end
+"""
+Blocks until all operations are finished on `A`
+"""
+function synchronize(A::AbstractArray)
+    # fallback is a noop, for backends not needing synchronization. This
+    # makes it easier to write generic code that also works for AbstractArrays
+end
+#
+# @inline function synchronize_threads(state)
+#     CUDAnative.__syncthreads()
+# end
+
+
 
 
 """
