@@ -67,14 +67,14 @@ you want to test.
 
 You can run the test suite like this:
 
-```@example
+```Julia
 using GPUArrays, GPUArrays.TestSuite
 TestSuite.run_tests(MyGPUArrayType)
 ```
 If you don't want to run the whole suite, you can also run parts of it:
 
 
-```@example
+```Julia
 Typ = JLArray
 GPUArrays.allowslow(false) # fail tests when slow indexing path into Array type is used.
 

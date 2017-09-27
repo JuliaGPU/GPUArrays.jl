@@ -38,7 +38,7 @@ end
 
 Macro form of `linear_index`, which calls return when out of bounds.
 So it can be used like this:
-    ```
+    ```jldoctest
     function kernel(state, A)
         idx = @linear_index A state
         # from here on it's save to index into A with idx
@@ -61,7 +61,7 @@ end
 """
     cartesianidx(A, statesym = :state)
 
-Like `@linearidx`, but returns an N-dimensional `NTuple{ndim(A), Cuint}` as index
+Like [`@linearidx(A, statesym = :state)`](@ref), but returns an N-dimensional `NTuple{ndim(A), Cuint}` as index
 """
 macro cartesianidx(A, statesym = :state)
     quote
