@@ -109,9 +109,9 @@ end
 
 
 """
-    gpu_call(f, A::GPUArray, args::Tuple, configuration = length(A))
+    gpu_call(kernel::Function, A::GPUArray, args::Tuple, configuration = length(A))
 
-Calls function `f` on the GPU.
+Calls function `kernel` on the GPU.
 `A` must be an GPUArray and will help to dispatch to the correct GPU backend
 and supplies queues and contexts.
 Calls the kernel function with `kernel(state, args...)`, where state is dependant on the backend
@@ -123,7 +123,7 @@ Optionally, a launch configuration can be supplied in the following way:
     2) Pass a tuple of integer tuples to define blocks and threads per blocks!
 
 """
-function gpu_call(f, A::GPUArray, args::Tuple, configuration = length(A))
+function gpu_call(kernel, A::GPUArray, args::Tuple, configuration = length(A))
     ITuple = NTuple{N, Integer} where N
     # If is a single integer, we assume it to be the global size / total number of threads one wants to launch
     thread_blocks = if isa(configuration, Integer)
@@ -147,7 +147,7 @@ function gpu_call(f, A::GPUArray, args::Tuple, configuration = length(A))
                 `linear_index` will be inbetween 1:prod((blocks..., threads...))
         """)
     end
-    _gpu_call(f, A, args, thread_blocks)
+    _gpu_call(kernel, A, args, thread_blocks)
 end
 
 # Internal GPU call function, that needs to be overloaded by the backends.
