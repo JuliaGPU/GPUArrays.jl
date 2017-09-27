@@ -38,7 +38,8 @@ end
 
 Macro form of `linear_index`, which calls return when out of bounds.
 So it can be used like this:
-    ```jldoctest
+
+    ```julia
     function kernel(state, A)
         idx = @linear_index A state
         # from here on it's save to index into A with idx
