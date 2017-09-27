@@ -13,7 +13,10 @@ end
 
 
 """
+     synchronize_threads(state)
+
 in CUDA terms `__synchronize`
+in OpenCL terms: `barrier(CLK_LOCAL_MEM_FENCE)`
 """
 function synchronize_threads(state)
     error("Not implemented")
@@ -21,16 +24,29 @@ end
 
 
 """
-    inear_index(state)
+    linear_index(state)
 
-linear index in a GPU kernel (equal to  OpenCL.get_global_id)
+linear index corresponding to each kernel launch (in OpenCL equal to get_global_id).
+
 """
 @inline function linear_index(state)
     UInt32((blockidx_x(state) - UInt32(1)) * blockdim_x(state) + threadidx_x(state))
 end
 
 """
-Macro form of `linear_index`, which returns when out of bounds
+    linearidx(A, statesym = :state)
+
+Macro form of `linear_index`, which calls return when out of bounds.
+So it can be used like this:
+    ```
+    function kernel(state, A)
+        idx = @linear_index A state
+        # from here on it's save to index into A with idx
+        @inbounds begin
+            A[idx] = ...
+        end
+    end
+    ```
 """
 macro linearidx(A, statesym = :state)
     quote
@@ -43,6 +59,8 @@ end
 
 
 """
+    cartesianidx(A, statesym = :state)
+
 Like `@linearidx`, but returns an N-dimensional `NTuple{ndim(A), Cuint}` as index
 """
 macro cartesianidx(A, statesym = :state)
@@ -54,6 +72,8 @@ macro cartesianidx(A, statesym = :state)
 end
 
 """
+    global_size(state)
+
 Global size == blockdim * griddim == total number of kernel execution
 """
 @inline function global_size(state)
@@ -61,15 +81,19 @@ Global size == blockdim * griddim == total number of kernel execution
     griddim_x(state) * blockdim_x(state)
 end
 
-
 """
+    device(A::AbstractArray)
+
 Gets the device associated to the Array `A`
 """
 function device(A::AbstractArray)
     # fallback is a noop, for backends not needing synchronization. This
     # makes it easier to write generic code that also works for AbstractArrays
 end
+
 """
+    synchronize(A::AbstractArray)
+
 Blocks until all operations are finished on `A`
 """
 function synchronize(A::AbstractArray)
@@ -85,15 +109,17 @@ end
 
 
 """
+    gpu_call(f, A::GPUArray, args::Tuple, configuration = length(A))
+
 Calls function `f` on the GPU.
 `A` must be an GPUArray and will help to dispatch to the correct GPU backend
 and supplies queues and contexts.
-Calls kernel with `kernel(state, args...)`, where state is dependant on the backend
-and can be used for e.g getting an index into A with `linear_index(state)`.
-Optionally, launch configuration can be supplied in the following way:
+Calls the kernel function with `kernel(state, args...)`, where state is dependant on the backend
+and can be used for getting an index into `A` with `linear_index(state)`.
+Optionally, a launch configuration can be supplied in the following way:
 
     1) A single integer, indicating how many work items (total number of threads) you want to launch.
-        in this case `linear_index(state)` will be a number in the range 1:configuration
+        in this case `linear_index(state)` will be a number in the range `1:configuration`
     2) Pass a tuple of integer tuples to define blocks and threads per blocks!
 
 """
