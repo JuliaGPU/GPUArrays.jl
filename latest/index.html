@@ -96,7 +96,10 @@
         <li class="first-level active"><a href="#gpuarrays-documentation">GPUArrays Documentation</a></li>
         
     
-        <li class="first-level "><a href="#abstract-gpu-interface">Abstract GPU interface</a></li>
+        <li class="first-level "><a href="#the-abstract-gpu-interface">The Abstract GPU interface</a></li>
+        
+    
+        <li class="first-level "><a href="#the-abstract-testsuite">The abstract TestSuite</a></li>
         
     
     </ul>
@@ -105,9 +108,11 @@
 
 <p><a id='GPUArrays-Documentation-1'></a></p>
 <h1 id="gpuarrays-documentation">GPUArrays Documentation</h1>
-<p><a id='Abstract-GPU-interface-1'></a></p>
-<h1 id="abstract-gpu-interface">Abstract GPU interface</h1>
-<p>GPUArrays supports different platforms like CUDA and OpenCL, which all have different names for function that offer the same functionality on the hardware. E.g. how to call a function on the GPU, how to get the thread index etc. GPUArrays offers an abstract interface for these functions which are overloaded by the packages like <a href="https://github.com/JuliaGPU/CLArrays.jl">CLArrays</a> and <a href="https://github.com/JuliaGPU/CuArrays.jl">CuArrays</a>. This makes it possible to write generic code that can be run on all hardware. GPUArrays itself even contains a pure Julia implementation of this interface. The julia reference implementation is also a great way to debug your GPU code, since it offers many more errors and debugging information compared to the GPU backends - which mostly silently error or give cryptic errors (so far). You can use the reference implementation by using the <code>GPUArrays.JLArray</code> type.</p>
+<p>GPUArrays is an abstract interface for GPU computations. Think of it as the AbstractArray interface in Julia Base but for GPUs. It allows you to write generic julia code for all GPU platforms and implements common algorithms for the GPU. Like Julia Base, this includes BLAS wrapper, FFTs, maps, broadcasts and mapreduces. So when you inherit from GPUArrays and overload the interface correctly, you will get a lot of functionality for free. This will allow to have multiple GPUArray implementation for different purposes, while maximizing the ability to share code. Currently there are two packages implementing the interface namely <a href="https://github.com/JuliaGPU/CLArrays.jl">CLArrays</a> and <a href="https://github.com/JuliaGPU/CuArrays.jl">CuArrays</a>. As the name suggests, the first implements the interface using OpenCL and the latter uses CUDA.</p>
+<p><a id='The-Abstract-GPU-interface-1'></a></p>
+<h1 id="the-abstract-gpu-interface">The Abstract GPU interface</h1>
+<p>Different GPU computation frameworks like CUDA and OpenCL, have different names for accessing the same hardware functionality. E.g. how to launch a GPU Kernel, how to get the thread index and so forth. GPUArrays offers a unified abstract interface for these functions. This makes it possible to write generic code that can be run on all hardware. GPUArrays itself even contains a pure <a href="https://github.com/JuliaGPU/GPUArrays.jl/blob/master/src/jlbackend.jl">Julia implementation</a> of this interface. The julia reference implementation is a great way to debug your GPU code, since it offers more informative errors and debugging information compared to the GPU backends - which mostly silently error or give cryptic errors (so far).</p>
+<p>You can use the reference implementation by using the <code>GPUArrays.JLArray</code> type.</p>
 <p>The functions that are currently part of the interface:</p>
 <p>The low level dim + idx function, with a similar naming scheme as in CUDA:</p>
 <pre><code class="Julia"># with * being either of x, y or z
@@ -116,46 +121,94 @@ blockidx_*(state), blockdim_*(state), threadidx_*(state), griddim_*(state)
 get_group_id,      get_local_size,    get_local_id,       get_num_groups
 </code></pre>
 
+<p>Higher level functionality:</p>
 <p><a id='GPUArrays.gpu_call' href='#GPUArrays.gpu_call'>#</a>
 <strong><code>GPUArrays.gpu_call</code></strong> &mdash; <em>Function</em>.</p>
-<p>Calls function <code>f</code> on the GPU. <code>A</code> must be an GPUArray and will help to dispatch to the correct GPU backend and supplies queues and contexts. Calls kernel with <code>kernel(state, args...)</code>, where state is dependant on the backend and can be used for e.g getting an index into A with <code>linear_index(state)</code>. Optionally, launch configuration can be supplied in the following way:</p>
+<pre><code>gpu_call(f, A::GPUArray, args::Tuple, configuration = length(A))
+</code></pre>
+
+<p>Calls function <code>f</code> on the GPU. <code>A</code> must be an GPUArray and will help to dispatch to the correct GPU backend and supplies queues and contexts. Calls the kernel function with <code>kernel(state, args...)</code>, where state is dependant on the backend and can be used for getting an index into <code>A</code> with <code>linear_index(state)</code>. Optionally, a launch configuration can be supplied in the following way:</p>
 <pre><code>1) A single integer, indicating how many work items (total number of threads) you want to launch.
-    in this case `linear_index(state)` will be a number in the range 1:configuration
+    in this case `linear_index(state)` will be a number in the range `1:configuration`
 2) Pass a tuple of integer tuples to define blocks and threads per blocks!
 </code></pre>
 
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/c3815cf4e6339ac04196d8c80860f3e0c418aaea/src/abstract_gpu_interface.jl#L87-L99' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/b533f3c3ed2dda194b9ad56675b62da184c0616c/src/abstract_gpu_interface.jl#L111-L125' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.linear_index-Tuple{Any}' href='#GPUArrays.linear_index-Tuple{Any}'>#</a>
 <strong><code>GPUArrays.linear_index</code></strong> &mdash; <em>Method</em>.</p>
-<pre><code>inear_index(state)
+<pre><code>linear_index(state)
 </code></pre>
 
-<p>linear index in a GPU kernel (equal to  OpenCL.get_global_id)</p>
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/c3815cf4e6339ac04196d8c80860f3e0c418aaea/src/abstract_gpu_interface.jl#L23-L27' class='documenter-source'>source</a><br></p>
+<p>linear index corresponding to each kernel launch (in OpenCL equal to get_global_id).</p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/b533f3c3ed2dda194b9ad56675b62da184c0616c/src/abstract_gpu_interface.jl#L26-L31' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.global_size-Tuple{Any}' href='#GPUArrays.global_size-Tuple{Any}'>#</a>
 <strong><code>GPUArrays.global_size</code></strong> &mdash; <em>Method</em>.</p>
+<pre><code>global_size(state)
+</code></pre>
+
 <p>Global size == blockdim * griddim == total number of kernel execution</p>
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/c3815cf4e6339ac04196d8c80860f3e0c418aaea/src/abstract_gpu_interface.jl#L56-L58' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/b533f3c3ed2dda194b9ad56675b62da184c0616c/src/abstract_gpu_interface.jl#L74-L78' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.@linearidx-Tuple{Any,Any}' href='#GPUArrays.@linearidx-Tuple{Any,Any}'>#</a>
 <strong><code>GPUArrays.@linearidx</code></strong> &mdash; <em>Macro</em>.</p>
-<p>Macro form of <code>linear_index</code>, which returns when out of bounds</p>
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/c3815cf4e6339ac04196d8c80860f3e0c418aaea/src/abstract_gpu_interface.jl#L32-L34' class='documenter-source'>source</a><br></p>
+<pre><code>linearidx(A, statesym = :state)
+</code></pre>
+
+<p>Macro form of <code>linear_index</code>, which calls return when out of bounds. So it can be used like this:     <code>function kernel(state, A)         idx = @linear_index A state         # from here on it's save to index into A with idx         @inbounds begin             A[idx] = ...         end     end</code></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/b533f3c3ed2dda194b9ad56675b62da184c0616c/src/abstract_gpu_interface.jl#L36-L50' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.@cartesianidx-Tuple{Any,Any}' href='#GPUArrays.@cartesianidx-Tuple{Any,Any}'>#</a>
 <strong><code>GPUArrays.@cartesianidx</code></strong> &mdash; <em>Macro</em>.</p>
+<pre><code>cartesianidx(A, statesym = :state)
+</code></pre>
+
 <p>Like <code>@linearidx</code>, but returns an N-dimensional <code>NTuple{ndim(A), Cuint}</code> as index</p>
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/c3815cf4e6339ac04196d8c80860f3e0c418aaea/src/abstract_gpu_interface.jl#L45-L47' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/b533f3c3ed2dda194b9ad56675b62da184c0616c/src/abstract_gpu_interface.jl#L61-L65' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.synchronize_threads-Tuple{Any}' href='#GPUArrays.synchronize_threads-Tuple{Any}'>#</a>
 <strong><code>GPUArrays.synchronize_threads</code></strong> &mdash; <em>Method</em>.</p>
-<p>in CUDA terms <code>__synchronize</code></p>
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/c3815cf4e6339ac04196d8c80860f3e0c418aaea/src/abstract_gpu_interface.jl#L15-L17' class='documenter-source'>source</a><br></p>
+<pre><code> synchronize_threads(state)
+</code></pre>
+
+<p>in CUDA terms <code>__synchronize</code> in OpenCL terms: <code>barrier(CLK_LOCAL_MEM_FENCE)</code></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/b533f3c3ed2dda194b9ad56675b62da184c0616c/src/abstract_gpu_interface.jl#L15-L20' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.device-Tuple{AbstractArray}' href='#GPUArrays.device-Tuple{AbstractArray}'>#</a>
 <strong><code>GPUArrays.device</code></strong> &mdash; <em>Method</em>.</p>
+<pre><code>device(A::AbstractArray)
+</code></pre>
+
 <p>Gets the device associated to the Array <code>A</code></p>
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/c3815cf4e6339ac04196d8c80860f3e0c418aaea/src/abstract_gpu_interface.jl#L65-L67' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/b533f3c3ed2dda194b9ad56675b62da184c0616c/src/abstract_gpu_interface.jl#L84-L88' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.synchronize-Tuple{AbstractArray}' href='#GPUArrays.synchronize-Tuple{AbstractArray}'>#</a>
 <strong><code>GPUArrays.synchronize</code></strong> &mdash; <em>Method</em>.</p>
+<pre><code>synchronize(A::AbstractArray)
+</code></pre>
+
 <p>Blocks until all operations are finished on <code>A</code></p>
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/c3815cf4e6339ac04196d8c80860f3e0c418aaea/src/abstract_gpu_interface.jl#L72-L74' class='documenter-source'>source</a><br></p></div>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/tree/b533f3c3ed2dda194b9ad56675b62da184c0616c/src/abstract_gpu_interface.jl#L94-L98' class='documenter-source'>source</a><br></p>
+<p><a id='The-abstract-TestSuite-1'></a></p>
+<h1 id="the-abstract-testsuite">The abstract TestSuite</h1>
+<p>Since all array packages inheriting from GPUArrays need to offer the same functionality and interface, it makes sense to test them in the same way. This is why GPUArrays contains a test suite which can be called with the array type you want to test.</p>
+<p>You can run the test suite like this:</p>
+<p>```@example
+using GPUArrays, GPUArrays.TestSuite
+TestSuite.run_tests(MyGPUArrayType)</p>
+<pre><code>
+
+If you don't want to run the whole suite, you can also run parts of it:
+
+
+```@example
+Typ = JLArray
+GPUArrays.allowslow(false) # fail tests when slow indexing path into Array type is used.
+
+TestSuite.run_gpuinterface(Typ) # interface functions like gpu_call, threadidx, etc
+TestSuite.run_base(Typ) # basic functionality like launching a kernel on the GPU and Base operations
+TestSuite.run_blas(Typ) # tests the blas interface
+TestSuite.run_broadcasting(Typ) # tests the broadcasting implementation
+TestSuite.run_construction(Typ) # tests all kinds of different ways of constructing the array
+TestSuite.run_fft(Typ) # fft tests
+TestSuite.run_linalg(Typ) # linalg function tests
+TestSuite.run_mapreduce(Typ) # mapreduce sum, etc
+TestSuite.run_indexing(Typ) # indexing tests
+</code></pre></div>
         
     </div>
 
@@ -210,5 +263,5 @@ get_group_id,      get_local_size,    get_local_id,       get_num_groups
 
 <!--
 MkDocs version : 0.16.3
-Build Date UTC : 2017-09-27 09:18:11
+Build Date UTC : 2017-09-27 09:49:07
 -->
