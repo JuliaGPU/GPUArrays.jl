@@ -10,7 +10,7 @@ end
 """
 Thread group local memory
 """
-immutable LocalMem{N, T}
+struct LocalMem{N, T}
     x::NTuple{N, Vector{T}}
 end
 
@@ -27,7 +27,7 @@ to_blocks(state, x) = x
 # unpacks local memory for each block
 to_blocks(state, x::LocalMem) = x.x[blockidx_x(state)]
 
-function (::Type{JLArray{T, N}})(size::NTuple{N, Integer}) where {T, N}
+function JLArray{T, N}(size::NTuple{N, Integer}) where {T, N}
     JLArray{T, N}(Array{T, N}(size), size)
 end
 
@@ -37,23 +37,23 @@ function unsafe_reinterpret(::Type{T}, A::JLArray{ET}, size::NTuple{N, Integer})
     JLArray(collect(reshape(reinterpret(T, A.data), size)))
 end
 
-function copy!{T}(
+function copy!(
         dest::Array{T}, d_offset::Integer,
         source::JLArray{T}, s_offset::Integer, amount::Integer
-    )
+    ) where T
     copy!(dest, d_offset, source.data, s_offset, amount)
 end
-function copy!{T}(
+function copy!(
         dest::JLArray{T}, d_offset::Integer,
         source::Array{T}, s_offset::Integer, amount::Integer
-    )
+    ) where T
     copy!(dest.data, d_offset, source, s_offset, amount)
     dest
 end
-function copy!{T}(
+function copy!(
         dest::JLArray{T}, d_offset::Integer,
         source::JLArray{T}, s_offset::Integer, amount::Integer
-    )
+    ) where T
     copy!(dest.data, d_offset, source.data, s_offset, amount)
     dest
 end
@@ -99,10 +99,10 @@ function LocalMemory(state::JLState, ::Type{T}, ::Val{N}, ::Val{C}) where {T, N,
     end
 end
 
-function (::Type{AbstractDeviceArray})(ptr::Array, shape::NTuple{N, Integer}) where N
+function AbstractDeviceArray(ptr::Array, shape::NTuple{N, Integer}) where N
     reshape(ptr, Int.(shape))
 end
-function (::Type{AbstractDeviceArray})(ptr::Array, shape::Vararg{Integer, N}) where N
+function AbstractDeviceArray(ptr::Array, shape::Vararg{Integer, N}) where N
     reshape(ptr, Int.(shape))
 end
 
@@ -158,7 +158,7 @@ blasbuffer(A::JLArray) = A.data
 
 import Base: *, plan_ifft!, plan_fft!, plan_fft, plan_ifft, size, plan_bfft, plan_bfft!
 # defining our own plan type is the easiest way to pass around the plans in Base interface without ambiguities
-immutable FFTPlan{T}
+struct FFTPlan{T}
     p::T
 end
 function plan_fft(A::JLArray; kw_args...)

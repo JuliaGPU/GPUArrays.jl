@@ -71,7 +71,7 @@ function convolution!(a, out, k)
     out
 end
 
-immutable FFTKernel{T}
+struct FFTKernel{T}
     kernel::T
     irfftplan
     rfftplan

@@ -13,7 +13,7 @@ const GPUVecOrMat{T} = Union{GPUArray{T, 1}, GPUArray{T, 2}}
 # GPU Local Memory
 struct LocalMemory{T} <: GPUArray{T, 1}
     size::Int
-    (::Type{LocalMemory{T}})(x::Integer) where T = new{T}(x)
+    LocalMemory{T}(x::Integer) where T = new{T}(x)
 end
 
 #=
@@ -40,11 +40,11 @@ else
     error("No Serialization type found. Probably unsupported Julia version")
 end
 
-function Base.serialize{T <: GPUArray}(s::BaseSerializer, t::T)
+function Base.serialize(s::BaseSerializer, t::T) where T <: GPUArray
     Base.serialize_type(s, T)
     serialize(s, Array(t))
 end
-function Base.deserialize{T <: GPUArray}(s::BaseSerializer, ::Type{T})
+function Base.deserialize(s::BaseSerializer, ::Type{T}) where T <: GPUArray
     A = deserialize(s)
     T(A)
 end
@@ -88,18 +88,18 @@ for (D, S) in ((GPUArray, AbstractArray), (AbstractArray, GPUArray), (GPUArray, 
                 unpack_buffer(src), soffset, amount
             )
         end
-        function copy!{T, N}(
+        function copy!(
                 dest::$D{T, N}, rdest::NTuple{N, UnitRange},
                 src::$S{T, N}, ssrc::NTuple{N, UnitRange},
-            )
+            ) where {T, N}
             drange = crange(start.(rdest), last.(rdest))
             srange = crange(start.(ssrc), last.(ssrc))
             copy!(dest, drange, src, srange)
         end
-        function copy!{T}(
+        function copy!(
                 dest::$D{T}, d_range::CartesianRange{CartesianIndex{1}},
                 src::$S{T}, s_range::CartesianRange{CartesianIndex{1}},
-            )
+            ) where T
             amount = length(d_range)
             if length(s_range) != amount
                 throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
@@ -109,9 +109,9 @@ for (D, S) in ((GPUArray, AbstractArray), (AbstractArray, GPUArray), (GPUArray, 
             s_offset = first(s_range)[1]
             copy!(dest, d_offset, src, s_offset, amount)
         end
-        function copy!{T, N}(
+        function copy!(
                 dest::$D{T, N}, src::$S{T, N}
-            )
+            ) where {T, N}
             len = length(src)
             len == 0 && return dest
             if length(dest) > len
@@ -134,10 +134,10 @@ function copy_kernel!(state, dest, dest_offsets, src, src_offsets, shape, shape_
     return
 end
 
-function copy!{T, N}(
+function copy!(
         dest::GPUArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
         src::GPUArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
-    )
+    ) where {T, N}
     shape = size(destcrange)
     if shape != size(srccrange)
         throw(DimensionMismatch("Ranges don't match their size. Found: $shape, $(size(srccrange))"))
@@ -155,10 +155,10 @@ function copy!{T, N}(
 end
 
 
-function copy!{T, N}(
+function copy!(
         dest::GPUArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
         src::AbstractArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
-    )
+    ) where {T, N}
     # Is this efficient? Maybe!
     # TODO: compare to a pure intrinsic copy implementation!
     # this would mean looping over linear sections of memory and
@@ -170,10 +170,10 @@ function copy!{T, N}(
 end
 
 
-function copy!{T, N}(
+function copy!(
         dest::AbstractArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
         src::GPUArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
-    )
+    ) where {T, N}
     # Is this efficient? Maybe!
     dest_gpu = similar(src, size(destcrange))
     nrange = CartesianRange(one(CartesianIndex{N}), CartesianIndex(size(dest_gpu)))
