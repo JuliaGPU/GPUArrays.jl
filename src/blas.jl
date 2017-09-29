@@ -28,10 +28,10 @@ end
 
 for elty in (Float64, Float32)
     @eval begin
-        function Base.BLAS.scal!{N}(
+        function Base.BLAS.scal!(
                 n::Integer, DA::$elty,
                 DX::GPUArray{$elty, N}, incx::Integer
-            )
+            ) where N
             blasmod = blas_module(DX)
             blasmod.scal!(n, DA, blasbuffer(DX), incx)
             DX

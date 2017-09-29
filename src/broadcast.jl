@@ -111,7 +111,7 @@ arg_length(x) = ()
 
 abstract type BroadcastDescriptor{Typ} end
 
-immutable BroadcastDescriptorN{Typ, N} <: BroadcastDescriptor{Typ}
+struct BroadcastDescriptorN{Typ, N} <: BroadcastDescriptor{Typ}
     size::NTuple{N, UInt32}
     keep::NTuple{N, UInt32}
     idefault::NTuple{N, UInt32}
@@ -208,7 +208,7 @@ for N = 0:10
 
 end
 
-function mapidx{N}(f, A::GPUArray, args::NTuple{N, Any})
+function mapidx(f, A::GPUArray, args::NTuple{N, Any}) where N
     gpu_call(mapidx_kernel, A, (f, A, UInt32(length(A)), args...))
 end
 
@@ -225,7 +225,7 @@ end
 end
 
 # differently shaped arrays
-@generated function newindex{N, T}(I, ilin::T, keep::NTuple{N}, Idefault, size)
+@generated function newindex(I, ilin::T, keep::NTuple{N}, Idefault, size) where {N, T}
     exprs = Expr(:tuple)
     for i = 1:N
         push!(exprs.args, :(T(Bool(keep[$i]) ? T(I[$i]) : T(Idefault[$i]))))

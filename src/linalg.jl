@@ -53,7 +53,7 @@ function transpose_blocks!(
     return
 end
 
-function transpose!{T}(At::GPUArray{T, 2}, A::GPUArray{T, 2})
+function transpose!(At::GPUArray{T, 2}, A::GPUArray{T, 2}) where T
     if size(A, 1) == size(A, 2) && all(x-> x % 32 == 0, size(A))
         outsize = UInt32.(size(At))
         TDIM = UInt32(32); BLOCK_ROWS = UInt32(8)

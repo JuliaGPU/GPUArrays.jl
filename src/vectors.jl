@@ -2,7 +2,7 @@ import Base: copy!, splice!, append!, push!, setindex!, start, next, done
 import Base: getindex, map, length, eltype, endof, ndims, size, resize!
 
 resize!(A::GPUArray, newdims::Int...) = resize!(A, newdims)
-function resize!{T}(A::GPUArray{T, 1}, newdims::NTuple{1, Int})
+function resize!(A::GPUArray{T, 1}, newdims::NTuple{1, Int}) where T
     newdims == size(A) && return A
     newlength = newdims[1]
     real_length = length(buffer(A))
@@ -21,7 +21,7 @@ function resize!{T}(A::GPUArray{T, 1}, newdims::NTuple{1, Int})
     end
 end
 
-function reshape!{T, NDim}(A::GPUArray{T, NDim}, newdims::NTuple{NDim, Int})
+function reshape!(A::GPUArray{T, NDim}, newdims::NTuple{NDim, Int}) where {T, NDim}
     size(A) == newdims && return A
     if prod(newdims) == length(A)
         throw(DimensionMismatch("new dimensions $newdims must be consistent with array length $(length(A))"))
@@ -34,7 +34,7 @@ end
 This updates an array, even if dimensions and sizes don't match.
 Will resize accordingly!
 """
-function update!{T, N}(A::GPUArray{T, N}, value::Array{T, N})
+function update!(A::GPUArray{T, N}, value::Array{T, N}) where {T, N}
     size(A) != size(value) && resize!(A, size(value))
     copy!(A, value)
     return
@@ -51,11 +51,11 @@ end
 
 
 
-push!{T}(v::GPUVector{T}, x) = push!(v, convert(T, x))
-push!{T}(v::GPUVector{T}, x::T) = append!(v, [x])
-push!{T}(v::GPUVector{T}, x::T...) = append!(v, [x...])
+push!(v::GPUVector{T}, x) where {T} = push!(v, convert(T, x))
+push!(v::GPUVector{T}, x::T) where {T} = append!(v, [x])
+push!(v::GPUVector{T}, x::T...) where {T} = append!(v, [x...])
 
-function append!{T}(v::GPUVector{T}, value)
+function append!(v::GPUVector{T}, value) where T
     x = array_convert(Vector{T}, value)
     lv, lx = length(v), length(x)
     real_length = length(buffer(v))
@@ -73,12 +73,12 @@ function grow_at(v::GPUVector, index::Int, amount::Int)
     copy!(v, index, v, index + amount, amount)
 end
 
-splice!{T}(v::GPUVector{T}, index::Int, x::T) = (v[index] = x)
-function splice!{T}(v::GPUVector{T}, index::Int, x::Vector = T[])
+splice!(v::GPUVector{T}, index::Int, x::T) where {T} = (v[index] = x)
+function splice!(v::GPUVector{T}, index::Int, x::Vector = T[]) where T
     splice!(v, index:index, map(T, x))
 end
 
-function splice!{T}(v::GPUVector{T}, index::UnitRange, x::Vector=T[])
+function splice!(v::GPUVector{T}, index::UnitRange, x::Vector=T[]) where T
     lenv = length(v)
     elements_to_grow = length(x) - length(index) # -1
     buffer = similar(buffer(v), length(v) + elements_to_grow)

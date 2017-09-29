@@ -20,18 +20,18 @@ startvalue(::typeof(Base.scalarmin), T) = typemax(T)
 startvalue(::typeof(Base.scalarmax), T) = typemin(T)
 
 # TODO widen and support Int64 and use Base.r_promote_type
-gpu_promote_type{T}(op, ::Type{T}) = T
-gpu_promote_type{T<:Base.WidenReduceResult}(op, ::Type{T}) = T
-gpu_promote_type{T<:Base.WidenReduceResult}(::typeof(+), ::Type{T}) = T
-gpu_promote_type{T<:Base.WidenReduceResult}(::typeof(*), ::Type{T}) = T
-gpu_promote_type{T<:Number}(::typeof(+), ::Type{T}) = typeof(zero(T)+zero(T))
-gpu_promote_type{T<:Number}(::typeof(*), ::Type{T}) = typeof(one(T)*one(T))
-gpu_promote_type{T<:Base.WidenReduceResult}(::typeof(Base.scalarmax), ::Type{T}) = T
-gpu_promote_type{T<:Base.WidenReduceResult}(::typeof(Base.scalarmin), ::Type{T}) = T
-gpu_promote_type{T<:Base.WidenReduceResult}(::typeof(max), ::Type{T}) = T
-gpu_promote_type{T<:Base.WidenReduceResult}(::typeof(min), ::Type{T}) = T
+gpu_promote_type(op, ::Type{T}) where {T} = T
+gpu_promote_type(op, ::Type{T}) where {T<:Base.WidenReduceResult} = T
+gpu_promote_type(::typeof(+), ::Type{T}) where {T<:Base.WidenReduceResult} = T
+gpu_promote_type(::typeof(*), ::Type{T}) where {T<:Base.WidenReduceResult} = T
+gpu_promote_type(::typeof(+), ::Type{T}) where {T<:Number} = typeof(zero(T)+zero(T))
+gpu_promote_type(::typeof(*), ::Type{T}) where {T<:Number} = typeof(one(T)*one(T))
+gpu_promote_type(::typeof(Base.scalarmax), ::Type{T}) where {T<:Base.WidenReduceResult} = T
+gpu_promote_type(::typeof(Base.scalarmin), ::Type{T}) where {T<:Base.WidenReduceResult} = T
+gpu_promote_type(::typeof(max), ::Type{T}) where {T<:Base.WidenReduceResult} = T
+gpu_promote_type(::typeof(min), ::Type{T}) where {T<:Base.WidenReduceResult} = T
 
-function Base.mapreduce{T, N}(f::Function, op::Function, A::GPUArray{T, N})
+function Base.mapreduce(f::Function, op::Function, A::GPUArray{T, N}) where {T, N}
     OT = gpu_promote_type(op, T)
     v0 = startvalue(op, OT) # TODO do this better
     mapreduce(f, op, v0, A)
@@ -117,9 +117,9 @@ end
 to_cpu(x) = x
 to_cpu(x::GPUArray) = Array(x)
 
-function acc_mapreduce{T, OT, N}(
+function acc_mapreduce(
         f, op, v0::OT, A::GPUArray{T, N}, rest::Tuple
-    )
+    ) where {T, OT, N}
     dev = device(A)
     blocksize = 80
     threads = 256

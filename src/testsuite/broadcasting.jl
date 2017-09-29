@@ -24,7 +24,7 @@ function testv3_2(a, b)
 end
 
 # more complex function for broadcast
-function test_kernel{T}(a::T, b)
+function test_kernel(a::T, b) where T
     c = a
     for i=1:5
         c += T(b)
