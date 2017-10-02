@@ -105,8 +105,10 @@ end
 
 
 function arg_length(x::AbstractArray)
-    if !isbits(x)
-        error("Non isbits Arrays in GPU Broadcast not supported (So arrays that don't contain pointers to memory are, e.g. UnitRanges). Try converting it to a gpu array. Found: $(typeof(x))")
+    if !Base.datatype_pointerfree(x)
+        error("Arrays type contains pointer - this doesn't work on the GPU (So arrays that don't contain pointers to memory, e.g. UnitRanges, would work).
+            Try converting it to a gpu array. Found: $(typeof(x))"
+        )
     end
     UInt32.(size(x))
 end
