@@ -6,11 +6,9 @@
 
 [Benchmarks](https://github.com/JuliaGPU/GPUBenchmarks.jl/blob/master/results/results.md)
 
-GPU Array package for Julia's various GPU backends.
-The compilation for the GPU is done with [CUDAnative.jl](https://github.com/JuliaGPU/CUDAnative.jl/)
-and for OpenCL [Transpiler.jl](https://github.com/SimonDanisch/Transpiler.jl) is used.
-In the future it's planned to replace the transpiler by a similar approach
-CUDAnative.jl is using (via LLVM + SPIR-V).
+Abstract GPU Array package for Julia's various GPU backends.
+See it as a Julia Base.AbstractArray for GPUs.
+Currently, you either need to install [CLArrays](https://github.com/JuliaGPU/CLArrays.jl) or [CuArrays](https://github.com/JuliaGPU/CLArrays.jl) for a concrete implementation.
 
 
 # Why another GPU array package in yet another language?
@@ -50,9 +48,7 @@ In theory, we could go as far as inspecting user defined callbacks (we can get t
 
 # Scope
 
-Current backends: OpenCL, CUDA, Julia Threaded
-
-Implemented for all backends:
+Interface offered for all backends:
 
 ```Julia
 map(f, ::GPUArray...)
@@ -71,68 +67,6 @@ From (CL/CU)BLAS
 gemm!, scal!, gemv! and the high level functions that are implemented with these, like A * B, A_mul_B!, etc.
 ```
 
-
-# Usage
-
-A backend will be initialized by default,
-but can be explicitly set with `opencl()`, `cudanative()`, `threaded()`.
-There is also `GPUArrays.init(device_symbol, filterfuncs...)`, which can be used to programmatically
-initialize a backend.
-Filterfuncs can be used to select a device like this (`opencl()`, etc also support those):
-```Julia
-import GPUArrays: is_gpu, has_atleast, threads
-GPUArrays.init(:cudanative, is_gpu, dev -> has_atleast(dev, threads, 512))
-```
-You can also temporarily create a context on the currently selected backend with this construct:
-```Julia
-on_device([device = GPUArrays.current_device()]) do context
-    A = GPUArray(rand(Float32, 32, 32))
-    c = A .+ A
-end
-```
-Or you can run some code on all currently available devices like this:
-
-```Julia
-forall_devices(filterfuncs...) do context
-    A = GPUArray(rand(Float32, 32, 32))
-    c = A .+ A
-end
-```
-
-
-```Julia
-using GPUArrays
-
-a = GPUArray(rand(Float32, 32, 32)) # can be constructed from any Julia Array
-b = similar(a) # similar and other Julia.Base operations are defined
-b .= a .+ 1f0 # broadcast in action, only works on 0.6 for .+. on 0.5 do: b .= (+).(a, 1f0)!
-c = a * b # calls to BLAS
-function test(a, b)
-    Complex64(sin(a / b))
-end
-complex_c = test.(c, b)
-fft!(complex_c) # fft!/ifft!/plan_fft, plan_ifft, plan_fft!, plan_ifft!
-
-"""
-When you program with GPUArrays, you can just write normal julia functions, feed them to gpu_call and depending on what backend you choose it will use Transpiler.jl or CUDAnative.
-"""
-#Signature, global_size == cuda blocks, local size == cuda threads
-gpu_call(kernel::Function, DispatchDummy::GPUArray, args::Tuple, global_size = length(DispatchDummy), local_size = nothing)
-with kernel looking like this:
-
-function kernel(state, arg1, arg2, arg3) # args get splatted into the kernel call
-    # state gets always passed as the first argument and is needed to offer the same
-    # functionality across backends, even though they have very different ways of of getting e.g. the thread index
-    # arg1 can be any gpu array - this is needed to dispatch to the correct intrinsics.
-    # if you call gpu_call without any further modifications to global/local size, this should give you a linear index into
-    # DispatchDummy
-    idx = linear_index(state)
-    arg1[idx] = arg2[idx] + arg3[idx]
-    return #kernel must return void
-end
-```
-Example for [gpu_call](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/custom_kernels.jl)
-
 # Currently supported subset of Julia Code
 
 working with immutable isbits (not containing pointers) type should be completely supported
@@ -150,21 +84,4 @@ Transpiler/OpenCL has problems with putting GPU arrays on the gpu into a struct 
 
 # Installation
 
-I recently added a lot of features and bug fixes to the master branch, so you might want to check that out (`Pkg.checkout("GPUArrays")`).
-
-For the cudanative backend, you need to install [CUDAnative.jl manually](https://github.com/JuliaGPU/CUDAnative.jl/#installation) and it works only on osx + linux with a julia source build.
-Make sure to have either CUDA and/or OpenCL drivers installed correctly.
-`Pkg.build("GPUArrays")` will pick those up and should include the working backends.
-So if your system configuration changes, make sure to run `Pkg.build("GPUArrays")` again.
-The rest should work automatically:
-
-```Julia
-Pkg.add("GPUArrays")
-Pkg.checkout("GPUArrays") # optional but recommended to checkout master branch
-Pkg.build("GPUArrays") # should print out information about what backends are added
-# Test it!
-Pkg.test("GPUArrays")
-```
-If a backend is not supported by the hardware, you will see build errors while running `Pkg.add("GPUArrays")`.
-Since GPUArrays selects only working backends when running `Pkg.build("GPUArrays")`
-**these errors can be ignored**.
+See CuArrays or CLArrays for installation instructions.
