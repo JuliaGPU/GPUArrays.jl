@@ -10,6 +10,7 @@ function run_linalg(Typ)
         @testset "PermuteDims" begin
             against_base(x -> permutedims(x, (2, 1)), T, (2, 3))
             against_base(x -> permutedims(x, (2, 1, 3)), T, (4, 5, 6))
+            against_base(x -> permutedims(x, (3, 1, 2)), T, (4, 5, 6))
         end
     end
 end

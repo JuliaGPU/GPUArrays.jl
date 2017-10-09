@@ -42,14 +42,15 @@ function transpose_blocks!(
 
     for j = UInt32(0):UInt32(3)
         j0 = j * BLOCK_ROWS
-        tile[tidx_x + ui1, tidx_y + j0 + ui1] = idata[y + j0, x]
+        @inbounds tile[tidx_x + ui1, tidx_y + j0 + ui1] = idata[y + j0, x]
     end
 
     synchronize_threads(state)
     for j = UInt32(0):UInt32(3)
         j0 = j * BLOCK_ROWS
-        odata[x, y + j0] = tile[tidx_x + ui1, tidx_y + j0 + ui1]
+        @inbounds odata[x, y + j0] = tile[tidx_x + ui1, tidx_y + j0 + ui1]
     end
+
     return
 end
 
@@ -84,8 +85,8 @@ end
 function permutedims!(dest::GPUArray, src::GPUArray, perm)
     perm = UInt32.((perm...,))
     gpu_call(dest, (dest, src, perm)) do state, dest, src, perm
-        I = @cartesianidx dest state
-        @inbounds dest[I...] = src[genperm(I, perm)...]
+        I = @cartesianidx src state
+        @inbounds dest[genperm(I, perm)...] = src[I...]
         return
     end
     return dest
