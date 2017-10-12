@@ -8,7 +8,7 @@
 
 Abstract GPU Array package for Julia's various GPU backends.
 See it as a Julia Base.AbstractArray for GPUs.
-Currently, you either need to install [CLArrays](https://github.com/JuliaGPU/CLArrays.jl) or [CuArrays](https://github.com/JuliaGPU/CLArrays.jl) for a concrete implementation.
+Currently, you either need to install [CLArrays](https://github.com/JuliaGPU/CLArrays.jl) or [CuArrays](https://github.com/JuliaGPU/CuArrays.jl) for a concrete implementation.
 
 
 # Why another GPU array package in yet another language?
