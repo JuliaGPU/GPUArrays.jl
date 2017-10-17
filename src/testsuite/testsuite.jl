@@ -8,6 +8,7 @@ module TestSuite
 using Base.Test
 
 toarray(T, x::Tuple{X, Vararg{Int}}) where X = fill(first(x), Base.tail(x))
+toarray(::Type{T}, x::NTuple{N, Int}) where {T <: Bool, N} = rand(T, x)
 toarray(::Type{T}, x::NTuple{N, Int}) where {T <: Integer, N} = rand(T(1):T(10), x)
 toarray(T, x::NTuple{N, Int}) where N = rand(T, x)
 toarray(T, x) = x

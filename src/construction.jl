@@ -45,8 +45,8 @@ function convert(AT::Type{<: GPUArray{T, N}}, A::DenseArray{T, N}) where {T, N}
     copy!(AT(Base.size(A)), A)
 end
 
-function convert(AT::Type{<: GPUArray{T1}}, A::DenseArray{T2}) where {T1, T2}
-    copy!(similar(AT, T1, size(A)), T1.(A))
+function convert(AT::Type{<: GPUArray{T1}}, A::DenseArray{T2, N}) where {T1, T2, N}
+    copy!(similar(AT, T1, size(A)), convert(Array{T1, N}, A))
 end
 function convert(AT::Type{<: GPUArray}, A::DenseArray{T2, N}) where {T2, N}
     copy!(similar(AT, T2, size(A)), A)

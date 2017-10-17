@@ -42,8 +42,9 @@ end
 Base.scale!(s::Real, X::GPUArray) = scale!(X, s)
 function Base.scale!(X::GPUArray{T}, s::Real) where T <: BLAS.BlasComplex
     R = typeof(real(zero(T)))
-    buff = reinterpret(R, vec(X))
-    BLAS.scal!(2*length(X), R(s), buff, 1)
+    N = 2*length(X)
+    buff = unsafe_reinterpret(R, X, (N,))
+    BLAS.scal!(N, R(s), buff, 1)
     X
 end
 function Base.scale!(X::GPUArray{T}, s::Real) where T <: Union{Float32, Float64}
