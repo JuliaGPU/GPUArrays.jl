@@ -104,10 +104,17 @@ function Base.foreach(func, over::GPUArray, Bs...)
 end
 
 
-arg_length(x::Array) = error("No array in GPU Broadcast supported. Try converting it to a gpu array")
+function arg_length(x::AbstractArray)
+    if !Base.datatype_pointerfree(x)
+        error("Arrays type contains pointer - this doesn't work on the GPU (So arrays that don't contain pointers to memory, e.g. UnitRanges, would work).
+            Try converting it to a gpu array. Found: $(typeof(x))"
+        )
+    end
+    UInt32.(size(x))
+end
 arg_length(x::Tuple) = (UInt32(length(x)),)
 arg_length(x::GPUArray) = UInt32.(size(x))
-arg_length(x) = ()
+arg_length(x) = () # Scalar
 
 struct BInfo{Typ, N}
     size::NTuple{N, UInt32}
