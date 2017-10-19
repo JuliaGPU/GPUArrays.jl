@@ -7,7 +7,7 @@ function run_blas(Typ)
         T = Typ{Float32}
         @testset "matmul" begin
             against_base(*, T, (5, 5), (5, 5))
-            against_base(*, T, (5, 5), (5))
+            against_base(*, T, (5, 5), (5,))
             against_base(A_mul_Bt, T, (5, 5), (5, 5))
             against_base(At_mul_B, T, (5, 5), (5, 5))
         end
