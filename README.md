@@ -75,9 +75,7 @@ Transpiler/OpenCL has problems with putting GPU arrays on the gpu into a struct 
 
 # JLArray
 
-The `JLArray` is a `GPUArray` which doesn't run on the GPU and rather uses Julia's multithreading as its backend. It serves as a
-fallback for testing compatibility with `GPUArray`s in cases where a GPU does not exist and also serves as a way to force
-multithreading for broadcasted/mapped/etc. operations. It is constructed as follows:
+The `JLArray` is a `GPUArray` which doesn't run on the GPU and rather uses Julia's async constructs as its backend. It serves as a fallback for testing compatibility with `GPUArray`s in cases where a GPU does not exist and as a reference implementation. It is constructed as follows:
 
 ```julia
 gA = JLArray(A)
