@@ -73,6 +73,14 @@ working with immutable isbits (not containing pointers) type should be completel
 non allocating code (so no constructs like `x = [1, 2, 3]`). Note that tuples are isbits, so this works x = (1, 2, 3).
 Transpiler/OpenCL has problems with putting GPU arrays on the gpu into a struct - so no views and actually no multidimensional indexing. For that `size` is needed which would need to be part of the array struct. A fix for that is in sight, though.
 
+# JLArray
+
+The `JLArray` is a `GPUArray` which doesn't run on the GPU and rather uses Julia's async constructs as its backend. It serves as a fallback for testing compatibility with `GPUArray`s in cases where a GPU does not exist and as a reference implementation. It is constructed as follows:
+
+```julia
+gA = JLArray(A)
+```
+
 # TODO / up for grabs
 
 * stencil operations, convolutions
