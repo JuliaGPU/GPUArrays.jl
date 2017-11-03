@@ -48,6 +48,7 @@ function test_broadcast(Typ)
                 gres = Typ(cres)
                 gres .= test_idx.(gidx, Base.RefValue(gy))
                 cres .= test_idx.(cidx, Base.RefValue(cy))
+                @test Array(gres) == cres
             end
             @testset "Tuple" begin
                 against_base(T, (3, N), (3, N), (N,), (N,), (N,)) do out, arr, a, b, c
@@ -88,6 +89,15 @@ function test_broadcast(Typ)
                     @. u = uprev + dt*duprev + dt2*(fract*ku)
                 end
                 against_base((x) -> (-).(x), T, (2, 3))
+
+                against_base(T, dim, dim, dim, dim, dim, dim) do utilde, gA, k1, k2, k3, k4
+                    btilde1 = ET(1)
+                    btilde2 = ET(1)
+                    btilde3 = ET(1)
+                    btilde4 = ET(1)
+                    dt = ET(1)
+                    @. utilde = dt*(btilde1*k1 + btilde2*k2 + btilde3*k3 + btilde4*k4)
+                end
             end
 
             against_base((x) -> fill!(x, 1), T, (3,3))

@@ -73,7 +73,7 @@ function broadcast_t(f::Any, ::Type{Any}, ::Any, ::Any, A::GPUArrays.GPUArray, a
 end
 
 deref(x) = x
-deref(x::RefValue) = (x[],) # RefValue doesn't work with CUDAnative
+deref(x::RefValue) = (x[],) # RefValue doesn't work with CUDAnative so we use Tuple
 
 function _broadcast!(
         func, out::GPUArray,
@@ -84,9 +84,9 @@ function _broadcast!(
     shape = UInt32.(size(out))
     args = (A, Bs...)
     descriptor_tuple = ntuple(length(args)) do i
-        BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
+        BInfo(args[i], keeps[i], Idefaults[i])
     end
-    gpu_call(broadcast_kernel!, out, (func, out, shape, UInt32(length(out)), descriptor_tuple, A,  deref.(Bs)...))
+    gpu_call(broadcast_kernel!, out, (func, out, shape, descriptor_tuple, (A, deref.(Bs)...)))
     out
 end
 
@@ -97,9 +97,9 @@ function Base.foreach(func, over::GPUArray, Bs...)
     keeps, Idefaults = map_newindexer(shape, over, Bs)
     args = (over, Bs...)
     descriptor_tuple = ntuple(length(args)) do i
-        BroadcastDescriptor(args[i], keeps[i], Idefaults[i])
+        BInfo(args[i], keeps[i], Idefaults[i])
     end
-    gpu_call(foreach_kernel, over, (func, shape, UInt32.(length(over)), descriptor_tuple, over, deref.(Bs)...))
+    gpu_call(foreach_kernel, over, (func, shape, descriptor_tuple, (over, deref.(Bs)...)))
     return
 end
 
@@ -116,51 +116,60 @@ arg_length(x::Tuple) = (UInt32(length(x)),)
 arg_length(x::GPUArray) = UInt32.(size(x))
 arg_length(x) = () # Scalar
 
-abstract type BroadcastDescriptor{Typ} end
-
-struct BroadcastDescriptorN{Typ, N} <: BroadcastDescriptor{Typ}
+struct BInfo{Typ, N}
     size::NTuple{N, UInt32}
     keep::NTuple{N, UInt32}
     idefault::NTuple{N, UInt32}
 end
-function BroadcastDescriptor(val::RefValue, keep, idefault)
-    BroadcastDescriptorN{Tuple, 1}((UInt32(1),), (UInt32(0),), (UInt32(1),))
-end
 
-function BroadcastDescriptor(val, keep, idefault)
+function BInfo(val, keep, idefault)
     N = length(keep)
     typ = Broadcast.containertype(val)
-    BroadcastDescriptorN{typ, N}(arg_length(val), UInt32.(keep), UInt32.(idefault))
+    BInfo{typ, N}(arg_length(val), UInt32.(keep), UInt32.(idefault))
 end
 
 @propagate_inbounds @inline function _broadcast_getindex(
-        ::BroadcastDescriptor{Array}, A, I
+        ::BInfo{Array}, A, I
     )
     A[I]
 end
 @propagate_inbounds @inline function _broadcast_getindex(
-        ::BroadcastDescriptor{Tuple}, A, I
+        ::BInfo{Tuple}, A, I
     )
     A[I]
 end
 @propagate_inbounds @inline function _broadcast_getindex(
-        ::BroadcastDescriptor{Array}, A::Ref, I
+        ::BInfo{Array}, A::Ref, I
     )
     A[]
 end
 
 @inline _broadcast_getindex(any, A, I) = A
 
-for N = 0:10
+@inline function broadcast_kernel!(state, func, out, shape, descriptor, args)
+    ilin = @linearidx(out, state)
+    @inbounds out[ilin] = apply_broadcast(ilin, func, shape, descriptor, args)
+    return
+end
+function foreach_kernel(state, func, shape, descriptor, args)
+    ilin = @linearidx(args[1], state)
+    apply_broadcast(ilin, func, shape, descriptor, args)
+    return
+end
+
+function mapidx_kernel(state, f, A, args)
+    ilin = @linearidx(A, state)
+    f(ilin, A, args...)
+    return
+end
+
+for N = 0:15
     nargs = N + 1
     inner_expr = []
-    args = []
     valargs = []
     for i = 1:N
-        Ai = Symbol("A_", i);
         val_i = Symbol("val_", i); I_i = Symbol("I_", i);
         desi = Symbol("deref_", i)
-        push!(args, Ai)
         inner = quote
             # destructure the keeps and As tuples
             $desi = descriptor[$i]
@@ -172,14 +181,13 @@ for N = 0:10
                 $desi.size
             )
             # extract array values
-            @inbounds $val_i = _broadcast_getindex($desi, $Ai, $I_i)
+            @inbounds $val_i = _broadcast_getindex($desi, args[$i], $I_i)
         end
         push!(inner_expr, inner)
         push!(valargs, val_i)
     end
     @eval begin
-
-        @inline function apply_broadcast(ilin, state, func, shape, len, descriptor, $(args...))
+        @inline function apply_broadcast(ilin, func, shape, descriptor, args::NTuple{$N, Any})
             # this will hopefully get dead code removed,
             # if only arrays with linear index are involved, because I should be unused in that case
             I = gpu_ind2sub(shape, ilin)
@@ -187,36 +195,11 @@ for N = 0:10
             # call the function and store the result
             func($(valargs...))
         end
-
-        @inline function broadcast_kernel!(state, func, B, shape, len, descriptor, $(args...))
-            ilin = linear_index(state)
-            if ilin <= len
-                @inbounds B[ilin] = apply_broadcast(ilin, state, func, shape, len, descriptor, $(args...))
-            end
-            return
-        end
-
-        function foreach_kernel(state, func, shape, len, descriptor, A, $(args...))
-            ilin = linear_index(state)
-            if ilin <= len
-                apply_broadcast(ilin, state, func, shape, len, descriptor, A, $(args...))
-            end
-            return
-        end
-
-        function mapidx_kernel(state, f, A, len, $(args...))
-            i = linear_index(state)
-            @inbounds if i <= len
-                f(i, A, $(args...))
-            end
-            return
-        end
     end
-
 end
 
 function mapidx(f, A::GPUArray, args::NTuple{N, Any}) where N
-    gpu_call(mapidx_kernel, A, (f, A, UInt32(length(A)), args...))
+    gpu_call(mapidx_kernel, A, (f, A, args))
 end
 
 # don't do anything for empty tuples
