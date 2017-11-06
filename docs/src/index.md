@@ -55,6 +55,8 @@ synchronize_threads(state)
 device(A::AbstractArray)
 
 synchronize(A::AbstractArray)
+
+@LocalMemory(state, T, N)
 ```
 
 
