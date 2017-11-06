@@ -21,5 +21,6 @@ include("random.jl")
 
 export GPUArray, gpu_call, thread_blocks_heuristic, global_size, synchronize_threads
 export linear_index, @linearidx, @cartesianidx, convolution!, device, synchronize
+export JLArray
 
 end # module
