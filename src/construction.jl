@@ -41,6 +41,45 @@ similar(x::X, ::Type{T}, size::Base.Dims{N}) where {X <: GPUArray, T, N} = simil
 
 convert(AT::Type{<: GPUArray{T, N}}, A::GPUArray{T, N}) where {T, N} = A
 
+function indexstyle(x::T) where T
+    style = try
+        Base.IndexStyle(x)
+    catch
+        nothing
+    end
+    style
+end
+
+function collect_kernel(state, A, iter, ::IndexCartesian)
+    idx = @cartesianidx(A, state)
+    @inbounds A[idx...] = iter[idx...]
+    return
+end
+
+function collect_kernel(state, A, iter, ::IndexLinear)
+    idx = linear_index(state)
+    @inbounds A[idx] = iter[idx]
+    return
+end
+
+eltype_or(::Type{<: GPUArray}, or) = or
+eltype_or(::Type{<: GPUArray{T}}, or) where T = T
+eltype_or(::Type{<: GPUArray{T, N}}, or) where {T, N} = T
+
+function convert(AT::Type{<: GPUArray}, iter)
+    isize = Base.iteratorsize(iter)
+    style = indexstyle(iter)
+    ettrait = Base.iteratoreltype(iter)
+    if isbits(iter) && isize == Base.HasShape() && style != nothing && ettrait == Base.HasEltype()
+        # We can collect on the GPU
+        A = similar(AT, eltype_or(AT, eltype(iter)), size(iter))
+        gpu_call(collect_kernel, A, (A, iter, style))
+        A
+    else
+        convert(AT, collect(iter))
+    end
+end
+
 function convert(AT::Type{<: GPUArray{T, N}}, A::DenseArray{T, N}) where {T, N}
     copy!(AT(Base.size(A)), A)
 end
