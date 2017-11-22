@@ -1,11 +1,44 @@
 using GPUArrays
 using Base.Test, GPUArrays.TestSuite
 
+
+
+# It's kind of annoying to make FillArrays only a test dependency
+# so for texting the conversion to GPUArrays of shaped iterators,
+# I just copied the core types from FillArrays:s
+
+abstract type AbstractFill{T, N} <: AbstractArray{T, N} end
+@inline function Base.getindex(F::AbstractFill, k::Integer)
+    @boundscheck checkbounds(F, k)
+    getindex_value(F)
+end
+@inline function Base.getindex(F::AbstractFill{T, N}, kj::Vararg{<:Integer, N}) where {T, N}
+    @boundscheck checkbounds(F, kj...)
+    getindex_value(F)
+end
+Base.IndexStyle(F::AbstractFill) = IndexLinear()
+struct Fill{T, N} <: AbstractFill{T, N}
+    value::T
+    size::NTuple{N, Int}
+end
+getindex_value(x::Fill) = x.value
+@inline Base.size(F::Fill) = F.size
+struct Eye{T} <: AbstractMatrix{T}
+    size::NTuple{2, Int}
+end
+Base.size(E::Eye) = E.size
+@inline function Base.getindex(E::Eye{T}, k::Integer, j::Integer) where T
+    @boundscheck checkbounds(E, k, j)
+    ifelse(k == j, one(T), zero(T))
+end
+
+
 function run_construction(Typ)
     @testset "Construction" begin
         constructors(Typ)
         conversion(Typ)
         value_constructor(Typ)
+        iterator_constructors(Typ)
     end
 end
 
@@ -124,7 +157,7 @@ function value_constructor(Typ)
             @test all(x-> x == Int32(77), Array(x2))
 
             x = eye(T, 2, 2)
-            
+
             x1 = eye(Typ{T, 2}, 2, 2)
             x2 = eye(Typ{T}, (2, 2))
             x3 = eye(Typ{T, 2}, (2, 2))
@@ -132,6 +165,20 @@ function value_constructor(Typ)
             @test Array(x1) ≈ x
             @test Array(x2) ≈ x
             @test Array(x3) ≈ x
+        end
+    end
+end
+function iterator_constructors(Typ)
+    @testset "iterator constructors" begin
+        for T in supported_eltypes()
+            @test Typ(Fill(T(0), (10,))) == zeros(Typ{T}, 10)
+            @test Typ(Fill(T(0), (10, 10))) == zeros(Typ{T}, 10, 10)
+            x = Typ{Float32}(Fill(T(0), (10, 10)))
+            eltype(x) == Float32
+
+            @test Typ(Eye{T}((10, 10))) == eye(Typ{T}, 10, 10)
+            x = Typ{Float32}(Eye{T}((10, 10)))
+            @test eltype(x) == Float32
         end
     end
 end
