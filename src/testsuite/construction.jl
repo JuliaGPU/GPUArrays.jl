@@ -173,12 +173,13 @@ function iterator_constructors(Typ)
         for T in supported_eltypes()
             @test Typ(Fill(T(0), (10,))) == zeros(Typ{T}, 10)
             @test Typ(Fill(T(0), (10, 10))) == zeros(Typ{T}, 10, 10)
-            x = Typ{Float32}(Fill(T(0), (10, 10)))
-            eltype(x) == Float32
-
-            @test Typ(Eye{T}((10, 10))) == eye(Typ{T}, 10, 10)
-            x = Typ{Float32}(Eye{T}((10, 10)))
-            @test eltype(x) == Float32
+            if T <: Real
+                x = Typ{Float32}(Fill(T(0), (10, 10)))
+                @test eltype(x) == Float32
+                @test Typ(Eye{T}((10, 10))) == eye(Typ{T}, 10, 10)
+                x = Typ{Float32}(Eye{T}((10, 10)))
+                @test eltype(x) == Float32
+            end
         end
     end
 end
