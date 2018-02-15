@@ -104,10 +104,10 @@ function Base.foreach(func, over::GPUArray, Bs...)
 end
 
 
-function arg_length(x::AbstractArray)
-    if !Base.datatype_pointerfree(x)
+function arg_length(x::T) where T <: AbstractArray
+    if !Base.datatype_pointerfree(T)
         error("Arrays type contains pointer - this doesn't work on the GPU (So arrays that don't contain pointers to memory, e.g. UnitRanges, would work).
-            Try converting it to a gpu array. Found: $(typeof(x))"
+            Try converting it to a gpu array. Found: $(T)"
         )
     end
     UInt32.(size(x))
