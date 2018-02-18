@@ -1,9 +1,10 @@
-import Base: any, count, countnz
+import Base: any, all, count, countnz
 
 #############################
 # reduce
 # functions in base implemented with a direct loop need to be overloaded to use mapreduce
 any(pred, A::GPUArray) = Bool(mapreduce(pred, |, Int32(0), A))
+all(pred, A::GPUArray) = Bool(mapreduce(pred, &, Int32(1), A))
 count(pred, A::GPUArray) = Int(mapreduce(pred, +, UInt32(0), A))
 countnz(A::GPUArray) = Int(mapreduce(x-> x != 0, +, UInt32(0), A))
 countnz(A::GPUArray, dim) = Int(mapreducedim(x-> x != 0, +, UInt32(0), A, dim))
