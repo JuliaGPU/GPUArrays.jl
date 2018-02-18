@@ -133,5 +133,12 @@ function run_base(Typ)
             against_base((a, b)-> map!(-, a, b), T, (10,), (10,))
             against_base((a, b, c, d)-> map!(*, a, b, c, d), T, (10,), (10,), (10,), (10,))
         end
+
+        @testset "repmat" begin
+            against_base(a-> repmat(a, 5, 6), T, (10,))
+            against_base(a-> repmat(a, 5), T, (10,))
+            against_base(a-> repmat(a, 5), T, (5, 4))
+            against_base(a-> repmat(a, 4, 3), T, (10, 15))
+        end
     end
 end

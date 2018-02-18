@@ -92,3 +92,44 @@ function _sub2ind(inds, L, ind, i::IT, I::IT...) where IT
     r1 = inds[1]
     _sub2ind(Base.tail(inds), L * r1, ind + (i - IT(1)) * L, I...)
 end
+
+@inline Base.@propagate_inbounds getidx_2d1d(x::AbstractVector, i, j) = x[i]
+@inline Base.@propagate_inbounds getidx_2d1d(x::AbstractMatrix, i, j) = x[i, j]
+
+function Base.repmat(a::GPUVecOrMat, m::Int, n::Int = 1)
+    o, p = size(a, 1), size(a, 2)
+    b = similar(a, o*m, p*n)
+    args = (b, a, UInt32.((o, p, m, n))...)
+    gpu_call(a, args, n) do state, b, a, o, p, m, n
+        j = linear_index(state)
+        j > n && return
+        ui1 = UInt32(1)
+        d = (j - ui1) * p + ui1
+        @inbounds for i in ui1:m
+            c = (i - ui1) * o + ui1
+            for r in ui1:p
+                for k in ui1:o
+                    b[k - ui1 + c, r - ui1 + d] = getidx_2d1d(a, k, r)
+                end
+            end
+        end
+        return
+    end
+    return b
+end
+
+function Base.repmat(a::GPUVector, m::Int)
+    o = length(a)
+    b = similar(a, o*m)
+    gpu_call(a, (b, a, UInt32(o), UInt32(m)), m) do state, b, a, o, m
+        i = linear_index(state)
+        i > m && return
+        ui1 = UInt32(1)
+        c = (i - ui1)*o + ui1
+        @inbounds for i in ui1:o
+            b[c + i - ui1] = a[i]
+        end
+        return
+    end
+    return b
+end
