@@ -93,6 +93,9 @@ function _sub2ind(inds, L, ind, i::IT, I::IT...) where IT
     _sub2ind(Base.tail(inds), L * r1, ind + (i - IT(1)) * L, I...)
 end
 
+# This is pretty ugly, but I feel bad to add those to device arrays, since
+# we're never bound checking... So getindex(a::GPUVector, 10, 10) would silently go unnoticed
+# we need this here for easier implementation of repmat
 @inline Base.@propagate_inbounds getidx_2d1d(x::AbstractVector, i, j) = x[i]
 @inline Base.@propagate_inbounds getidx_2d1d(x::AbstractMatrix, i, j) = x[i, j]
 
