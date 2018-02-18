@@ -57,7 +57,8 @@ function rand!(A::GPUArray{T}) where T <: AbstractFloat
     A
 end
 
-rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Integer}) where {T, N} = rand(A, T, size)
+rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Integer}) where {T, N} = rand(X, T, size...)
+rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Int}) where {T, N} = rand(X, T, size...)
 
 function rand(X::Type{<: GPUArray}, ::Type{ET}, size::Integer...) where ET
     A = similar(X, ET, size)
