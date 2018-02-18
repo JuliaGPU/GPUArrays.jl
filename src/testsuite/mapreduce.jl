@@ -13,6 +13,7 @@ function run_mapreduce(Typ)
                         x = T(y)
                         @test sum(y, 2) ≈ Array(sum(x, 2))
                         @test sum(y, 1) ≈ Array(sum(x, 1))
+                        @test sum(y, (1, 2)) ≈ Array(sum(x, (1, 2)))
 
                         y = rand(range, N, 10)
                         x = T(y)

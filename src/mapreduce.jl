@@ -48,30 +48,39 @@ function Base.mapreduce(f, op, v0, A::GPUArray)
     acc_mapreduce(f, op, v0, A, ())
 end
 
-
-function mapreducedim_kernel(state, f, op, R::AbstractArray{T1, N}, A::AbstractArray{T, N}, slice_size, sizeA, dim) where {T1, T, N}
-    ilin = UInt32(linear_index(state))
-    ilin > length(R) && return
-    accum = zero(T1)
-    @inbounds for i = UInt32(1):slice_size
-        idx = N == dim ? (ilin, i) : (i, ilin)
-        i2d = gpu_sub2ind(sizeA, idx)
-        accum = op(accum, f(A[i2d]))
+@generated function mapreducedim_kernel(state, f, op, R, A, range::NTuple{N, Any}) where N
+    types = (range.parameters...,)
+    indices = ntuple(i-> Symbol("I_$i"), N)
+    Iexpr = ntuple(i-> :(I[$i]), N)
+    body = :(@inbounds R[$(Iexpr...)] = op(R[$(Iexpr...)], f(A[$(indices...)])))
+    for i = N:-1:1
+        idxsym = indices[i]
+        if types[i] == Void
+            body = quote
+                $idxsym = I[$i]
+                $body
+            end
+        else
+            rsym = Symbol("r_$i")
+            body = quote
+                $(rsym) = range[$i]
+                for $idxsym in UInt32(first($rsym)):UInt32(last($rsym))
+                    $body
+                end
+            end
+        end
+        body
     end
-    R[ilin] = accum
-    return
+    quote
+        I = @cartesianidx R state
+        $body
+        return
+    end
 end
+
 function Base._mapreducedim!(f, op, R::GPUArray, A::GPUArray)
-    sizeR = size(R)
-    if all(x-> x == 1, sizeR)
-        x = mapreduce(f, op, A)
-        copy!(R, reshape([x], sizeR))
-        return R
-    end
-    @assert count(x-> x == 1, sizeR) == (ndims(R) - 1) "Not implemented"
-    dim = findfirst(x-> x == 1, sizeR)
-    slice_size = size(A, dim)
-    gpu_call(mapreducedim_kernel, R, (f, op, R, A, UInt32(slice_size), UInt32.(size(A)), UInt32(dim)))
+    range = ifelse.(length.(indices(R)) .== 1, indices(A), nothing)
+    gpu_call(mapreducedim_kernel, R, (f, op, R, A, range))
     return R
 end
 
