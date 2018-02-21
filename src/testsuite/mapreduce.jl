@@ -38,5 +38,13 @@ function run_mapreduce(Typ)
                 end
             end
         end
+        @testset "any all" begin
+            for Ac in ([false, false], [false, true], [true, true])
+                A = Typ(Ac)
+                @test typeof(A) == Typ{Bool,1}
+                @test any(A) == any(Ac)
+                @test all(A) == all(Ac)
+            end
+        end
     end
 end

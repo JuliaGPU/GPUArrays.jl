@@ -41,6 +41,7 @@ include("mapreduce.jl")
 include("base.jl")
 include("indexing.jl")
 # include("vector.jl")
+include("random.jl")
 
 function supported_eltypes()
     (Float32, Float64, Int32, Int64, Complex64, Complex128)
@@ -60,6 +61,7 @@ function run_tests(Typ)
     run_linalg(Typ)
     run_mapreduce(Typ)
     run_indexing(Typ)
+    run_random(Typ)
 end
 
 export against_base, run_tests, supported_eltypes
