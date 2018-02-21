@@ -7,6 +7,10 @@ struct JLArray{T, N} <: GPUArray{T, N}
     size::NTuple{N, Int}
 end
 
+function showarray(io::IO, A::JLArray, repr::Bool)
+    print(io, "CPU: ")
+    showarray(io, Array(A), repr)
+end
 """
 Thread group local memory
 """
