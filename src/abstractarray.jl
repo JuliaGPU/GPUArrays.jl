@@ -1,4 +1,4 @@
-import Base: show, showcompact, similar, convert, _reshape, map!, copy!, map, copy, showarray
+import Base: show, showcompact, similar, convert, _reshape, map!, copyto!, map, copy, showarray
 
 # Dense GPU Array
 abstract type GPUArray{T, N} <: DenseArray{T, N} end
@@ -31,7 +31,7 @@ end
 
 ############################################
 # serialization
-
+using Serialization
 const BaseSerializer = if isdefined(Base, :AbstractSerializer)
     Base.AbstractSerializer
 elseif isdefined(Base, :SerializationState)
@@ -70,35 +70,33 @@ function to_cartesian(A, indices::Tuple)
         isa(val, Base.Slice{Base.OneTo{Int}}) && return size(A, i)
         error("GPU indexing only defined for integers or unit ranges. Found: $val")
     end)
-    CartesianRange(start, stop)
+    CartesianIndices(start, stop)
 end
-
-crange(start, stop) = CartesianRange(CartesianIndex(start), CartesianIndex(stop))
 
 
 
 for (D, S) in ((GPUArray, AbstractArray), (AbstractArray, GPUArray), (GPUArray, GPUArray))
     @eval begin
-        function copy!(
+        function copyto!(
                 dest::$D, doffset::Integer,
                 src::$S, soffset::Integer, amount::Integer
             )
-            copy!(
+            copyto!(
                 unpack_buffer(dest), doffset,
                 unpack_buffer(src), soffset, amount
             )
         end
-        function copy!(
+        function copyto!(
                 dest::$D{T, N}, rdest::NTuple{N, UnitRange},
                 src::$S{T, N}, ssrc::NTuple{N, UnitRange},
             ) where {T, N}
-            drange = crange(start.(rdest), last.(rdest))
-            srange = crange(start.(ssrc), last.(ssrc))
-            copy!(dest, drange, src, srange)
+            drange = CartesianIndices(rdest)
+            srange = CartesianIndices(ssrc)
+            copyto!(dest, drange, src, srange)
         end
-        function copy!(
-                dest::$D{T}, d_range::CartesianRange{CartesianIndex{1}},
-                src::$S{T}, s_range::CartesianRange{CartesianIndex{1}},
+        function copyto!(
+                dest::$D{T}, d_range::CartesianIndices{1},
+                src::$S{T}, s_range::CartesianIndices{1},
             ) where T
             amount = length(d_range)
             if length(s_range) != amount
@@ -107,9 +105,9 @@ for (D, S) in ((GPUArray, AbstractArray), (AbstractArray, GPUArray), (GPUArray, 
             amount == 0 && return dest
             d_offset = first(d_range)[1]
             s_offset = first(s_range)[1]
-            copy!(dest, d_offset, src, s_offset, amount)
+            copyto!(dest, d_offset, src, s_offset, amount)
         end
-        function copy!(
+        function copyto!(
                 dest::$D{T, N}, src::$S{T, N}
             ) where {T, N}
             len = length(src)
@@ -117,7 +115,7 @@ for (D, S) in ((GPUArray, AbstractArray), (AbstractArray, GPUArray), (GPUArray, 
             if length(dest) > len
                 throw(BoundsError(dest, length(src)))
             end
-            copy!(dest, 1, src, 1, len)
+            copyto!(dest, 1, src, 1, len)
         end
     end
 end
@@ -134,17 +132,18 @@ function copy_kernel!(state, dest, dest_offsets, src, src_offsets, shape, shape_
     return
 end
 
-function copy!(
-        dest::GPUArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
-        src::GPUArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
+function copyto!(
+        dest::GPUArray{T, N}, destcrange::CartesianIndices{N},
+        src::GPUArray{T, N}, srccrange::CartesianIndices{N}
     ) where {T, N}
     shape = size(destcrange)
     if shape != size(srccrange)
         throw(DimensionMismatch("Ranges don't match their size. Found: $shape, $(size(srccrange))"))
     end
     len = length(destcrange)
-    dest_offsets = UInt32.(destcrange.start.I .- 1)
-    src_offsets = UInt32.(srccrange.start.I .- 1)
+
+    dest_offsets = UInt32.(first.(destcrange.indices) .- 1)
+    src_offsets = UInt32.(first.(srccrange.indices) .- 1)
     ui_shape = UInt32.(shape)
     gpu_call(
         copy_kernel!, dest,
@@ -155,30 +154,30 @@ function copy!(
 end
 
 
-function copy!(
-        dest::GPUArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
-        src::AbstractArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
+function copyto!(
+        dest::GPUArray{T, N}, destcrange::CartesianIndices{N},
+        src::AbstractArray{T, N}, srccrange::CartesianIndices{N}
     ) where {T, N}
     # Is this efficient? Maybe!
-    # TODO: compare to a pure intrinsic copy implementation!
+    # TODO: compare to a pure intrinsic copyto implementation!
     # this would mean looping over linear sections of memory and
-    # use copy!(dest, offset::Integer, buffer(src), offset::Integer, amout::Integer)
+    # use copyto!(dest, offset::Integer, buffer(src), offset::Integer, amout::Integer)
     src_gpu = typeof(dest)(map(idx-> src[idx], srccrange))
-    nrange = CartesianRange(one(CartesianIndex{N}), CartesianIndex(size(src_gpu)))
-    copy!(dest, destcrange, src_gpu, nrange)
+    nrange = CartesianIndices(size(src_gpu))
+    copyto!(dest, destcrange, src_gpu, nrange)
     dest
 end
 
 
-function copy!(
-        dest::AbstractArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
-        src::GPUArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
+function copyto!(
+        dest::AbstractArray{T, N}, destcrange::CartesianIndices{N},
+        src::GPUArray{T, N}, srccrange::CartesianIndices{N}
     ) where {T, N}
     # Is this efficient? Maybe!
     dest_gpu = similar(src, size(destcrange))
-    nrange = CartesianRange(one(CartesianIndex{N}), CartesianIndex(size(dest_gpu)))
-    copy!(dest_gpu, nrange, src, srccrange)
-    copy!(dest, destcrange, Array(dest_gpu), nrange)
+    nrange = CartesianIndices(size(dest_gpu))
+    copyto!(dest_gpu, nrange, src, srccrange)
+    copyto!(dest, destcrange, Array(dest_gpu), nrange)
     dest
 end
 
@@ -190,7 +189,7 @@ Copyright (c) 2009-2016: Jeff Bezanson, Stefan Karpinski, Viral B. Shah, and oth
 
 https://github.com/JuliaLang/julia/contributors
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copyto of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copyto, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 

@@ -14,24 +14,39 @@ Base.:(==)(A::GPUArray, B::GPUArray) = Bool(mapreduce(==, &, Int32(1), A, B))
 # hack to get around of fetching the first element of the GPUArray
 # as a startvalue, which is a bit complicated with the current reduce implementation
 function startvalue(f, T)
-    error("Please supply a starting value for mapreduce. E.g: mapreduce($f, $op, 1, A)")
+    error("Please supply a starting value for mapreduce. E.g: mapreduce(func, $f, 1, A)")
 end
 startvalue(::typeof(+), T) = zero(T)
+startvalue(::typeof(Base.add_sum), T) = zero(T)
 startvalue(::typeof(*), T) = one(T)
-startvalue(::typeof(Base.scalarmin), T) = typemax(T)
-startvalue(::typeof(Base.scalarmax), T) = typemin(T)
+startvalue(::typeof(Base.mul_prod), T) = one(T)
+
+startvalue(::typeof(max), T) = typemin(T)
+startvalue(::typeof(min), T) = typemax(T)
+
+# TODO mirror base
+
+if Int === Int32
+const SmallSigned = Union{Int8,Int16}
+const SmallUnsigned = Union{UInt8,UInt16}
+else
+const SmallSigned = Union{Int8,Int16,Int32}
+const SmallUnsigned = Union{UInt8,UInt16,UInt32}
+end
+
+const CommonReduceResult = Union{UInt64,UInt128,Int64,Int128,Float16,Float32,Float64}
+const WidenReduceResult = Union{SmallSigned, SmallUnsigned}
+
 
 # TODO widen and support Int64 and use Base.r_promote_type
 gpu_promote_type(op, ::Type{T}) where {T} = T
-gpu_promote_type(op, ::Type{T}) where {T<:Base.WidenReduceResult} = T
-gpu_promote_type(::typeof(+), ::Type{T}) where {T<:Base.WidenReduceResult} = T
-gpu_promote_type(::typeof(*), ::Type{T}) where {T<:Base.WidenReduceResult} = T
+gpu_promote_type(op, ::Type{T}) where {T<: WidenReduceResult} = T
+gpu_promote_type(::typeof(+), ::Type{T}) where {T<: WidenReduceResult} = T
+gpu_promote_type(::typeof(*), ::Type{T}) where {T<: WidenReduceResult} = T
 gpu_promote_type(::typeof(+), ::Type{T}) where {T<:Number} = typeof(zero(T)+zero(T))
 gpu_promote_type(::typeof(*), ::Type{T}) where {T<:Number} = typeof(one(T)*one(T))
-gpu_promote_type(::typeof(Base.scalarmax), ::Type{T}) where {T<:Base.WidenReduceResult} = T
-gpu_promote_type(::typeof(Base.scalarmin), ::Type{T}) where {T<:Base.WidenReduceResult} = T
-gpu_promote_type(::typeof(max), ::Type{T}) where {T<:Base.WidenReduceResult} = T
-gpu_promote_type(::typeof(min), ::Type{T}) where {T<:Base.WidenReduceResult} = T
+gpu_promote_type(::typeof(max), ::Type{T}) where {T<: WidenReduceResult} = T
+gpu_promote_type(::typeof(min), ::Type{T}) where {T<: WidenReduceResult} = T
 
 function Base.mapreduce(f::Function, op::Function, A::GPUArray{T, N}) where {T, N}
     OT = gpu_promote_type(op, T)
@@ -80,7 +95,7 @@ end
 end
 
 function Base._mapreducedim!(f, op, R::GPUArray, A::GPUArray)
-    range = ifelse.(length.(indices(R)) .== 1, indices(A), nothing)
+    range = ifelse.(length.(axes(R)) .== 1, axes(A), nothing)
     gpu_call(mapreducedim_kernel, R, (f, op, R, A, range))
     return R
 end
