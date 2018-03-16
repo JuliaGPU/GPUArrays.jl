@@ -44,7 +44,7 @@ include("indexing.jl")
 include("random.jl")
 
 function supported_eltypes()
-    (Float32, Float64, Int32, Int64, Complex64, Complex128)
+    (Float32, Float64, Int32, Int64, ComplexF32, ComplexF64)
 end
 
 """

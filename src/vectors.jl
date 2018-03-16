@@ -1,4 +1,4 @@
-import Base: copy!, splice!, append!, push!, setindex!, start, next, done
+import Base: copyto!, splice!, append!, push!, setindex!, start, next, done
 import Base: getindex, map, length, eltype, endof, ndims, size, resize!
 
 resize!(A::GPUArray, newdims::Int...) = resize!(A, newdims)
@@ -13,7 +13,7 @@ function resize!(A::GPUArray{T, 1}, newdims::NTuple{1, Int}) where T
         B = similar(A, newdims)
         if length(A) > 0
             max_len = min(length(A), newlength) #might also shrink
-            copy!(B, (1:max_len,), A, (1:max_len,))
+            copyto!(B, (1:max_len,), A, (1:max_len,))
         end
         A.size = newdims
         A.buffer = buffer(B)
@@ -36,7 +36,7 @@ Will resize accordingly!
 """
 function update!(A::GPUArray{T, N}, value::Array{T, N}) where {T, N}
     size(A) != size(value) && resize!(A, size(value))
-    copy!(A, value)
+    copyto!(A, value)
     return
 end
 
@@ -70,7 +70,7 @@ end
 
 function grow_at(v::GPUVector, index::Int, amount::Int)
     resize!(v, length(v) + amount)
-    copy!(v, index, v, index + amount, amount)
+    copyto!(v, index, v, index + amount, amount)
 end
 
 splice!(v::GPUVector{T}, index::Int, x::T) where {T} = (v[index] = x)
@@ -82,11 +82,11 @@ function splice!(v::GPUVector{T}, index::UnitRange, x::Vector=T[]) where T
     lenv = length(v)
     elements_to_grow = length(x) - length(index) # -1
     buffer = similar(buffer(v), length(v) + elements_to_grow)
-    copy!(v.buffer, 1, buffer, 1, first(index) - 1) # copy first half
-    copy!(v.buffer, last(index) + 1, buffer, first(index) + length(x), lenv - last(index)) # shift second half
+    copyto!(v.buffer, 1, buffer, 1, first(index) - 1) # copyto first half
+    copyto!(v.buffer, last(index) + 1, buffer, first(index) + length(x), lenv - last(index)) # shift second half
     v.buffer = buffer
     v.real_length = length(buffer)
     v.size = (v.real_length,)
-    copy!(x, 1, buffer, first(index), length(x)) # copy contents of insertion vector
+    copyto!(x, 1, buffer, first(index), length(x)) # copyto contents of insertion vector
     return
 end

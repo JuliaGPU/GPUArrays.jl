@@ -1,5 +1,5 @@
 import CLFFT
-
+using FFT
 # figure out a gc safe way to store plans.
 # weak refs won't work, since the caching should keep them alive.
 # But at the end, we need to free all of these, otherwise CLFFT will crash

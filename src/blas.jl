@@ -9,7 +9,7 @@ function blasbuffer(A)
     error("$(typeof(A)) doesn't support BLAS operations")
 end
 
-for T in (Float32, Float64, Complex64, Complex128)
+for T in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin
         function Base.BLAS.gemm!(
                 transA::Char, transB::Char, alpha::$T,
@@ -53,7 +53,7 @@ function Base.scale!(X::GPUArray{T}, s::Number) where T <: Union{Float32, Float6
 end
 
 
-for elty in (Float32, Float64, Complex64, Complex128)
+for elty in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin
         function Base.BLAS.gemv!(trans::Char, alpha::($elty), A::GPUVecOrMat{$elty}, X::GPUVector{$elty}, beta::($elty), Y::GPUVector{$elty})
             m, n = size(A, 1), size(A, 2)
@@ -75,7 +75,7 @@ for elty in (Float32, Float64, Complex64, Complex128)
 end
 
 
-for elty in (Float32, Float64, Complex64, Complex128)
+for elty in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin
         function Base.BLAS.axpy!(
                 alpha::Number, x::GPUArray{$elty}, y::GPUArray{$elty}
