@@ -1,7 +1,3 @@
-using GPUArrays
-using GPUArrays.TestSuite
-using Base.Test
-using FFTW
 
 function run_fft(Typ)
     T = Typ{ComplexF32}

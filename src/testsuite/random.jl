@@ -1,6 +1,3 @@
-using GPUArrays
-using Base.Test, GPUArrays.TestSuite
-
 function run_random(Typ)
     @testset "Random" begin
         @testset "rand" begin  # uniform

@@ -1,5 +1,4 @@
-using GPUArrays, StaticArrays
-using Base.Test, GPUArrays.TestSuite
+
 
 function run_indexing(Typ)
     @testset "indexing" begin

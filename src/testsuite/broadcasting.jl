@@ -1,5 +1,3 @@
-using GPUArrays
-using Test, GPUArrays.TestSuite
 
 
 function run_broadcasting(Typ)

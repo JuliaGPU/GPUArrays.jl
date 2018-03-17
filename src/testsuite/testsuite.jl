@@ -5,7 +5,19 @@ Abstract test suite that can be used for all packages inheriting from GPUArray
 """
 module TestSuite
 
-using Base.Test
+using GPUArrays
+using GPUArrays: mapidx, gpu_sub2ind
+
+if GPUArrays.is_v07
+    using Test
+    using LinearAlgebra
+    using Random
+else
+    using Base.Test
+end
+
+using FFTW
+using StaticArrays
 
 toarray(T, x::Tuple{X, Vararg{Int}}) where X = fill(first(x), Base.tail(x))
 toarray(::Type{T}, x::NTuple{N, Int}) where {T <: Bool, N} = rand(T, x)

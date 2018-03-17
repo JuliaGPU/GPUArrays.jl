@@ -1,7 +1,3 @@
-using GPUArrays
-using Random
-import Random: rand, rand!
-
 function TausStep(z::Unsigned, S1::Integer, S2::Integer, S3::Integer, M::Unsigned)
     b = (((z << S1) ⊻ z) >> S2)
     return (((z & M) << S3) ⊻ b)

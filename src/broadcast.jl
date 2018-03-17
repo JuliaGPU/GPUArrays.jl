@@ -1,8 +1,3 @@
-using Base.Broadcast
-import Base.Broadcast: broadcast!, broadcast_similar
-using Base.Broadcast: map_newindexer, combine_styles, Scalar, BroadcastStyle, ArrayStyle, Style
-using Base: @propagate_inbounds, @pure, RefValue
-
 
 BroadcastStyle(::Type{T}) where T <: GPUArray = ArrayStyle{T}()
 BroadcastStyle(::Type{Any}, ::Type{T}) where T <: GPUArray = ArrayStyle{T}()
@@ -10,75 +5,6 @@ BroadcastStyle(::Type{T}, ::Type{Any}) where T <: GPUArray = ArrayStyle{T}()
 function broadcast_similar(f, ::ArrayStyle{T}, ::Type{ElType}, inds, As...) where {T <: GPUArray, ElType}
     similar(T, ElType, length.(inds))
 end
-
-# @inline function const_kernel(state, A, op, len)
-#     idx = linear_index(state)
-#     @inbounds if idx <= len
-#         A[idx] = op()
-#     end
-#     return
-# end
-# @inline function const_kernel2(state, A, x, len)
-#     idx = linear_index(state)
-#     @inbounds if idx <= len
-#         A[idx] = x
-#     end
-#     return
-# end
-#
-# function broadcast!(f, A::GPUArray)
-#     gpu_call(const_kernel, A, (A, f, UInt32(length(A))))
-#     A
-# end
-# function broadcast!(f::typeof(identity), A::GPUArray, val::Number)
-#     valconv = convert(eltype(A), val)
-#     gpu_call(const_kernel2, A, (A, valconv, UInt32(length(A))))
-#     A
-# end
-# @inline function broadcast_t(f, T::Type{Bool}, shape, it, A::GPUArray, Bs::Vararg{Any,N}) where N
-#     C = similar(A, T, shape)
-#     keeps, Idefaults = map_newindexer(shape, A, Bs)
-#     _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, it)
-#     return C
-# end
-# @inline function broadcast_t(f, T::Type{Bool}, shape, it, A::GPUArray, B::GPUArray, Bs::Vararg{Any,N}) where N
-#     C = similar(A, T, shape)
-#     Bs = (B, Bs...)
-#     keeps, Idefaults = map_newindexer(shape, A, Bs)
-#     _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, it)
-#     return C
-# end
-#
-# @inline function broadcast_t(
-#         f, ::Type{T}, shape, iter, A::GPUArray, Bs::Vararg{Any,N}
-#     ) where {N, T}
-#     C = similar(A, T, shape)
-#     keeps, Idefaults = map_newindexer(shape, A, Bs)
-#     _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, iter)
-#     return C
-# end
-# @inline function broadcast_t(
-#         f, ::Type{T}, shape, iter, A::GPUArray, B::GPUArray, rest::Vararg{Any,N}
-#     ) where {N, T}
-#     C = similar(A, T, shape)
-#     Bs = (B, rest...)
-#     keeps, Idefaults = map_newindexer(shape, A, Bs)
-#     _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, iter)
-#     return C
-# end
-#
-# @inline function broadcast_t(
-#         f, T, shape, iter, A::Any, B::GPUArray, rest::Vararg{Any, N}
-#     ) where N
-#     C = similar(B, T, shape)
-#     Bs = (B, rest...)
-#     keeps, Idefaults = map_newindexer(shape, A, Bs)
-#     _broadcast!(f, C, keeps, Idefaults, A, Bs, Val{N}, iter)
-#     return C
-# end
-# function broadcast_t(f::Any, ::Type{Any}, ::Any, ::Any, A::GPUArrays.GPUArray, args::Vararg{Any,N}) where N
-#     error("Return type couldn't be inferred for broadcast. Func: $f, $(typeof(A)), $args")
-# end
 
  # RefValue doesn't work with CUDAnative so we use Tuple, which should have the same behaviour
 deref(x) = x
@@ -153,9 +79,6 @@ end
     end
     :(Base.@_inline_meta; gpu_sub2ind(size, $exprs))
 end
-
-
-
 
 for N = 0:15
     nargs = N + 1

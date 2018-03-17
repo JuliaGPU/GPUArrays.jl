@@ -1,6 +1,4 @@
-using Base.Test, GPUArrays
-using GPUArrays: mapidx, gpu_sub2ind
-using GPUArrays.TestSuite
+
 
 function cartesian_iter(state, A, res, Asize)
     for i in CartesianIndices(Asize)
