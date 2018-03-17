@@ -31,7 +31,6 @@ end
 
 ############################################
 # serialization
-using Serialization
 const BaseSerializer = if isdefined(Base, :AbstractSerializer)
     Base.AbstractSerializer
 elseif isdefined(Base, :SerializationState)

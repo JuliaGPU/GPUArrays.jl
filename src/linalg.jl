@@ -1,4 +1,4 @@
-import Base: transpose!, permutedims!
+
 # function transpose_kernel!(
 #         state, At, A::AbstractArray{T}, width, height, ::Val{BLOCK}, ::Val{LMem}
 #     ) where {BLOCK, LMem, T}

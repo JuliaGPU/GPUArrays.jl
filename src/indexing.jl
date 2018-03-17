@@ -35,7 +35,6 @@ Base.setindex!(xs::GPUArray, v, i::Integer) = xs[i] = convert(eltype(xs), v)
 
 # Vector indexing
 
-using Base.Cartesian
 to_index(a, x) = x
 to_index(::A, x::Array{ET}) where {A, ET} = copyto!(similar(A, ET, size(x)), x)
 to_index(a, x::UnitRange{<: Integer}) = convert(UnitRange{UInt32}, x)

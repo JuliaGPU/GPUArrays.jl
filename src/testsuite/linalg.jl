@@ -1,5 +1,3 @@
-using GPUArrays
-using Base.Test, GPUArrays.TestSuite
 
 function run_linalg(Typ)
     T = Typ{Float32}

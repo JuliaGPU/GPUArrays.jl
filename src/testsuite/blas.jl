@@ -1,7 +1,4 @@
-using GPUArrays
-using GPUArrays.TestSuite
-using Base.Test
-using LinearAlgebra
+
 
 function run_blas(Typ)
     @testset "BLAS" begin

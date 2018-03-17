@@ -1,7 +1,7 @@
 # Very simple Julia backend which is just for testing the implementation
 # and can be used as a reference implementation
-import Base: pointer, similar, size, copyto!, convert
-using Base: RefValue
+
+
 struct JLArray{T, N} <: GPUArray{T, N}
     data::Array{T, N}
     size::NTuple{N, Int}
@@ -161,9 +161,7 @@ end
 blas_module(::JLArray) = Base.LinAlg.BLAS
 blasbuffer(A::JLArray) = A.data
 
-using FFTW
 
-import FFTW: *, plan_ifft!, plan_fft!, plan_fft, plan_ifft, size, plan_bfft, plan_bfft!
 # defining our own plan type is the easiest way to pass around the plans in Base interface without ambiguities
 struct FFTPlan{T}
     p::T

@@ -11,7 +11,7 @@ end
 
 for T in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin
-        function Base.BLAS.gemm!(
+        function BLAS.gemm!(
                 transA::Char, transB::Char, alpha::$T,
                 A::GPUVecOrMat{$T}, B::GPUVecOrMat{$T},
                 beta::$T, C::GPUVecOrMat{$T}
@@ -28,7 +28,7 @@ end
 
 for elty in (Float64, Float32)
     @eval begin
-        function Base.BLAS.scal!(
+        function BLAS.scal!(
                 n::Integer, DA::$elty,
                 DX::GPUArray{$elty, N}, incx::Integer
             ) where N
@@ -39,15 +39,15 @@ for elty in (Float64, Float32)
     end
 end
 
-Base.scale!(s::Number, X::GPUArray) = scale!(X, s)
-function Base.scale!(X::GPUArray{T}, s::Number) where T <: BLAS.BlasComplex
+scale!(s::Number, X::GPUArray) = scale!(X, s)
+function scale!(X::GPUArray{T}, s::Number) where T <: BLAS.BlasComplex
     R = typeof(real(zero(T)))
     N = 2*length(X)
     buff = unsafe_reinterpret(R, X, (N,))
     BLAS.scal!(N, R(s), buff, 1)
     X
 end
-function Base.scale!(X::GPUArray{T}, s::Number) where T <: Union{Float32, Float64}
+function scale!(X::GPUArray{T}, s::Number) where T <: Union{Float32, Float64}
     BLAS.scal!(length(X), T(s), X, 1)
     X
 end
@@ -55,7 +55,7 @@ end
 
 for elty in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin
-        function Base.BLAS.gemv!(trans::Char, alpha::($elty), A::GPUVecOrMat{$elty}, X::GPUVector{$elty}, beta::($elty), Y::GPUVector{$elty})
+        function BLAS.gemv!(trans::Char, alpha::($elty), A::GPUVecOrMat{$elty}, X::GPUVector{$elty}, beta::($elty), Y::GPUVector{$elty})
             m, n = size(A, 1), size(A, 2)
             if trans == 'N' && (length(X) != n || length(Y) != m)
                 throw(DimensionMismatch("A has dimensions $(size(A)), X has length $(length(X)) and Y has length $(length(Y))"))
@@ -77,7 +77,7 @@ end
 
 for elty in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin
-        function Base.BLAS.axpy!(
+        function BLAS.axpy!(
                 alpha::Number, x::GPUArray{$elty}, y::GPUArray{$elty}
             )
             if length(x) != length(y)
