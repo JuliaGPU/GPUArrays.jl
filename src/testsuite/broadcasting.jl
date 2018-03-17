@@ -1,5 +1,5 @@
 using GPUArrays
-using Base.Test, GPUArrays.TestSuite
+using Test, GPUArrays.TestSuite
 
 
 function run_broadcasting(Typ)

@@ -10,8 +10,7 @@ function fill(X::Type{<: GPUArray}, val::T, dims::NTuple{N, Integer}) where {T, 
 end
 
 function fill!(A::GPUArray{T, N}, val) where {T, N}
-    valconv = T(val)
-    gpu_call(const_kernel2, A, (A, valconv, UInt32(length(A))))
+    A .= identity.(T(val))
     A
 end
 
