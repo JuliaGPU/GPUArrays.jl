@@ -6,6 +6,9 @@ function run_random(Typ)
         @testset "rand" begin  # uniform
             for T in (Float32, Float64)
                 @test length(rand(Typ{T,1}, (4,))) == 4
+                @test length(rand(Typ{T}, (4,))) == 4
+                @test length(rand(Typ{T}, 4)) == 4
+                @test eltype(rand(Typ, 4)) == Float32
                 @test length(rand(Typ, T, 4)) == 4
                 @test length(rand(Typ{T,2}, (4,5))) == 20
                 @test length(rand(Typ, T, 4, 5)) == 20
