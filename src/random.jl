@@ -57,6 +57,10 @@ function rand!(A::GPUArray{T}) where T <: AbstractFloat
     A
 end
 
+rand(X::Type{<: GPUArray}, i::Integer...) = rand(X, Float32, i...)
+rand(X::Type{<: GPUArray}, size::NTuple{N, Int}) where N = rand(X, Float32, size...)
+rand(X::Type{<: GPUArray{T}}, i::Integer...) where T = rand(X, T, i...)
+rand(X::Type{<: GPUArray{T}}, size::NTuple{N, Int}) where {T, N} = rand(X, T, size...)
 rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Integer}) where {T, N} = rand(X, T, size...)
 rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Int}) where {T, N} = rand(X, T, size...)
 
