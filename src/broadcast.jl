@@ -1,4 +1,3 @@
-
 BroadcastStyle(::Type{T}) where T <: GPUArray = ArrayStyle{T}()
 BroadcastStyle(::Type{Any}, ::Type{T}) where T <: GPUArray = ArrayStyle{T}()
 BroadcastStyle(::Type{T}, ::Type{Any}) where T <: GPUArray = ArrayStyle{T}()
@@ -68,14 +67,14 @@ end
 
 # optimize for 1D arrays
 @pure function newindex(I::NTuple{1}, ilin, keep::NTuple{1}, Idefault, size)
-    Bool(keep[1]) ? ilin : Idefault[1]
+    (keep[1] % Bool) ? ilin : Idefault[1]
 end
 
 # differently shaped arrays
 @generated function newindex(I, ilin::T, keep::NTuple{N}, Idefault, size) where {N, T}
     exprs = Expr(:tuple)
     for i = 1:N
-        push!(exprs.args, :(T(Bool(keep[$i]) ? T(I[$i]) : T(Idefault[$i]))))
+        push!(exprs.args, :(T((keep[$i] % Bool) ? T(I[$i]) : T(Idefault[$i]))))
     end
     :(Base.@_inline_meta; gpu_sub2ind(size, $exprs))
 end
