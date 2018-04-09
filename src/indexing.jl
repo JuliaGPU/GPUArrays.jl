@@ -16,7 +16,7 @@ function _getindex(xs::GPUArray{T}, i::Integer) where T
 end
 
 function Base.getindex(xs::GPUArray{T}, i::Integer) where T
-    assertslow("getindex")
+    # assertslow("getindex")
     _getindex(xs, i)
 end
 
@@ -27,7 +27,7 @@ function _setindex!(xs::GPUArray{T}, v::T, i::Integer) where T
 end
 
 function Base.setindex!(xs::GPUArray{T}, v::T, i::Integer) where T
-    assertslow("setindex!")
+    # assertslow("setindex!")
     _setindex!(xs, v, i)
 end
 
