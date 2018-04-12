@@ -27,7 +27,7 @@ function maxpool2d_kernel(state, A::AbstractArray{T}, out, Asize, pool, stride, 
 end
 
 
-function maxpool2d(a, pool; stride = 1, pad = 0)
+function maxpool2d{T <: Integer}(a, pool::T; stride = pool, pad = 0)
     b = zeros(typeof(a), size(a,1) + pad * 2, size(a,2) + pad * 2, size(a,3), size(a,4))
     b[pad + 1 : pad + size(a,1), pad + 1 : pad + size(a,2), :, :] = a
     Asize = UInt32.(size(b))

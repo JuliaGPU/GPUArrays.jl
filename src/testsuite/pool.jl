@@ -7,7 +7,7 @@ function run_pool(Typ)
       continue
     end
     @testset "$ET" begin
-      @testset "maxpool" begin
+      @testset "maxpool with padding" begin
         pool = 3
         stride = 3
         pad = 3
@@ -18,7 +18,34 @@ function run_pool(Typ)
         out1 = maxpool(b, (3, 3))
 
         a = T(a)
-        out2 = GPUArrays.maxpool2d(a, pool, stride = 3, pad = 3)
+        out2 = GPUArrays.maxpool2d(a, pool, pad = pad)
+        
+        @test out1 ≈ out2
+      end
+
+      @testset "maxpool without padding" begin
+        pool = 3
+        stride = 3
+
+        a = rand(ET, 9,9,3,1)
+        out1 = maxpool(a, (3, 3))
+
+        a = T(a)
+        out2 = GPUArrays.maxpool2d(a, pool)
+        
+        @test out1 ≈ out2
+      end
+
+
+      @testset "maxpool with full kernel" begin
+        pool = 9
+        stride = 1
+
+        a = rand(ET, 9,9,3,1)
+        out1 = maxpool(a, (9, 9))
+
+        a = T(a)
+        out2 = GPUArrays.maxpool2d(a, pool, stride = stride)
         
         @test out1 ≈ out2
       end
