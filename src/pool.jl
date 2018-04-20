@@ -26,17 +26,14 @@ end
 
 
 function maxpool2d{T <: Integer}(a, pool::T; stride = pool, pad = 0)
-    b = zeros(typeof(a), size(a,1) + pad * 2, size(a,2) + pad * 2, size(a,3), size(a,4))
-    b[pad + 1 : pad + size(a,1), pad + 1 : pad + size(a,2), :, :] = a
-    Asize = UInt32.(size(b))
-    pool = UInt32(pool)
-    stride = UInt32(stride)
-    outSize = [i for i in size(b)]
-    outSize[1:2] = [div(Asize[1] - pool, stride) + 1, div(Asize[2] - pool, stride) + 1]
-    out = similar(b, outSize...)
-    outSize = UInt32.(tuple(outSize...))
-    gpu_call(maxpool2d_kernel, b, (b, out, Asize, pool, stride, outSize))
-    GPUArrays.synchronize(out)
+    a2 = size.((a,), (1, 2))
+    b = zeros(typeof(a), (a2 .+ 2pad)..., size(a, 3), size(a, 4))
+    apad = a2 .+ pad
+    b[pad + 1 : apad[1], pad + 1 : apad[2], :, :] = a
+    as = ((size(b) .- pool) .÷ stride) .+ 1
+    out = similar(b, (as[1], as[2], size(b, 3), size(b, 4)))
+    sizes = map(x-> UInt32.(x), (size(b), pool, stride, size(out)))
+    gpu_call(maxpool2d_kernel, b, (b, out, sizes...))
     out
 end
 
