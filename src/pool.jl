@@ -1,5 +1,3 @@
-import CUDAnative
-
 function maxpool2d_kernel(state, A::AbstractArray{T}, out, Asize, pool, stride, outSize) where T
     ilin = linear_index(state)
     idx = GPUArrays.gpu_ind2sub(Asize, ilin)
@@ -33,9 +31,10 @@ function maxpool2d{T <: Integer}(a, pool::T; stride = pool, pad = 0)
     Asize = UInt32.(size(b))
     pool = UInt32(pool)
     stride = UInt32(stride)
-    out = similar(b)
-    out = out[1:(div(Asize[1] - pool, stride) + 1), 1:(div(Asize[2] - pool, stride) + 1), :, :]
-    outSize = UInt32.(size(out))
+    outSize = [i for i in size(b)]
+    outSize[1:2] = [div(Asize[1] - pool, stride) + 1, div(Asize[2] - pool, stride) + 1]
+    out = similar(b, outSize...)
+    outSize = UInt32.(tuple(outSize...))
     gpu_call(maxpool2d_kernel, b, (b, out, Asize, pool, stride, outSize))
     GPUArrays.synchronize(out)
     out
