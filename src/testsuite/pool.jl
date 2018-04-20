@@ -18,6 +18,7 @@ function run_pool(Typ)
         out1 = maxpool(b, (3, 3))
 
         a = T(a)
+        GPUArrays.allowslow(true)
         out2 = GPUArrays.maxpool2d(a, pool, pad = pad)
         
         @test out1 ≈ out2
@@ -31,6 +32,7 @@ function run_pool(Typ)
         out1 = maxpool(a, (3, 3))
 
         a = T(a)
+        GPUArrays.allowslow(true)
         out2 = GPUArrays.maxpool2d(a, pool)
         
         @test out1 ≈ out2
@@ -45,6 +47,7 @@ function run_pool(Typ)
         out1 = maxpool(a, (9, 9))
 
         a = T(a)
+        GPUArrays.allowslow(true)
         out2 = GPUArrays.maxpool2d(a, pool, stride = stride)
         
         @test out1 ≈ out2
