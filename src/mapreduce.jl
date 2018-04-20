@@ -85,9 +85,12 @@ function Base._mapreducedim!(f, op, R::GPUArray, A::GPUArray)
     return R
 end
 
+simple_broadcast_index(A::AbstractArray, i) = A[i]
+simple_broadcast_index(x, i) = x
+
 for i = 0:10
     args = ntuple(x-> Symbol("arg_", x), i)
-    fargs = ntuple(x-> :(broadcast_index($(args[x]), length, global_index)), i)
+    fargs = ntuple(x-> :(simple_broadcast_index($(args[x]), global_index)), i)
     @eval begin
         # http://developer.amd.com/resources/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
         function reduce_kernel(state, f, op, v0::T, A, ::Val{LMEM}, result, $(args...)) where {T, LMEM}

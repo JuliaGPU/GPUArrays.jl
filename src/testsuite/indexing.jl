@@ -15,6 +15,13 @@ function run_indexing(Typ)
                 @test Array(src[1:3]) == x[1:3]
                 @test Array(src[3:end]) == x[3:end]
             end
+            @testset "multi dim, sliced setindex" begin
+                x = zeros(Typ{T}, 10, 10, 10, 10)
+                y = rand(Typ{T}, 5, 5, 10, 10)
+                x[2:6, 2:6, :, :] = y
+                x[2:6, 2:6, :, :] == y
+           end
+
         end
 
         for T in (Float32, Int32)
