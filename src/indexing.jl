@@ -62,3 +62,26 @@ function Base._unsafe_getindex!(dest::GPUArray, src::GPUArray, Is::Union{Real, A
     gpu_call(index_kernel, dest, (dest, src, UInt32.(idims), map(x-> to_index(dest, x), Is)))
     return dest
 end
+
+
+@generated function setindex_kernel!(state, dest::AbstractArray, src::AbstractArray, idims, Is, len)
+    N = length(Is.parameters)
+    idx = ntuple(i-> :(Cuint(Is[$i][Int(is[$i])])), N)
+    quote
+        i = linear_index(state)
+        i > len && return
+        is = gpu_ind2sub(idims, i)
+        @inbounds setindex!(dest, src[i], $(idx...))
+        return
+    end
+end
+
+function Base._unsafe_setindex!(::IndexStyle, dest::GPUArray, src::GPUArray, Is::Union{Real, AbstractArray}...)
+    if length(Is) == 1 && isa(first(Is), Array) && isempty(first(Is)) # indexing with empty array
+        return dest
+    end
+    idims = map(length, Is)
+    len = length(src)
+    gpu_call(setindex_kernel!, src, (dest, src, UInt32.(idims), map(x-> to_index(dest, x), Is), UInt32(len)), len)
+    return dest
+end

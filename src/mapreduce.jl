@@ -9,7 +9,7 @@ count(pred, A::GPUArray) = Int(mapreduce(pred, +, UInt32(0), A))
 countnz(A::GPUArray) = Int(mapreduce(x-> x != 0, +, UInt32(0), A))
 countnz(A::GPUArray, dim) = Int(mapreducedim(x-> x != 0, +, UInt32(0), A, dim))
 
-Base.:(==)(A::GPUArray, B::GPUArray) = Bool(mapreduce(==, &, Int32(1), A, B))
+Base.:(==)(A::GPUArray, B::GPUArray) = Bool(mapreduce((a, b)-> convert(Int32, a == b), &, Int32(1), A, B))
 
 # hack to get around of fetching the first element of the GPUArray
 # as a startvalue, which is a bit complicated with the current reduce implementation
@@ -85,9 +85,12 @@ function Base._mapreducedim!(f, op, R::GPUArray, A::GPUArray)
     return R
 end
 
+simple_broadcast_index(A::AbstractArray, i) = A[i]
+simple_broadcast_index(x, i) = x
+
 for i = 0:10
     args = ntuple(x-> Symbol("arg_", x), i)
-    fargs = ntuple(x-> :(broadcast_index($(args[x]), length, global_index)), i)
+    fargs = ntuple(x-> :(simple_broadcast_index($(args[x]), global_index)), i)
     @eval begin
         # http://developer.amd.com/resources/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
         function reduce_kernel(state, f, op, v0::T, A, ::Val{LMEM}, result, $(args...)) where {T, LMEM}
