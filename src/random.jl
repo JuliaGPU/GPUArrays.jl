@@ -33,6 +33,17 @@ function gpu_rand(::Type{T}, state, randstate::AbstractVector{NTuple{4, UInt32}}
     return stateful_rand[2]
 end
 
+floattype(::Type{T}) where T <: Union{Int64, UInt64} = Float64
+floattype(::Type{T}) where T <: Union{Int32, UInt32} = Float32
+
+to_number_range(x::AbstractFloat, ::Type{T}) where T <: Unsigned = T(round(x * typemax(T)))
+to_number_range(x::F, ::Type{T}) where {T <: Signed, F <: AbstractFloat} = T(round(((x - F(0.5)) * typemax(T)) * T(2)))
+
+function gpu_rand(::Type{T}, state, randstate::AbstractVector{NTuple{4, UInt32}}) where T <: Integer
+    f = gpu_rand(floattype(T), state, randstate)
+    return to_number_range(f, T)
+end
+
 global cached_state, clear_cache
 let rand_state_dict = Dict()
     clear_cache() = (empty!(rand_state_dict); return)
@@ -46,17 +57,21 @@ let rand_state_dict = Dict()
         end
     end
 end
-function rand!(A::GPUArray{T}) where T <: AbstractFloat
+function rand!(A::GPUArray{T}) where T <: Number
     rstates = cached_state(A)
     gpu_call(A, (rstates, A,)) do state, randstates, a
         idx = linear_index(state)
         idx > length(a) && return
-        a[idx] = gpu_rand(T, state, randstates)
+        @inbounds a[idx] = gpu_rand(T, state, randstates)
         return
     end
     A
 end
 
+rand(X::Type{<: GPUArray}, i::Integer...) = rand(X, Float32, i...)
+rand(X::Type{<: GPUArray}, size::NTuple{N, Int}) where N = rand(X, Float32, size...)
+rand(X::Type{<: GPUArray{T}}, i::Integer...) where T = rand(X, T, i...)
+rand(X::Type{<: GPUArray{T}}, size::NTuple{N, Int}) where {T, N} = rand(X, T, size...)
 rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Integer}) where {T, N} = rand(X, T, size...)
 rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Int}) where {T, N} = rand(X, T, size...)
 
