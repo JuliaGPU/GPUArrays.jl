@@ -1,5 +1,3 @@
-import CUDAnative
-
 function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asize, Bsize, outSize) where {T}
     # Thread identifiers
     TS = UInt32(2)
