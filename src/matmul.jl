@@ -1,3 +1,5 @@
+import CUDAnative
+
 function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asize, Bsize, outSize) where {T}
     # Thread identifiers
     TS = UInt32(2)
@@ -5,10 +7,10 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
     col = threadidx_y(state)
     # col = row
 
-
     groups_1 = blockidx_x(state)
     groups_2 = blockidx_y(state)
-    # CUDAnative.@cuprintf("curr: %d\n", row)
+
+    CUDAnative.@cuprintf("curr: %d\n", row)
 
     globalRow = TS * (groups_1[1] - 1) + (row[1] - 1) + 1 # Row ID of C (0..M)
     globalCol = TS * (groups_2[1] - 1) + (col[1] - 1) + 1 # Col ID of C (0..N)
@@ -58,7 +60,9 @@ function matmul(a::GPUArray{T, 2}, b::GPUArray{T, 2}) where T
     out = similar(a, Asize[1], Bsize[2])
     outSize = size(out)
     Asize = UInt32.(Asize)
-    gpu_call(matmul_kernel, out, (a,b, out, UInt32.(Asize), UInt32.(Bsize), UInt32.(outSize)), (ceil.(UInt32, size(out) ./ (UInt32(2), UInt32(2))), (UInt32(2), UInt32(2))))
+    config = (ceil.(Int, size(out) ./ (UInt32(2), UInt32(2))), (UInt32(2), UInt32(2)))
+    # println("config: ",config)
+    gpu_call(matmul_kernel, out, (a,b, out, UInt32.(Asize), UInt32.(Bsize), UInt32.(outSize)), config)
     out
 end
 
