@@ -8,8 +8,8 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
     groups_1 = blockidx_x(state)
     groups_2 = blockidx_y(state)
 
-    globalRow = TS * (groups_1 - 1) + (row - 1) + 1 # Row ID of C (0..M)
-    globalCol = TS * (groups_2 - 1) + (col - 1) + 1 # Col ID of C (0..N)
+    globalRow = TS * (groups_1 - 1) + (row - 1) +1# Row ID of C (0..M)
+    globalCol = TS * (groups_2 - 1) + (col - 1) +1# Col ID of C (0..N)
 
     @inbounds begin
         if globalRow > Asize[1] || globalCol > Bsize[2]
@@ -17,7 +17,6 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
         end
     end
 
-    # println("groups_1: ", groups_1, " groups_2: ", groups_2, " row: ", row, " col: ", col)
     # @show globalRow
     # @show globalCol
 
@@ -35,11 +34,8 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
         # Load one tile of A and B into local memory
         tiledRow = TS * (t - 1) + (row - 1) + 1
         tiledCol = TS * (t - 1) + (col - 1) + 1
-        @show tiledRow, tiledCol
-        @show globalRow, globalCol
-        println()
-        Asub[(col - 1) * TS + (row - 1) + 1] = A[(tiledCol - 1) * Asize[1] + (globalRow - 1) + 1]
-        Bsub[(col - 1) * TS + (row - 1) + 1] = B[(globalCol - 1) * Asize[2] + (tiledRow - 1) + 1]
+        Asub[(col - 1) * TS + row] = A[(tiledCol - 1) * Asize[1] + globalRow]
+        Bsub[(col - 1) * TS + row] = B[(globalCol - 1) * Asize[2] + tiledRow]
 
         # Synchronise to make sure the tile is loaded
         synchronize_threads(state)
@@ -48,12 +44,11 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
         for k in UInt32(1):UInt32(TS)
             acc += Asub[(k - 1)*TS + (row - 1 ) + 1] * Bsub[(col - 1) * TS + (k - 1) + 1]
         end
-
         # Synchronise before loading the next tile
         synchronize_threads(state)
     end
 
-    # Store the final result in C
+    # Store the final result in out
     out[(globalCol - 1) * Asize[1] + (globalRow - 1) + 1] = acc
 
     return
@@ -68,8 +63,8 @@ function matmul!(dest::GPUArray, a::GPUArray{T, 2}, b::GPUArray{T, 2}) where T
     outSize = UInt32.(size(dest))
     Asize = UInt32.(Asize)
     Bsize = UInt32.(Bsize)
-    config = ((Asize[1] - TS + UInt32(1), Bsize[2] - TS + UInt32(1)), (TS, TS))
-    println("config: ",config)
+    config = ((Asize[1] - TS + UInt32(1), Bsize[2] - TS + UInt32(1)), (TS + UInt32(0), TS + UInt32(0)))
+    # println("config: ",config)
     gpu_call(matmul_kernel, dest, (a,b, dest, Asize, Bsize, outSize, Val{UInt32(4)}(), Val{UInt32(16)}()), config)
     dest
 end
