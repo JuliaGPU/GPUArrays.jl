@@ -12,10 +12,14 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
     globalCol = TS * (groups_2 - 1) + (col - 1) + 1 # Col ID of C (0..N)
 
     @inbounds begin
-        if globalRow > (Asize[1] - TS) || globalCol > (Bsize[2] - TS)
+        if globalRow > Asize[1] || globalCol > Bsize[2]
             return
         end
     end
+
+    # println("groups_1: ", groups_1, " groups_2: ", groups_2, " row: ", row, " col: ", col)
+    # @show globalRow
+    # @show globalCol
 
     # Local memory to fit a tile of TS*TS elements of A and B
     Asub = @LocalMemory(state, T, TS²)
@@ -31,6 +35,9 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
         # Load one tile of A and B into local memory
         tiledRow = TS * (t - 1) + (row - 1) + 1
         tiledCol = TS * (t - 1) + (col - 1) + 1
+        @show tiledRow, tiledCol
+        @show globalRow, globalCol
+        println()
         Asub[(col - 1) * TS + (row - 1) + 1] = A[(tiledCol - 1) * Asize[1] + (globalRow - 1) + 1]
         Bsub[(col - 1) * TS + (row - 1) + 1] = B[(globalCol - 1) * Asize[2] + (tiledRow - 1) + 1]
 
