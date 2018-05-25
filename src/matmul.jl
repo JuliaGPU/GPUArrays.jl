@@ -32,24 +32,24 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
     for t in UInt32(1):UInt32(numTiles)
 
         # Load one tile of A and B into local memory
-        tiledRow = TS * (t - 1) + (row - 1) + 1
-        tiledCol = TS * (t - 1) + (col - 1) + 1
-        Asub[(col - 1) * TS + row] = A[(tiledCol - 1) * Asize[1] + globalRow]
-        Bsub[(col - 1) * TS + row] = B[(globalCol - 1) * Asize[2] + tiledRow]
+        @inbounds tiledRow = TS * (t - 1) + (row - 1) + 1
+        @inbounds tiledCol = TS * (t - 1) + (col - 1) + 1
+        @inbounds Asub[(col - 1) * TS + row] = A[(tiledCol - 1) * Asize[1] + globalRow]
+        @inbounds Bsub[(col - 1) * TS + row] = B[(globalCol - 1) * Asize[2] + tiledRow]
 
         # Synchronise to make sure the tile is loaded
         synchronize_threads(state)
 
         # Perform the computation for a single tile
         for k in UInt32(1):UInt32(TS)
-            acc += Asub[(k - 1)*TS + (row - 1 ) + 1] * Bsub[(col - 1) * TS + (k - 1) + 1]
+            @inbounds acc += Asub[(k - 1)*TS + (row - 1 ) + 1] * Bsub[(col - 1) * TS + (k - 1) + 1]
         end
         # Synchronise before loading the next tile
         synchronize_threads(state)
     end
 
     # Store the final result in out
-    out[(globalCol - 1) * Asize[1] + (globalRow - 1) + 1] = acc
+    @inbounds out[(globalCol - 1) * Asize[1] + (globalRow - 1) + 1] = acc
 
     return
 
@@ -63,7 +63,8 @@ function matmul!(dest::GPUArray, a::GPUArray{T, 2}, b::GPUArray{T, 2}) where T
     outSize = UInt32.(size(dest))
     Asize = UInt32.(Asize)
     Bsize = UInt32.(Bsize)
-    config = ((Asize[1] - TS + UInt32(1), Bsize[2] - TS + UInt32(1)), (TS + UInt32(0), TS + UInt32(0)))
+    config = ((div(Asize[1], TS), div(Bsize[2], TS)), (TS, TS))
+    println("config: ", config)
     # println("config: ",config)
     gpu_call(matmul_kernel, dest, (a,b, dest, Asize, Bsize, outSize, Val{UInt32(32)}(), Val{UInt32(1024)}()), config)
     dest
