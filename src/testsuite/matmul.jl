@@ -8,14 +8,15 @@ function run_matmul(Typ)
     end
     @testset "$ET" begin
       @testset "matmul" begin
-        a = rand(ET, 4,4)
-        b = rand(ET, 4,4)
+        a = rand(ET, 1024,1024)
+        b = rand(ET, 1024,1024)
         out1 = a * b
 
         a = T(a)
         b = T(b)
+        out2 = similar(T(out1))
         GPUArrays.allowslow(true)
-        out2 = GPUArrays.matmul(a, b)
+        out2 = GPUArrays.matmul!(out2, a, b)
         
         @test out1 ≈ out2
       end

@@ -1,4 +1,4 @@
-function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asize, Bsize, outSize, ::Val{TS}, ::Val{TS²}) where {T, TS, TS²}
+function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asize, Bsize, outSize, ::Val{TS}, ::Val{TS²}, ::Val{IntTS²}) where {T, TS, TS², IntTS²}
     # Thread identifiers
     row = threadidx_x(state) # Local row ID (max: TS)
     col = threadidx_y(state)
@@ -21,8 +21,8 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
     # @show globalCol
 
     # Local memory to fit a tile of TS*TS elements of A and B
-    Asub = @LocalMemory(state, T, TS²)
-    Bsub = @LocalMemory(state, T, TS²)
+    Asub = @LocalMemory(state, T, IntTS²)
+    Bsub = @LocalMemory(state, T, IntTS²)
 
     # Initialise the accumulation register
     acc = T(0.0)
@@ -64,9 +64,7 @@ function matmul!(dest::GPUArray, a::GPUArray{T, 2}, b::GPUArray{T, 2}) where T
     Asize = UInt32.(Asize)
     Bsize = UInt32.(Bsize)
     config = ((div(Asize[1], TS), div(Bsize[2], TS)), (TS, TS))
-    println("config: ", config)
-    # println("config: ",config)
-    gpu_call(matmul_kernel, dest, (a,b, dest, Asize, Bsize, outSize, Val{UInt32(32)}(), Val{UInt32(1024)}()), config)
+    gpu_call(matmul_kernel, dest, (a,b, dest, Asize, Bsize, outSize, Val{UInt32(32)}(), Val{UInt32(1024)}(), Val{1024}()), config)
     dest
 end
 #
