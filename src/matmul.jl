@@ -59,12 +59,14 @@ end
 function matmul!(dest::GPUArray, a::GPUArray{T, 2}, b::GPUArray{T, 2}) where T
     Asize = size(a)
     Bsize = size(b)
-    TS = UInt32(32)
+    device = GPUArrays.device(a)
+    thr = GPUArrays.threads(device)
+    TS = Int(sqrt(thr))
     outSize = UInt32.(size(dest))
     Asize = UInt32.(Asize)
     Bsize = UInt32.(Bsize)
     config = ((div(Asize[1], TS), div(Bsize[2], TS)), (TS, TS))
-    gpu_call(matmul_kernel, dest, (a,b, dest, Asize, Bsize, outSize, Val{UInt32(32)}(), Val{UInt32(1024)}(), Val{1024}()), config)
+    gpu_call(matmul_kernel, dest, (a,b, dest, Asize, Bsize, outSize, Val{UInt32(TS)}(), Val{UInt32(TS^2)}(), Val{TS^2}()), config)
     dest
 end
 #
