@@ -1,4 +1,4 @@
-import Base: any, all, count, countnz
+import Base: any, all, count, countnz, isapprox
 
 #############################
 # reduce
@@ -147,3 +147,14 @@ function acc_mapreduce(
     gpu_call(reduce_kernel, A, args, ((blocksize,), (threads,)))
     reduce(op, Array(out))
 end
+
+"""
+Same as Base.isapprox, but without keyword args and without nans
+"""
+function fast_isapprox(x::Number, y::Number, rtol::Real = Base.rtoldefault(x, y), atol::Real=0)
+    x == y || (isfinite(x) && isfinite(y) && abs(x - y) <= atol + rtol*max(abs(x), abs(y)))
+end
+
+isapprox(A::GPUArray{T1}, B::GPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, B, T1(rtol), T1(atol)))
+isapprox(A::AbstractArray{T1}, B::GPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, Array(B), T1(rtol), T1(atol)))
+isapprox(A::GPUArray{T1}, B::AbstractArray{T2}, rtol::Real = Base.rtoldefault(T1, T2), atol::Real=0) where {T1, T2} = all(fast_isapprox.(Array(A), B, T1(rtol), T1(atol)))
