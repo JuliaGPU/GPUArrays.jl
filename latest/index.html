@@ -117,21 +117,21 @@ get_group_id,      get_local_size,    get_local_id,       get_num_groups
 2) Pass a tuple of integer tuples to define blocks and threads per blocks!
 </code></pre>
 
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/38a669a8247e5e0df81a177e9f9a07134685f639/src/abstract_gpu_interface.jl#L112-L126' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/b185b43c1a7f9b9fcb649ed24f2fd54a9e53a212/src/abstract_gpu_interface.jl#L112-L126' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.linear_index-Tuple{Any}' href='#GPUArrays.linear_index-Tuple{Any}'>#</a>
 <strong><code>GPUArrays.linear_index</code></strong> &mdash; <em>Method</em>.</p>
 <pre><code>linear_index(state)
 </code></pre>
 
 <p>linear index corresponding to each kernel launch (in OpenCL equal to get_global_id).</p>
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/38a669a8247e5e0df81a177e9f9a07134685f639/src/abstract_gpu_interface.jl#L26-L31' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/b185b43c1a7f9b9fcb649ed24f2fd54a9e53a212/src/abstract_gpu_interface.jl#L26-L31' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.global_size-Tuple{Any}' href='#GPUArrays.global_size-Tuple{Any}'>#</a>
 <strong><code>GPUArrays.global_size</code></strong> &mdash; <em>Method</em>.</p>
 <pre><code>global_size(state)
 </code></pre>
 
 <p>Global size == blockdim * griddim == total number of kernel execution</p>
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/38a669a8247e5e0df81a177e9f9a07134685f639/src/abstract_gpu_interface.jl#L75-L79' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/b185b43c1a7f9b9fcb649ed24f2fd54a9e53a212/src/abstract_gpu_interface.jl#L75-L79' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.@linearidx-Tuple{Any,Any}' href='#GPUArrays.@linearidx-Tuple{Any,Any}'>#</a>
 <strong><code>GPUArrays.@linearidx</code></strong> &mdash; <em>Macro</em>.</p>
 <pre><code>linearidx(A, statesym = :state)
@@ -149,39 +149,39 @@ end
 ```
 </code></pre>
 
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/38a669a8247e5e0df81a177e9f9a07134685f639/src/abstract_gpu_interface.jl#L36-L51' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/b185b43c1a7f9b9fcb649ed24f2fd54a9e53a212/src/abstract_gpu_interface.jl#L36-L51' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.@cartesianidx-Tuple{Any,Any}' href='#GPUArrays.@cartesianidx-Tuple{Any,Any}'>#</a>
 <strong><code>GPUArrays.@cartesianidx</code></strong> &mdash; <em>Macro</em>.</p>
 <pre><code>cartesianidx(A, statesym = :state)
 </code></pre>
 
 <p>Like <a href=".#GPUArrays.@linearidx-Tuple{Any,Any}"><code>@linearidx(A, statesym = :state)</code></a>, but returns an N-dimensional <code>NTuple{ndim(A), Cuint}</code> as index</p>
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/38a669a8247e5e0df81a177e9f9a07134685f639/src/abstract_gpu_interface.jl#L62-L66' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/b185b43c1a7f9b9fcb649ed24f2fd54a9e53a212/src/abstract_gpu_interface.jl#L62-L66' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.synchronize_threads-Tuple{Any}' href='#GPUArrays.synchronize_threads-Tuple{Any}'>#</a>
 <strong><code>GPUArrays.synchronize_threads</code></strong> &mdash; <em>Method</em>.</p>
 <pre><code> synchronize_threads(state)
 </code></pre>
 
 <p>in CUDA terms <code>__synchronize</code> in OpenCL terms: <code>barrier(CLK_LOCAL_MEM_FENCE)</code></p>
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/38a669a8247e5e0df81a177e9f9a07134685f639/src/abstract_gpu_interface.jl#L15-L20' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/b185b43c1a7f9b9fcb649ed24f2fd54a9e53a212/src/abstract_gpu_interface.jl#L15-L20' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.device-Tuple{AbstractArray}' href='#GPUArrays.device-Tuple{AbstractArray}'>#</a>
 <strong><code>GPUArrays.device</code></strong> &mdash; <em>Method</em>.</p>
 <pre><code>device(A::AbstractArray)
 </code></pre>
 
 <p>Gets the device associated to the Array <code>A</code></p>
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/38a669a8247e5e0df81a177e9f9a07134685f639/src/abstract_gpu_interface.jl#L85-L89' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/b185b43c1a7f9b9fcb649ed24f2fd54a9e53a212/src/abstract_gpu_interface.jl#L85-L89' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.synchronize-Tuple{AbstractArray}' href='#GPUArrays.synchronize-Tuple{AbstractArray}'>#</a>
 <strong><code>GPUArrays.synchronize</code></strong> &mdash; <em>Method</em>.</p>
 <pre><code>synchronize(A::AbstractArray)
 </code></pre>
 
 <p>Blocks until all operations are finished on <code>A</code></p>
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/38a669a8247e5e0df81a177e9f9a07134685f639/src/abstract_gpu_interface.jl#L95-L99' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/b185b43c1a7f9b9fcb649ed24f2fd54a9e53a212/src/abstract_gpu_interface.jl#L95-L99' class='documenter-source'>source</a><br></p>
 <p><a id='GPUArrays.@LocalMemory-Tuple{Any,Any,Any}' href='#GPUArrays.@LocalMemory-Tuple{Any,Any,Any}'>#</a>
 <strong><code>GPUArrays.@LocalMemory</code></strong> &mdash; <em>Macro</em>.</p>
 <p>Creates a local static memory shared inside one block.</p>
-<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/38a669a8247e5e0df81a177e9f9a07134685f639/src/ondevice.jl#L21-L23' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaGPU/GPUArrays.jl/blob/b185b43c1a7f9b9fcb649ed24f2fd54a9e53a212/src/ondevice.jl#L21-L23' class='documenter-source'>source</a><br></p>
 <p><a id='The-abstract-TestSuite-1'></a></p>
 <h1 id="the-abstract-testsuite">The abstract TestSuite</h1>
 <p>Since all array packages inheriting from GPUArrays need to offer the same functionality and interface, it makes sense to test them in the same way. This is why GPUArrays contains a test suite which can be called with the array type you want to test.</p>
@@ -260,5 +260,5 @@ TestSuite.run_indexing(Typ) # indexing tests
 
 <!--
 MkDocs version : 0.17.3
-Build Date UTC : 2018-06-01 09:16:59
+Build Date UTC : 2018-06-01 10:11:37
 -->
