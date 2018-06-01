@@ -40,8 +40,9 @@ This allows GPUArrays to offer a lot of functionality with minimal code.
 Also, when compiling Julia for the GPU, we can use all the cool features from Julia, e.g.
 higher order functions, multiple dispatch, meta programming and generated functions.
 Checkout the examples, to see how this can be used to emit specialized code while not losing flexibility:
-[unrolling](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/juliaset.jl),
-[vector loads/stores](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/examples/vectorload.jl)
+
+[<img src="https://raw.githubusercontent.com/JuliaGPU/GPUBenchmarks.jl/master/results/plots/juliaset_result.png" height="150">](https://github.com/JuliaGPU/GPUBenchmarks.jl/blob/master/results/results.md)
+[<img src="https://user-images.githubusercontent.com/1010467/40832645-12ca1f50-658c-11e8-9fb4-170871db2499.png" height="150">](https://juliagpu.github.io/GPUShowcases.jl/latest/)
 
 In theory, we could go as far as inspecting user defined callbacks (we can get the complete AST), count operations and estimate register usage and use those numbers to optimize our kernels!
 
