@@ -20,5 +20,15 @@ function run_blas(Typ)
                 against_base(scale!, Typ{T}, (13, 23), 77f0)
             end
         end
+        @testset "gbmv" begin
+            m, n = 10, 11
+            A, x, y = randn(Float32, 3, n), randn(Float32, n), zeros(Float32, m)
+
+            Ag, xg, yg = Typ(A), Typ(x), Typ(y)
+
+            BLAS.gbmv!('N', m, 1, 1, 1f0, A, x, 0f0, y)
+            BLAS.gbmv!('N', m, 1, 1, 1f0, Ag, xg, 0f0, yg)
+            @test y ≈ Array(yg)
+        end
     end
 end
