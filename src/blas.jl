@@ -89,3 +89,25 @@ for elty in (Float32, Float64, Complex64, Complex128)
         end
     end
 end
+
+
+for elty in (Float32, Float64, Complex64, Complex128)
+    @eval begin
+        function Base.BLAS.gbmv!(trans::Char, m::Int, kl::Int, ku::Int, alpha::($elty), A::GPUMatrix{$elty}, X::GPUVector{$elty}, beta::($elty), Y::GPUVector{$elty})
+            n = size(A, 2)
+            if trans == 'N' && (length(X) != n || length(Y) != m)
+                throw(DimensionMismatch("A has dimensions $(size(A)), X has length $(length(X)) and Y has length $(length(Y))"))
+            elseif trans == 'C' && (length(X) != m || length(Y) != n)
+                throw(DimensionMismatch("A' has dimensions $n, $m, X has length $(length(X)) and Y has length $(length(Y))"))
+            elseif trans == 'T' && (length(X) != m || length(Y) != n)
+                throw(DimensionMismatch("A.' has dimensions $n, $m, X has length $(length(X)) and Y has length $(length(Y))"))
+            end
+            blasmod = blas_module(A)
+            blasmod.gbmv!(
+                trans, m, kl, ku, alpha,
+                blasbuffer(A), blasbuffer(X), beta, blasbuffer(Y)
+            )
+            Y
+        end
+    end
+end
