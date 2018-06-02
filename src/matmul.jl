@@ -21,6 +21,8 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
     Asub = @LocalMemory(state, T, TS²)
     Bsub = @LocalMemory(state, T, TS²)
 
+    # save_print("TS^2: ", TS²)
+
     # Initialise the accumulation register
     acc = @LocalMemory(state, T, WPT)
     for w in UInt32(1):UInt32(WPT)
@@ -33,8 +35,9 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
         for w in UInt32(1):UInt32(WPT)
             @inbounds tiledRow = UInt32(TS) * (t - 1) + (row - 1) + 1
             @inbounds tiledCol = UInt32(TS) * (t - 1) + (col - 1) + 1
-            @inbounds Asub[(col - 1 + (w - 1)*UInt32(RTS)) * UInt32(TS) + row] = A[(tiledCol - 1 + (w - 1)*UInt32(RTS)) * Asize[1] + globalRow]
-            @inbounds Bsub[(col - 1 + (w - 1)*UInt32(RTS)) * UInt32(TS) + row] = B[(globalCol - 1 + (w - 1)*UInt32(RTS)) * Asize[2] + tiledRow]
+            # save_print("gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, col + w*RTS))): ", gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, col + w*RTS))))
+            @inbounds Asub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, col + (w - 1)*RTS)))] = A[(tiledCol - 1 + (w - 1)*UInt32(RTS)) * Asize[1] + globalRow]
+            @inbounds Bsub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, col + (w - 1)*RTS)))] = B[(globalCol - 1 + (w - 1)*UInt32(RTS)) * Asize[2] + tiledRow]
         end
 
         # Synchronise to make sure the tile is loaded
@@ -43,7 +46,7 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
         # Perform the computation for a single tile
         for k in UInt32(1):UInt32(TS)
             for w in UInt32(1):UInt32(WPT)
-                @inbounds acc[w] += Asub[(k - 1)*UInt32(TS) + (row - 1 ) + 1] * Bsub[(col - 1) * UInt32(TS) + (k - 1) + 1]
+                @inbounds acc[w] += Asub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, k)))] * Bsub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((k, col + (w - 1)*RTS)))]
             end
         end
         # Synchronise before loading the next tile
@@ -65,6 +68,7 @@ function matmul!(dest::GPUArray, a::GPUArray{T, 2}, b::GPUArray{T, 2}) where T
     device = GPUArrays.device(a)
     thr = GPUArrays.threads(device)
     TS = ceil(Int,sqrt(thr))
+    # print("TS: ", TS)
     WPT = 8
     outSize = UInt32.(size(dest))
     Asize = UInt32.(Asize)
