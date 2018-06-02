@@ -24,10 +24,12 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
     # save_print("TS^2: ", TS²)
 
     # Initialise the accumulation register
+    # acc = zeros(T, WPT)
     acc = @LocalMemory(state, T, WPT)
     for w in UInt32(1):UInt32(WPT)
         acc[w] = Float32(0)
     end
+    synchronize_threads(state)
 
     # Loop over all tiles
     for t in UInt32(1):UInt32(numTiles)
@@ -36,8 +38,8 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
             @inbounds tiledRow = UInt32(TS) * (t - 1) + (row - 1) + 1
             @inbounds tiledCol = UInt32(TS) * (t - 1) + (col - 1) + 1
             # save_print("gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, col + w*RTS))): ", gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, col + w*RTS))))
-            @inbounds Asub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, col + (w - 1)*RTS)))] = A[(tiledCol - 1 + (w - 1)*UInt32(RTS)) * Asize[1] + globalRow]
-            @inbounds Bsub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, col + (w - 1)*RTS)))] = B[(globalCol - 1 + (w - 1)*UInt32(RTS)) * Asize[2] + tiledRow]
+            @inbounds Asub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, (col - 1) + (w - 1)*RTS + 1)))] = A[(tiledCol - 1 + (w - 1)*UInt32(RTS)) * Asize[1] + globalRow]
+            @inbounds Bsub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, (col - 1) + (w - 1)*RTS + 1)))] = B[(globalCol - 1 + (w - 1)*UInt32(RTS)) * Asize[2] + tiledRow]
         end
 
         # Synchronise to make sure the tile is loaded
@@ -46,7 +48,7 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
         # Perform the computation for a single tile
         for k in UInt32(1):UInt32(TS)
             for w in UInt32(1):UInt32(WPT)
-                @inbounds acc[w] += Asub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, k)))] * Bsub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((k, col + (w - 1)*RTS)))]
+                @inbounds acc[w] += Asub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, k)))] * Bsub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((k, (col - 1) + (w - 1)*RTS + 1)))]
             end
         end
         # Synchronise before loading the next tile
@@ -73,6 +75,7 @@ function matmul!(dest::GPUArray, a::GPUArray{T, 2}, b::GPUArray{T, 2}) where T
     outSize = UInt32.(size(dest))
     Asize = UInt32.(Asize)
     Bsize = UInt32.(Bsize)
+    acc = zeros(typeof(a), WPT)
     config = ((div(Asize[1], TS), div(Bsize[2], TS)), (TS, div(TS, WPT)))
     gpu_call(matmul_kernel, dest, (a,b, dest, Asize, Bsize, outSize, Val{TS}(), Val{TS^2}(), Val{WPT}(), Val{div(Asize[2], TS)}(), Val{div(TS, WPT)}()), config)
     dest
