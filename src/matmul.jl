@@ -70,7 +70,8 @@ function matmul!(dest::GPUArray, a::GPUArray{T, 2}, b::GPUArray{T, 2}) where T
     Asize = UInt32.(Asize)
     Bsize = UInt32.(Bsize)
     acc = zeros(typeof(a), WPT)
-    config = ((div(Asize[1], TS), div(Bsize[2], TS)), (TS, div(TS, WPT)))
+    config = (UInt32.((div(Asize[1], TS), div(Bsize[2], TS))), UInt32.((TS, div(TS, WPT))))
+    # print("config: ", config)
     gpu_call(matmul_kernel, dest, (a,b, dest, Asize, Bsize, outSize, Val{TS}(), Val{TS^2}(), Val{WPT}(), Val{div(Asize[2], TS)}(), Val{div(TS, WPT)}()), config)
     dest
 end
