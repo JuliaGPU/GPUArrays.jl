@@ -1,3 +1,18 @@
+@generated function ntuple_args(f, ::Val{N}, args::Vararg{<: Any, Nargs}) where {N, Nargs}
+    expr = Expr(:tuple)
+    for i = 1:N
+        call = Expr(:call, :f, i)
+        for j = 1:Nargs
+            push!(call.args, :(args[$j]))
+        end
+        push!(expr.args, call)
+    end
+    quote
+        Base.@_inline_meta
+        $expr
+    end
+end
+
 function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asize, Bsize, outSize, ::Val{TS}, ::Val{TS²}, ::Val{WPT}, ::Val{numTiles}, ::Val{RTS}) where {T, TS, TS², WPT, numTiles, RTS}
     # Thread identifiers
     row = threadidx_x(state) # Local row ID (max: TS)
@@ -41,7 +56,7 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
 
         # Perform the computation for a single tile
         for k in UInt32(1):UInt32(TS)
-            acc = ntuple(Val{WPT}) do w
+            acc = ntuple_args(Val{WPT}(), acc, Asub, Bsub) do w, acc, Asub, Bsub
              acc[w] +  Asub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, k)))] * Bsub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((k, (col - 1) + (w - 1)*RTS + 1)))]
             end
         end
