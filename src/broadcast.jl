@@ -1,27 +1,51 @@
+
+import Base.Broadcast: BroadcastStyle, AbstractArrayStyle, Broadcasted, broadcast_axes
+import Base.Broadcast: DefaultArrayStyle, materialize!, flatten, ArrayStyle, combine_styles
+
 BroadcastStyle(::Type{T}) where T <: GPUArray = ArrayStyle{T}()
 BroadcastStyle(::Type{Any}, ::Type{T}) where T <: GPUArray = ArrayStyle{T}()
 BroadcastStyle(::Type{T}, ::Type{Any}) where T <: GPUArray = ArrayStyle{T}()
-function broadcast_similar(f, ::ArrayStyle{T}, ::Type{ElType}, inds, As...) where {T <: GPUArray, ElType}
-    similar(T, ElType, length.(inds))
+BroadcastStyle(::Type{T1}, ::Type{T2}) where {T1 <: GPUArray, T2 <: GPUArray} = ArrayStyle{T}()
+
+const GPUBroadcast = Broadcasted{<: ArrayStyle{<: GPUArray}}
+
+function Base.similar(bc::Broadcasted{ArrayStyle{GPU}}, ::Type{ElType}) where {GPU <: GPUArray, ElType}
+    similar(GPU, ElType, axes(bc))
+end
+
+# copy overload
+
+function gpu_eachindex(f, axes, A::GPUArray, args...)
+    # TODO use axes + offset etc
+    shape = length.(axes)
+    gpu_call(A, (f, shape, A, args...), prod(shape)) do state, f, A, args...
+        lidx = linear_index(state)
+        lidx > length(A) && return
+        cartesian = CartesianIndex(gpu_ind2sub(shape, lidx))
+        f(state, cartesian, A, args...)
+        return
+    end
+end
+
+# copyto! overloads
+@inline function copyto!(dest::GPUArray, B::GPUBroadcast)
+    flat = flatten(B); as = flat.args; f = flat.f
+    gpu_broadcast!(f, dest, as)
 end
 
  # RefValue doesn't work with CUDAnative so we use Tuple, which should have the same behaviour
 deref(x) = x
 deref(x::RefValue) = (x[],)
 
-broadcast!(func, out::GPUArray, ::Nothing, args...) = gpu_broadcast!(func, out, args)
-# this is not mentioned in the docs, but the above specialisation doesn't seem to get hit for e.g.
-# x .= identity.(2.0)
-broadcast!(func, out::GPUArray, ::Scalar, args...) = gpu_broadcast!(func, out, args)
 function gpu_broadcast!(
         func, out::GPUArray, _args
     )
     args = deref.(_args)
-    shape = broadcast_indices(out)
+    # TODO handle cases if axes is not OneTo
+    shape = length.(broadcast_axes(out))
     gshape = UInt32.(size(out))
-    keeps, Idefaults = map_newindexer(shape, args)
     descriptor_tuple = ntuple(length(args)) do i
-        BInfo(args[i], keeps[i], Idefaults[i])
+        BInfo(shape, args[i])
     end
     gpu_call(broadcast_kernel!, out, (func, out, gshape, descriptor_tuple, args))
     out
@@ -33,9 +57,9 @@ end
     return
 end
 
-arg_length(x::Tuple) = (UInt32(length(x)),)
-arg_length(x::AbstractArray) = UInt32.(size(x))
-arg_length(x) = () # Scalar
+arg_shape(x::Tuple) = (UInt32(length(x)),)
+arg_shape(x::AbstractArray) = UInt32.(size(x))
+arg_shape(x) = () # Scalar
 
 struct BInfo{Typ, N}
     size::NTuple{N, UInt32}
@@ -43,10 +67,19 @@ struct BInfo{Typ, N}
     idefault::NTuple{N, UInt32}
 end
 
-function BInfo(val, keep, idefault)
-    N = length(keep)
-    typ = typeof(combine_styles(val))
-    BInfo{typ, N}(arg_length(val), UInt32.(keep), UInt32.(idefault))
+function BInfo(shape::NTuple{N, <: Integer}, arg) where N
+    typ = typeof(combine_styles(arg))
+    ashape = arg_shape(arg)
+    keep = ntuple(Val{length(ashape)}) do i
+        # < is not enough normally, but all other checks should have been performed by check broadcast shape
+        ashape[i] < shape[i] && return UInt32(0)
+        UInt32(1)
+    end
+    idefault = ntuple(Val{length(ashape)}) do i
+        ashape[i] < shape[i] && return UInt32(1)
+        UInt32(ashape[i])
+    end
+    BInfo{typ, N}(ashape, keep, idefault)
 end
 
 @propagate_inbounds @inline function _broadcast_getindex(
@@ -54,13 +87,8 @@ end
     )
     A[I]
 end
-@propagate_inbounds @inline function _broadcast_getindex(
-        ::BInfo{Style{Tuple}}, A, I
-    )
-    A[I]
-end
-@inline _broadcast_getindex(any, A, I) = A
 
+@inline _broadcast_getindex(any, A, I) = A
 
 # don't do anything for empty tuples
 @pure newindex(I, ilin, keep::Tuple{}, Idefault::Tuple{}, size::Tuple{}) = UInt32(1)
