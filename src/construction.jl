@@ -35,9 +35,11 @@ end
 
 (T::Type{<: GPUArray})(x) = convert(T, x)
 (T::Type{<: GPUArray})(dims::Integer...) = T(dims)
+(T::Type{<: GPUArray})(dims::NTuple{N, Base.OneTo{Int}}) where N = T(length.(dims))
 (T::Type{<: GPUArray{X} where X})(dims::NTuple{N, Integer}) where N = similar(T, eltype(T), dims)
 
 similar(x::X, ::Type{T}, size::Base.Dims{N}) where {X <: GPUArray, T, N} = similar(X, T, size)
+similar(::Type{X}, ::Type{T}, size::NTuple{N, Base.OneTo{Int}}) where {X <: GPUArray, T, N} = similar(X, T, length.(size))
 
 convert(AT::Type{<: GPUArray{T, N}}, A::GPUArray{T, N}) where {T, N} = A
 
