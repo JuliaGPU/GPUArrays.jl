@@ -56,8 +56,8 @@ function matmul_kernel(state, A::AbstractArray{T}, B::AbstractArray{T}, out, Asi
 
         # Perform the computation for a single tile
         for k in UInt32(1):UInt32(TS)
-            acc = ntuple_args(Val{WPT}(), acc, Asub, Bsub) do w, acc, Asub, Bsub
-             acc[w] +  Asub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, k)))] * Bsub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((k, (col - 1) + (w - 1)*RTS + 1)))]
+            acc = ntuple_args(Val{WPT}(), acc, Asub, Bsub, TS, RTS, row, col, k) do w, acc, Asub, Bsub, TS, RTS, row, col, k
+             @inbounds return (acc[w] +  Asub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((row, k)))] * Bsub[gpu_sub2ind(UInt32.((TS, TS)), UInt32.((k, (col - 1) + (w - 1)*RTS + 1)))])
             end
         end
         # Synchronise before loading the next tile
