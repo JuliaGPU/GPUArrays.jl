@@ -20,6 +20,7 @@ const shmem_counter = Ref{Int}(0)
 
 """
 Creates a local static memory shared inside one block.
+Equivalent to `__local` of OpenCL or `__shared__ (<variable>)` of CUDA.
 """
 macro LocalMemory(state, T, N)
     id = (shmem_counter[] += 1)
