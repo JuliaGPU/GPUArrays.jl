@@ -57,11 +57,21 @@ function repeat_kernel(state, A::AbstractArray{T}, out::AbstractArray{T},  inner
         return
     end
     # inner_indices = (1:n for n in inner)
-    inner_indices = ntuple_args(Val{length(inner)}(), inner) do i, inner
-        @inbounds return (UInt32(1):inner[i]) + (idx[i] - UInt32(1)) * inner[i]
+    inner_start_indices = ntuple_args(Val{length(inner)}(), inner, idx) do i, inner, idx
+        @inbounds return (UInt32(1)) + (idx[i] - UInt32(1)) * inner[i]
     end
 
-    @inbounds out[inner_indices...] = A[idx[1], idx[2]]
+    inner_end_indices = ntuple_args(Val{length(inner)}(), inner, idx) do i, inner, idx
+        @inbounds return (inner[i]) + (idx[i] - UInt32(1)) * inner[i]
+    end
+
+
+    # @inbounds out[inner_start_indices[1]:inner_end_indices[1], inner_start_indices[2]:inner_end_indices[2]] = A[idx[1], idx[2]]
+    for i in inner_start_indices[1]:inner_end_indices[1]
+        for j in inner_start_indices[2]:inner_end_indices[2]
+            @inbounds out[i, j] = A[idx[1], idx[2]]
+        end
+    end
 
     synchronize_threads(state)
 
