@@ -42,7 +42,7 @@ function repeat_kernel(state, A::AbstractArray{T}, out::AbstractArray{T},  inner
         return
     end
     # inner_indices = (1:n for n in inner)
-    inner_indices = ntuple(Val{length(inner)}) do i 
+    inner_indices = ntuple_args(Val{length(inner)}(), idx, inner) do i, idx, inner
         (1:inner[i]) + (idx[i] - 1) * inner[i]
     end
 
@@ -50,63 +50,80 @@ function repeat_kernel(state, A::AbstractArray{T}, out::AbstractArray{T},  inner
         out[i] = A[idx[1], idx[2]]
     end
 
-    src_indices = ntuple(Val{length(inner_shape)}) do i
+    src_indices = ntuple_args(Val{length(inner_shape)}(), inner_shape) do i, inner_shape
         1:inner_shape[i]
     end
-    dest_indices = copy(src_indices)
+
+    dest_indices = ntuple_args(Val{length(inner_shape)}(), inner_shape) do i, inner_shape
+        1:inner_shape[i]
+    end
+
+    for i in 1:length(outer)
+        # for j in 2:outer[i]
+            dest_indices = ntuple_args(Val{length(inner_shape)}(), inner_shape, out, dest_indices) do k, inner_shape, out, dest_indices
+                if k == i
+                    dest_indices[i] + inner_shape[i]
+                else
+                    dest_indices[i]
+                end
+            # end
+            out[dest_indices...] = out[src_indices...]
+        end
+        src_indices = ntuple_args(Val{length(outSize)}(), outSize) do i, outSize
+            1:outSize[i]
+        end
+        dest_indices = ntuple_args(Val{length(outSize)}(), outSize) do i, outSize
+            1:outSize[i]
+        end
+    end
 
 
+
+
+
+
+    
     # n = inner[1]
     # inner_indices[1] = (1:n) + ((c[1] - 1) * n)
 
-
-
-
-
-
    # fill the first inner block
-    if all(x -> x == 1, inner)
-        out[indices(A)...] = A
-    else
-        inner_indices = [1:n for n in inner]
-        for c in CartesianRange(indices(A))
-            for i in 1:ndims(A)
-                n = inner[i]
-                inner_indices[i] = (1:n) + ((c[i] - 1) * n)
-            end
-            cat_fill!(out, A[c], inner_indices)
-        end
-    end
+    # if all(x -> x == 1, inner)
+    #     out[indices(A)...] = A
+    # else
+    #     inner_indices = [1:n for n in inner]
+    #     for c in CartesianRange(indices(A))
+    #         for i in 1:ndims(A)
+    #             n = inner[i]
+    #             inner_indices[i] = (1:n) + ((c[i] - 1) * n)
+    #         end
+    #         cat_fill!(out, A[c], inner_indices)
+    #     end
+    # end
 
     # fill the outer blocks along each dimension
-    if all(x -> x == 1, outer)
-        return R
-    end
-    src_indices  = [1:n for n in inner_shape]
-    dest_indices = copy(src_indices)
-    for i in 1:length(outer)
-        B = view(R, src_indices...)
-        for j in 2:outer[i]
-            dest_indices[i] += inner_shape[i]
-            R[dest_indices...] = B
-        end
-        src_indices[i] = dest_indices[i] = 1:shape[i]
-    end
+    # if all(x -> x == 1, outer)
+    #     return R
+    # end
+    # src_indices  = [1:n for n in inner_shape]
+    # dest_indices = copy(src_indices)
+    # for i in 1:length(outer)
+    #     B = view(out, src_indices...)
+    #     for j in 2:outer[i]
+    #         dest_indices[i] += inner_shape[i]
+    #         out[dest_indices...] = B
+    #     end
+    #     src_indices[i] = dest_indices[i] = 1:shape[i]
+    # end
 
 end
 
 
-function repeat(A::GPUArray, inner, outer) 
+function gpu_repeat(A::GPUArray, inner, outer) 
     shape, inner_shape = rep_shapes(A, inner, outer)
     R = similar(A, shape)
     if any(iszero, shape)
         return R
     end
-    gpu_call(repeat_kernel, R, (a, R, inner, outer, UInt32.(shape(A)), UInt32.(shape), UInt32.(inner_shape))
+    gpu_call(repeat_kernel, R, (A, R, inner, outer, UInt32.(size(A)), UInt32.(shape), UInt32.(inner_shape)))
     return R
 end
-#
-# A = JLArray(rand(10, 10))
-# B = JLArray(rand(10, 10))
-# out = JLArray(zeros(size(A, 1), size(B, 2)))
-# matmul!(out, A, B)
