@@ -1,5 +1,20 @@
 using Base: CartesianIndex, tail, cat_fill!
 
+const io_lock = ReentrantLock()
+save_print(args...) = save_print(STDOUT, args...)
+function save_print(io::IO, args...)
+    @async begin
+        try
+            lock(io)
+            lock(io_lock)
+            print(io, string(args..., "\n"))
+        finally
+            unlock(io_lock)
+            unlock(io)
+        end
+    end
+end
+
 @generated function ntuple_args(f, ::Val{N}, args::Vararg{<: Any, Nargs}) where {N, Nargs}
     expr = Expr(:tuple)
     for i = 1:N
@@ -42,40 +57,43 @@ function repeat_kernel(state, A::AbstractArray{T}, out::AbstractArray{T},  inner
         return
     end
     # inner_indices = (1:n for n in inner)
-    inner_indices = ntuple_args(Val{length(inner)}(), idx, inner) do i, idx, inner
-        (1:inner[i]) + (idx[i] - 1) * inner[i]
+    inner_indices = ntuple_args(Val{length(inner)}(), inner) do i, inner
+        @inbounds return (UInt32(1):inner[i]) + (idx[i] - UInt32(1)) * inner[i]
     end
 
-    for i in inner_indices
-        out[i] = A[idx[1], idx[2]]
-    end
+    @inbounds out[inner_indices...] = A[idx[1], idx[2]]
 
-    src_indices = ntuple_args(Val{length(inner_shape)}(), inner_shape) do i, inner_shape
-        1:inner_shape[i]
-    end
+    synchronize_threads(state)
 
-    dest_indices = ntuple_args(Val{length(inner_shape)}(), inner_shape) do i, inner_shape
-        1:inner_shape[i]
-    end
+    return 
+    # """
+    # src_indices = ntuple_args(Val{length(inner_shape)}(), inner_shape) do i, inner_shape
+    #     1:inner_shape[i]
+    # end
 
-    for i in 1:length(outer)
-        # for j in 2:outer[i]
-            dest_indices = ntuple_args(Val{length(inner_shape)}(), inner_shape, out, dest_indices) do k, inner_shape, out, dest_indices
-                if k == i
-                    dest_indices[i] + inner_shape[i]
-                else
-                    dest_indices[i]
-                end
-            # end
-            out[dest_indices...] = out[src_indices...]
-        end
-        src_indices = ntuple_args(Val{length(outSize)}(), outSize) do i, outSize
-            1:outSize[i]
-        end
-        dest_indices = ntuple_args(Val{length(outSize)}(), outSize) do i, outSize
-            1:outSize[i]
-        end
-    end
+    # dest_indices = ntuple_args(Val{length(inner_shape)}(), inner_shape) do i, inner_shape
+    #     1:inner_shape[i]
+    # end
+
+    # for i in 1:length(outer)
+    #     # for j in 2:outer[i]
+    #         dest_indices = ntuple_args(Val{length(inner_shape)}(), inner_shape, out, dest_indices) do k, inner_shape, out, dest_indices
+    #             if k == i
+    #                 dest_indices[i] + inner_shape[i]
+    #             else
+    #                 dest_indices[i]
+    #             end
+    #         # end
+    #         out[dest_indices...] = out[src_indices...]
+    #     end
+    #     src_indices = ntuple_args(Val{length(outSize)}(), outSize) do i, outSize
+    #         1:outSize[i]
+    #     end
+    #     dest_indices = ntuple_args(Val{length(outSize)}(), outSize) do i, outSize
+    #         1:outSize[i]
+    #     end
+    # end
+    # """
 
 
 
