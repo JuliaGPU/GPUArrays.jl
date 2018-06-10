@@ -42,20 +42,25 @@ function repeat_kernel(state, A::AbstractArray{T}, out::AbstractArray{T}, inner,
         return
     end
 
-    for m in UInt32(1):UInt32(length(outer))
-        # inner_indices = (1:n for n in inner)
-        for n in UInt32(1):UInt32(outer[m])
-            inner_start_indices = ntuple_args(Val{length(inner)}(), inner, idx, m, n, inner_shape) do i, inner, idx, m, n, inner_shape
-                if m == i
-                    @inbounds return ((UInt32(1)) + (idx[i] - UInt32(1)) * inner[i]) + ((n - UInt32(1)) * inner_shape[m])
+    # save_print("idx ", idx)
+
+    for n1 in UInt32(1):UInt32(outer[UInt32(1)])
+        for n2 in UInt32(1):UInt32(outer[UInt32(2)])
+            inner_start_indices = ntuple_args(Val{length(inner)}(), inner, idx, n1, n2, inner_shape) do i, inner, idx, n1, n2, inner_shape
+                if UInt32(i) == UInt32(1)
+                    @inbounds return ((UInt32(1)) + (idx[i] - UInt32(1)) * inner[i]) + ((n1 - UInt32(1)) * inner_shape[UInt32(1)])
+                elseif UInt32(i) == UInt32(2)
+                    @inbounds return ((UInt32(1)) + (idx[i] - UInt32(1)) * inner[i]) + ((n2 - UInt32(1)) * inner_shape[UInt32(2)])
                 else
                     @inbounds return ((UInt32(1)) + (idx[i] - UInt32(1)) * inner[i])
                 end
             end
 
-            inner_end_indices = ntuple_args(Val{length(inner)}(), inner, idx, m, n, inner_shape) do i, inner, idx, m, n, inner_shape
-                if m == i
-                    @inbounds return ((inner[i]) + (idx[i] - UInt32(1)) * inner[i]) + ((n - UInt32(1)) * inner_shape[m])
+            inner_end_indices = ntuple_args(Val{length(inner)}(), inner, idx, n1, n2, inner_shape) do i, inner, idx, n1, n2, inner_shape
+                if UInt32(i) == UInt32(1)
+                    @inbounds return ((inner[i]) + (idx[i] - UInt32(1)) * inner[i]) + ((n1 - UInt32(1)) * inner_shape[UInt32(1)])
+                elseif UInt32(i) == UInt32(2)
+                    @inbounds return ((inner[i]) + (idx[i] - UInt32(1)) * inner[i]) + ((n2 - UInt32(1)) * inner_shape[UInt32(2)])    
                 else
                     @inbounds return ((inner[i]) + (idx[i] - UInt32(1)) * inner[i])
                 end
