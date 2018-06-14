@@ -83,17 +83,16 @@ end
 function repeat_back_kernel(state, A::AbstractArray{T}, delta::AbstractArray{T}, out::AbstractArray{T}, inner, outer, ::Val{dims}, Asize) where {T, dims}
     ilin = linear_index(state)
     idx = GPUArrays.gpu_ind2sub(Asize, ilin)
-    if (idx[1] > delta[1] || idx[2] > Asize[2])
+    if (idx[1] > Asize[1] || idx[2] > Asize[2])
         return
     end
-
-    src_idx = ntuple_args(Val{dims}(), idx, inner, Asize) do dim, idx, inner, Asize
-     @inbounds return (mod1(div(idx[dim] - 1, inner[dim]) + 1, Asize[dim]))
+    
+    src_idx = ntuple_args(Val{dims}(), idx, inner, Asize, mod1) do dim, idx, inner, Asize, mod1
+        @inbounds return (mod1(div(idx[dim] - 1, inner[dim]) + 1, Asize[dim]))
     end
-
-
     
     out[src_idx...] += delta[idx[1], idx[2]]
+    synchronize_threads(state)
     
     return
 end
