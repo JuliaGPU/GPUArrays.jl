@@ -10,8 +10,7 @@ function fill(X::Type{<: GPUArray}, val::T, dims::NTuple{N, Integer}) where {T, 
 end
 
 function fill!(A::GPUArray{T, N}, val) where {T, N}
-    valconv = T(val)
-    gpu_call(const_kernel2, A, (A, valconv, UInt32(length(A))))
+    A .= identity.(T(val))
     A
 end
 
@@ -34,10 +33,13 @@ function eye(T::Type{<: GPUArray}, dims::NTuple{2, Integer})
     res
 end
 
+(T::Type{<: GPUArray})(x) = convert(T, x)
 (T::Type{<: GPUArray})(dims::Integer...) = T(dims)
+(T::Type{<: GPUArray})(dims::NTuple{N, Base.OneTo{Int}}) where N = T(length.(dims))
 (T::Type{<: GPUArray{X} where X})(dims::NTuple{N, Integer}) where N = similar(T, eltype(T), dims)
 
 similar(x::X, ::Type{T}, size::Base.Dims{N}) where {X <: GPUArray, T, N} = similar(X, T, size)
+similar(::Type{X}, ::Type{T}, size::NTuple{N, Base.OneTo{Int}}) where {X <: GPUArray, T, N} = similar(X, T, length.(size))
 
 convert(AT::Type{<: GPUArray{T, N}}, A::GPUArray{T, N}) where {T, N} = A
 
@@ -67,10 +69,10 @@ eltype_or(::Type{<: GPUArray{T}}, or) where T = T
 eltype_or(::Type{<: GPUArray{T, N}}, or) where {T, N} = T
 
 function convert(AT::Type{<: GPUArray}, iter)
-    isize = Base.iteratorsize(iter)
+    isize = Base.IteratorSize(iter)
     style = indexstyle(iter)
-    ettrait = Base.iteratoreltype(iter)
-    if isbits(iter) && isize == Base.HasShape() && style != nothing && ettrait == Base.HasEltype()
+    ettrait = Base.IteratorEltype(iter)
+    if isbits(iter) && isa(isize, Base.HasShape) && style != nothing && isa(ettrait, Base.HasEltype)
         # We can collect on the GPU
         A = similar(AT, eltype_or(AT, eltype(iter)), size(iter))
         gpu_call(collect_kernel, A, (A, iter, style))
@@ -81,16 +83,16 @@ function convert(AT::Type{<: GPUArray}, iter)
 end
 
 function convert(AT::Type{<: GPUArray{T, N}}, A::DenseArray{T, N}) where {T, N}
-    copy!(AT(Base.size(A)), A)
+    copyto!(AT(Base.size(A)), A)
 end
 
 function convert(AT::Type{<: GPUArray{T1}}, A::DenseArray{T2, N}) where {T1, T2, N}
-    copy!(similar(AT, T1, size(A)), convert(Array{T1, N}, A))
+    copyto!(similar(AT, T1, size(A)), convert(Array{T1, N}, A))
 end
 function convert(AT::Type{<: GPUArray}, A::DenseArray{T2, N}) where {T2, N}
-    copy!(similar(AT, T2, size(A)), A)
+    copyto!(similar(AT, T2, size(A)), A)
 end
 
 function convert(AT::Type{Array{T, N}}, A::GPUArray{CT, CN}) where {T, N, CT, CN}
-    convert(AT, copy!(Array{CT, CN}(Int.(Base.size(A))), A))
+    convert(AT, copyto!(Array{CT, CN}(undef, Int.(Base.size(A))), A))
 end

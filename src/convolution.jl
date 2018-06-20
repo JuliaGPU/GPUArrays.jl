@@ -83,6 +83,6 @@ function fftkernel(A, kernel)
 end
 
 function convolution_fft!(a, out, k)
-    irfft(rfft(A).*conj(rfft(krn)), length(indices(A,1)))
+    irfft(rfft(A).*conj(rfft(krn)), length(axes(A,1)))
     out
 end

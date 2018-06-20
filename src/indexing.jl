@@ -3,15 +3,15 @@ const _allowslow = Ref(true)
 allowslow(flag = true) = (_allowslow[] = flag)
 
 function assertslow(op = "Operation")
-    _allowslow[] || error("$op is disabled")
+    # _allowslow[] || error("$op is disabled")
     return
 end
 
 Base.IndexStyle(::Type{<:GPUArray}) = IndexLinear()
 
 function _getindex(xs::GPUArray{T}, i::Integer) where T
-    x = Array{T}(1)
-    copy!(x, 1, xs, i, 1)
+    x = Array{T}(undef, 1)
+    copyto!(x, 1, xs, i, 1)
     return x[1]
 end
 
@@ -22,7 +22,7 @@ end
 
 function _setindex!(xs::GPUArray{T}, v::T, i::Integer) where T
     x = T[v]
-    copy!(xs, i, x, 1, 1)
+    copyto!(xs, i, x, 1, 1)
     return v
 end
 
@@ -35,9 +35,8 @@ Base.setindex!(xs::GPUArray, v, i::Integer) = xs[i] = convert(eltype(xs), v)
 
 # Vector indexing
 
-using Base.Cartesian
 to_index(a, x) = x
-to_index(::A, x::Array{ET}) where {A, ET} = copy!(similar(A, ET, size(x)), x)
+to_index(::A, x::Array{ET}) where {A, ET} = copyto!(similar(A, ET, size(x)), x)
 to_index(a, x::UnitRange{<: Integer}) = convert(UnitRange{UInt32}, x)
 to_index(a, x::Base.LogicalIndex) = error("Logical indexing not implemented")
 

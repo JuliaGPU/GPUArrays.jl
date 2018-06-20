@@ -1,6 +1,3 @@
-using GPUArrays
-import Base: rand, rand!
-
 function TausStep(z::Unsigned, S1::Integer, S2::Integer, S3::Integer, M::Unsigned)
     b = (((z << S1) ⊻ z) >> S2)
     return (((z & M) << S3) ⊻ b)
@@ -52,7 +49,7 @@ let rand_state_dict = Dict()
         get!(rand_state_dict, dev) do
             N = GPUArrays.threads(dev)
             res = similar(x, NTuple{4, UInt32}, N)
-            copy!(res, [ntuple(i-> rand(UInt32), 4) for i=1:N])
+            copyto!(res, [ntuple(i-> rand(UInt32), 4) for i=1:N])
             res
         end
     end

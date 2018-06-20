@@ -1,6 +1,22 @@
 __precompile__(true)
 module GPUArrays
 
+const is_v07 = VERSION > v"0.7-"
+
+using Serialization
+using Random
+using LinearAlgebra
+import Base: copyto!
+
+import Random: rand, rand!
+using LinearAlgebra.BLAS
+using FFTW
+import FFTW: *, plan_ifft!, plan_fft!, plan_fft, plan_ifft, size, plan_bfft, plan_bfft!
+import Base: pointer, similar, size, convert
+import LinearAlgebra: scale!, transpose!, permutedims!
+using Base: @propagate_inbounds, @pure, RefValue, Cartesian
+
+
 include("abstractarray.jl")
 include("abstract_gpu_interface.jl")
 include("ondevice.jl")
