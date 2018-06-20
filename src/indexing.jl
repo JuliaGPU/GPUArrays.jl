@@ -62,3 +62,8 @@ function Base._unsafe_getindex!(dest::GPUArray, src::GPUArray, Is::Union{Real, A
     gpu_call(index_kernel, dest, (dest, src, UInt32.(idims), map(x-> to_index(dest, x), Is)))
     return dest
 end
+
+
+function Base.checkindex(::Type{Bool}, inds::AbstractUnitRange, I::GPUArray)
+    true
+end

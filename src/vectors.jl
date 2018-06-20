@@ -90,3 +90,40 @@ function splice!(v::GPUVector{T}, index::UnitRange, x::Vector=T[]) where T
     copy!(x, 1, buffer, first(index), length(x)) # copy contents of insertion vector
     return
 end
+
+#https://devblogs.nvidia.com/parallelforall/cuda-pro-tip-optimized-filtering-warp-aggregated-atomics/
+function filter_shared_k(predicate, dst, src, nres, n)
+    l_n = 0 # shared int
+    i = blockIdx.x * (NPER_THREAD * BS) + threadIdx.x
+
+    for (int iter = 0; iter < NPER_THREAD; iter++)
+        # zero the counter
+        (threadIdx.x == 0) && (l_n = 0)
+
+        synchronize_threads(state)
+
+        # get the value, evaluate the predicate, and
+        # increment the counter if needed
+        int d, pos, ;
+
+        if (i < n)
+            d = src[i]
+            predicate(d) && (pos = atomicAdd(l_n, 1))
+        end
+        synchronize_threads(state)
+
+        # leader increments the global counter
+        if threadIdx.x == 0
+            l_n = atomicAdd(nres, l_n)
+        end
+        synchronize_threads(state)
+
+        # threads with true predicates write their elements
+        if (i < n && d > 0)
+            pos += l_n; # increment local pos by global counter
+            dst[pos] = d;
+        end
+        synchronize_threads(state)
+        i += BS;
+    end
+end
