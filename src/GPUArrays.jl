@@ -1,8 +1,6 @@
 __precompile__(true)
 module GPUArrays
 
-const is_v07 = VERSION > v"0.7-"
-
 using Serialization
 using Random
 using LinearAlgebra

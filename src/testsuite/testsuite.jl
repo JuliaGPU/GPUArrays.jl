@@ -8,14 +8,9 @@ module TestSuite
 using GPUArrays
 using GPUArrays: mapidx, gpu_sub2ind
 
-if GPUArrays.is_v07
-    using Test
-    using LinearAlgebra
-    using Random
-else
-    using Base.Test
-end
-
+using Test
+using LinearAlgebra
+using Random
 using FFTW
 using StaticArrays
 
