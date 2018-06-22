@@ -1,4 +1,5 @@
 using Base: CartesianIndex, tail, cat_fill!
+using CUDAnative
 
 @generated function ntuple_args(f, ::Val{N}, args::Vararg{<: Any, Nargs}) where {N, Nargs}
     expr = Expr(:tuple)
@@ -87,11 +88,15 @@ function repeat_back_kernel(state, A::AbstractArray{T}, delta::AbstractArray{T},
         return
     end
     
-    src_idx = ntuple_args(Val{dims}(), idx, inner, Asize, mod1) do dim, idx, inner, Asize, mod1
-        @inbounds return (mod1(div(idx[dim] - 1, inner[dim]) + 1, Asize[dim]))
-    end
+    @inbounds src_idx_1 = mod1(div(idx[1] - 1, inner[1]) + 1, Asize[1])
+    @inbounds src_idx_2 = mod1(div(idx[2] - 1, inner[2]) + 1, Asize[2])
+    synchronize_threads(state)
+    @inbounds const_here = out[src_idx_1, src_idx_2]
+    # synchronize_threads(state)
+
+    # CUDAnative.@cuprintf("idx[1]: %d\nidx[2]: %d\nsrc_idx_1: %d\nsrc_idx_2: %d\nconst_here: %d\ndelta[idx...]: %f\n\n", idx[1], idx[2], src_idx_1, src_idx_2, const_here, delta[idx...])
     
-    out[src_idx...] += delta[idx[1], idx[2]]
+    @inbounds out[src_idx_1, src_idx_2] = const_here + delta[idx...]
     synchronize_threads(state)
     
     return
@@ -109,6 +114,6 @@ end
 
 function gpu_repeat_grad(A::GPUArray, delta::GPUArray, inner, outer)
     R = zeros(typeof(A), size(A))
-    gpu_call(repeat_back_kernel, delta, (A, delta, R, inner, outer, Val{UInt32.(ndims(A))}(), UInt32.(size(A))))
+    gpu_call(repeat_back_kernel, A, (A, delta, R, inner, outer, Val{UInt32.(ndims(A))}(), UInt32.(size(A))))
     return R
 end
