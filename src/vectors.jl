@@ -34,7 +34,7 @@ end
 This updates an array, even if dimensions and sizes don't match.
 Will resize accordingly!
 """
-function update!(A::GPUArray{T, N}, value::Array{T, N}) where {T, N}
+function update!(A::GPUArray{T, N}, value::AbstractArray{T, N}) where {T, N}
     size(A) != size(value) && resize!(A, size(value))
     copyto!(A, value)
     return

@@ -15,22 +15,18 @@ end
 
 # copy overload
 
-function gpu_eachindex(f, axes, A::GPUArray, args...)
-    # TODO use axes + offset etc
-    shape = length.(axes)
-    gpu_call(A, (f, shape, A, args...), prod(shape)) do state, f, A, args...
-        lidx = linear_index(state)
-        lidx > length(A) && return
-        cartesian = CartesianIndex(gpu_ind2sub(shape, lidx))
-        f(state, cartesian, A, args...)
-        return
+function copyto_kernel!(state, dest, bc)
+    let I = @cartesianidx(dest, state)
+        @inbounds dest[I] = bc[I]
     end
 end
 
 # copyto! overloads
-@inline function copyto!(dest::GPUArray, B::GPUBroadcast)
-    flat = flatten(B); as = flat.args; f = flat.f
-    gpu_broadcast!(f, dest, as)
+@inline function Base.copyto!(dest::GPUArray, bc::GPUBroadcast)
+    axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
+    bc′ = Broadcast.preprocess(dest, bc)
+    gpu_call(copyto_kernel!, dest, (dest, bc′))
+    return dest
 end
 
  # RefValue doesn't work with CUDAnative so we use Tuple, which should have the same behaviour

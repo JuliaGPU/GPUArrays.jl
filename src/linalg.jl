@@ -85,7 +85,7 @@ end
 function permutedims!(dest::GPUArray, src::GPUArray, perm)
     perm = UInt32.((perm...,))
     gpu_call(dest, (dest, src, perm)) do state, dest, src, perm
-        I = @cartesianidx src state
+        I = Tuple(@cartesianidx(src, state))
         @inbounds dest[genperm(I, perm)...] = src[I...]
         return
     end

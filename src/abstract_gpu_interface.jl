@@ -68,7 +68,7 @@ macro cartesianidx(A, statesym = :state)
     quote
         x = $(esc(A))
         i2 = @linearidx(x, $(esc(statesym)))
-        gpu_ind2sub(x, i2)
+        CartesianIndex(gpu_ind2sub(x, i2))
     end
 end
 

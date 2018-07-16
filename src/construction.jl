@@ -10,7 +10,10 @@ function fill(X::Type{<: GPUArray}, val::T, dims::NTuple{N, Integer}) where {T, 
 end
 
 function fill!(A::GPUArray{T, N}, val) where {T, N}
-    A .= identity.(T(val))
+    gpu_call(A, (A, convert(T, val))) do state, a, val
+        idx = @linearidx(a, state)
+        @inbounds a[idx] = val
+    end
     A
 end
 
@@ -37,6 +40,9 @@ end
 (T::Type{<: GPUArray})(dims::Integer...) = T(dims)
 (T::Type{<: GPUArray})(dims::NTuple{N, Base.OneTo{Int}}) where N = T(length.(dims))
 (T::Type{<: GPUArray{X} where X})(dims::NTuple{N, Integer}) where N = similar(T, eltype(T), dims)
+(T::Type{<: GPUArray{ET}})(dims::NTuple{N, Integer}) where {ET, N} = similar(T, ET, dims)
+
+(T::Type{<: GPUArray{ET}})(::UndefInitializer, dims::NTuple{N, Integer}) where {ET, N} = similar(T, ET, dims)
 
 similar(x::X, ::Type{T}, size::Base.Dims{N}) where {X <: GPUArray, T, N} = similar(X, T, size)
 similar(::Type{X}, ::Type{T}, size::NTuple{N, Base.OneTo{Int}}) where {X <: GPUArray, T, N} = similar(X, T, length.(size))
@@ -54,7 +60,7 @@ end
 
 function collect_kernel(state, A, iter, ::IndexCartesian)
     idx = @cartesianidx(A, state)
-    @inbounds A[idx...] = iter[idx...]
+    @inbounds A[idx] = iter[idx]
     return
 end
 
