@@ -10,11 +10,6 @@ function fill(X::Type{<: GPUArray}, val::T, dims::NTuple{N, Integer}) where {T, 
     fill!(res, val)
 end
 
-function fill!(A::GPUArray{T, N}, val) where {T, N}
-    A .= identity.(T(val))
-    A
-end
-
 zeros(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, zero(eltype(T)), dims)
 ones(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, one(eltype(T)), dims)
 
