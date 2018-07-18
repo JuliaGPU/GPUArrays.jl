@@ -4,6 +4,7 @@ module GPUArrays
 using Serialization
 using Random
 using LinearAlgebra
+using Printf
 import Base: copyto!
 
 import Random: rand, rand!

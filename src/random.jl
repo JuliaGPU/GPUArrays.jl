@@ -41,8 +41,8 @@ function gpu_rand(::Type{T}, state, randstate::AbstractVector{NTuple{4, UInt32}}
     return to_number_range(f, T)
 end
 
-global cached_state, clear_cache
 let rand_state_dict = Dict()
+    global cached_state, clear_cache
     clear_cache() = (empty!(rand_state_dict); return)
     function cached_state(x)
         dev = GPUArrays.device(x)

@@ -158,7 +158,7 @@ for (i, sym) in enumerate((:x, :y, :z))
     end
 end
 
-blas_module(::JLArray) = Base.LinAlg.BLAS
+blas_module(::JLArray) = LinearAlgebra.BLAS
 blasbuffer(A::JLArray) = A.data
 
 

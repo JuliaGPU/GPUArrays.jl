@@ -1,4 +1,5 @@
-import Base: fill!, similar, eye, zeros, ones, fill
+import Base: fill!, similar, zeros, ones, fill
+import LinearAlgebra: eye
 
 
 function fill(X::Type{<: GPUArray}, val, dims::Integer...)
