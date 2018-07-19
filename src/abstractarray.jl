@@ -31,19 +31,13 @@ end
 
 ############################################
 # serialization
-const BaseSerializer = if isdefined(Base, :AbstractSerializer)
-    Base.AbstractSerializer
-elseif isdefined(Base, :SerializationState)
-    Base.SerializationState
-else
-    error("No Serialization type found. Probably unsupported Julia version")
-end
+import Serialization: AbstractSerializer, serialize, deserialize, serialize_type
 
-function Base.serialize(s::BaseSerializer, t::T) where T <: GPUArray
-    Base.serialize_type(s, T)
+function serialize(s::AbstractSerializer, t::T) where T <: GPUArray
+    serialize_type(s, T)
     serialize(s, Array(t))
 end
-function Base.deserialize(s::BaseSerializer, ::Type{T}) where T <: GPUArray
+function deserialize(s::AbstractSerializer, ::Type{T}) where T <: GPUArray
     A = deserialize(s)
     T(A)
 end

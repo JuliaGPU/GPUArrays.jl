@@ -1,4 +1,5 @@
-import Base: fill!, similar, eye, zeros, ones, fill
+import Base: fill!, similar, zeros, ones, fill
+import LinearAlgebra: eye
 
 
 function fill(X::Type{<: GPUArray}, val, dims::Integer...)
@@ -7,11 +8,6 @@ end
 function fill(X::Type{<: GPUArray}, val::T, dims::NTuple{N, Integer}) where {T, N}
     res = similar(X, T, dims)
     fill!(res, val)
-end
-
-function fill!(A::GPUArray{T, N}, val) where {T, N}
-    A .= identity.(T(val))
-    A
 end
 
 zeros(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, zero(eltype(T)), dims)
@@ -35,8 +31,9 @@ end
 
 (T::Type{<: GPUArray})(x) = convert(T, x)
 (T::Type{<: GPUArray})(dims::Integer...) = T(dims)
-(T::Type{<: GPUArray})(dims::NTuple{N, Base.OneTo{Int}}) where N = T(length.(dims))
+(T::Type{<: GPUArray})(dims::NTuple{N, Base.OneTo{Int}}) where N = T(undef, length.(dims))
 (T::Type{<: GPUArray{X} where X})(dims::NTuple{N, Integer}) where N = similar(T, eltype(T), dims)
+(T::Type{<: GPUArray{X} where X})(::UndefInitializer, dims::NTuple{N, Integer}) where N = similar(T, eltype(T), dims)
 
 similar(x::X, ::Type{T}, size::Base.Dims{N}) where {X <: GPUArray, T, N} = similar(X, T, size)
 similar(::Type{X}, ::Type{T}, size::NTuple{N, Base.OneTo{Int}}) where {X <: GPUArray, T, N} = similar(X, T, length.(size))

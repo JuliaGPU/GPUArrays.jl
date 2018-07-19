@@ -91,9 +91,9 @@ for elty in (Float32, Float64, ComplexF32, ComplexF64)
 end
 
 
-for elty in (Float32, Float64, Complex64, Complex128)
+for elty in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin
-        function Base.BLAS.gbmv!(trans::Char, m::Int, kl::Int, ku::Int, alpha::($elty), A::GPUMatrix{$elty}, X::GPUVector{$elty}, beta::($elty), Y::GPUVector{$elty})
+        function BLAS.gbmv!(trans::Char, m::Int, kl::Int, ku::Int, alpha::($elty), A::GPUMatrix{$elty}, X::GPUVector{$elty}, beta::($elty), Y::GPUVector{$elty})
             n = size(A, 2)
             if trans == 'N' && (length(X) != n || length(Y) != m)
                 throw(DimensionMismatch("A has dimensions $n, $m, X has length $(length(X)) and Y has length $(length(Y))"))

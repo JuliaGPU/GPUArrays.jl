@@ -55,8 +55,8 @@ function run_base(Typ)
             y = rand(Float32, 20, 10)
             a = Typ(x)
             b = Typ(y)
-            r1 = CartesianIndices(CartesianIndex(1, 3), CartesianIndex(7, 8))
-            r2 = CartesianIndices(CartesianIndex(4, 3), CartesianIndex(10, 8))
+            r1 = CartesianIndices((1:7, 3:8))
+            r2 = CartesianIndices((4:10, 3:8))
             copyto!(x, r1, y, r2)
             copyto!(a, r1, b, r2)
             @test x == Array(a)
@@ -132,11 +132,11 @@ function run_base(Typ)
             against_base((a, b, c, d)-> map!(*, a, b, c, d), T, (10,), (10,), (10,), (10,))
         end
 
-        @testset "repmat" begin
-            against_base(a-> repmat(a, 5, 6), T, (10,))
-            against_base(a-> repmat(a, 5), T, (10,))
-            against_base(a-> repmat(a, 5), T, (5, 4))
-            against_base(a-> repmat(a, 4, 3), T, (10, 15))
+        @testset "repeat" begin
+            against_base(a-> repeat(a, 5, 6), T, (10,))
+            against_base(a-> repeat(a, 5), T, (10,))
+            against_base(a-> repeat(a, 5), T, (5, 4))
+            against_base(a-> repeat(a, 4, 3), T, (10, 15))
         end
     end
 end
