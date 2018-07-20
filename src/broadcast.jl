@@ -12,7 +12,7 @@ using Base.Broadcast
     bc′ = Broadcast.preprocess(dest, bc)
     gpu_call(dest, (dest, bc′)) do state, dest, bc′
         let I = CartesianIndex(@cartesianidx(dest))
-            @inbounds dest[I] = bc[I]
+            @inbounds dest[I] = bc′[I]
         end
     end
 
