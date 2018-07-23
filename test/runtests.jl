@@ -1,4 +1,4 @@
-using GPUArrays, Base.Test
+using GPUArrays, Test
 using GPUArrays.TestSuite
 
 

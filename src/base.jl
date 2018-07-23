@@ -95,11 +95,11 @@ end
 
 # This is pretty ugly, but I feel bad to add those to device arrays, since
 # we're never bound checking... So getindex(a::GPUVector, 10, 10) would silently go unnoticed
-# we need this here for easier implementation of repmat
+# we need this here for easier implementation of repeat
 @inline Base.@propagate_inbounds getidx_2d1d(x::AbstractVector, i, j) = x[i]
 @inline Base.@propagate_inbounds getidx_2d1d(x::AbstractMatrix, i, j) = x[i, j]
 
-function Base.repmat(a::GPUVecOrMat, m::Int, n::Int = 1)
+function Base.repeat(a::GPUVecOrMat, m::Int, n::Int = 1)
     o, p = size(a, 1), size(a, 2)
     b = similar(a, o*m, p*n)
     args = (b, a, UInt32.((o, p, m, n))...)
@@ -121,7 +121,7 @@ function Base.repmat(a::GPUVecOrMat, m::Int, n::Int = 1)
     return b
 end
 
-function Base.repmat(a::GPUVector, m::Int)
+function Base.repeat(a::GPUVector, m::Int)
     o = length(a)
     b = similar(a, o*m)
     gpu_call(a, (b, a, UInt32(o), UInt32(m)), m) do state, b, a, o, m

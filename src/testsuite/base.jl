@@ -1,9 +1,7 @@
-using Base.Test, GPUArrays
-using GPUArrays: mapidx, gpu_sub2ind
-using GPUArrays.TestSuite
+
 
 function cartesian_iter(state, A, res, Asize)
-    for i in CartesianRange(CartesianIndex(Asize))
+    for i in CartesianIndices(Asize)
         idx = gpu_sub2ind(Asize, i.I)
         res[idx] = A[idx]
     end
@@ -17,14 +15,14 @@ function clmap!(state, f, out, b)
 end
 
 function ntuple_test(state, result, ::Val{N}) where N
-    result[1] = ntuple(Val{N}) do i
+    result[1] = ntuple(Val(N)) do i
         Float32(i) * 77f0
     end
     return
 end
 
 function ntuple_closure(state, result, ::Val{N}, testval) where N
-    result[1] = ntuple(Val{N}) do i
+    result[1] = ntuple(Val(N)) do i
         Float32(i) * testval
     end
     return
@@ -33,8 +31,8 @@ end
 function run_base(Typ)
     @testset "base functionality" begin
         @testset "mapidx" begin
-            a = rand(Complex64, 77)
-            b = rand(Complex64, 77)
+            a = rand(ComplexF32, 77)
+            b = rand(ComplexF32, 77)
             A = Typ(a)
             B = Typ(b)
             off = UInt32(1)
@@ -52,23 +50,23 @@ function run_base(Typ)
         end
 
 
-        @testset "copy!" begin
+        @testset "copyto!" begin
             x = zeros(Float32, 10, 10)
             y = rand(Float32, 20, 10)
             a = Typ(x)
             b = Typ(y)
-            r1 = CartesianRange(CartesianIndex(1, 3), CartesianIndex(7, 8))
-            r2 = CartesianRange(CartesianIndex(4, 3), CartesianIndex(10, 8))
-            copy!(x, r1, y, r2)
-            copy!(a, r1, b, r2)
+            r1 = CartesianIndices((1:7, 3:8))
+            r2 = CartesianIndices((4:10, 3:8))
+            copyto!(x, r1, y, r2)
+            copyto!(a, r1, b, r2)
             @test x == Array(a)
 
             x2 = zeros(Float32, 10, 10)
-            copy!(x2, r1, b, r2)
+            copyto!(x2, r1, b, r2)
             @test x2 == x
 
             fill!(a, 0f0)
-            copy!(a, r1, y, r2)
+            copyto!(a, r1, y, r2)
             @test Array(a) == x
         end
         GPUArrays.allowslow(true)
@@ -90,13 +88,13 @@ function run_base(Typ)
         GPUArrays.allowslow(false)
 
         @testset "reinterpret" begin
-            a = rand(Complex64, 22)
+            a = rand(ComplexF32, 22)
             A = Typ(a)
             af0 = reinterpret(Float32, a)
             Af0 = reinterpret(Float32, A)
             @test Array(Af0) == af0
 
-            a = rand(Complex64, 10 * 10)
+            a = rand(ComplexF32, 10 * 10)
             A = Typ(a)
             af0 = reinterpret(Float32, a, (20, 10))
             Af0 = reinterpret(Float32, A, (20, 10))
@@ -134,11 +132,11 @@ function run_base(Typ)
             against_base((a, b, c, d)-> map!(*, a, b, c, d), T, (10,), (10,), (10,), (10,))
         end
 
-        @testset "repmat" begin
-            against_base(a-> repmat(a, 5, 6), T, (10,))
-            against_base(a-> repmat(a, 5), T, (10,))
-            against_base(a-> repmat(a, 5), T, (5, 4))
-            against_base(a-> repmat(a, 4, 3), T, (10, 15))
+        @testset "repeat" begin
+            against_base(a-> repeat(a, 5, 6), T, (10,))
+            against_base(a-> repeat(a, 5), T, (10,))
+            against_base(a-> repeat(a, 5), T, (5, 4))
+            against_base(a-> repeat(a, 4, 3), T, (10, 15))
         end
     end
 end

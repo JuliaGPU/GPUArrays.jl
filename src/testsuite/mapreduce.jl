@@ -1,4 +1,3 @@
-using GPUArrays.TestSuite, Base.Test
 
 
 function run_mapreduce(Typ)
