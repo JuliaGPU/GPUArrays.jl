@@ -135,12 +135,12 @@ function copyto!(
     end
     len = length(destcrange)
 
-    dest_offsets = UInt32.(first.(destcrange.indices) .- 1)
-    src_offsets = UInt32.(first.(srccrange.indices) .- 1)
-    ui_shape = UInt32.(shape)
+    dest_offsets = Int.(first.(destcrange.indices) .- 1)
+    src_offsets = Int.(first.(srccrange.indices) .- 1)
+    ui_shape = Int.(shape)
     gpu_call(
         copy_kernel!, dest,
-        (dest, dest_offsets, src, src_offsets, ui_shape, UInt32.(size(dest)), UInt32.(size(src)), UInt32(len)),
+        (dest, dest_offsets, src, src_offsets, ui_shape, Int.(size(dest)), Int.(size(src)), Int(len)),
         len
     )
     dest

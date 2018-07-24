@@ -3,9 +3,9 @@ import Base: sum, next, start, done, IndexStyle
 abstract type AbstractDeviceArray{T, N} <: AbstractArray{T, N} end
 
 IndexStyle(::AbstractDeviceArray) = IndexLinear()
-start(x::AbstractDeviceArray) = UInt32(1)
-next(x::AbstractDeviceArray, state::UInt32) = x[state], state + UInt32(1)
-done(x::AbstractDeviceArray, state::UInt32) = state > length(x)
+start(x::AbstractDeviceArray) = 1
+next(x::AbstractDeviceArray, state::Int) = x[state], state + 1
+done(x::AbstractDeviceArray, state::Int) = state > length(x)
 
 function sum(A::AbstractDeviceArray{T}) where T
     acc = zero(T)

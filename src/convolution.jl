@@ -7,9 +7,9 @@
 #         ::Val{BLOCK_SIZE},
 #         ::Val{LOCAL_WIDTH}
 #     ) where {T, BLOCK_SIZE, LOCAL_WIDTH}
-#     ui1 = UInt32(1); ui0 = UInt32(0)
+#     1 = 1; 0 = 0
 #     w = kernel_width
-#     wBy2 = w >> ui1 #w divided by 2
+#     wBy2 = w >> 1 #w divided by 2
 #     #Goes up to 15x15 filters
 #     ptr = LocalMemory(state, T, LOCAL_WIDTH) # local width need to be static, so calculating it from block size won't cut it
 #     P = CLArrays.LocalArray{T, 2}(ptr, (LOCAL_WIDTH, LOCAL_WIDTH))
@@ -33,8 +33,8 @@
 #     synchronize_threads(state)
 #     ##############
 #     convPix = zero(T);
-#     for ix = ui0:(w - ui1)
-#         for jy = ui0:(w - ui1)
+#     for ix = 0:(w - 1)
+#         for jy = 0:(w - 1)
 #             temp = P[ix, jy]
 #             convPix += temp * kernelValues[ix + w*jy]
 #         end
@@ -54,8 +54,8 @@ function convolution_kernel(state, A::AbstractArray{T}, out, K, Asize, Ksize) wh
     end
     accum = zero(T)
     kw, kh = Ksize[1], Ksize[2]
-    for ix = UInt32(0):(kw - UInt32(1))
-        for jy = UInt32(0):(kh - UInt32(1))
+    for ix = 0:(kw - 1)
+        for jy = 0:(kh - 1)
             temp = A[gpu_sub2ind(Asize, idx .+ (ix, jy))]
             accum += temp * K[ix + kw*jy + 1]
         end
@@ -66,7 +66,7 @@ end
 
 
 function convolution!(a, out, k)
-    gpu_call(convolution_kernel, a, (a, out, k, UInt32.(size(a)), UInt32.(size(k))))
+    gpu_call(convolution_kernel, a, (a, out, k, Int.(size(a)), Int.(size(k))))
     GPUArrays.synchronize(out)
     out
 end

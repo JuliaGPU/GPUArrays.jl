@@ -154,7 +154,7 @@ end
 for (i, sym) in enumerate((:x, :y, :z))
     for f in (:blockidx, :blockdim, :threadidx, :griddim)
         fname = Symbol(string(f, '_', sym))
-        @eval $fname(state::JLState) = UInt32(state.$f[$i])
+        @eval $fname(state::JLState) = Int(state.$f[$i])
     end
 end
 

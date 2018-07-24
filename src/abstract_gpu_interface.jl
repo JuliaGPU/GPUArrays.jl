@@ -5,7 +5,7 @@ Uses CUDA like names
 for sym in (:x, :y, :z)
     for f in (:blockidx, :blockdim, :threadidx, :griddim)
         fname = Symbol(string(f, '_', sym))
-        @eval $fname(state)::UInt32 = error("Not implemented")
+        @eval $fname(state)::Int = error("Not implemented")
         @eval export $fname
     end
 end
@@ -30,7 +30,7 @@ linear index corresponding to each kernel launch (in OpenCL equal to get_global_
 
 """
 @inline function linear_index(state)
-    UInt32((blockidx_x(state) - UInt32(1)) * blockdim_x(state) + threadidx_x(state))
+    Int((blockidx_x(state) - 1) * blockdim_x(state) + threadidx_x(state))
 end
 
 """
