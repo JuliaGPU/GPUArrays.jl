@@ -30,7 +30,7 @@ linear index corresponding to each kernel launch (in OpenCL equal to get_global_
 
 """
 @inline function linear_index(state)
-    Int((blockidx_x(state) - 1) * blockdim_x(state) + threadidx_x(state))
+    (blockidx_x(state) - 1) * blockdim_x(state) + threadidx_x(state)
 end
 
 """
@@ -62,7 +62,7 @@ end
 """
     cartesianidx(A, statesym = :state)
 
-Like [`@linearidx(A, statesym = :state)`](@ref), but returns an N-dimensional `NTuple{ndim(A), Cuint}` as index
+Like [`@linearidx(A, statesym = :state)`](@ref), but returns an N-dimensional `NTuple{ndim(A), Int}` as index
 """
 macro cartesianidx(A, statesym = :state)
     quote
