@@ -5,13 +5,13 @@ import Base: any, all, count, countnz, isapprox
 # functions in base implemented with a direct loop need to be overloaded to use mapreduce
 
 
-any(pred, A::GPUArray) = Bool(mapreduce(pred, |, Int32(0), A))
-all(pred, A::GPUArray) = Bool(mapreduce(pred, &, Int32(1), A))
+any(A::GPUArray{Bool}) = mapreduce(identity, |, false, A)
+all(A::GPUArray{Bool}) = mapreduce(identity, &, true, A)
 count(pred, A::GPUArray) = Int(mapreduce(pred, +, 0, A))
 countnz(A::GPUArray) = Int(mapreduce(x-> x != 0, +, 0, A))
 countnz(A::GPUArray, dim) = Int(mapreducedim(x-> x != 0, +, 0, A, dim))
 
-Base.:(==)(A::GPUArray, B::GPUArray) = Bool(mapreduce(==, &, Int32(1), A, B))
+Base.:(==)(A::GPUArray, B::GPUArray) = Bool(mapreduce(==, &, true, A, B))
 
 # hack to get around of fetching the first element of the GPUArray
 # as a startvalue, which is a bit complicated with the current reduce implementation
@@ -159,7 +159,7 @@ function acc_mapreduce(
     threads = 256
     if length(A) <= blocksize * threads
         args = zip(Array(A), to_cpu.(rest)...)
-        return mapreduce(x-> f(x...), op, v0, args)
+        return mapreduce(x-> f(x...), op, args, init = v0)
     end
     out = similar(A, OT, (blocksize,))
     fill!(out, v0)
