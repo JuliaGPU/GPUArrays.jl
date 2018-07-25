@@ -41,8 +41,12 @@ gpu_promote_type(op, ::Type{T}) where {T} = T
 gpu_promote_type(op, ::Type{T}) where {T<: WidenReduceResult} = T
 gpu_promote_type(::typeof(+), ::Type{T}) where {T<: WidenReduceResult} = T
 gpu_promote_type(::typeof(*), ::Type{T}) where {T<: WidenReduceResult} = T
+gpu_promote_type(::typeof(Base.add_sum), ::Type{T}) where {T<:WidenReduceResult} = typeof(Base.add_sum(zero(T), zero(T)))
+gpu_promote_type(::typeof(Base.mul_prod), ::Type{T}) where {T<:WidenReduceResult} = typeof(Base.mul_prod(one(T), one(T)))
 gpu_promote_type(::typeof(+), ::Type{T}) where {T<:Number} = typeof(zero(T)+zero(T))
 gpu_promote_type(::typeof(*), ::Type{T}) where {T<:Number} = typeof(one(T)*one(T))
+gpu_promote_type(::typeof(Base.add_sum), ::Type{T}) where {T<:Number} = typeof(Base.add_sum(zero(T), zero(T)))
+gpu_promote_type(::typeof(Base.mul_prod), ::Type{T}) where {T<:Number} = typeof(Base.mul_prod(one(T), one(T)))
 gpu_promote_type(::typeof(max), ::Type{T}) where {T<: WidenReduceResult} = T
 gpu_promote_type(::typeof(min), ::Type{T}) where {T<: WidenReduceResult} = T
 
