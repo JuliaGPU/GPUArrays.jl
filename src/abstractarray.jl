@@ -135,12 +135,12 @@ function copyto!(
     end
     len = length(destcrange)
 
-    dest_offsets = Int.(first.(destcrange.indices) .- 1)
-    src_offsets = Int.(first.(srccrange.indices) .- 1)
-    ui_shape = Int.(shape)
+    dest_offsets = first.(destcrange.indices) .- 1
+    src_offsets = first.(srccrange.indices) .- 1
+    ui_shape = shape
     gpu_call(
         copy_kernel!, dest,
-        (dest, dest_offsets, src, src_offsets, ui_shape, Int.(size(dest)), Int.(size(src)), Int(len)),
+        (dest, dest_offsets, src, src_offsets, ui_shape, size(dest), size(src), len),
         len
     )
     dest
@@ -197,7 +197,7 @@ This makes it easier to do checks just on the high level.
 function unsafe_reinterpret end
 
 function reinterpret(::Type{T}, a::GPUArray{S,1}) where T where S
-    nel = Int(div(length(a)*sizeof(S),sizeof(T)))
+    nel = (length(a)*sizeof(S)) ÷ sizeof(T)
     # TODO: maybe check that remainder is zero?
     return reinterpret(T, a, (nel,))
 end
@@ -209,7 +209,7 @@ function reinterpret(::Type{T}, a::GPUArray{S}) where T where S
     reinterpret(T, a, size(a))
 end
 
-function reinterpret(::Type{T}, a::GPUArray{S}, dims::NTuple{N,Int}) where T where S where N
+function reinterpret(::Type{T}, a::GPUArray{S}, dims::NTuple{N, Integer}) where T where S where N
     if !isbits(T)
         throw(ArgumentError("cannot reinterpret Array{$(S)} to ::Type{Array{$(T)}}, type $(T) is not a bits type"))
     end
@@ -229,7 +229,7 @@ function _reshape(A::GPUArray{T}, dims::Dims) where T
     return unsafe_reinterpret(T, A, dims)
 end
 #ambig
-function _reshape(A::GPUArray{T, 1}, dims::Tuple{Int}) where T
+function _reshape(A::GPUArray{T, 1}, dims::Tuple{Integer}) where T
     n = Base._length(A)
     prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
     return unsafe_reinterpret(T, A, dims)

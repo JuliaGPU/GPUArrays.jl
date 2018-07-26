@@ -46,7 +46,7 @@ to_index(a, x::Base.LogicalIndex) = error("Logical indexing not implemented")
         i = linear_index(state)
         i > length(dest) && return
         is = gpu_ind2sub(idims, i)
-        @nexprs $N i -> @inbounds I_i = Is[i][Int(is[i])]
+        @nexprs $N i -> @inbounds I_i = Is[i][is[i]]
         @inbounds dest[i] = @ncall $N getindex src i -> I_i
         return
     end
@@ -58,7 +58,7 @@ function Base._unsafe_getindex!(dest::GPUArray, src::GPUArray, Is::Union{Real, A
         return dest
     end
     idims = map(length, Is)
-    gpu_call(index_kernel, dest, (dest, src, Int.(idims), map(x-> to_index(dest, x), Is)))
+    gpu_call(index_kernel, dest, (dest, src, idims, map(x-> to_index(dest, x), Is)))
     return dest
 end
 
@@ -68,7 +68,7 @@ end
 
 @generated function setindex_kernel!(state, dest::AbstractArray, src, idims, Is, len)
     N = length(Is.parameters)
-    idx = ntuple(i-> :(Is[$i][Int(is[$i])]), N)
+    idx = ntuple(i-> :(Is[$i][is[$i]]), N)
     quote
         i = linear_index(state)
         i > len && return
@@ -96,6 +96,6 @@ function Base._unsafe_setindex!(::IndexStyle, dest::T, src, Is::Union{Real, Abst
     idims = length.(Is)
     len = prod(idims)
     src_gpu = gpu_convert(T, src)
-    gpu_call(setindex_kernel!, dest, (dest, src_gpu, Int.(idims), map(x-> to_index(dest, x), Is), Int(len)), len)
+    gpu_call(setindex_kernel!, dest, (dest, src_gpu, idims, map(x-> to_index(dest, x), Is), len), len)
     return dest
 end

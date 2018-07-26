@@ -48,7 +48,7 @@
 
 function convolution_kernel(state, A::AbstractArray{T}, out, K, Asize, Ksize) where T
     ilin = linear_index(state)
-    idx = GPUArrays.gpu_ind2sub(Asize, ilin)
+    idx = gpu_ind2sub(Asize, ilin)
     if idx[1] >= Asize[1] - Ksize[1] || idx[2] >= Asize[2] - Ksize[2]
         return
     end
@@ -66,8 +66,8 @@ end
 
 
 function convolution!(a, out, k)
-    gpu_call(convolution_kernel, a, (a, out, k, Int.(size(a)), Int.(size(k))))
-    GPUArrays.synchronize(out)
+    gpu_call(convolution_kernel, a, (a, out, k, size(a), size(k)))
+    synchronize(out)
     out
 end
 
@@ -83,6 +83,6 @@ function fftkernel(A, kernel)
 end
 
 function convolution_fft!(a, out, k)
-    irfft(rfft(A).*conj(rfft(krn)), length(axes(A,1)))
+    irfft(rfft(A) .* conj(rfft(krn)), length(axes(A, 1)))
     out
 end

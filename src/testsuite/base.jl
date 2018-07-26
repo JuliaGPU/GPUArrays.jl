@@ -36,7 +36,7 @@ function run_base(Typ)
             A = Typ(a)
             B = Typ(b)
             off = 1
-            mapidx(A, (B, off, Int(length(A)))) do i, a, b, off, len
+            mapidx(A, (B, off, length(A))) do i, a, b, off, len
                 x = b[i]
                 x2 = b[min(i+off, len)]
                 a[i] = x * x2

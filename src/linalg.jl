@@ -54,8 +54,8 @@ end
 
 function transpose!(At::GPUArray{T, 2}, A::GPUArray{T, 2}) where T
     if size(A, 1) == size(A, 2) && all(x-> x % 32 == 0, size(A))
-        outsize = Int.(size(At))
-        TDIM = Int(32); BLOCK_ROWS = 8
+        outsize = size(At)
+        TDIM = 32; BLOCK_ROWS = 8
         nrows = TDIM ÷ BLOCK_ROWS
         shmemdim = (TDIM, (TDIM + 1))
         static_params = map(x-> Val{x}(), (shmemdim, TDIM, BLOCK_ROWS, nrows))
@@ -80,8 +80,7 @@ function genperm(I::NTuple{N}, perm::NTuple{N}) where N
     ntuple(d-> I[perm[d]], Val{N})
 end
 
-function permutedims!(dest::GPUArray, src::GPUArray, perm)
-    perm = Int.((perm...,))
+function permutedims!(dest::GPUArray, src::GPUArray, perm::NTuple{N, Integer}) where N
     gpu_call(dest, (dest, src, perm)) do state, dest, src, perm
         I = @cartesianidx src state
         @inbounds dest[genperm(I, perm)...] = src[I...]
