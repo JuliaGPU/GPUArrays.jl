@@ -39,7 +39,7 @@ map!(f, y::GPUArray, x1::GPUArray, x2::GPUArray) =
 # end
 #
 # function _cat(dim, dest, xs...)
-#     gpu_call(dest, (UInt32(dim), dest, xs)) do state, dim, dest, xs
+#     gpu_call(dest, (Int(dim), dest, xs)) do state, dim, dest, xs
 #         I = @cartesianidx dest state
 #         nI = catindex(dim, I, size.(xs))
 #         n = nI[1]; I′ = nI[2]
@@ -102,17 +102,15 @@ end
 function Base.repeat(a::GPUVecOrMat, m::Int, n::Int = 1)
     o, p = size(a, 1), size(a, 2)
     b = similar(a, o*m, p*n)
-    args = (b, a, UInt32.((o, p, m, n))...)
-    gpu_call(a, args, n) do state, b, a, o, p, m, n
+    gpu_call(a, (b, a, o, p, m, n), n) do state, b, a, o, p, m, n
         j = linear_index(state)
         j > n && return
-        ui1 = UInt32(1)
-        d = (j - ui1) * p + ui1
-        @inbounds for i in ui1:m
-            c = (i - ui1) * o + ui1
-            for r in ui1:p
-                for k in ui1:o
-                    b[k - ui1 + c, r - ui1 + d] = getidx_2d1d(a, k, r)
+        d = (j - 1) * p + 1
+        @inbounds for i in 1:m
+            c = (i - 1) * o + 1
+            for r in 1:p
+                for k in 1:o
+                    b[k - 1 + c, r - 1 + d] = getidx_2d1d(a, k, r)
                 end
             end
         end
@@ -124,13 +122,12 @@ end
 function Base.repeat(a::GPUVector, m::Int)
     o = length(a)
     b = similar(a, o*m)
-    gpu_call(a, (b, a, UInt32(o), UInt32(m)), m) do state, b, a, o, m
+    gpu_call(a, (b, a, o, m), m) do state, b, a, o, m
         i = linear_index(state)
         i > m && return
-        ui1 = UInt32(1)
-        c = (i - ui1)*o + ui1
-        @inbounds for i in ui1:o
-            b[c + i - ui1] = a[i]
+        c = (i - 1)*o + 1
+        @inbounds for i in 1:o
+            b[c + i - 1] = a[i]
         end
         return
     end

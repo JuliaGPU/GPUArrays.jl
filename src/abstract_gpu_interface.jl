@@ -5,7 +5,7 @@ Uses CUDA like names
 for sym in (:x, :y, :z)
     for f in (:blockidx, :blockdim, :threadidx, :griddim)
         fname = Symbol(string(f, '_', sym))
-        @eval $fname(state)::UInt32 = error("Not implemented")
+        @eval $fname(state)::Int = error("Not implemented")
         @eval export $fname
     end
 end
@@ -30,7 +30,7 @@ linear index corresponding to each kernel launch (in OpenCL equal to get_global_
 
 """
 @inline function linear_index(state)
-    UInt32((blockidx_x(state) - UInt32(1)) * blockdim_x(state) + threadidx_x(state))
+    (blockidx_x(state) - 1) * blockdim_x(state) + threadidx_x(state)
 end
 
 """
@@ -62,7 +62,7 @@ end
 """
     cartesianidx(A, statesym = :state)
 
-Like [`@linearidx(A, statesym = :state)`](@ref), but returns an N-dimensional `NTuple{ndim(A), Cuint}` as index
+Like [`@linearidx(A, statesym = :state)`](@ref), but returns an N-dimensional `NTuple{ndim(A), Int}` as index
 """
 macro cartesianidx(A, statesym = :state)
     quote

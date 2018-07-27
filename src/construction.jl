@@ -16,7 +16,7 @@ ones(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, one(eltyp
 function eyekernel(state, res::AbstractArray{T}, stride) where T
     i = linear_index(state)
     i > stride && return
-    ilin = (stride * (i - UInt32(1))) + i
+    ilin = (stride * (i - 1)) + i
     @inbounds res[ilin] = one(T)
     return
 end
@@ -25,7 +25,7 @@ eye(T::Type{<: GPUArray}, i1::Integer) = eye(T, (i1, i1))
 eye(T::Type{<: GPUArray}, i1::Integer, i2::Integer) = eye(T, (i1, i2))
 function eye(T::Type{<: GPUArray}, dims::NTuple{2, Integer})
     res = zeros(T, dims)
-    gpu_call(eyekernel, res, (res, UInt32(size(res, 1))), minimum(dims))
+    gpu_call(eyekernel, res, (res, size(res, 1)), minimum(dims))
     res
 end
 
@@ -91,5 +91,5 @@ function convert(AT::Type{<: GPUArray}, A::DenseArray{T2, N}) where {T2, N}
 end
 
 function convert(AT::Type{Array{T, N}}, A::GPUArray{CT, CN}) where {T, N, CT, CN}
-    convert(AT, copyto!(Array{CT, CN}(undef, Int.(Base.size(A))), A))
+    convert(AT, copyto!(Array{CT, CN}(undef, size(A)), A))
 end

@@ -38,7 +38,7 @@ function test_broadcast(Typ)
         T = Typ{ET}
         @testset "broadcast $ET" begin
             @testset "RefValue" begin
-                cidx = rand(UInt32(1):UInt32(N), 2*N)
+                cidx = rand(1:Int(N), 2*N)
                 gidx = Typ(cidx)
                 cy = TestSuite.toarray(ET, (2*N,))
                 gy = Typ(cy)

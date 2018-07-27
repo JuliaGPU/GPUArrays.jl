@@ -3,11 +3,15 @@ import Base: any, all, count, countnz, isapprox
 #############################
 # reduce
 # functions in base implemented with a direct loop need to be overloaded to use mapreduce
-count(pred, A::GPUArray) = Int(mapreduce(pred, +, UInt32(0), A))
-countnz(A::GPUArray) = Int(mapreduce(x-> x != 0, +, UInt32(0), A))
-countnz(A::GPUArray, dim) = Int(mapreducedim(x-> x != 0, +, UInt32(0), A, dim))
 
-Base.:(==)(A::GPUArray, B::GPUArray) = Bool(mapreduce(==, &, Int32(1), A, B))
+
+any(A::GPUArray{Bool}) = mapreduce(identity, |, false, A)
+all(A::GPUArray{Bool}) = mapreduce(identity, &, true, A)
+count(pred, A::GPUArray) = Int(mapreduce(pred, +, 0, A))
+countnz(A::GPUArray) = Int(mapreduce(x-> x != 0, +, 0, A))
+countnz(A::GPUArray, dim) = Int(mapreducedim(x-> x != 0, +, 0, A, dim))
+
+Base.:(==)(A::GPUArray, B::GPUArray) = Bool(mapreduce(==, &, true, A, B))
 
 # hack to get around of fetching the first element of the GPUArray
 # as a startvalue, which is a bit complicated with the current reduce implementation
@@ -29,7 +33,7 @@ const SmallSigned = Union{Int8,Int16}
 const SmallUnsigned = Union{UInt8,UInt16}
 else
 const SmallSigned = Union{Int8,Int16,Int32}
-const SmallUnsigned = Union{UInt8,UInt16,UInt32}
+const SmallUnsigned = Union{UInt8,UInt16,Int}
 end
 
 const CommonReduceResult = Union{UInt64,UInt128,Int64,Int128,Float16,Float32,Float64}
@@ -41,8 +45,12 @@ gpu_promote_type(op, ::Type{T}) where {T} = T
 gpu_promote_type(op, ::Type{T}) where {T<: WidenReduceResult} = T
 gpu_promote_type(::typeof(+), ::Type{T}) where {T<: WidenReduceResult} = T
 gpu_promote_type(::typeof(*), ::Type{T}) where {T<: WidenReduceResult} = T
+gpu_promote_type(::typeof(Base.add_sum), ::Type{T}) where {T<:WidenReduceResult} = typeof(Base.add_sum(zero(T), zero(T)))
+gpu_promote_type(::typeof(Base.mul_prod), ::Type{T}) where {T<:WidenReduceResult} = typeof(Base.mul_prod(one(T), one(T)))
 gpu_promote_type(::typeof(+), ::Type{T}) where {T<:Number} = typeof(zero(T)+zero(T))
 gpu_promote_type(::typeof(*), ::Type{T}) where {T<:Number} = typeof(one(T)*one(T))
+gpu_promote_type(::typeof(Base.add_sum), ::Type{T}) where {T<:Number} = typeof(Base.add_sum(zero(T), zero(T)))
+gpu_promote_type(::typeof(Base.mul_prod), ::Type{T}) where {T<:Number} = typeof(Base.mul_prod(one(T), one(T)))
 gpu_promote_type(::typeof(max), ::Type{T}) where {T<: WidenReduceResult} = T
 gpu_promote_type(::typeof(min), ::Type{T}) where {T<: WidenReduceResult} = T
 
@@ -78,7 +86,7 @@ end
             rsym = Symbol("r_$i")
             body = quote
                 $(rsym) = range[$i]
-                for $idxsym in UInt32(first($rsym)):UInt32(last($rsym))
+                for $idxsym in Int(first($rsym)):Int(last($rsym))
                     $body
                 end
             end
@@ -107,7 +115,6 @@ for i = 0:10
     @eval begin
         # http://developer.amd.com/resources/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
         function reduce_kernel(state, f, op, v0::T, A, ::Val{LMEM}, result, $(args...)) where {T, LMEM}
-            ui0 = UInt32(0); ui1 = UInt32(1); ui2 = UInt32(2)
             tmp_local = @LocalMemory(state, T, LMEM)
             global_index = linear_index(state)
             acc = v0
@@ -118,22 +125,22 @@ for i = 0:10
                 global_index += global_size(state)
             end
             # Perform parallel reduction
-            local_index = threadidx_x(state) - ui1
-            tmp_local[local_index + ui1] = acc
+            local_index = threadidx_x(state) - 1
+            tmp_local[local_index + 1] = acc
             synchronize_threads(state)
 
-            offset = blockdim_x(state) ÷ ui2
-            while offset > ui0
+            offset = blockdim_x(state) ÷ 2
+            while offset > 0
                 if (local_index < offset)
-                    other = tmp_local[local_index + offset + ui1]
-                    mine = tmp_local[local_index + ui1]
-                    tmp_local[local_index + ui1] = op(mine, other)
+                    other = tmp_local[local_index + offset + 1]
+                    mine = tmp_local[local_index + 1]
+                    tmp_local[local_index + 1] = op(mine, other)
                 end
                 synchronize_threads(state)
-                offset = offset ÷ ui2
+                offset = offset ÷ 2
             end
-            if local_index == ui0
-                result[blockidx_x(state)] = tmp_local[ui1]
+            if local_index == 0
+                result[blockidx_x(state)] = tmp_local[1]
             end
             return
         end
@@ -152,7 +159,7 @@ function acc_mapreduce(
     threads = 256
     if length(A) <= blocksize * threads
         args = zip(Array(A), to_cpu.(rest)...)
-        return mapreduce(x-> f(x...), op, v0, args)
+        return mapreduce(x-> f(x...), op, args, init = v0)
     end
     out = similar(A, OT, (blocksize,))
     fill!(out, v0)

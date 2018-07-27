@@ -35,8 +35,8 @@ function run_base(Typ)
             b = rand(ComplexF32, 77)
             A = Typ(a)
             B = Typ(b)
-            off = UInt32(1)
-            mapidx(A, (B, off, UInt32(length(A)))) do i, a, b, off, len
+            off = 1
+            mapidx(A, (B, off, length(A))) do i, a, b, off, len
                 x = b[i]
                 x2 = b[min(i+off, len)]
                 a[i] = x * x2
