@@ -105,10 +105,10 @@ function LocalMemory(state::JLState, ::Type{T}, ::Val{N}, ::Val{C}) where {T, N,
 end
 
 function AbstractDeviceArray(ptr::Array, shape::NTuple{N, Integer}) where N
-    reshape(ptr, Int.(shape))
+    reshape(ptr, shape)
 end
 function AbstractDeviceArray(ptr::Array, shape::Vararg{Integer, N}) where N
-    reshape(ptr, Int.(shape))
+    reshape(ptr, shape)
 end
 
 
@@ -122,7 +122,7 @@ function _gpu_call(f, A::JLArray, args::Tuple, blocks_threads::Tuple{T, T}) wher
     for blockidx in CartesianIndices(blockdim)
         state.blockidx = blockidx.I
         block_args = to_blocks.(state, device_args)
-        for threadidx in CartesianIndices(Int.(threads))
+        for threadidx in CartesianIndices(threads)
             thread_state = JLState(state, threadidx.I)
             tasks[threadidx] = @async f(thread_state, block_args...)
         end

@@ -102,8 +102,7 @@ end
 function Base.repeat(a::GPUVecOrMat, m::Int, n::Int = 1)
     o, p = size(a, 1), size(a, 2)
     b = similar(a, o*m, p*n)
-    args = (b, a, Int.((o, p, m, n))...)
-    gpu_call(a, args, n) do state, b, a, o, p, m, n
+    gpu_call(a, (b, a, o, p, m, n), n) do state, b, a, o, p, m, n
         j = linear_index(state)
         j > n && return
         d = (j - 1) * p + 1
@@ -123,7 +122,7 @@ end
 function Base.repeat(a::GPUVector, m::Int)
     o = length(a)
     b = similar(a, o*m)
-    gpu_call(a, (b, a, Int(o), Int(m)), m) do state, b, a, o, m
+    gpu_call(a, (b, a, o, m), m) do state, b, a, o, m
         i = linear_index(state)
         i > m && return
         c = (i - 1)*o + 1
