@@ -1,5 +1,5 @@
 import Base: copyto!, splice!, append!, push!, setindex!
-import Base: getindex, map, length, eltype, endof, ndims, size, resize!
+import Base: getindex, map, length, eltype, ndims, size, resize!
 
 resize!(A::GPUArray, newdims::Int...) = resize!(A, newdims)
 function resize!(A::GPUArray{T, 1}, newdims::NTuple{1, Int}) where T
