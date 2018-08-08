@@ -211,10 +211,10 @@ function reinterpret(::Type{T}, a::GPUArray{S}) where T where S
 end
 
 function reinterpret(::Type{T}, a::GPUArray{S}, dims::NTuple{N, Integer}) where T where S where N
-    if !isbits(T)
+    if !isbitstype(T)
         throw(ArgumentError("cannot reinterpret Array{$(S)} to ::Type{Array{$(T)}}, type $(T) is not a bits type"))
     end
-    if !isbits(S)
+    if !isbitstype(S)
         throw(ArgumentError("cannot reinterpret Array{$(S)} to ::Type{Array{$(T)}}, type $(S) is not a bits type"))
     end
     nel = div(length(a)*sizeof(S),sizeof(T))
