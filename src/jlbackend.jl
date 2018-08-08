@@ -4,12 +4,20 @@
 
 struct JLArray{T, N} <: GPUArray{T, N}
     data::Array{T, N}
-    size::NTuple{N, Int}
+    size::Dims{N}
+
+    function JLArray{T,N}(data::Array{T, N}, size::NTuple{N, Int}) where {T,N}
+        new(data, size)
+    end
 end
+
+JLArray(data::AbstractArray{T, N}, size::Dims{N}) where {T,N} = JLArray{T,N}(data, size)
+
 function showarray(io::IO, A::JLArray, repr::Bool)
     print(io, "CPU: ")
     showarray(io, Array(A), repr)
 end
+
 """
 Thread group local memory
 """
@@ -39,7 +47,7 @@ end
 similar(::Type{<: JLArray}, ::Type{T}, size::Base.Dims{N}) where {T, N} = JLArray{T, N}(size)
 
 function unsafe_reinterpret(::Type{T}, A::JLArray{ET}, size::NTuple{N, Integer}) where {T, ET, N}
-    JLArray{T, N}(reshape(reinterpret(T, A.data), size), size)
+    JLArray(Array(reshape(reinterpret(T, A.data), size)), size)
 end
 
 function copyto!(
