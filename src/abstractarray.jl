@@ -1,4 +1,4 @@
-import Base: show, showcompact, similar, convert, _reshape, map!, copyto!, map, copy, deepcopy, showarray
+import Base: show, showcompact, similar, convert, _reshape, map!, copyto!, map, copy, deepcopy
 
 # Dense GPU Array
 abstract type GPUArray{T, N} <: DenseArray{T, N} end

@@ -124,25 +124,25 @@ end
 function value_constructor(Typ)
     @testset "value constructor" begin
         for T in supported_eltypes()
-            x = zeros(T, 2, 2)
-            x1 = zeros(Typ{T}, 2, 2)
-            x2 = zeros(Typ{T}, (2, 2))
-            x3 = zeros(Typ{T, 2}, (2, 2))
+            x = fill(zero(T), (2, 2))
+            x1 = fill(Typ{T}, T(0), (2, 2))
+            x2 = fill(Typ{T}, T(0), (2, 2))
+            x3 = fill(Typ{T, 2}, T(0), (2, 2))
             @test Array(x1) ≈ x
             @test Array(x2) ≈ x
             @test Array(x3) ≈ x
 
-            x = ones(T, 2, 2)
-            x1 = ones(Typ{T}, 2, 2)
-            x2 = ones(Typ{T}, (2, 2))
-            x3 = ones(Typ{T, 2}, (2, 2))
+            x = fill(T(1), (2, 2))
+            x1 = fill(Typ{T}, T(1), (2, 2))
+            x2 = fill(Typ{T}, T(1), (2, 2))
+            x3 = fill(Typ{T, 2}, T(1), (2, 2))
             @test Array(x1) ≈ x
             @test Array(x2) ≈ x
             @test Array(x3) ≈ x
 
             fill!(x, 0)
 
-            x1 = fill(Typ{T}, 0f0, 2, 2)
+            x1 = fill(Typ{T}, 0f0, (2, 2))
             x2 = fill(Typ{T}, T(0), (2, 2))
             x3 = fill(Typ{T, 2}, T(0), (2, 2))
             @test Array(x1) ≈ x
@@ -169,8 +169,8 @@ end
 function iterator_constructors(Typ)
     @testset "iterator constructors" begin
         for T in supported_eltypes()
-            @test Typ(Fill(T(0), (10,))) == zeros(Typ{T}, 10)
-            @test Typ(Fill(T(0), (10, 10))) == zeros(Typ{T}, 10, 10)
+            @test Typ(Fill(T(0), (10,))) == fill(Typ{T}, T(0), (10,))
+            @test Typ(Fill(T(0), (10, 10))) == fill(Typ{T}, T(0), (10, 10))
             if T <: Real
                 x = Typ{Float32}(Fill(T(0), (10, 10)))
                 @test eltype(x) == Float32

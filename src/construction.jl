@@ -2,12 +2,21 @@ import Base: fill!, similar, zeros, ones, fill
 import LinearAlgebra: eye
 
 
-function fill(X::Type{<: GPUArray}, val, dims::Integer...)
-    fill(X, val, dims)
-end
+
 function fill(X::Type{<: GPUArray}, val::T, dims::NTuple{N, Integer}) where {T, N}
     res = similar(X, T, dims)
     fill!(res, val)
+end
+function fill(X::Type{<: GPUArray{T}}, val, dims::NTuple{N, Integer}) where {T, N}
+    res = similar(X, T, dims)
+    fill!(res, convert(T, val))
+end
+function fill!(A::GPUArray{T}, x) where T
+    gpu_call(A, (A, convert(T, x))) do state, a, val
+        @inbounds a[linear_index(state)] = val
+        return
+    end
+    A
 end
 
 zeros(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, zero(eltype(T)), dims)
@@ -23,8 +32,9 @@ end
 
 eye(T::Type{<: GPUArray}, i1::Integer) = eye(T, (i1, i1))
 eye(T::Type{<: GPUArray}, i1::Integer, i2::Integer) = eye(T, (i1, i2))
+
 function eye(T::Type{<: GPUArray}, dims::NTuple{2, Integer})
-    res = zeros(T, dims)
+    res = fill(T, 0.0, dims)
     gpu_call(eyekernel, res, (res, size(res, 1)), minimum(dims))
     res
 end

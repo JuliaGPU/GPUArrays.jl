@@ -77,7 +77,7 @@ function transpose!(At::GPUArray{T, 2}, A::GPUArray{T, 2}) where T
 end
 
 function genperm(I::NTuple{N}, perm::NTuple{N}) where N
-    ntuple(d-> I[perm[d]], Val{N})
+    ntuple(d-> (@inbounds return I[perm[d]]), Val(N))
 end
 
 function permutedims!(dest::GPUArray, src::GPUArray, perm::NTuple{N, Integer}) where N
@@ -87,4 +87,12 @@ function permutedims!(dest::GPUArray, src::GPUArray, perm::NTuple{N, Integer}) w
         return
     end
     return dest
+end
+
+
+function copyto!(A::AbstractArray, B::Adjoint{T, <: GPUArray}) where T
+    copyto!(A, Adjoint(Array(B.parent)))
+end
+function copyto!(A::GPUArray, B::Adjoint{T, <: GPUArray}) where T
+    transpose!(A, B.parent)
 end

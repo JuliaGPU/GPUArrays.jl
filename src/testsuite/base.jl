@@ -51,8 +51,8 @@ function run_base(Typ)
 
 
         @testset "copyto!" begin
-            x = zeros(Float32, 10, 10)
-            y = rand(Float32, 20, 10)
+            x = fill(0f0, (10, 10))
+            y = rand(Float32, (20, 10))
             a = Typ(x)
             b = Typ(y)
             r1 = CartesianIndices((1:7, 3:8))
@@ -61,7 +61,7 @@ function run_base(Typ)
             copyto!(a, r1, b, r2)
             @test x == Array(a)
 
-            x2 = zeros(Float32, 10, 10)
+            x2 = fill(0f0, (10, 10))
             copyto!(x2, r1, b, r2)
             @test x2 == x
 
@@ -73,7 +73,7 @@ function run_base(Typ)
         # right now in CLArrays we fallback to geindex since on some hardware
         # somehow the vcat kernel segfaults -.-
         @testset "vcat + hcat" begin
-            x = zeros(Float32, 10, 10)
+            x = fill(0f0, (10, 10))
             y = rand(Float32, 20, 10)
             a = Typ(x)
             b = Typ(y)
@@ -113,7 +113,7 @@ function run_base(Typ)
         @testset "cartesian iteration" begin
             Ac = rand(Float32, 32, 32)
             A = Typ(Ac)
-            result = zeros(A)
+            result = fill!(copy(A), 0.0)
             gpu_call(cartesian_iter, result, (A, result, size(A)))
             Array(result) == Ac
         end

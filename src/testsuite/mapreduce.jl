@@ -10,19 +10,19 @@ function run_mapreduce(Typ)
                     for N in (2, 10)
                         y = rand(range, N, N)
                         x = T(y)
-                        @test sum(y, 2) ≈ Array(sum(x, 2))
-                        @test sum(y, 1) ≈ Array(sum(x, 1))
-                        @test sum(y, (1, 2)) ≈ Array(sum(x, (1, 2)))
+                        @test sum(y, dims = 2) ≈ Array(sum(x, dims = 2))
+                        @test sum(y, dims = 1) ≈ Array(sum(x, dims = 1))
+                        @test sum(y, dims = (1, 2)) ≈ Array(sum(x, dims = (1, 2)))
 
                         y = rand(range, N, 10)
                         x = T(y)
-                        @test sum(y, 2) ≈ Array(sum(x, 2))
-                        @test sum(y, 1) ≈ Array(sum(x, 1))
+                        @test sum(y, dims = 2) ≈ Array(sum(x, dims = 2))
+                        @test sum(y, dims = 1) ≈ Array(sum(x, dims = 1))
 
                         y = rand(range, 10, N)
                         x = T(y)
-                        @test sum(y, 2) ≈ Array(sum(x, 2))
-                        @test sum(y, 1) ≈ Array(sum(x, 1))
+                        @test sum(y, dims = 2) ≈ Array(sum(x, dims = 2))
+                        @test sum(y, dims = 1) ≈ Array(sum(x, dims = 1))
                     end
                 end
                 @testset "sum maximum minimum prod" begin
@@ -53,7 +53,7 @@ function run_mapreduce(Typ)
         @testset "isapprox" begin
             for ET in supported_eltypes()
                 ET <: Complex && continue
-                A = zeros(Typ{ET}, 100)
+                A = fill(Typ{ET}, ET(0), (100,))
                 B = ones(Typ{ET}, 100)
                 @test !(A ≈ B)
                 @test !(A ≈ Array(B))

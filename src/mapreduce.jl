@@ -77,7 +77,7 @@ end
     body = :(@inbounds R[$(Iexpr...)] = op(R[$(Iexpr...)], f(A[$(indices...)])))
     for i = N:-1:1
         idxsym = indices[i]
-        if types[i] == Void
+        if types[i] == Nothing
             body = quote
                 $idxsym = I[$i]
                 $body
@@ -175,6 +175,6 @@ function fast_isapprox(x::Number, y::Number, rtol::Real = Base.rtoldefault(x, y)
     x == y || (isfinite(x) && isfinite(y) && abs(x - y) <= atol + rtol*max(abs(x), abs(y)))
 end
 
-isapprox(A::GPUArray{T1}, B::GPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, B, T1(rtol), T1(atol)))
-isapprox(A::AbstractArray{T1}, B::GPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, Array(B), T1(rtol), T1(atol)))
-isapprox(A::GPUArray{T1}, B::AbstractArray{T2}, rtol::Real = Base.rtoldefault(T1, T2), atol::Real=0) where {T1, T2} = all(fast_isapprox.(Array(A), B, T1(rtol), T1(atol)))
+isapprox(A::GPUArray{T1}, B::GPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, B, T1(rtol), T1(atol)))
+isapprox(A::AbstractArray{T1}, B::GPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, Array(B), T1(rtol), T1(atol)))
+isapprox(A::GPUArray{T1}, B::AbstractArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(Array(A), B, T1(rtol), T1(atol)))
