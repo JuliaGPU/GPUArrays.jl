@@ -1,15 +1,11 @@
-import Base: any, all, count, countnz, isapprox
-
 #############################
 # reduce
 # functions in base implemented with a direct loop need to be overloaded to use mapreduce
 
 
-any(A::GPUArray{Bool}) = mapreduce(identity, |, false, A)
-all(A::GPUArray{Bool}) = mapreduce(identity, &, true, A)
-count(pred, A::GPUArray) = Int(mapreduce(pred, +, 0, A))
-countnz(A::GPUArray) = Int(mapreduce(x-> x != 0, +, 0, A))
-countnz(A::GPUArray, dim) = Int(mapreducedim(x-> x != 0, +, 0, A, dim))
+Base.any(A::GPUArray{Bool}) = mapreduce(identity, |, false, A)
+Base.all(A::GPUArray{Bool}) = mapreduce(identity, &, true, A)
+Base.count(pred, A::GPUArray) = Int(mapreduce(pred, +, 0, A))
 
 Base.:(==)(A::GPUArray, B::GPUArray) = Bool(mapreduce(==, &, true, A, B))
 
@@ -175,6 +171,6 @@ function fast_isapprox(x::Number, y::Number, rtol::Real = Base.rtoldefault(x, y)
     x == y || (isfinite(x) && isfinite(y) && abs(x - y) <= atol + rtol*max(abs(x), abs(y)))
 end
 
-isapprox(A::GPUArray{T1}, B::GPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, B, T1(rtol), T1(atol)))
-isapprox(A::AbstractArray{T1}, B::GPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, Array(B), T1(rtol), T1(atol)))
-isapprox(A::GPUArray{T1}, B::AbstractArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(Array(A), B, T1(rtol), T1(atol)))
+Base.isapprox(A::GPUArray{T1}, B::GPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, B, T1(rtol), T1(atol)))
+Base.isapprox(A::AbstractArray{T1}, B::GPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, Array(B), T1(rtol), T1(atol)))
+Base.isapprox(A::GPUArray{T1}, B::AbstractArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(Array(A), B, T1(rtol), T1(atol)))
