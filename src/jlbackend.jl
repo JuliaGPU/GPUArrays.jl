@@ -20,7 +20,7 @@ end
 size(x::JLArray) = x.size
 pointer(x::JLArray) = pointer(x.data)
 to_device(state, x::JLArray) = x.data
-to_device(state, x::Tuple) = to_device.(state, x)
+to_device(state, x::Tuple) = to_device.(Ref(state), x)
 to_device(state, x::RefValue{<: JLArray}) = RefValue(to_device(state, x[]))
 to_device(state, x) = x
 # creates a `local` vector for each thread group
@@ -117,11 +117,11 @@ function _gpu_call(f, A::JLArray, args::Tuple, blocks_threads::Tuple{T, T}) wher
     idx = ntuple(i-> 1, length(blocks))
     blockdim = blocks
     state = JLState(threads, blockdim)
-    device_args = to_device.(state, args)
+    device_args = to_device.(Ref(state), args)
     tasks = Array{Task}(undef, threads...)
     for blockidx in CartesianIndices(blockdim)
         state.blockidx = blockidx.I
-        block_args = to_blocks.(state, device_args)
+        block_args = to_blocks.(Ref(state), device_args)
         for threadidx in CartesianIndices(threads)
             thread_state = JLState(state, threadidx.I)
             tasks[threadidx] = @async f(thread_state, block_args...)
