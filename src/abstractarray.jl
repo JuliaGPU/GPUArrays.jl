@@ -20,12 +20,9 @@ end
 AbstractArray interface
 =#
 
-function showarray(io::IO, A::GPUArray, repr::Bool)
+function Base.show(io::IO, A::GPUArray)
     print(io, "GPU: ")
-    showarray(io, Array(A), repr)
-end
-function showcompact(io::IO, mt::MIME"text/plain", A::GPUArray)
-    showcompact(io, mt, Array(A))
+    Base.show(io, Array(A), repr)
 end
 
 
