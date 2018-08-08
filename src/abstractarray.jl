@@ -225,7 +225,7 @@ function reinterpret(::Type{T}, a::GPUArray{S}, dims::NTuple{N, Integer}) where 
 end
 
 function _reshape(A::GPUArray{T}, dims::Dims) where T
-    n = Base._length(A)
+    n = length(A)
     prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
     return unsafe_reinterpret(T, A, dims)
 end
