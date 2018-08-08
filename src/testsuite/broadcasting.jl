@@ -119,8 +119,8 @@ function test_vec3(Typ)
     @testset "vec 3" begin
         N = 20
 
-        xc = map(x-> ntuple(i-> rand(Float32), Val{3}), 1:N)
-        yc = map(x-> ntuple(i-> rand(Float32), Val{3}), 1:N)
+        xc = map(x-> ntuple(i-> rand(Float32), Val(3)), 1:N)
+        yc = map(x-> ntuple(i-> rand(Float32), Val(3)), 1:N)
 
         x = Typ(xc)
         y = Typ(yc)

@@ -103,10 +103,10 @@ function run_base(Typ)
 
         @testset "ntuple test" begin
             result = Typ(Vector{NTuple{3, Float32}}(undef, 1))
-            gpu_call(ntuple_test, result, (result, Val{3}()))
+            gpu_call(ntuple_test, result, (result, Val(3)))
             @test Array(result)[1] == (77, 2*77, 3*77)
             x = 88f0
-            gpu_call(ntuple_closure, result, (result, Val{3}(), x))
+            gpu_call(ntuple_closure, result, (result, Val(3), x))
             @test Array(result)[1] == (x, 2*x, 3*x)
         end
 

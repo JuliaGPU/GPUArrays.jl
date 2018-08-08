@@ -25,7 +25,7 @@ Equivalent to `__local` of OpenCL or `__shared__ (<variable>)` of CUDA.
 macro LocalMemory(state, T, N)
     id = (shmem_counter[] += 1)
     quote
-        lémem = LocalMemory($(esc(state)), $(esc(T)), Val{$(esc(N))}(), Val{$id}())
+        lémem = LocalMemory($(esc(state)), $(esc(T)), Val($(esc(N))), Val($id))
         AbstractDeviceArray(lémem, $(esc(N)))
     end
 end

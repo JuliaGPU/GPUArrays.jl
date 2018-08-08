@@ -58,7 +58,7 @@ function transpose!(At::GPUArray{T, 2}, A::GPUArray{T, 2}) where T
         TDIM = 32; BLOCK_ROWS = 8
         nrows = TDIM ÷ BLOCK_ROWS
         shmemdim = (TDIM, (TDIM + 1))
-        static_params = map(x-> Val{x}(), (shmemdim, TDIM, BLOCK_ROWS, nrows))
+        static_params = map(x-> Val(x), (shmemdim, TDIM, BLOCK_ROWS, nrows))
         args = (At, A, static_params...)
 
         griddim = ceil.(Int, size(A) ./ (TDIM, TDIM))
