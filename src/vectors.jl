@@ -1,4 +1,4 @@
-import Base: copyto!, splice!, append!, push!, setindex!, start, next, done
+import Base: copyto!, splice!, append!, push!, setindex!
 import Base: getindex, map, length, eltype, endof, ndims, size, resize!
 
 resize!(A::GPUArray, newdims::Int...) = resize!(A, newdims)

@@ -1,13 +1,16 @@
-import Base: sum, next, start, done, IndexStyle
-
 abstract type AbstractDeviceArray{T, N} <: AbstractArray{T, N} end
 
-IndexStyle(::AbstractDeviceArray) = IndexLinear()
-start(x::AbstractDeviceArray) = 1
-next(x::AbstractDeviceArray, state::Int) = x[state], state + 1
-done(x::AbstractDeviceArray, state::Int) = state > length(x)
+Base.IndexStyle(::AbstractDeviceArray) = IndexLinear()
 
-function sum(A::AbstractDeviceArray{T}) where T
+@inline function Base.iterate(A::AbstractDeviceArray, i=1)
+    if (i % UInt) - 1 < length(A)
+        (@inbounds A[i], i + 1)
+    else
+        nothing
+    end
+end
+
+function Base.sum(A::AbstractDeviceArray{T}) where T
     acc = zero(T)
     for elem in A
         acc += elem

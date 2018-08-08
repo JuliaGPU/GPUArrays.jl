@@ -7,7 +7,7 @@ function assertslow(op = "Operation")
     return
 end
 
-Base.IndexStyle(::Type{<:GPUArray}) = IndexLinear()
+Base.IndexStyle(::Type{<:GPUArray}) = Base.IndexLinear()
 
 function _getindex(xs::GPUArray{T}, i::Integer) where T
     x = Array{T}(undef, 1)
