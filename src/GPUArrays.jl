@@ -12,7 +12,6 @@ using LinearAlgebra.BLAS
 using FFTW
 import FFTW: *, plan_ifft!, plan_fft!, plan_fft, plan_ifft, size, plan_bfft, plan_bfft!
 import Base: pointer, similar, size, convert
-import LinearAlgebra: scale!, transpose!, permutedims!
 using Base: @propagate_inbounds, @pure, RefValue
 using Base.Cartesian
 using Random

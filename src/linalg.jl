@@ -52,7 +52,7 @@ function transpose_blocks!(
     return
 end
 
-function transpose!(At::GPUArray{T, 2}, A::GPUArray{T, 2}) where T
+function LinearAlgebra.transpose!(At::GPUArray{T, 2}, A::GPUArray{T, 2}) where T
     if size(A, 1) == size(A, 2) && all(x-> x % 32 == 0, size(A))
         outsize = size(At)
         TDIM = 32; BLOCK_ROWS = 8
@@ -80,7 +80,7 @@ function genperm(I::NTuple{N}, perm::NTuple{N}) where N
     ntuple(d-> (@inbounds return I[perm[d]]), Val(N))
 end
 
-function permutedims!(dest::GPUArray, src::GPUArray, perm::NTuple{N, Integer}) where N
+function LinearAlgebra.permutedims!(dest::GPUArray, src::GPUArray, perm::NTuple{N, Integer}) where N
     gpu_call(dest, (dest, src, perm)) do state, dest, src, perm
         I = @cartesianidx src state
         @inbounds dest[genperm(I, perm)...] = src[I...]
