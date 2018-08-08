@@ -154,7 +154,7 @@ function value_constructor(Typ)
             @test all(x-> x == 2f0, Array(x1))
             @test all(x-> x == Int32(77), Array(x2))
 
-            x = eye(T, 2, 2)
+            x = Matrix{T}(I, 2, 2)
 
             x1 = eye(Typ{T, 2}, 2, 2)
             x2 = eye(Typ{T}, (2, 2))
