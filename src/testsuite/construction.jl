@@ -156,9 +156,9 @@ function value_constructor(Typ)
 
             x = Matrix{T}(I, 2, 2)
 
-            x1 = eye(Typ{T, 2}, 2, 2)
-            x2 = eye(Typ{T}, (2, 2))
-            x3 = eye(Typ{T, 2}, (2, 2))
+            x1 = Typ{T, 2}(I, 2, 2)
+            x2 = Typ{T}(I, (2, 2))
+            x3 = Typ{T, 2}(I, (2, 2))
 
             @test Array(x1) ≈ x
             @test Array(x2) ≈ x
@@ -174,7 +174,7 @@ function iterator_constructors(Typ)
             if T <: Real
                 x = Typ{Float32}(Fill(T(0), (10, 10)))
                 @test eltype(x) == Float32
-                @test Typ(Eye{T}((10, 10))) == eye(Typ{T}, 10, 10)
+                @test Typ(Eye{T}((10, 10))) == Typ{T}(I, 10, 10)
                 x = Typ{Float32}(Eye{T}((10, 10)))
                 @test eltype(x) == Float32
             end
