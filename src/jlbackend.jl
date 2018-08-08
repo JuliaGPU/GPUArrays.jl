@@ -76,7 +76,7 @@ end
 function JLState(threads::NTuple{N}, blockdim::NTuple{N}) where N
     idx = ntuple(i-> 1, Val(N))
     blockcount = prod(blockdim)
-    lmems = [Vector{Array}(0) for i in 1:blockcount]
+    lmems = [Vector{Array}() for i in 1:blockcount]
     JLState{N}(threads, blockdim, idx, idx, 0, lmems)
 end
 
