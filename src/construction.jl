@@ -13,7 +13,8 @@ function fill(X::Type{<: GPUArray{T}}, val, dims::NTuple{N, Integer}) where {T, 
 end
 function fill!(A::GPUArray{T}, x) where T
     gpu_call(A, (A, convert(T, x))) do state, a, val
-        @inbounds a[linear_index(state)] = val
+        idx = @linearidx(a, state)
+        @inbounds a[idx] = val
         return
     end
     A
