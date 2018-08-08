@@ -14,8 +14,8 @@ function run_blas(Typ)
             against_base(mul!, T, (15,), (15, 10), (10,))
         end
         for T in (ComplexF32, Float32)
-            @testset "scale! $T" begin
-                against_base(scale!, Typ{T}, (13, 23), 77f0)
+            @testset "rmul! $T" begin
+                against_base(rmul!, Typ{T}, (13, 23), 77f0)
             end
         end
         @testset "gbmv" begin
