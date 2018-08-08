@@ -96,8 +96,8 @@ function run_base(Typ)
 
             a = rand(ComplexF32, 10 * 10)
             A = Typ(a)
-            af0 = reinterpret(Float32, a, (20, 10))
-            Af0 = reinterpret(Float32, A, (20, 10))
+            af0 = reshape(reinterpret(Float32, vec(a)), (20, 10))
+            Af0 = reshape(reinterpret(Float32, vec(A)), (20, 10))
             @test Array(Af0) == af0
         end
 

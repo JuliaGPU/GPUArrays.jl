@@ -39,7 +39,7 @@ end
 similar(::Type{<: JLArray}, ::Type{T}, size::Base.Dims{N}) where {T, N} = JLArray{T, N}(size)
 
 function unsafe_reinterpret(::Type{T}, A::JLArray{ET}, size::NTuple{N, Integer}) where {T, ET, N}
-    JLArray{T, N}(reinterpret(T, A.data, size), size)
+    JLArray{T, N}(reshape(reinterpret(T, A.data), size), size)
 end
 
 function copyto!(
