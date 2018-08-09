@@ -1,4 +1,4 @@
-import Base: show, showcompact, similar, convert, _reshape, map!, copy!, map, copy, showarray
+import Base: show, showcompact, similar, convert, _reshape, map!, copy!, map, copy, deepcopy, showarray
 
 # Dense GPU Array
 abstract type GPUArray{T, N} <: DenseArray{T, N} end
@@ -183,6 +183,7 @@ function copy!(
 end
 
 copy(x::GPUArray) = identity.(x)
+deepcopy(x::GPUArray) = copy(x)
 
 #=
 reinterpret taken from julia base/array.jl

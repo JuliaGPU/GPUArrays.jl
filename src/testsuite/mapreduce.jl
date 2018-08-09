@@ -45,6 +45,9 @@ function run_mapreduce(Typ)
                 @test any(A) == any(Ac)
                 @test all(A) == all(Ac)
                 @test A == copy(A)
+                @test A !== copy(A)
+                @test A == deepcopy(A)
+                @test A !== deepcopy(A)
             end
         end
     end
