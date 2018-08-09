@@ -35,7 +35,7 @@ function run_indexing(Typ)
                 src[1:3] = T[77, 22, 11]
                 @test Array(src[1:3]) == T[77, 22, 11]
                 src[1] = T(0)
-                src[2:end] = 77
+                src[2:end] = T(77)
                 GPUArrays.allowslow(false)
                 @test Array(src) == T[0, 77, 77, 77, 77, 77, 77]
             end
