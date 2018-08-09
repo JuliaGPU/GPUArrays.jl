@@ -1,4 +1,3 @@
-using GPUArrays.TestSuite, Base.Test
 
 
 function run_mapreduce(Typ)
@@ -48,6 +47,17 @@ function run_mapreduce(Typ)
                 @test A !== copy(A)
                 @test A == deepcopy(A)
                 @test A !== deepcopy(A)
+            end
+        end
+
+        @testset "isapprox" begin
+            for ET in supported_eltypes()
+                ET <: Complex && continue
+                A = zeros(Typ{ET}, 100)
+                B = ones(Typ{ET}, 100)
+                @test !(A ≈ B)
+                @test !(A ≈ Array(B))
+                @test !(Array(A) ≈ B)
             end
         end
     end

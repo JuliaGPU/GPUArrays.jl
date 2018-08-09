@@ -1,5 +1,4 @@
-using GPUArrays, Base.Test
-using GPUArrays: JLArray
+using GPUArrays, Test
 using GPUArrays.TestSuite
 
 

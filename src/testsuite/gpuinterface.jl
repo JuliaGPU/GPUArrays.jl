@@ -1,7 +1,7 @@
 function run_gpuinterface(Typ)
     @testset "parallel execution interface" begin
         N = 10
-        x = Typ(Vector{Int}(N))
+        x = Typ(Vector{Int}(undef, N))
         x .= 0
         gpu_call(x, (x,)) do state, x
             x[linear_index(state)] = 2

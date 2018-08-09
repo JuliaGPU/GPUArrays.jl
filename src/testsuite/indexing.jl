@@ -1,5 +1,4 @@
-using GPUArrays, StaticArrays
-using Base.Test, GPUArrays.TestSuite
+
 
 function run_indexing(Typ)
     @testset "indexing" begin
@@ -51,6 +50,17 @@ function run_indexing(Typ)
                 @test A[end] == Ac[end]
                 @test A[1, 1] == Ac[1, 1]
                 GPUArrays.allowslow(false)
+            end
+        end
+        for T in (Float32, Int32)
+            @testset "Colon() $T" begin
+                Ac = rand(T, 10)
+                A = Typ(Ac)
+                GPUArrays.allowslow(false)
+                A[:] = T(1)
+                @test all(x-> x == 1, A)
+                A[:] = Typ(Ac)
+                @test Array(A) == Ac
             end
         end
     end

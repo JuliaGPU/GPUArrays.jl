@@ -3,15 +3,15 @@ const _allowslow = Ref(true)
 allowslow(flag = true) = (_allowslow[] = flag)
 
 function assertslow(op = "Operation")
-    _allowslow[] || error("$op is disabled")
+    # _allowslow[] || error("$op is disabled")
     return
 end
 
 Base.IndexStyle(::Type{<:GPUArray}) = IndexLinear()
 
 function _getindex(xs::GPUArray{T}, i::Integer) where T
-    x = Array{T}(1)
-    copy!(x, 1, xs, i, 1)
+    x = Array{T}(undef, 1)
+    copyto!(x, 1, xs, i, 1)
     return x[1]
 end
 
@@ -22,7 +22,7 @@ end
 
 function _setindex!(xs::GPUArray{T}, v::T, i::Integer) where T
     x = T[v]
-    copy!(xs, i, x, 1, 1)
+    copyto!(xs, i, x, 1, 1)
     return v
 end
 
@@ -35,10 +35,9 @@ Base.setindex!(xs::GPUArray, v, i::Integer) = xs[i] = convert(eltype(xs), v)
 
 # Vector indexing
 
-using Base.Cartesian
 to_index(a, x) = x
-to_index(::A, x::Array{ET}) where {A, ET} = copy!(similar(A, ET, size(x)), x)
-to_index(a, x::UnitRange{<: Integer}) = convert(UnitRange{UInt32}, x)
+to_index(::A, x::Array{ET}) where {A, ET} = copyto!(similar(A, ET, size(x)), x)
+to_index(a, x::UnitRange{<: Integer}) = convert(UnitRange{Int}, x)
 to_index(a, x::Base.LogicalIndex) = error("Logical indexing not implemented")
 
 @generated function index_kernel(state, dest::AbstractArray, src::AbstractArray, idims, Is)
@@ -47,7 +46,7 @@ to_index(a, x::Base.LogicalIndex) = error("Logical indexing not implemented")
         i = linear_index(state)
         i > length(dest) && return
         is = gpu_ind2sub(idims, i)
-        @nexprs $N i -> @inbounds I_i = Is[i][Int(is[i])]
+        @nexprs $N i -> @inbounds I_i = Is[i][is[i]]
         @inbounds dest[i] = @ncall $N getindex src i -> I_i
         return
     end
@@ -59,29 +58,44 @@ function Base._unsafe_getindex!(dest::GPUArray, src::GPUArray, Is::Union{Real, A
         return dest
     end
     idims = map(length, Is)
-    gpu_call(index_kernel, dest, (dest, src, UInt32.(idims), map(x-> to_index(dest, x), Is)))
+    gpu_call(index_kernel, dest, (dest, src, idims, map(x-> to_index(dest, x), Is)))
     return dest
 end
 
+# simple broadcast getindex like function... could reuse another?
+@inline bgetindex(x::AbstractArray, i) = x[i]
+@inline bgetindex(x, i) = x
 
-@generated function setindex_kernel!(state, dest::AbstractArray, src::AbstractArray, idims, Is, len)
+@generated function setindex_kernel!(state, dest::AbstractArray, src, idims, Is, len)
     N = length(Is.parameters)
-    idx = ntuple(i-> :(Cuint(Is[$i][Int(is[$i])])), N)
+    idx = ntuple(i-> :(Is[$i][is[$i]]), N)
     quote
         i = linear_index(state)
         i > len && return
         is = gpu_ind2sub(idims, i)
-        @inbounds setindex!(dest, src[i], $(idx...))
+        @inbounds setindex!(dest, bgetindex(src, i), $(idx...))
         return
     end
 end
 
-function Base._unsafe_setindex!(::IndexStyle, dest::GPUArray, src::GPUArray, Is::Union{Real, AbstractArray}...)
+
+#TODO this should use adapt, but I currently don't have time to figure out it's intended usage
+
+gpu_convert(GPUType, x::GPUArray) = x
+function gpu_convert(GPUType, x::AbstractArray)
+    isbits(x) ? x : convert(GPUType, x)
+end
+function gpu_convert(GPUType, x)
+    isbits(x) ? x : error("Only isbits types are allowed for indexing. Found: $(typeof(x))")
+end
+
+function Base._unsafe_setindex!(::IndexStyle, dest::T, src, Is::Union{Real, AbstractArray}...) where T <: GPUArray
     if length(Is) == 1 && isa(first(Is), Array) && isempty(first(Is)) # indexing with empty array
         return dest
     end
-    idims = map(length, Is)
-    len = length(src)
-    gpu_call(setindex_kernel!, src, (dest, src, UInt32.(idims), map(x-> to_index(dest, x), Is), UInt32(len)), len)
+    idims = length.(Is)
+    len = prod(idims)
+    src_gpu = gpu_convert(T, src)
+    gpu_call(setindex_kernel!, dest, (dest, src_gpu, idims, map(x-> to_index(dest, x), Is), len), len)
     return dest
 end
