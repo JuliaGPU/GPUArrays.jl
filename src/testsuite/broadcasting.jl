@@ -42,7 +42,7 @@ function test_broadcast(Typ)
                 gidx = Typ(cidx)
                 cy = TestSuite.toarray(ET, (2*N,))
                 gy = Typ(cy)
-                cres = zeros(ET, size(cidx))
+                cres = fill(zero(ET), size(cidx))
                 gres = Typ(cres)
                 gres .= test_idx.(gidx, Base.RefValue(gy))
                 cres .= test_idx.(cidx, Base.RefValue(cy))
@@ -119,13 +119,13 @@ function test_vec3(Typ)
     @testset "vec 3" begin
         N = 20
 
-        xc = map(x-> ntuple(i-> rand(Float32), Val{3}), 1:N)
-        yc = map(x-> ntuple(i-> rand(Float32), Val{3}), 1:N)
+        xc = map(x-> ntuple(i-> rand(Float32), Val(3)), 1:N)
+        yc = map(x-> ntuple(i-> rand(Float32), Val(3)), 1:N)
 
         x = Typ(xc)
         y = Typ(yc)
 
-        res1c = zeros(Float32, N)
+        res1c = fill(0f0, N)
         res2c = similar(xc)
 
         res1 = Typ(res1c)

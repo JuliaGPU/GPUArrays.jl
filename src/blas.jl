@@ -39,15 +39,15 @@ for elty in (Float64, Float32)
     end
 end
 
-scale!(s::Number, X::GPUArray) = scale!(X, s)
-function scale!(X::GPUArray{T}, s::Number) where T <: BLAS.BlasComplex
+LinearAlgebra.rmul!(s::Number, X::GPUArray) = rmul!(X, s)
+function LinearAlgebra.rmul!(X::GPUArray{T}, s::Number) where T <: BLAS.BlasComplex
     R = typeof(real(zero(T)))
     N = 2*length(X)
     buff = unsafe_reinterpret(R, X, (N,))
     BLAS.scal!(N, R(s), buff, 1)
     X
 end
-function scale!(X::GPUArray{T}, s::Number) where T <: Union{Float32, Float64}
+function LinearAlgebra.rmul!(X::GPUArray{T}, s::Number) where T <: Union{Float32, Float64}
     BLAS.scal!(length(X), T(s), X, 1)
     X
 end

@@ -1,33 +1,41 @@
 import Base: fill!, similar, zeros, ones, fill
-import LinearAlgebra: eye
 
 
-function fill(X::Type{<: GPUArray}, val, dims::Integer...)
-    fill(X, val, dims)
-end
+
 function fill(X::Type{<: GPUArray}, val::T, dims::NTuple{N, Integer}) where {T, N}
     res = similar(X, T, dims)
     fill!(res, val)
+end
+function fill(X::Type{<: GPUArray{T}}, val, dims::NTuple{N, Integer}) where {T, N}
+    res = similar(X, T, dims)
+    fill!(res, convert(T, val))
+end
+function fill!(A::GPUArray{T}, x) where T
+    gpu_call(A, (A, convert(T, x))) do state, a, val
+        idx = @linearidx(a, state)
+        @inbounds a[idx] = val
+        return
+    end
+    A
 end
 
 zeros(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, zero(eltype(T)), dims)
 ones(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, one(eltype(T)), dims)
 
-function eyekernel(state, res::AbstractArray{T}, stride) where T
+function uniformscaling_kernel(state, res::AbstractArray{T}, stride, s::UniformScaling) where T
     i = linear_index(state)
     i > stride && return
     ilin = (stride * (i - 1)) + i
-    @inbounds res[ilin] = one(T)
+    @inbounds res[ilin] = s.λ
     return
 end
 
-eye(T::Type{<: GPUArray}, i1::Integer) = eye(T, (i1, i1))
-eye(T::Type{<: GPUArray}, i1::Integer, i2::Integer) = eye(T, (i1, i2))
-function eye(T::Type{<: GPUArray}, dims::NTuple{2, Integer})
+function (T::Type{<: GPUArray})(s::UniformScaling, dims::Dims{2})
     res = zeros(T, dims)
-    gpu_call(eyekernel, res, (res, size(res, 1)), minimum(dims))
+    gpu_call(uniformscaling_kernel, res, (res, size(res, 1), s), minimum(dims))
     res
 end
+(T::Type{<: GPUArray})(s::UniformScaling, m::Integer, n::Integer) = T(s, Dims((m, n)))
 
 (T::Type{<: GPUArray})(x) = convert(T, x)
 (T::Type{<: GPUArray})(dims::Integer...) = T(dims)

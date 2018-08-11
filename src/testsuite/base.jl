@@ -51,8 +51,8 @@ function run_base(Typ)
 
 
         @testset "copyto!" begin
-            x = zeros(Float32, 10, 10)
-            y = rand(Float32, 20, 10)
+            x = fill(0f0, (10, 10))
+            y = rand(Float32, (20, 10))
             a = Typ(x)
             b = Typ(y)
             r1 = CartesianIndices((1:7, 3:8))
@@ -61,7 +61,7 @@ function run_base(Typ)
             copyto!(a, r1, b, r2)
             @test x == Array(a)
 
-            x2 = zeros(Float32, 10, 10)
+            x2 = fill(0f0, (10, 10))
             copyto!(x2, r1, b, r2)
             @test x2 == x
 
@@ -73,7 +73,7 @@ function run_base(Typ)
         # right now in CLArrays we fallback to geindex since on some hardware
         # somehow the vcat kernel segfaults -.-
         @testset "vcat + hcat" begin
-            x = zeros(Float32, 10, 10)
+            x = fill(0f0, (10, 10))
             y = rand(Float32, 20, 10)
             a = Typ(x)
             b = Typ(y)
@@ -96,24 +96,24 @@ function run_base(Typ)
 
             a = rand(ComplexF32, 10 * 10)
             A = Typ(a)
-            af0 = reinterpret(Float32, a, (20, 10))
-            Af0 = reinterpret(Float32, A, (20, 10))
+            af0 = reshape(reinterpret(Float32, vec(a)), (20, 10))
+            Af0 = reshape(reinterpret(Float32, vec(A)), (20, 10))
             @test Array(Af0) == af0
         end
 
         @testset "ntuple test" begin
-            result = Typ(Vector{NTuple{3, Float32}}(1))
-            gpu_call(ntuple_test, result, (result, Val{3}()))
+            result = Typ(Vector{NTuple{3, Float32}}(undef, 1))
+            gpu_call(ntuple_test, result, (result, Val(3)))
             @test Array(result)[1] == (77, 2*77, 3*77)
             x = 88f0
-            gpu_call(ntuple_closure, result, (result, Val{3}(), x))
+            gpu_call(ntuple_closure, result, (result, Val(3), x))
             @test Array(result)[1] == (x, 2*x, 3*x)
         end
 
         @testset "cartesian iteration" begin
             Ac = rand(Float32, 32, 32)
             A = Typ(Ac)
-            result = zeros(A)
+            result = fill!(copy(A), 0.0)
             gpu_call(cartesian_iter, result, (A, result, size(A)))
             Array(result) == Ac
         end

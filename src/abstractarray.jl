@@ -1,4 +1,4 @@
-import Base: show, showcompact, similar, convert, _reshape, map!, copyto!, map, copy, deepcopy, showarray
+import Base: show, showcompact, similar, convert, _reshape, map!, copyto!, map, copy, deepcopy
 
 # Dense GPU Array
 abstract type GPUArray{T, N} <: DenseArray{T, N} end
@@ -20,12 +20,9 @@ end
 AbstractArray interface
 =#
 
-function showarray(io::IO, A::GPUArray, repr::Bool)
+function Base.show(io::IO, A::GPUArray)
     print(io, "GPU: ")
-    showarray(io, Array(A), repr)
-end
-function showcompact(io::IO, mt::MIME"text/plain", A::GPUArray)
-    showcompact(io, mt, Array(A))
+    Base.show(io, Array(A), repr)
 end
 
 
@@ -211,10 +208,10 @@ function reinterpret(::Type{T}, a::GPUArray{S}) where T where S
 end
 
 function reinterpret(::Type{T}, a::GPUArray{S}, dims::NTuple{N, Integer}) where T where S where N
-    if !isbits(T)
+    if !isbitstype(T)
         throw(ArgumentError("cannot reinterpret Array{$(S)} to ::Type{Array{$(T)}}, type $(T) is not a bits type"))
     end
-    if !isbits(S)
+    if !isbitstype(S)
         throw(ArgumentError("cannot reinterpret Array{$(S)} to ::Type{Array{$(T)}}, type $(S) is not a bits type"))
     end
     nel = div(length(a)*sizeof(S),sizeof(T))
@@ -225,7 +222,7 @@ function reinterpret(::Type{T}, a::GPUArray{S}, dims::NTuple{N, Integer}) where 
 end
 
 function _reshape(A::GPUArray{T}, dims::Dims) where T
-    n = Base._length(A)
+    n = length(A)
     prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
     return unsafe_reinterpret(T, A, dims)
 end

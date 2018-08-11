@@ -34,7 +34,8 @@ floattype(::Type{T}) where T <: Union{Int64, UInt64} = Float64
 floattype(::Type{T}) where T <: Union{Int32, UInt32} = Float32
 
 to_number_range(x::AbstractFloat, ::Type{T}) where T <: Unsigned = T(round(x * typemax(T)))
-to_number_range(x::F, ::Type{T}) where {T <: Signed, F <: AbstractFloat} = T(round(((x - F(0.5)) * typemax(T)) * T(2)))
+
+to_number_range(x::F, ::Type{T}) where {T <: Signed, F <: AbstractFloat} = Base.unsafe_trunc(T, round(((x - F(0.5)) * typemax(T)) * T(2)))
 
 function gpu_rand(::Type{T}, state, randstate::AbstractVector{NTuple{4, UInt32}}) where T <: Integer
     f = gpu_rand(floattype(T), state, randstate)

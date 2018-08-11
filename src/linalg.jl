@@ -52,13 +52,13 @@ function transpose_blocks!(
     return
 end
 
-function transpose!(At::GPUArray{T, 2}, A::GPUArray{T, 2}) where T
+function LinearAlgebra.transpose!(At::GPUArray{T, 2}, A::GPUArray{T, 2}) where T
     if size(A, 1) == size(A, 2) && all(x-> x % 32 == 0, size(A))
         outsize = size(At)
         TDIM = 32; BLOCK_ROWS = 8
         nrows = TDIM ÷ BLOCK_ROWS
         shmemdim = (TDIM, (TDIM + 1))
-        static_params = map(x-> Val{x}(), (shmemdim, TDIM, BLOCK_ROWS, nrows))
+        static_params = map(x-> Val(x), (shmemdim, TDIM, BLOCK_ROWS, nrows))
         args = (At, A, static_params...)
 
         griddim = ceil.(Int, size(A) ./ (TDIM, TDIM))
@@ -77,14 +77,22 @@ function transpose!(At::GPUArray{T, 2}, A::GPUArray{T, 2}) where T
 end
 
 function genperm(I::NTuple{N}, perm::NTuple{N}) where N
-    ntuple(d-> I[perm[d]], Val{N})
+    ntuple(d-> (@inbounds return I[perm[d]]), Val(N))
 end
 
-function permutedims!(dest::GPUArray, src::GPUArray, perm::NTuple{N, Integer}) where N
+function LinearAlgebra.permutedims!(dest::GPUArray, src::GPUArray, perm::NTuple{N, Integer}) where N
     gpu_call(dest, (dest, src, perm)) do state, dest, src, perm
         I = @cartesianidx src state
         @inbounds dest[genperm(I, perm)...] = src[I...]
         return
     end
     return dest
+end
+
+
+function copyto!(A::AbstractArray, B::Adjoint{T, <: GPUArray}) where T
+    copyto!(A, Adjoint(Array(B.parent)))
+end
+function copyto!(A::GPUArray, B::Adjoint{T, <: GPUArray}) where T
+    transpose!(A, B.parent)
 end

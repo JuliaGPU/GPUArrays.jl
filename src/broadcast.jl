@@ -1,6 +1,18 @@
 using Base.Broadcast
 
-@inline function Base.copyto!(dest::GPUArray, bc::Broadcast.Broadcasted{Nothing})
+import Base.Broadcast: BroadcastStyle, AbstractArrayStyle, Broadcasted, broadcast_axes
+import Base.Broadcast: DefaultArrayStyle, materialize!, flatten, ArrayStyle, combine_styles
+
+BroadcastStyle(::Type{T}) where T <: GPUArray = ArrayStyle{T}()
+BroadcastStyle(::Type{Any}, ::Type{T}) where T <: GPUArray = ArrayStyle{T}()
+BroadcastStyle(::Type{T}, ::Type{Any}) where T <: GPUArray = ArrayStyle{T}()
+BroadcastStyle(::Type{T1}, ::Type{T2}) where {T1 <: GPUArray, T2 <: GPUArray} = ArrayStyle{T}()
+
+const GPUBroadcast = Broadcasted{<: ArrayStyle{<: GPUArray}}
+function Base.similar(bc::Broadcasted{ArrayStyle{GPU}}, ::Type{ElType}) where {GPU <: GPUArray, ElType}
+    similar(GPU, ElType, axes(bc))
+end
+@inline function Base.copyto!(dest::GPUArray, bc::GPUBroadcast)
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     # # Performance optimization: broadcast!(identity, dest, A) is equivalent to copyto!(dest, A) if indices match
     # if bc.f === identity && bc.args isa Tuple{AbstractArray} # only a single input argument to broadcast!

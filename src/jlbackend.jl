@@ -4,12 +4,20 @@
 
 struct JLArray{T, N} <: GPUArray{T, N}
     data::Array{T, N}
-    size::NTuple{N, Int}
+    size::Dims{N}
+
+    function JLArray{T,N}(data::Array{T, N}, size::NTuple{N, Int}) where {T,N}
+        new(data, size)
+    end
 end
+
+JLArray(data::AbstractArray{T, N}, size::Dims{N}) where {T,N} = JLArray{T,N}(data, size)
+
 function showarray(io::IO, A::JLArray, repr::Bool)
     print(io, "CPU: ")
     showarray(io, Array(A), repr)
 end
+
 """
 Thread group local memory
 """
@@ -20,7 +28,7 @@ end
 size(x::JLArray) = x.size
 pointer(x::JLArray) = pointer(x.data)
 to_device(state, x::JLArray) = x.data
-to_device(state, x::Tuple) = to_device.(state, x)
+to_device(state, x::Tuple) = to_device.(Ref(state), x)
 to_device(state, x::RefValue{<: JLArray}) = RefValue(to_device(state, x[]))
 to_device(state, x) = x
 # creates a `local` vector for each thread group
@@ -39,7 +47,7 @@ end
 similar(::Type{<: JLArray}, ::Type{T}, size::Base.Dims{N}) where {T, N} = JLArray{T, N}(size)
 
 function unsafe_reinterpret(::Type{T}, A::JLArray{ET}, size::NTuple{N, Integer}) where {T, ET, N}
-    JLArray{T, N}(reinterpret(T, A.data, size), size)
+    JLArray(Array(reshape(reinterpret(T, A.data), size)), size)
 end
 
 function copyto!(
@@ -76,7 +84,7 @@ end
 function JLState(threads::NTuple{N}, blockdim::NTuple{N}) where N
     idx = ntuple(i-> 1, Val(N))
     blockcount = prod(blockdim)
-    lmems = [Vector{Array}(0) for i in 1:blockcount]
+    lmems = [Vector{Array}() for i in 1:blockcount]
     JLState{N}(threads, blockdim, idx, idx, 0, lmems)
 end
 
@@ -96,7 +104,7 @@ function LocalMemory(state::JLState, ::Type{T}, ::Val{N}, ::Val{C}) where {T, N,
     lmems = state.localmems[blockidx_x(state)]
     # first invokation in block
     if length(lmems) < state.localmem_counter
-        lmem = zeros(T, N...)
+        lmem = fill(zero(T), N)
         push!(lmems, lmem)
         return lmem
     else
@@ -117,11 +125,11 @@ function _gpu_call(f, A::JLArray, args::Tuple, blocks_threads::Tuple{T, T}) wher
     idx = ntuple(i-> 1, length(blocks))
     blockdim = blocks
     state = JLState(threads, blockdim)
-    device_args = to_device.(state, args)
+    device_args = to_device.(Ref(state), args)
     tasks = Array{Task}(undef, threads...)
     for blockidx in CartesianIndices(blockdim)
         state.blockidx = blockidx.I
-        block_args = to_blocks.(state, device_args)
+        block_args = to_blocks.(Ref(state), device_args)
         for threadidx in CartesianIndices(threads)
             thread_state = JLState(state, threadidx.I)
             tasks[threadidx] = @async f(thread_state, block_args...)

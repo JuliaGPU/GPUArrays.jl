@@ -15,7 +15,7 @@ function run_indexing(Typ)
                 @test Array(src[3:end]) == x[3:end]
             end
             @testset "multi dim, sliced setindex" begin
-                x = zeros(Typ{T}, 10, 10, 10, 10)
+                x = fill(Typ{T}, T(0), (10, 10, 10, 10))
                 y = rand(Typ{T}, 5, 5, 10, 10)
                 x[2:6, 2:6, :, :] = y
                 x[2:6, 2:6, :, :] == y
@@ -25,7 +25,7 @@ function run_indexing(Typ)
 
         for T in (Float32, Int32)
             @testset "Indexing with $T" begin
-                x = zeros(T, 7)
+                x = fill(zero(T), 7)
                 src = Typ(x)
                 GPUArrays.allowslow(true)
                 for i = 1:7
@@ -35,7 +35,7 @@ function run_indexing(Typ)
                 src[1:3] = T[77, 22, 11]
                 @test Array(src[1:3]) == T[77, 22, 11]
                 src[1] = T(0)
-                src[2:end] = 77
+                src[2:end] = T(77)
                 GPUArrays.allowslow(false)
                 @test Array(src) == T[0, 77, 77, 77, 77, 77, 77]
             end
