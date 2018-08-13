@@ -1,5 +1,3 @@
-
-
 function cartesian_iter(state, A, res, Asize)
     for i in CartesianIndices(Asize)
         idx = gpu_sub2ind(Asize, i.I)
@@ -69,6 +67,7 @@ function run_base(Typ)
             copyto!(a, r1, y, r2)
             @test Array(a) == x
         end
+
         GPUArrays.allowslow(true)
         # right now in CLArrays we fallback to geindex since on some hardware
         # somehow the vcat kernel segfaults -.-
@@ -125,6 +124,7 @@ function run_base(Typ)
             jy = Array(y)
             @test map!(-, jy, jy) ≈ Array(x)
         end
+
         T = Typ{Float32}
         @testset "map" begin
             against_base((a, b)-> map(+, a, b), T, (10,), (10,))

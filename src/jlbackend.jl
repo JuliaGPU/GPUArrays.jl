@@ -52,23 +52,20 @@ function unsafe_reinterpret(::Type{T}, A::JLArray{ET}, size::NTuple{N, Integer})
     JLArray(Array(reshape(reinterpret(T, A.data), size)), size)
 end
 
-function copyto!(
-        dest::Array{T}, d_offset::Integer,
-        source::JLArray{T}, s_offset::Integer, amount::Integer
-    ) where T
+function Base.unsafe_copyto!(dest::Array{T}, d_offset::Integer,
+                             source::JLArray{T}, s_offset::Integer,
+                             amount::Integer) where T
     copyto!(dest, d_offset, source.data, s_offset, amount)
 end
-function copyto!(
-        dest::JLArray{T}, d_offset::Integer,
-        source::Array{T}, s_offset::Integer, amount::Integer
-    ) where T
+function Base.unsafe_copyto!(dest::JLArray{T}, d_offset::Integer,
+                             source::Array{T}, s_offset::Integer,
+                             amount::Integer) where T
     copyto!(dest.data, d_offset, source, s_offset, amount)
     dest
 end
-function copyto!(
-        dest::JLArray{T}, d_offset::Integer,
-        source::JLArray{T}, s_offset::Integer, amount::Integer
-    ) where T
+function Base.unsafe_copyto!(dest::JLArray{T}, d_offset::Integer,
+                             source::JLArray{T}, s_offset::Integer,
+                             amount::Integer) where T
     copyto!(dest.data, d_offset, source.data, s_offset, amount)
     dest
 end
