@@ -64,30 +64,28 @@ function to_cartesian(A, indices::Tuple)
 end
 
 
+## basic copy methods that dispatch to unsafe_copyto! for linear copies
+
+materialize(x::AbstractArray) = Array(x)
+materialize(x::GPUArray) = x
 
 for (D, S) in ((GPUArray, AbstractArray), (AbstractArray, GPUArray), (GPUArray, GPUArray))
     @eval begin
-        function copyto!(
-                dest::$D, doffset::Integer,
-                src::$S, soffset::Integer, amount::Integer
-            )
-            copyto!(
-                unpack_buffer(dest), doffset,
-                unpack_buffer(src), soffset, amount
-            )
+        function Base.copyto!(dest::$D, doffset::Integer,
+                              src::$S, soffset::Integer,
+                              amount::Integer)
+            unsafe_copyto!(materialize(dest), doffset, materialize(src), soffset, amount)
         end
-        function copyto!(
-                dest::$D{T, N}, rdest::NTuple{N, UnitRange},
-                src::$S{T, N}, ssrc::NTuple{N, UnitRange},
-            ) where {T, N}
+
+        function Base.copyto!(dest::$D{T, N}, rdest::NTuple{N, UnitRange},
+                              src::$S{T, N}, ssrc::NTuple{N, UnitRange}) where {T, N}
             drange = CartesianIndices(rdest)
             srange = CartesianIndices(ssrc)
             copyto!(dest, drange, src, srange)
         end
-        function copyto!(
-                dest::$D{T}, d_range::CartesianIndices{1},
-                src::$S{T}, s_range::CartesianIndices{1},
-            ) where T
+
+        function Base.copyto!(dest::$D{T}, d_range::CartesianIndices{1},
+                              src::$S{T}, s_range::CartesianIndices{1}) where T
             amount = length(d_range)
             if length(s_range) != amount
                 throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
@@ -95,20 +93,22 @@ for (D, S) in ((GPUArray, AbstractArray), (AbstractArray, GPUArray), (GPUArray, 
             amount == 0 && return dest
             d_offset = first(d_range)[1]
             s_offset = first(s_range)[1]
-            copyto!(dest, d_offset, src, s_offset, amount)
+            unsafe_copyto!(materialize(dest), d_offset, materialize(src), s_offset, amount)
         end
-        function copyto!(
-                dest::$D{T, N}, src::$S{T, N}
-            ) where {T, N}
+
+        function Base.copyto!(dest::$D{T, N}, src::$S{T, N}) where {T, N}
             len = length(src)
             len == 0 && return dest
             if length(dest) > len
                 throw(BoundsError(dest, length(src)))
             end
-            copyto!(dest, 1, src, 1, len)
+            unsafe_copyto!(materialize(dest), 1, materialize(src), 1, len)
         end
     end
 end
+
+
+## higher-dimensional copy methods that dispatch to a kernel
 
 function copy_kernel!(state, dest, dest_offsets, src, src_offsets, shape, shape_dest, shape_source, length)
     i = linear_index(state)
@@ -122,7 +122,7 @@ function copy_kernel!(state, dest, dest_offsets, src, src_offsets, shape, shape_
     return
 end
 
-function copyto!(
+function Base.copyto!(
         dest::GPUArray{T, N}, destcrange::CartesianIndices{N},
         src::GPUArray{T, N}, srccrange::CartesianIndices{N}
     ) where {T, N}
@@ -144,7 +144,7 @@ function copyto!(
 end
 
 
-function copyto!(
+function Base.copyto!(
         dest::GPUArray{T, N}, destcrange::CartesianIndices{N},
         src::AbstractArray{T, N}, srccrange::CartesianIndices{N}
     ) where {T, N}
@@ -159,7 +159,7 @@ function copyto!(
 end
 
 
-function copyto!(
+function Base.copyto!(
         dest::AbstractArray{T, N}, destcrange::CartesianIndices{N},
         src::GPUArray{T, N}, srccrange::CartesianIndices{N}
     ) where {T, N}
