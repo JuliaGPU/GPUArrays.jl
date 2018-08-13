@@ -1,35 +1,4 @@
-
-
-
-# It's kind of annoying to make FillArrays only a test dependency
-# so for texting the conversion to GPUArrays of shaped iterators,
-# I just copied the core types from FillArrays:s
-
-abstract type AbstractFill{T, N} <: AbstractArray{T, N} end
-@inline function Base.getindex(F::AbstractFill, k::Integer)
-    @boundscheck checkbounds(F, k)
-    getindex_value(F)
-end
-@inline function Base.getindex(F::AbstractFill{T, N}, kj::Vararg{<:Integer, N}) where {T, N}
-    @boundscheck checkbounds(F, kj...)
-    getindex_value(F)
-end
-Base.IndexStyle(F::AbstractFill) = IndexLinear()
-struct Fill{T, N} <: AbstractFill{T, N}
-    value::T
-    size::NTuple{N, Int}
-end
-getindex_value(x::Fill) = x.value
-@inline Base.size(F::Fill) = F.size
-struct Eye{T} <: AbstractMatrix{T}
-    size::NTuple{2, Int}
-end
-Base.size(E::Eye) = E.size
-@inline function Base.getindex(E::Eye{T}, k::Integer, j::Integer) where T
-    @boundscheck checkbounds(E, k, j)
-    ifelse(k == j, one(T), zero(T))
-end
-
+using FillArrays
 
 function run_construction(Typ)
     @testset "Construction" begin
