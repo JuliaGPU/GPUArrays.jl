@@ -1,7 +1,7 @@
 # GPUArrays
 
 [![](https://travis-ci.org/JuliaGPU/GPUArrays.jl.svg?branch=master)](https://travis-ci.org/JuliaGPU/GPUArrays.jl)
-[![](https://ci.appveyor.com/api/projects/status/2aa4bvmq7e9rh338/branch/master?svg=true)](https://ci.appveyor.com/project/SimonDanisch/gpuarrays-jl-8n74h/branch/master)
+[![](https://ci.appveyor.com/api/projects/status/2aa4bvmq7e9rh338/branch/master?svg=true)](https://ci.appveyor.com/project/SimonDanisch/gpuarrays-jl/branch/master)
 [![](https://gitlab.com/JuliaGPU/GPUArrays.jl/badges/master/pipeline.svg)](https://gitlab.com/JuliaGPU/GPUArrays.jl/pipelines)
 [![](https://codecov.io/gh/JuliaGPU/GPUArrays.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/JuliaGPU/GPUArrays.jl)
 [![](https://img.shields.io/badge/docs-latest-blue.svg)](https://JuliaGPU.github.io/GPUArrays.jl/latest)
