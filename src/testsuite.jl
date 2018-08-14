@@ -44,7 +44,7 @@ include("testsuite/linalg.jl")
 include("testsuite/mapreduce.jl")
 include("testsuite/base.jl")
 include("testsuite/indexing.jl")
-# include("testsuite/vector.jl")
+include("testsuite/vector.jl")
 include("testsuite/random.jl")
 
 function supported_eltypes()
@@ -57,14 +57,9 @@ end
 
 
 """
-Runs the GPUArrays test suite on array type `Typ`
+Runs the entire GPUArrays test suite on array type `Typ`
 """
 function test(Typ)
-    # TODO: more fine-grained allowscalar within test_indexing
-    GPUArrays.allowscalar(true)
-    TestSuite.test_indexing(Typ)
-
-    GPUArrays.allowscalar(false)
     TestSuite.test_gpuinterface(Typ)
     TestSuite.test_base(Typ)
     TestSuite.test_blas(Typ)
@@ -73,5 +68,7 @@ function test(Typ)
     TestSuite.test_fft(Typ)
     TestSuite.test_linalg(Typ)
     TestSuite.test_mapreduce(Typ)
+    TestSuite.test_indexing(Typ)
+    #TestSuite.test_vectors(Typ)
     TestSuite.test_random(Typ)
 end

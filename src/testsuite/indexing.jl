@@ -1,5 +1,6 @@
 function test_indexing(Typ)
-    @testset "indexing" begin
+    # TODO: more fine-grained allowscalar within test_indexing
+    GPUArrays.@allowscalar @testset "indexing" begin
         for T in (Float32, Int32#=, SVector{3, Float32}=#)
             @testset "Indexing with $T" begin
                 x = rand(T, 32)
