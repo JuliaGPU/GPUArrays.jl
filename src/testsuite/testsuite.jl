@@ -33,8 +33,7 @@ function against_base(f, Typ, sizes...)
     gpu_arrays = togpu.(Typ, jl_arrays)
     res_jl = f(jl_arrays...)
     res_gpu = f(gpu_arrays...)
-    pass = res_jl ≈ Array(res_gpu) # all the array printing in @test A ≈ B is just too bad
-    @test pass
+    @test res_jl ≈ Array(res_gpu)
 end
 
 

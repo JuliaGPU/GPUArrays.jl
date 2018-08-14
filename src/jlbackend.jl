@@ -1,7 +1,6 @@
 # Very simple Julia backend which is just for testing the implementation
 # and can be used as a reference implementation
 
-
 struct JLArray{T, N} <: GPUArray{T, N}
     data::Array{T, N}
     size::Dims{N}
@@ -13,10 +12,13 @@ end
 
 JLArray(data::AbstractArray{T, N}, size::Dims{N}) where {T,N} = JLArray{T,N}(data, size)
 
-function showarray(io::IO, A::JLArray, repr::Bool)
-    print(io, "CPU: ")
-    showarray(io, Array(A), repr)
-end
+Base.show(io::IO, x::JLArray) = show(io, collect(x))
+Base.show(io::IO, x::LinearAlgebra.Adjoint{<:Any,<:JLArray}) = show(io, LinearAlgebra.adjoint(collect(x.parent)))
+Base.show(io::IO, x::LinearAlgebra.Transpose{<:Any,<:JLArray}) = show(io, LinearAlgebra.transpose(collect(x.parent)))
+
+Base.show(io::IO, ::MIME"text/plain", x::JLArray) = show(io, MIME"text/plain"(), collect(x))
+Base.show(io::IO, ::MIME"text/plain", x::LinearAlgebra.Adjoint{<:Any,<:JLArray}) = show(io, MIME"text/plain"(), LinearAlgebra.adjoint(collect(x.parent)))
+Base.show(io::IO, ::MIME"text/plain", x::LinearAlgebra.Transpose{<:Any,<:JLArray}) = show(io, MIME"text/plain"(), LinearAlgebra.transpose(collect(x.parent)))
 
 """
 Thread group local memory
@@ -50,23 +52,20 @@ function unsafe_reinterpret(::Type{T}, A::JLArray{ET}, size::NTuple{N, Integer})
     JLArray(Array(reshape(reinterpret(T, A.data), size)), size)
 end
 
-function copyto!(
-        dest::Array{T}, d_offset::Integer,
-        source::JLArray{T}, s_offset::Integer, amount::Integer
-    ) where T
+function Base.unsafe_copyto!(dest::Array{T}, d_offset::Integer,
+                             source::JLArray{T}, s_offset::Integer,
+                             amount::Integer) where T
     copyto!(dest, d_offset, source.data, s_offset, amount)
 end
-function copyto!(
-        dest::JLArray{T}, d_offset::Integer,
-        source::Array{T}, s_offset::Integer, amount::Integer
-    ) where T
+function Base.unsafe_copyto!(dest::JLArray{T}, d_offset::Integer,
+                             source::Array{T}, s_offset::Integer,
+                             amount::Integer) where T
     copyto!(dest.data, d_offset, source, s_offset, amount)
     dest
 end
-function copyto!(
-        dest::JLArray{T}, d_offset::Integer,
-        source::JLArray{T}, s_offset::Integer, amount::Integer
-    ) where T
+function Base.unsafe_copyto!(dest::JLArray{T}, d_offset::Integer,
+                             source::JLArray{T}, s_offset::Integer,
+                             amount::Integer) where T
     copyto!(dest.data, d_offset, source.data, s_offset, amount)
     dest
 end
