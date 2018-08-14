@@ -69,12 +69,12 @@ end
 materialize(x::AbstractArray) = Array(x)
 materialize(x::GPUArray) = x
 
-for (D, S) in ((GPUArray, AbstractArray), (AbstractArray, GPUArray), (GPUArray, GPUArray))
+for (D, S) in ((GPUArray, AbstractArray), (Array, GPUArray), (GPUArray, GPUArray))
     @eval begin
         function Base.copyto!(dest::$D, doffset::Integer,
                               src::$S, soffset::Integer,
                               amount::Integer)
-            unsafe_copyto!(materialize(dest), doffset, materialize(src), soffset, amount)
+            unsafe_copyto!(dest, doffset, materialize(src), soffset, amount)
         end
 
         function Base.copyto!(dest::$D{T, N}, rdest::NTuple{N, UnitRange},
@@ -93,7 +93,7 @@ for (D, S) in ((GPUArray, AbstractArray), (AbstractArray, GPUArray), (GPUArray, 
             amount == 0 && return dest
             d_offset = first(d_range)[1]
             s_offset = first(s_range)[1]
-            unsafe_copyto!(materialize(dest), d_offset, materialize(src), s_offset, amount)
+            unsafe_copyto!(dest, d_offset, materialize(src), s_offset, amount)
         end
 
         function Base.copyto!(dest::$D{T, N}, src::$S{T, N}) where {T, N}
@@ -102,7 +102,7 @@ for (D, S) in ((GPUArray, AbstractArray), (AbstractArray, GPUArray), (GPUArray, 
             if length(dest) > len
                 throw(BoundsError(dest, length(src)))
             end
-            unsafe_copyto!(materialize(dest), 1, materialize(src), 1, len)
+            unsafe_copyto!(dest, 1, materialize(src), 1, len)
         end
     end
 end

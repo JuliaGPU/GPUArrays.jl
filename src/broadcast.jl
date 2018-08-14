@@ -16,7 +16,7 @@ function Base.similar(bc::Broadcasted{ArrayStyle{GPU}}, ::Type{ElType}) where {G
 end
 
 @inline function Base.copyto!(dest::GPUArray, bc::GPUBroadcast)
-     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
+    axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     bc′ = Broadcast.preprocess(dest, bc)
     gpu_call(dest, (dest, bc′)) do state, dest, bc′
         let I = CartesianIndex(@cartesianidx(dest))
