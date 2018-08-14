@@ -60,7 +60,11 @@ end
 Runs the GPUArrays test suite on array type `Typ`
 """
 function test(Typ)
-    GPUArrays.allowslow(false)
+    # TODO: more fine-grained allowscalar within test_indexing
+    GPUArrays.allowscalar(true)
+    TestSuite.test_indexing(Typ)
+
+    GPUArrays.allowscalar(false)
     TestSuite.test_gpuinterface(Typ)
     TestSuite.test_base(Typ)
     TestSuite.test_blas(Typ)
@@ -69,6 +73,5 @@ function test(Typ)
     TestSuite.test_fft(Typ)
     TestSuite.test_linalg(Typ)
     TestSuite.test_mapreduce(Typ)
-    TestSuite.test_indexing(Typ)
     TestSuite.test_random(Typ)
 end

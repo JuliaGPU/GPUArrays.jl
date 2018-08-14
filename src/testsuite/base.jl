@@ -68,9 +68,6 @@ function test_base(Typ)
             @test Array(a) == x
         end
 
-        GPUArrays.allowslow(true)
-        # right now in CLArrays we fallback to geindex since on some hardware
-        # somehow the vcat kernel segfaults -.-
         @testset "vcat + hcat" begin
             x = fill(0f0, (10, 10))
             y = rand(Float32, 20, 10)
@@ -84,7 +81,6 @@ function test_base(Typ)
             against_base(hcat, Typ{Float32}, (3, 3), (3, 3))
             against_base(vcat, Typ{Float32}, (3, 3), (3, 3))
         end
-        GPUArrays.allowslow(false)
 
         @testset "reinterpret" begin
             a = rand(ComplexF32, 22)
