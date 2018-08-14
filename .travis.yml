@@ -6,6 +6,7 @@ os:
 dist: trusty
 julia:
   - 0.7
+  - 1.0
   - nightly
 matrix:
  allow_failures:
