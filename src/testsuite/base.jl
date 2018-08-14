@@ -26,7 +26,7 @@ function ntuple_closure(state, result, ::Val{N}, testval) where N
     return
 end
 
-function run_base(Typ)
+function test_base(Typ)
     @testset "base functionality" begin
         @testset "mapidx" begin
             a = rand(ComplexF32, 77)

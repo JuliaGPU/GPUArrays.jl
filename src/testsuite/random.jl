@@ -1,4 +1,4 @@
-function run_random(Typ)
+function test_random(Typ)
     @testset "Random" begin
         @testset "rand" begin  # uniform
             for T in (Float32, Float64, Int64, Int32)

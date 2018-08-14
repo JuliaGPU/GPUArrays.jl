@@ -1,6 +1,4 @@
-
-
-function run_mapreduce(Typ)
+function test_mapreduce(Typ)
     @testset "mapreduce" begin
         for ET in supported_eltypes()
             T = Typ{ET}

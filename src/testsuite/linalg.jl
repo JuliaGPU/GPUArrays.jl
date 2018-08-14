@@ -1,5 +1,4 @@
-
-function run_linalg(Typ)
+function test_linalg(Typ)
     T = Typ{Float32}
     @testset "Linalg" begin
         @testset "transpose" begin

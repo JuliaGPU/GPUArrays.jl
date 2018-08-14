@@ -1,6 +1,4 @@
-
-
-function run_indexing(Typ)
+function test_indexing(Typ)
     @testset "indexing" begin
         for T in (Float32, Int32#=, SVector{3, Float32}=#)
             @testset "Indexing with $T" begin
