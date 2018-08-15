@@ -1,5 +1,8 @@
-# Very simple Julia backend which is just for testing the implementation
-# and can be used as a reference implementation
+# Very simple Julia back-end which is just for testing the implementation and can be used as
+# a reference implementation
+
+
+## construction
 
 struct JLArray{T, N} <: GPUArray{T, N}
     data::Array{T, N}
@@ -12,6 +15,22 @@ end
 
 JLArray(data::AbstractArray{T, N}, size::Dims{N}) where {T,N} = JLArray{T,N}(data, size)
 
+(::Type{<: JLArray{T}})(x::AbstractArray) where T = JLArray(convert(Array{T}, x), size(x))
+
+function JLArray{T, N}(size::NTuple{N, Integer}) where {T, N}
+    JLArray{T, N}(Array{T, N}(undef, size), size)
+end
+
+
+## getters
+
+size(x::JLArray) = x.size
+
+pointer(x::JLArray) = pointer(x.data)
+
+
+## I/O
+
 Base.show(io::IO, x::JLArray) = show(io, collect(x))
 Base.show(io::IO, x::LinearAlgebra.Adjoint{<:Any,<:JLArray}) = show(io, LinearAlgebra.adjoint(collect(x.parent)))
 Base.show(io::IO, x::LinearAlgebra.Transpose{<:Any,<:JLArray}) = show(io, LinearAlgebra.transpose(collect(x.parent)))
@@ -20,6 +39,9 @@ Base.show(io::IO, ::MIME"text/plain", x::JLArray) = show(io, MIME"text/plain"(),
 Base.show(io::IO, ::MIME"text/plain", x::LinearAlgebra.Adjoint{<:Any,<:JLArray}) = show(io, MIME"text/plain"(), LinearAlgebra.adjoint(collect(x.parent)))
 Base.show(io::IO, ::MIME"text/plain", x::LinearAlgebra.Transpose{<:Any,<:JLArray}) = show(io, MIME"text/plain"(), LinearAlgebra.transpose(collect(x.parent)))
 
+
+## other
+
 """
 Thread group local memory
 """
@@ -27,8 +49,6 @@ struct LocalMem{N, T}
     x::NTuple{N, Vector{T}}
 end
 
-size(x::JLArray) = x.size
-pointer(x::JLArray) = pointer(x.data)
 to_device(state, x::JLArray) = x.data
 to_device(state, x::Tuple) = to_device.(Ref(state), x)
 to_device(state, x::RefValue{<: JLArray}) = RefValue(to_device(state, x[]))
@@ -39,12 +59,6 @@ to_device(state, x::LocalMemory{T}) where T = LocalMem(ntuple(i-> Vector{T}(x.si
 to_blocks(state, x) = x
 # unpacks local memory for each block
 to_blocks(state, x::LocalMem) = x.x[blockidx_x(state)]
-
-(::Type{<: JLArray{T}})(x::AbstractArray) where T = JLArray(convert(Array{T}, x), size(x))
-
-function JLArray{T, N}(size::NTuple{N, Integer}) where {T, N}
-    JLArray{T, N}(Array{T, N}(undef, size), size)
-end
 
 similar(::Type{<: JLArray}, ::Type{T}, size::Base.Dims{N}) where {T, N} = JLArray{T, N}(size)
 
@@ -131,7 +145,8 @@ function _gpu_call(f, A::JLArray, args::Tuple, blocks_threads::Tuple{T, T}) wher
         block_args = to_blocks.(Ref(state), device_args)
         for threadidx in CartesianIndices(threads)
             thread_state = JLState(state, threadidx.I)
-            tasks[threadidx] = @async f(thread_state, block_args...)
+            tasks[threadidx] = @async @allowscalar f(thread_state, block_args...)
+            # TODO: @async obfuscates the trace to any exception which happens during f
         end
         for t in tasks
             fetch(t)
@@ -145,7 +160,6 @@ struct JLDevice end
 device(x::JLArray) = JLDevice()
 threads(dev::JLDevice) = 256
 blocks(dev::JLDevice) = (256, 256, 256)
-
 
 @inline function synchronize_threads(::JLState)
     #=
@@ -168,8 +182,9 @@ end
 blas_module(::JLArray) = LinearAlgebra.BLAS
 blasbuffer(A::JLArray) = A.data
 
+# defining our own plan type is the easiest way to pass around the plans in Base interface
+# without ambiguities
 
-# defining our own plan type is the easiest way to pass around the plans in Base interface without ambiguities
 struct FFTPlan{T}
     p::T
 end
@@ -191,7 +206,6 @@ end
 function plan_ifft(A::JLArray; kw_args...)
     FFTPlan(plan_ifft(A.data; kw_args...))
 end
-
 
 function *(plan::FFTPlan, A::JLArray)
     x = plan.p * A.data

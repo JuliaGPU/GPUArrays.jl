@@ -1,6 +1,4 @@
-using FillArrays
-
-function run_construction(Typ)
+function test_construction(Typ)
     @testset "Construction" begin
         constructors(Typ)
         conversion(Typ)

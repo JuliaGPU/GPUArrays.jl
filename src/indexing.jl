@@ -1,10 +1,20 @@
-const _allowslow = Ref(true)
+const _allowscalar = Ref(true)
 
-allowslow(flag = true) = (_allowslow[] = flag)
+allowscalar(flag = true) = (_allowscalar[] = flag)
 
-function assertslow(op = "Operation")
-    # _allowslow[] || error("$op is disabled")
-    return
+function assertscalar(op = "Operation")
+  _allowscalar[] || error("$op is disabled")
+  return
+end
+
+macro allowscalar(ex)
+    quote
+        local prev = _allowscalar[]
+        _allowscalar[] = true
+        local ret = $(esc(ex))
+        _allowscalar[] = prev
+        ret
+    end
 end
 
 Base.IndexStyle(::Type{<:GPUArray}) = Base.IndexLinear()
@@ -16,7 +26,7 @@ function _getindex(xs::GPUArray{T}, i::Integer) where T
 end
 
 function Base.getindex(xs::GPUArray{T}, i::Integer) where T
-    assertslow("getindex")
+  ndims(xs) > 0 && assertscalar("scalar getindex")
     _getindex(xs, i)
 end
 
@@ -27,11 +37,12 @@ function _setindex!(xs::GPUArray{T}, v::T, i::Integer) where T
 end
 
 function Base.setindex!(xs::GPUArray{T}, v::T, i::Integer) where T
-    assertslow("setindex!")
+  assertscalar("scalar setindex!")
     _setindex!(xs, v, i)
 end
 
 Base.setindex!(xs::GPUArray, v, i::Integer) = xs[i] = convert(eltype(xs), v)
+
 
 # Vector indexing
 

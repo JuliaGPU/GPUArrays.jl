@@ -1,6 +1,4 @@
-using LinearAlgebra
-
-function run_blas(Typ)
+function test_blas(Typ)
     @testset "BLAS" begin
         T = Typ{Float32}
         @testset "matmul" begin

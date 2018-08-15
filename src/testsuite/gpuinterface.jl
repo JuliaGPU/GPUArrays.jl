@@ -1,4 +1,4 @@
-function run_gpuinterface(Typ)
+function test_gpuinterface(Typ)
     @testset "parallel execution interface" begin
         N = 10
         x = Typ(Vector{Int}(undef, N))

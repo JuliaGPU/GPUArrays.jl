@@ -1,9 +1,7 @@
-
-
-function run_broadcasting(Typ)
+function test_broadcasting(Typ)
     @testset "broadcast" begin
-        test_broadcast(Typ)
-        test_vec3(Typ)
+        broadcasting(Typ)
+        vec3(Typ)
     end
 end
 
@@ -31,8 +29,7 @@ function test_kernel(a::T, b) where T
     return c
 end
 
-
-function test_broadcast(Typ)
+function broadcasting(Typ)
     for ET in supported_eltypes()
         N = 10
         T = Typ{ET}
@@ -40,7 +37,7 @@ function test_broadcast(Typ)
             @testset "RefValue" begin
                 cidx = rand(1:Int(N), 2*N)
                 gidx = Typ(cidx)
-                cy = TestSuite.toarray(ET, (2*N,))
+                cy = toarray(ET, (2*N,))
                 gy = Typ(cy)
                 cres = fill(zero(ET), size(cidx))
                 gres = Typ(cres)
@@ -115,7 +112,7 @@ function test_broadcast(Typ)
     end
 end
 
-function test_vec3(Typ)
+function vec3(Typ)
     @testset "vec 3" begin
         N = 20
 
