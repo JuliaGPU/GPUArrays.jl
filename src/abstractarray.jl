@@ -16,16 +16,6 @@ struct LocalMemory{T} <: GPUArray{T, 1}
     LocalMemory{T}(x::Integer) where T = new{T}(x)
 end
 
-#=
-AbstractArray interface
-=#
-
-function Base.show(io::IO, A::GPUArray)
-    print(io, "GPU: ")
-    Base.show(io, Array(A), repr)
-end
-
-
 ############################################
 # serialization
 import Serialization: AbstractSerializer, serialize, deserialize, serialize_type
