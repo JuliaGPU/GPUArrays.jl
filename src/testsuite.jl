@@ -22,7 +22,7 @@ function compare(f, AT::Type{<:GPUArray}, xs...)
     gpu_in = convert_array.(AT, xs)
     cpu_out = f(cpu_in...)
     gpu_out = f(gpu_in...)
-    cpu_out ≈ Array(gpu_out)
+    collect(cpu_out) ≈ collect(gpu_out)
 end
 
 function supported_eltypes()
