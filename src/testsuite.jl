@@ -46,6 +46,7 @@ include("testsuite/base.jl")
 include("testsuite/indexing.jl")
 include("testsuite/vector.jl")
 include("testsuite/random.jl")
+include("testsuite/io.jl")
 
 function supported_eltypes()
     (Float32, Float64, Int32, Int64, ComplexF32, ComplexF64)

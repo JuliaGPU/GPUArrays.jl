@@ -28,12 +28,6 @@ size(x::JLArray) = x.size
 
 pointer(x::JLArray) = pointer(x.data)
 
-
-## I/O
-Base.print_array(io::IO, x::GPUArray) = Base.print_array(io, collect(x))B
-Base.print_array(io::IO, x::LinearAlgebra.Adjoint{<:Any,<:GPUArray}) = Base.print_array(io, LinearAlgebra.adjoint(collect(x.parent)))
-Base.print_array(io::IO, x::LinearAlgebra.Transpose{<:Any,<:GPUArray}) = Base.print_array(io, LinearAlgebra.transpose(collect(x.parent)))
-
 ## other
 
 """

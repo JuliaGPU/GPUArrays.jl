@@ -16,8 +16,11 @@ struct LocalMemory{T} <: GPUArray{T, 1}
     LocalMemory{T}(x::Integer) where T = new{T}(x)
 end
 
-############################################
-# serialization
+
+# input/output
+
+## serialization
+
 import Serialization: AbstractSerializer, serialize, deserialize, serialize_type
 
 function serialize(s::AbstractSerializer, t::T) where T <: GPUArray
@@ -53,6 +56,14 @@ function to_cartesian(A, indices::Tuple)
     CartesianIndices(start, stop)
 end
 
+## showing
+
+Base.print_array(io::IO, x::GPUArray) = Base.print_array(io, collect(x))
+Base.print_array(io::IO, x::LinearAlgebra.Adjoint{<:Any,<:GPUArray}) = Base.print_array(io, LinearAlgebra.adjoint(collect(x.parent)))
+Base.print_array(io::IO, x::LinearAlgebra.Transpose{<:Any,<:GPUArray}) = Base.print_array(io, LinearAlgebra.transpose(collect(x.parent)))
+
+
+# memory operations
 
 ## basic copy methods that dispatch to unsafe_copyto! for linear copies
 
