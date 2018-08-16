@@ -24,9 +24,9 @@ end
 
 ## getters
 
-size(x::JLArray) = x.size
+Base.size(x::JLArray) = x.size
 
-pointer(x::JLArray) = pointer(x.data)
+Base.pointer(x::JLArray) = pointer(x.data)
 
 
 ## other
@@ -40,7 +40,7 @@ end
 
 to_device(state, x::JLArray) = x.data
 to_device(state, x::Tuple) = to_device.(Ref(state), x)
-to_device(state, x::RefValue{<: JLArray}) = RefValue(to_device(state, x[]))
+to_device(state, x::Base.RefValue{<: JLArray}) = Base.RefValue(to_device(state, x[]))
 to_device(state, x) = x
 # creates a `local` vector for each thread group
 to_device(state, x::LocalMemory{T}) where T = LocalMem(ntuple(i-> Vector{T}(x.size), blockdim_x(state)))
@@ -49,7 +49,7 @@ to_blocks(state, x) = x
 # unpacks local memory for each block
 to_blocks(state, x::LocalMem) = x.x[blockidx_x(state)]
 
-similar(::Type{<: JLArray}, ::Type{T}, size::Base.Dims{N}) where {T, N} = JLArray{T, N}(size)
+Base.similar(::Type{<: JLArray}, ::Type{T}, size::Base.Dims{N}) where {T, N} = JLArray{T, N}(size)
 
 unsafe_reinterpret(::Type{T}, A::JLArray, size::Tuple) where T =
     reshape(reinterpret(T, A.data), size)

@@ -55,7 +55,7 @@ let rand_state_dict = Dict()
         end
     end
 end
-function rand!(A::GPUArray{T}) where T <: Number
+function Random.rand!(A::GPUArray{T}) where T <: Number
     rstates = cached_state(A)
     gpu_call(A, (rstates, A,)) do state, randstates, a
         idx = linear_index(state)
@@ -66,14 +66,14 @@ function rand!(A::GPUArray{T}) where T <: Number
     A
 end
 
-rand(X::Type{<: GPUArray}, i::Integer...) = rand(X, Float32, i...)
-rand(X::Type{<: GPUArray}, size::NTuple{N, Int}) where N = rand(X, Float32, size...)
-rand(X::Type{<: GPUArray{T}}, i::Integer...) where T = rand(X, T, i...)
-rand(X::Type{<: GPUArray{T}}, size::NTuple{N, Int}) where {T, N} = rand(X, T, size...)
-rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Integer}) where {T, N} = rand(X, T, size...)
-rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Int}) where {T, N} = rand(X, T, size...)
+Random.rand(X::Type{<: GPUArray}, i::Integer...) = rand(X, Float32, i...)
+Random.rand(X::Type{<: GPUArray}, size::NTuple{N, Int}) where N = rand(X, Float32, size...)
+Random.rand(X::Type{<: GPUArray{T}}, i::Integer...) where T = rand(X, T, i...)
+Random.rand(X::Type{<: GPUArray{T}}, size::NTuple{N, Int}) where {T, N} = rand(X, T, size...)
+Random.rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Integer}) where {T, N} = rand(X, T, size...)
+Random.rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Int}) where {T, N} = rand(X, T, size...)
 
-function rand(X::Type{<: GPUArray}, ::Type{ET}, size::Integer...) where ET
+function Random.rand(X::Type{<: GPUArray}, ::Type{ET}, size::Integer...) where ET
     A = similar(X, ET, size)
     rand!(A)
 end

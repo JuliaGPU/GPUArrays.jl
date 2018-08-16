@@ -9,10 +9,7 @@ using Random
 using LinearAlgebra
 using Printf
 
-import Random: rand, rand!
 using LinearAlgebra.BLAS
-import Base: pointer, similar, size, convert
-using Base: @propagate_inbounds, @pure, RefValue
 using Base.Cartesian
 
 using FFTW
