@@ -47,7 +47,6 @@ function test_base(Typ)
             @test Array(A) ≈ a
         end
 
-
         @testset "copyto!" begin
             x = fill(0f0, (10, 10))
             y = rand(Float32, (20, 10))
@@ -69,17 +68,12 @@ function test_base(Typ)
         end
 
         @testset "vcat + hcat" begin
-            x = fill(0f0, (10, 10))
-            y = rand(Float32, 20, 10)
-            a = Typ(x)
-            b = Typ(y)
-            @test vcat(x, y) == Array(vcat(a, b))
-            z = rand(Float32, 10, 10)
-            c = Typ(z)
-            @test hcat(x, z) == Array(hcat(a, c))
+            @test compare(vcat, Typ, fill(0f0, (10, 10)), rand(Float32, 20, 10))
+            @test compare(hcat, Typ, fill(0f0, (10, 10)), rand(Float32, 10, 10))
 
-            against_base(hcat, Typ{Float32}, (3, 3), (3, 3))
-            against_base(vcat, Typ{Float32}, (3, 3), (3, 3))
+            @test compare(hcat, Typ, rand(Float32, 3, 3), rand(Float32, 3, 3))
+            @test compare(vcat, Typ, rand(Float32, 3, 3), rand(Float32, 3, 3))
+            @test compare((a,b) -> cat(a, b; dims=4), Typ, rand(Float32, 3, 4), rand(Float32, 3, 4))
         end
 
         @testset "reinterpret" begin
@@ -121,18 +115,17 @@ function test_base(Typ)
             @test map!(-, jy, jy) ≈ Array(x)
         end
 
-        T = Typ{Float32}
         @testset "map" begin
-            against_base((a, b)-> map(+, a, b), T, (10,), (10,))
-            against_base((a, b)-> map!(-, a, b), T, (10,), (10,))
-            against_base((a, b, c, d)-> map!(*, a, b, c, d), T, (10,), (10,), (10,), (10,))
+            @test compare((a, b)-> map(+, a, b),    Typ, rand(Float32, 10), rand(Float32, 10))
+            @test compare((a, b)-> map!(-, a, b),   Typ, rand(Float32, 10), rand(Float32, 10))
+            @test compare((a, b, c, d)-> map!(*, a, b, c, d), Typ, rand(Float32, 10), rand(Float32, 10), rand(Float32, 10), rand(Float32, 10))
         end
 
         @testset "repeat" begin
-            against_base(a-> repeat(a, 5, 6), T, (10,))
-            against_base(a-> repeat(a, 5), T, (10,))
-            against_base(a-> repeat(a, 5), T, (5, 4))
-            against_base(a-> repeat(a, 4, 3), T, (10, 15))
+            @test compare(a-> repeat(a, 5, 6),  Typ, rand(Float32, 10))
+            @test compare(a-> repeat(a, 5),     Typ, rand(Float32, 10))
+            @test compare(a-> repeat(a, 5),     Typ, rand(Float32, 5, 4))
+            @test compare(a-> repeat(a, 4, 3),  Typ, rand(Float32, 10, 15))
         end
     end
 end

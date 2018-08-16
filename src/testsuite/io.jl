@@ -1,6 +1,6 @@
 function test_io(Typ)
-    @testset "i/o" begin
-        @testset "Showing" begin
+    @testset "input/output" begin
+        @testset "showing" begin
           io = IOBuffer()
           A = Typ([1])
 

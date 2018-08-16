@@ -1,5 +1,5 @@
 function test_construction(Typ)
-    @testset "Construction" begin
+    @testset "construction" begin
         constructors(Typ)
         conversion(Typ)
         value_constructor(Typ)
@@ -89,7 +89,7 @@ function conversion(Typ)
 end
 
 function value_constructor(Typ)
-    @testset "value constructor" begin
+    @testset "value constructors" begin
         for T in supported_eltypes()
             x = fill(zero(T), (2, 2))
             x1 = fill(Typ{T}, T(0), (2, 2))
