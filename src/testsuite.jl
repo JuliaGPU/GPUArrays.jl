@@ -2,8 +2,9 @@
 
 module TestSuite
 
+export supported_eltypes
+
 using GPUArrays
-using GPUArrays: mapidx, gpu_sub2ind
 
 using LinearAlgebra
 using Random
@@ -24,6 +25,9 @@ function compare(f, Typ, xs...)
     cpu_out ≈ Array(gpu_out)
 end
 
+function supported_eltypes()
+    (Float32, Float64, Int32, Int64, ComplexF32, ComplexF64)
+end
 
 include("testsuite/construction.jl")
 include("testsuite/gpuinterface.jl")

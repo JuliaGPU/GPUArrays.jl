@@ -1,6 +1,6 @@
 function cartesian_iter(state, A, res, Asize)
     for i in CartesianIndices(Asize)
-        idx = gpu_sub2ind(Asize, i.I)
+        idx = GPUArrays.gpu_sub2ind(Asize, i.I)
         res[idx] = A[idx]
     end
     return
@@ -34,7 +34,7 @@ function test_base(Typ)
             A = Typ(a)
             B = Typ(b)
             off = 1
-            mapidx(A, (B, off, length(A))) do i, a, b, off, len
+            GPUArrays.mapidx(A, (B, off, length(A))) do i, a, b, off, len
                 x = b[i]
                 x2 = b[min(i+off, len)]
                 a[i] = x * x2
