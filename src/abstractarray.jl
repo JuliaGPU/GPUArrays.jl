@@ -1,4 +1,4 @@
-import Base: show, showcompact, similar, convert, _reshape, map!, copyto!, map, copy, deepcopy
+import Base: similar, convert, _reshape, map!, copyto!, map, copy, deepcopy
 
 # Dense GPU Array
 abstract type GPUArray{T, N} <: DenseArray{T, N} end
@@ -15,16 +15,6 @@ struct LocalMemory{T} <: GPUArray{T, 1}
     size::Int
     LocalMemory{T}(x::Integer) where T = new{T}(x)
 end
-
-#=
-AbstractArray interface
-=#
-
-function Base.show(io::IO, A::GPUArray)
-    print(io, "GPU: ")
-    Base.show(io, Array(A), repr)
-end
-
 
 ############################################
 # serialization

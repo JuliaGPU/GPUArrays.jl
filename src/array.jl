@@ -30,15 +30,9 @@ pointer(x::JLArray) = pointer(x.data)
 
 
 ## I/O
-
-Base.show(io::IO, x::JLArray) = show(io, collect(x))
-Base.show(io::IO, x::LinearAlgebra.Adjoint{<:Any,<:JLArray}) = show(io, LinearAlgebra.adjoint(collect(x.parent)))
-Base.show(io::IO, x::LinearAlgebra.Transpose{<:Any,<:JLArray}) = show(io, LinearAlgebra.transpose(collect(x.parent)))
-
-Base.show(io::IO, ::MIME"text/plain", x::JLArray) = show(io, MIME"text/plain"(), collect(x))
-Base.show(io::IO, ::MIME"text/plain", x::LinearAlgebra.Adjoint{<:Any,<:JLArray}) = show(io, MIME"text/plain"(), LinearAlgebra.adjoint(collect(x.parent)))
-Base.show(io::IO, ::MIME"text/plain", x::LinearAlgebra.Transpose{<:Any,<:JLArray}) = show(io, MIME"text/plain"(), LinearAlgebra.transpose(collect(x.parent)))
-
+Base.print_array(io::IO, x::GPUArray) = Base.print_array(io, collect(x))B
+Base.print_array(io::IO, x::LinearAlgebra.Adjoint{<:Any,<:GPUArray}) = Base.print_array(io, LinearAlgebra.adjoint(collect(x.parent)))
+Base.print_array(io::IO, x::LinearAlgebra.Transpose{<:Any,<:GPUArray}) = Base.print_array(io, LinearAlgebra.transpose(collect(x.parent)))
 
 ## other
 
