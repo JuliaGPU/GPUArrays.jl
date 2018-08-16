@@ -8,50 +8,60 @@ function test_construction(Typ)
 end
 
 function constructors(Typ)
-    @testset "similar + constructor" begin
+    @testset "constructors + similar" begin
         for T in supported_eltypes()
             B = Typ{T}(10)
+            @test B isa Typ{T,1}
             @test size(B) == (10,)
             @test eltype(B) == T
 
             B = Typ{T}(10, 10)
+            @test B isa Typ{T,2}
             @test size(B) == (10, 10)
             @test eltype(B) == T
 
             B = Typ{T}((10, 10))
+            @test B isa Typ{T,2}
             @test size(B) == (10, 10)
             @test eltype(B) == T
 
             B = similar(B, Int32, (11, 15))
+            @test B isa Typ{Int32,2}
             @test size(B) == (11, 15)
             @test eltype(B) == Int32
 
             B = similar(B, T)
+            @test B isa Typ{T,2}
             @test size(B) == (11, 15)
             @test eltype(B) == T
 
             B = similar(B, (5,))
+            @test B isa Typ{T,1}
             @test size(B) == (5,)
             @test eltype(B) == T
 
             B = similar(B, 7)
+            @test B isa Typ{T,1}
             @test size(B) == (7,)
             @test eltype(B) == T
 
-
             B = similar(Typ{Int32}, (11, 15))
+            @test B isa Typ{Int32,2}
             @test size(B) == (11, 15)
             @test eltype(B) == Int32
 
             B = similar(Typ{Int32, 2}, T, (11, 15))
+            @test B isa Typ{T,2}
             @test size(B) == (11, 15)
             @test eltype(B) == T
 
             B = similar(Typ{T}, (5,))
+            @test B isa Typ{T,1}
             @test size(B) == (5,)
             @test eltype(B) == T
 
             B = similar(Typ{T}, 7)
+            @test B isa Typ{T,1}
             @test size(B) == (7,)
             @test eltype(B) == T
         end
