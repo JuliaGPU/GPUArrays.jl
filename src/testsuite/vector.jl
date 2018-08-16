@@ -1,14 +1,14 @@
-function test_vectors(Typ)
+function test_vectors(AT)
     @testset "vector interface" begin
         a = Float32[]
-        x = Typ(a)
+        x = AT(a)
         @test length(x) == 0
         push!(x, 12f0)
         @test length(x) == 1
         @test x[1] == 12f0
 
         a = Float32[0]
-        x = Typ(a)
+        x = AT(a)
         @test length(x) == 1
         @test length(GPUArrays.buffer(x)) == 1
         push!(x, 12)

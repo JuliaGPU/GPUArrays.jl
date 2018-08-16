@@ -1,10 +1,10 @@
-function test_indexing(Typ)
+function test_indexing(AT)
     # TODO: more fine-grained allowscalar within test_indexing
     GPUArrays.@allowscalar @testset "indexing" begin
         for T in (Float32, Int32#=, SVector{3, Float32}=#)
             @testset "Indexing with $T" begin
                 x = rand(T, 32)
-                src = Typ(x)
+                src = AT(x)
                 for (i, xi) in enumerate(x)
                     @test src[i] == xi
                 end
@@ -12,8 +12,8 @@ function test_indexing(Typ)
                 @test Array(src[3:end]) == x[3:end]
             end
             @testset "multi dim, sliced setindex" begin
-                x = fill(Typ{T}, T(0), (10, 10, 10, 10))
-                y = rand(Typ{T}, 5, 5, 10, 10)
+                x = fill(AT{T}, T(0), (10, 10, 10, 10))
+                y = rand(AT{T}, 5, 5, 10, 10)
                 x[2:6, 2:6, :, :] = y
                 x[2:6, 2:6, :, :] == y
            end
@@ -23,7 +23,7 @@ function test_indexing(Typ)
         for T in (Float32, Int32)
             @testset "Indexing with $T" begin
                 x = fill(zero(T), 7)
-                src = Typ(x)
+                src = AT(x)
                 for i = 1:7
                     src[i] = i
                 end
@@ -39,7 +39,7 @@ function test_indexing(Typ)
         for T in (Float32, Int32)
             @testset "issue #42 with $T" begin
                 Ac = rand(Float32, 2, 2)
-                A = Typ(Ac)
+                A = AT(Ac)
                 @test A[1] == Ac[1]
                 @test A[end] == Ac[end]
                 @test A[1, 1] == Ac[1, 1]
@@ -48,10 +48,10 @@ function test_indexing(Typ)
         for T in (Float32, Int32)
             @testset "Colon() $T" begin
                 Ac = rand(T, 10)
-                A = Typ(Ac)
+                A = AT(Ac)
                 A[:] = T(1)
                 @test all(x-> x == 1, A)
-                A[:] = Typ(Ac)
+                A[:] = AT(Ac)
                 @test Array(A) == Ac
             end
         end
