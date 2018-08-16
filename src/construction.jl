@@ -1,16 +1,12 @@
-import Base: fill!, zeros, ones, fill
-
-
-
-function fill(X::Type{<: GPUArray}, val::T, dims::NTuple{N, Integer}) where {T, N}
+function Base.fill(X::Type{<: GPUArray}, val::T, dims::NTuple{N, Integer}) where {T, N}
     res = similar(X, T, dims)
     fill!(res, val)
 end
-function fill(X::Type{<: GPUArray{T}}, val, dims::NTuple{N, Integer}) where {T, N}
+function Base.fill(X::Type{<: GPUArray{T}}, val, dims::NTuple{N, Integer}) where {T, N}
     res = similar(X, T, dims)
     fill!(res, convert(T, val))
 end
-function fill!(A::GPUArray{T}, x) where T
+function Base.fill!(A::GPUArray{T}, x) where T
     gpu_call(A, (A, convert(T, x))) do state, a, val
         idx = @linearidx(a, state)
         @inbounds a[idx] = val
@@ -19,8 +15,8 @@ function fill!(A::GPUArray{T}, x) where T
     A
 end
 
-zeros(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, zero(eltype(T)), dims)
-ones(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, one(eltype(T)), dims)
+Base.zeros(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, zero(eltype(T)), dims)
+Base.ones(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, one(eltype(T)), dims)
 
 function uniformscaling_kernel(state, res::AbstractArray{T}, stride, s::UniformScaling) where T
     i = linear_index(state)

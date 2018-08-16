@@ -1,10 +1,10 @@
 allequal(x) = true
 allequal(x, y, z...) = x == y && allequal(y, z...)
-function map!(f, y::GPUArray, xs::GPUArray...)
+function Base.map!(f, y::GPUArray, xs::GPUArray...)
     @assert allequal(size.((y, xs...))...)
     return y .= f.(xs...)
 end
-function map(f, y::GPUArray, xs::GPUArray...)
+function Base.map(f, y::GPUArray, xs::GPUArray...)
     @assert allequal(size.((y, xs...))...)
     return f.(y, xs...)
 end

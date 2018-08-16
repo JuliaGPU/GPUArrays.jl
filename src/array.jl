@@ -120,7 +120,6 @@ function AbstractDeviceArray(ptr::Array, shape::Vararg{Integer, N}) where N
     reshape(ptr, shape)
 end
 
-
 function _gpu_call(f, A::JLArray, args::Tuple, blocks_threads::Tuple{T, T}) where T <: NTuple{N, Integer} where N
     blocks, threads = blocks_threads
     idx = ntuple(i-> 1, length(blocks))
@@ -170,32 +169,21 @@ end
 blas_module(::JLArray) = LinearAlgebra.BLAS
 blasbuffer(A::JLArray) = A.data
 
-# defining our own plan type is the easiest way to pass around the plans in Base interface
+# defining our own plan type is the easiest way to pass around the plans in FFTW interface
 # without ambiguities
 
 struct FFTPlan{T}
     p::T
 end
-function plan_fft(A::JLArray; kw_args...)
-    FFTPlan(plan_fft(A.data; kw_args...))
-end
-function plan_fft!(A::JLArray; kw_args...)
-    FFTPlan(plan_fft!(A.data; kw_args...))
-end
-function plan_bfft!(A::JLArray; kw_args...)
-    FFTPlan(plan_bfft!(A.data; kw_args...))
-end
-function plan_bfft(A::JLArray; kw_args...)
-    FFTPlan(plan_bfft(A.data; kw_args...))
-end
-function plan_ifft!(A::JLArray; kw_args...)
-    FFTPlan(plan_ifft!(A.data; kw_args...))
-end
-function plan_ifft(A::JLArray; kw_args...)
-    FFTPlan(plan_ifft(A.data; kw_args...))
-end
 
-function *(plan::FFTPlan, A::JLArray)
+FFTW.plan_fft(A::JLArray; kw_args...) = FFTPlan(plan_fft(A.data; kw_args...))
+FFTW.plan_fft!(A::JLArray; kw_args...) = FFTPlan(plan_fft!(A.data; kw_args...))
+FFTW.plan_bfft!(A::JLArray; kw_args...) = FFTPlan(plan_bfft!(A.data; kw_args...))
+FFTW.plan_bfft(A::JLArray; kw_args...) = FFTPlan(plan_bfft(A.data; kw_args...))
+FFTW.plan_ifft!(A::JLArray; kw_args...) = FFTPlan(plan_ifft!(A.data; kw_args...))
+FFTW.plan_ifft(A::JLArray; kw_args...) = FFTPlan(plan_ifft(A.data; kw_args...))
+
+function Base.:(*)(plan::FFTPlan, A::JLArray)
     x = plan.p * A.data
     JLArray(x)
 end

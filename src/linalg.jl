@@ -90,9 +90,9 @@ function LinearAlgebra.permutedims!(dest::GPUArray, src::GPUArray, perm::NTuple{
 end
 
 
-function copyto!(A::AbstractArray, B::Adjoint{T, <: GPUArray}) where T
+function Base.copyto!(A::AbstractArray, B::Adjoint{T, <: GPUArray}) where T
     copyto!(A, Adjoint(Array(B.parent)))
 end
-function copyto!(A::GPUArray, B::Adjoint{T, <: GPUArray}) where T
+function Base.copyto!(A::GPUArray, B::Adjoint{T, <: GPUArray}) where T
     transpose!(A, B.parent)
 end

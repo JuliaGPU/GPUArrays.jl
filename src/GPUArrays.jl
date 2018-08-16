@@ -13,7 +13,6 @@ using LinearAlgebra.BLAS
 using Base.Cartesian
 
 using FFTW
-import FFTW: *, plan_ifft!, plan_fft!, plan_fft, plan_ifft, size, plan_bfft, plan_bfft!
 
 include("abstractarray.jl")
 include("abstract_gpu_interface.jl")
