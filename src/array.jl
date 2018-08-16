@@ -28,6 +28,7 @@ size(x::JLArray) = x.size
 
 pointer(x::JLArray) = pointer(x.data)
 
+
 ## other
 
 """
@@ -50,9 +51,8 @@ to_blocks(state, x::LocalMem) = x.x[blockidx_x(state)]
 
 similar(::Type{<: JLArray}, ::Type{T}, size::Base.Dims{N}) where {T, N} = JLArray{T, N}(size)
 
-function unsafe_reinterpret(::Type{T}, A::JLArray{ET}, size::NTuple{N, Integer}) where {T, ET, N}
-    JLArray(Array(reshape(reinterpret(T, A.data), size)), size)
-end
+unsafe_reinterpret(::Type{T}, A::JLArray, size::Tuple) where T =
+    reshape(reinterpret(T, A.data), size)
 
 function Base.unsafe_copyto!(dest::Array{T}, d_offset::Integer,
                              source::JLArray{T}, s_offset::Integer,
