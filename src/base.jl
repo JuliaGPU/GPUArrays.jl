@@ -1,23 +1,20 @@
-import Base: count, map!, permutedims!, cat_t, vcat, hcat
-using Base: @pure
-
 allequal(x) = true
 allequal(x, y, z...) = x == y && allequal(y, z...)
-function map!(f, y::GPUArray, xs::GPUArray...)
+function Base.map!(f, y::GPUArray, xs::GPUArray...)
     @assert allequal(size.((y, xs...))...)
     return y .= f.(xs...)
 end
-function map(f, y::GPUArray, xs::GPUArray...)
+function Base.map(f, y::GPUArray, xs::GPUArray...)
     @assert allequal(size.((y, xs...))...)
     return f.(y, xs...)
 end
 
 # Break ambiguities with base
-map!(f, y::GPUArray) =
+Base.map!(f, y::GPUArray) =
     invoke(map!, Tuple{Any,GPUArray,Vararg{GPUArray}}, f, y)
-map!(f, y::GPUArray, x::GPUArray) =
+Base.map!(f, y::GPUArray, x::GPUArray) =
     invoke(map!, Tuple{Any,GPUArray, Vararg{GPUArray}}, f, y, x)
-map!(f, y::GPUArray, x1::GPUArray, x2::GPUArray) =
+Base.map!(f, y::GPUArray, x1::GPUArray, x2::GPUArray) =
     invoke(map!, Tuple{Any,GPUArray, Vararg{GPUArray}}, f, y, x1, x2)
 
 
@@ -49,36 +46,36 @@ map!(f, y::GPUArray, x1::GPUArray, x2::GPUArray) =
 #     return dest
 # end
 #
-# function cat_t(dims::Integer, T::Type, x::GPUArray, xs::GPUArray...)
+# function Base.cat_t(dims::Integer, T::Type, x::GPUArray, xs::GPUArray...)
 #     catdims = Base.dims2cat(dims)
 #     shape = Base.cat_shape(catdims, (), size.((x, xs...))...)
 #     dest = Base.cat_similar(x, T, shape)
 #     _cat(dims, dest, x, xs...)
 # end
 #
-# vcat(xs::GPUArray...) = cat(1, xs...)
-# hcat(xs::GPUArray...) = cat(2, xs...)
+# Base.vcat(xs::GPUArray...) = cat(1, xs...)
+# Base.hcat(xs::GPUArray...) = cat(2, xs...)
 
 
 # Base functions that are sadly not fit for the the GPU yet (they only work for Int64)
-@pure @inline function gpu_ind2sub(A::AbstractArray, ind::T) where T
+Base.@pure @inline function gpu_ind2sub(A::AbstractArray, ind::T) where T
     _ind2sub(size(A), ind - T(1))
 end
-@pure @inline function gpu_ind2sub(dims::NTuple{N}, ind::T) where {N, T}
+Base.@pure @inline function gpu_ind2sub(dims::NTuple{N}, ind::T) where {N, T}
     _ind2sub(NTuple{N, T}(dims), ind - T(1))
 end
-@pure @inline _ind2sub(::Tuple{}, ind::T) where {T} = (ind + T(1),)
-@pure @inline function _ind2sub(indslast::NTuple{1}, ind::T) where T
+Base.@pure @inline _ind2sub(::Tuple{}, ind::T) where {T} = (ind + T(1),)
+Base.@pure @inline function _ind2sub(indslast::NTuple{1}, ind::T) where T
     ((ind + T(1)),)
 end
-@pure @inline function _ind2sub(inds, ind::T) where T
+Base.@pure @inline function _ind2sub(inds, ind::T) where T
     r1 = inds[1]
     indnext = div(ind, r1)
     f = T(1); l = r1
     (ind-l*indnext+f, _ind2sub(Base.tail(inds), indnext)...)
 end
 
-@pure function gpu_sub2ind(dims::NTuple{N}, I::NTuple{N2, T}) where {N, N2, T}
+Base.@pure function gpu_sub2ind(dims::NTuple{N}, I::NTuple{N2, T}) where {N, N2, T}
     Base.@_inline_meta
     _sub2ind(NTuple{N, T}(dims), T(1), T(1), I...)
 end

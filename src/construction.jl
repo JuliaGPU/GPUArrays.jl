@@ -1,16 +1,12 @@
-import Base: fill!, similar, zeros, ones, fill
-
-
-
-function fill(X::Type{<: GPUArray}, val::T, dims::NTuple{N, Integer}) where {T, N}
+function Base.fill(X::Type{<: GPUArray}, val::T, dims::NTuple{N, Integer}) where {T, N}
     res = similar(X, T, dims)
     fill!(res, val)
 end
-function fill(X::Type{<: GPUArray{T}}, val, dims::NTuple{N, Integer}) where {T, N}
+function Base.fill(X::Type{<: GPUArray{T}}, val, dims::NTuple{N, Integer}) where {T, N}
     res = similar(X, T, dims)
     fill!(res, convert(T, val))
 end
-function fill!(A::GPUArray{T}, x) where T
+function Base.fill!(A::GPUArray{T}, x) where T
     gpu_call(A, (A, convert(T, x))) do state, a, val
         idx = @linearidx(a, state)
         @inbounds a[idx] = val
@@ -19,8 +15,8 @@ function fill!(A::GPUArray{T}, x) where T
     A
 end
 
-zeros(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, zero(eltype(T)), dims)
-ones(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, one(eltype(T)), dims)
+Base.zeros(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, zero(eltype(T)), dims)
+Base.ones(T::Type{<: GPUArray}, dims::NTuple{N, Integer}) where N = fill(T, one(eltype(T)), dims)
 
 function uniformscaling_kernel(state, res::AbstractArray{T}, stride, s::UniformScaling) where T
     i = linear_index(state)
@@ -43,10 +39,10 @@ end
 (T::Type{<: GPUArray{X} where X})(dims::NTuple{N, Integer}) where N = similar(T, eltype(T), dims)
 (T::Type{<: GPUArray{X} where X})(::UndefInitializer, dims::NTuple{N, Integer}) where N = similar(T, eltype(T), dims)
 
-similar(x::X, ::Type{T}, size::Base.Dims{N}) where {X <: GPUArray, T, N} = similar(X, T, size)
-similar(::Type{X}, ::Type{T}, size::NTuple{N, Base.OneTo{Int}}) where {X <: GPUArray, T, N} = similar(X, T, length.(size))
+Base.similar(x::X, ::Type{T}, size::Base.Dims{N}) where {X <: GPUArray, T, N} = similar(X, T, size)
+Base.similar(::Type{X}, ::Type{T}, size::NTuple{N, Base.OneTo{Int}}) where {X <: GPUArray, T, N} = similar(X, T, length.(size))
 
-convert(AT::Type{<: GPUArray{T, N}}, A::GPUArray{T, N}) where {T, N} = A
+Base.convert(AT::Type{<: GPUArray{T, N}}, A::GPUArray{T, N}) where {T, N} = A
 
 function indexstyle(x::T) where T
     style = try
@@ -73,7 +69,7 @@ eltype_or(::Type{<: GPUArray}, or) = or
 eltype_or(::Type{<: GPUArray{T}}, or) where T = T
 eltype_or(::Type{<: GPUArray{T, N}}, or) where {T, N} = T
 
-function convert(AT::Type{<: GPUArray}, iter)
+function Base.convert(AT::Type{<: GPUArray}, iter)
     isize = Base.IteratorSize(iter)
     style = indexstyle(iter)
     ettrait = Base.IteratorEltype(iter)
@@ -87,17 +83,18 @@ function convert(AT::Type{<: GPUArray}, iter)
     end
 end
 
-function convert(AT::Type{<: GPUArray{T, N}}, A::DenseArray{T, N}) where {T, N}
+function Base.convert(AT::Type{<: GPUArray{T, N}}, A::DenseArray{T, N}) where {T, N}
     copyto!(AT(Base.size(A)), A)
 end
 
-function convert(AT::Type{<: GPUArray{T1}}, A::DenseArray{T2, N}) where {T1, T2, N}
+function Base.convert(AT::Type{<: GPUArray{T1}}, A::DenseArray{T2, N}) where {T1, T2, N}
     copyto!(similar(AT, T1, size(A)), convert(Array{T1, N}, A))
 end
-function convert(AT::Type{<: GPUArray}, A::DenseArray{T2, N}) where {T2, N}
+
+function Base.convert(AT::Type{<: GPUArray}, A::DenseArray{T2, N}) where {T2, N}
     copyto!(similar(AT, T2, size(A)), A)
 end
 
-function convert(AT::Type{Array{T, N}}, A::GPUArray{CT, CN}) where {T, N, CT, CN}
+function Base.convert(AT::Type{Array{T, N}}, A::GPUArray{CT, CN}) where {T, N, CT, CN}
     convert(AT, copyto!(Array{CT, CN}(undef, size(A)), A))
 end

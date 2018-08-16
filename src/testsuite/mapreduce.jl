@@ -1,7 +1,7 @@
-function test_mapreduce(Typ)
+function test_mapreduce(AT)
     @testset "mapreduce" begin
         for ET in supported_eltypes()
-            T = Typ{ET}
+            T = AT{ET}
             @testset "$ET" begin
                 range = ET <: Integer ? (ET(-2):ET(2)) : ET
                 @testset "mapreducedim" begin
@@ -37,8 +37,8 @@ function test_mapreduce(Typ)
         end
         @testset "any all ==" begin
             for Ac in ([false, false], [false, true], [true, true])
-                A = Typ(Ac)
-                @test typeof(A) == Typ{Bool,1}
+                A = AT(Ac)
+                @test typeof(A) == AT{Bool,1}
                 @test any(A) == any(Ac)
                 @test all(A) == all(Ac)
                 @test A == copy(A)
@@ -51,8 +51,8 @@ function test_mapreduce(Typ)
         @testset "isapprox" begin
             for ET in supported_eltypes()
                 ET <: Complex && continue
-                A = fill(Typ{ET}, ET(0), (100,))
-                B = ones(Typ{ET}, 100)
+                A = fill(AT{ET}, ET(0), (100,))
+                B = ones(AT{ET}, 100)
                 @test !(A ≈ B)
                 @test !(A ≈ Array(B))
                 @test !(Array(A) ≈ B)

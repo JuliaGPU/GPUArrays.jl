@@ -24,15 +24,10 @@ end
 
 ## getters
 
-size(x::JLArray) = x.size
+Base.size(x::JLArray) = x.size
 
-pointer(x::JLArray) = pointer(x.data)
+Base.pointer(x::JLArray) = pointer(x.data)
 
-
-## I/O
-Base.print_array(io::IO, x::GPUArray) = Base.print_array(io, collect(x))B
-Base.print_array(io::IO, x::LinearAlgebra.Adjoint{<:Any,<:GPUArray}) = Base.print_array(io, LinearAlgebra.adjoint(collect(x.parent)))
-Base.print_array(io::IO, x::LinearAlgebra.Transpose{<:Any,<:GPUArray}) = Base.print_array(io, LinearAlgebra.transpose(collect(x.parent)))
 
 ## other
 
@@ -45,7 +40,7 @@ end
 
 to_device(state, x::JLArray) = x.data
 to_device(state, x::Tuple) = to_device.(Ref(state), x)
-to_device(state, x::RefValue{<: JLArray}) = RefValue(to_device(state, x[]))
+to_device(state, x::Base.RefValue{<: JLArray}) = Base.RefValue(to_device(state, x[]))
 to_device(state, x) = x
 # creates a `local` vector for each thread group
 to_device(state, x::LocalMemory{T}) where T = LocalMem(ntuple(i-> Vector{T}(x.size), blockdim_x(state)))
@@ -54,11 +49,10 @@ to_blocks(state, x) = x
 # unpacks local memory for each block
 to_blocks(state, x::LocalMem) = x.x[blockidx_x(state)]
 
-similar(::Type{<: JLArray}, ::Type{T}, size::Base.Dims{N}) where {T, N} = JLArray{T, N}(size)
+Base.similar(::Type{<: JLArray}, ::Type{T}, size::Base.Dims{N}) where {T, N} = JLArray{T, N}(size)
 
-function unsafe_reinterpret(::Type{T}, A::JLArray{ET}, size::NTuple{N, Integer}) where {T, ET, N}
-    JLArray(Array(reshape(reinterpret(T, A.data), size)), size)
-end
+unsafe_reinterpret(::Type{T}, A::JLArray, size::Tuple) where T =
+    reshape(reinterpret(T, A.data), size)
 
 function Base.unsafe_copyto!(dest::Array{T}, d_offset::Integer,
                              source::JLArray{T}, s_offset::Integer,
@@ -126,7 +120,6 @@ function AbstractDeviceArray(ptr::Array, shape::Vararg{Integer, N}) where N
     reshape(ptr, shape)
 end
 
-
 function _gpu_call(f, A::JLArray, args::Tuple, blocks_threads::Tuple{T, T}) where T <: NTuple{N, Integer} where N
     blocks, threads = blocks_threads
     idx = ntuple(i-> 1, length(blocks))
@@ -176,32 +169,21 @@ end
 blas_module(::JLArray) = LinearAlgebra.BLAS
 blasbuffer(A::JLArray) = A.data
 
-# defining our own plan type is the easiest way to pass around the plans in Base interface
+# defining our own plan type is the easiest way to pass around the plans in FFTW interface
 # without ambiguities
 
 struct FFTPlan{T}
     p::T
 end
-function plan_fft(A::JLArray; kw_args...)
-    FFTPlan(plan_fft(A.data; kw_args...))
-end
-function plan_fft!(A::JLArray; kw_args...)
-    FFTPlan(plan_fft!(A.data; kw_args...))
-end
-function plan_bfft!(A::JLArray; kw_args...)
-    FFTPlan(plan_bfft!(A.data; kw_args...))
-end
-function plan_bfft(A::JLArray; kw_args...)
-    FFTPlan(plan_bfft(A.data; kw_args...))
-end
-function plan_ifft!(A::JLArray; kw_args...)
-    FFTPlan(plan_ifft!(A.data; kw_args...))
-end
-function plan_ifft(A::JLArray; kw_args...)
-    FFTPlan(plan_ifft(A.data; kw_args...))
-end
 
-function *(plan::FFTPlan, A::JLArray)
+FFTW.plan_fft(A::JLArray; kw_args...) = FFTPlan(plan_fft(A.data; kw_args...))
+FFTW.plan_fft!(A::JLArray; kw_args...) = FFTPlan(plan_fft!(A.data; kw_args...))
+FFTW.plan_bfft!(A::JLArray; kw_args...) = FFTPlan(plan_bfft!(A.data; kw_args...))
+FFTW.plan_bfft(A::JLArray; kw_args...) = FFTPlan(plan_bfft(A.data; kw_args...))
+FFTW.plan_ifft!(A::JLArray; kw_args...) = FFTPlan(plan_ifft!(A.data; kw_args...))
+FFTW.plan_ifft(A::JLArray; kw_args...) = FFTPlan(plan_ifft(A.data; kw_args...))
+
+function Base.:(*)(plan::FFTPlan, A::JLArray)
     x = plan.p * A.data
     JLArray(x)
 end

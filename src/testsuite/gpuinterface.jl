@@ -1,7 +1,7 @@
-function test_gpuinterface(Typ)
+function test_gpuinterface(AT)
     @testset "parallel execution interface" begin
         N = 10
-        x = Typ(Vector{Int}(undef, N))
+        x = AT(Vector{Int}(undef, N))
         x .= 0
         gpu_call(x, (x,)) do state, x
             x[linear_index(state)] = 2
@@ -26,7 +26,7 @@ function test_gpuinterface(Typ)
             return
         end
         @test Array(x) == [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
-        x2 = Typ([0])
+        x2 = AT([0])
         gpu_call(x, (x2,), configuration) do state, x
             x[1] = blockdim_x(state)
             return

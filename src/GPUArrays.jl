@@ -1,18 +1,18 @@
 module GPUArrays
 
+export GPUArray, gpu_call, thread_blocks_heuristic, global_size, synchronize_threads
+export linear_index, @linearidx, @cartesianidx, convolution!, device, synchronize
+export JLArray
+
 using Serialization
 using Random
 using LinearAlgebra
 using Printf
 
-import Random: rand, rand!
 using LinearAlgebra.BLAS
-import Base: pointer, similar, size, convert
-using Base: @propagate_inbounds, @pure, RefValue
 using Base.Cartesian
 
 using FFTW
-import FFTW: *, plan_ifft!, plan_fft!, plan_fft, plan_ifft, size, plan_bfft, plan_bfft!
 
 include("abstractarray.jl")
 include("abstract_gpu_interface.jl")
@@ -33,9 +33,5 @@ include("random.jl")
 include("array.jl")
 
 include("testsuite.jl")
-
-export GPUArray, gpu_call, thread_blocks_heuristic, global_size, synchronize_threads
-export linear_index, @linearidx, @cartesianidx, convolution!, device, synchronize
-export JLArray
 
 end # module

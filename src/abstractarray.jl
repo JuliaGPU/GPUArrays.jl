@@ -1,5 +1,3 @@
-import Base: similar, convert, _reshape, map!, copyto!, map, copy, deepcopy
-
 # Dense GPU Array
 abstract type GPUArray{T, N} <: DenseArray{T, N} end
 
@@ -16,8 +14,11 @@ struct LocalMemory{T} <: GPUArray{T, 1}
     LocalMemory{T}(x::Integer) where T = new{T}(x)
 end
 
-############################################
-# serialization
+
+# input/output
+
+## serialization
+
 import Serialization: AbstractSerializer, serialize, deserialize, serialize_type
 
 function serialize(s::AbstractSerializer, t::T) where T <: GPUArray
@@ -53,6 +54,14 @@ function to_cartesian(A, indices::Tuple)
     CartesianIndices(start, stop)
 end
 
+## showing
+
+Base.print_array(io::IO, x::GPUArray) = Base.print_array(io, collect(x))
+Base.print_array(io::IO, x::LinearAlgebra.Adjoint{<:Any,<:GPUArray}) = Base.print_array(io, LinearAlgebra.adjoint(collect(x.parent)))
+Base.print_array(io::IO, x::LinearAlgebra.Transpose{<:Any,<:GPUArray}) = Base.print_array(io, LinearAlgebra.transpose(collect(x.parent)))
+
+
+# memory operations
 
 ## basic copy methods that dispatch to unsafe_copyto! for linear copies
 
@@ -161,8 +170,8 @@ function Base.copyto!(
     dest
 end
 
-copy(x::GPUArray) = identity.(x)
-deepcopy(x::GPUArray) = copy(x)
+Base.copy(x::GPUArray) = identity.(x)
+Base.deepcopy(x::GPUArray) = copy(x)
 
 #=
 reinterpret taken from julia base/array.jl
@@ -211,13 +220,13 @@ function reinterpret(::Type{T}, a::GPUArray{S}, dims::NTuple{N, Integer}) where 
     unsafe_reinterpret(T, a, dims)
 end
 
-function _reshape(A::GPUArray{T}, dims::Dims) where T
+function Base._reshape(A::GPUArray{T}, dims::Dims) where T
     n = length(A)
     prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
     return unsafe_reinterpret(T, A, dims)
 end
 #ambig
-function _reshape(A::GPUArray{T, 1}, dims::Tuple{Integer}) where T
+function Base._reshape(A::GPUArray{T, 1}, dims::Tuple{Integer}) where T
     n = Base._length(A)
     prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
     return unsafe_reinterpret(T, A, dims)
