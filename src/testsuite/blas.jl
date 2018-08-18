@@ -1,25 +1,14 @@
 function test_blas(AT)
     @testset "BLAS" begin
-        @testset "matmul with element type $elty" for elty in (Float32, Float64, ComplexF32, ComplexF64)
-            A = rand(elty, 5, 6)
-            B = rand(elty, 6, 5)
-            C = rand(elty, 5, 5)
-            x = rand(elty, 5)
-            y = rand(elty, 6)
-
-            @test compare(*, AT, A, y)
-            @test compare(*, AT, transpose(A), x)
-            @test compare(*, AT, adjoint(A), x)
-
-            @test compare(*, AT, A, B)
-            @test compare(*, AT, transpose(A), C)
-            @test compare(*, AT, C, transpose(B))
-            @test compare(*, AT, transpose(A), transpose(B))
-            @test compare(*, AT, adjoint(A), C)
-            @test compare(*, AT, C, adjoint(B))
-            @test compare(*, AT, adjoint(A), adjoint(B))
-            @test compare(*, AT, transpose(A), adjoint(B))
-            @test compare(*, AT, adjoint(A), transpose(B))
+        @testset "matmul" begin
+            @test compare(*, AT, rand(Float32, 5, 5), rand(Float32, 5, 5))
+            @test compare(*, AT, rand(Float32, 5, 5), rand(Float32, 5))
+            @test compare((a, b)-> a * transpose(b), AT, rand(Float32, 5, 5), rand(Float32, 5, 5))
+            @test compare((c, a, b)-> mul!(c, a, transpose(b)), AT, rand(Float32, 10, 32), rand(Float32, 10, 60), rand(Float32, 32, 60))
+            @test compare((a, b)-> transpose(a) * b, AT, rand(Float32, 5, 5), rand(Float32, 5, 5))
+            @test compare((a, b)-> transpose(a) * transpose(b), AT, rand(Float32, 10, 15), rand(Float32, 1, 10))
+            @test compare((a, b)-> transpose(a) * b, AT, rand(Float32, 10, 15), rand(Float32, 10))
+            @test compare(mul!, AT, rand(Float32, 15), rand(Float32, 15, 10), rand(Float32, 10))
         end
 
         for T in (ComplexF32, Float32)
