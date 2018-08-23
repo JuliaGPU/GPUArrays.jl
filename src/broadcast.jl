@@ -2,12 +2,36 @@ using Base.Broadcast
 
 import Base.Broadcast: BroadcastStyle, Broadcasted, ArrayStyle
 
-BroadcastStyle(::Type{T}) where T <: GPUArray = ArrayStyle{T}()
+# We define a generic `BroadcastStyle` here that should be sufficient for most cases
+# dependent packages like `CuArrays` can define their own `BroadcastStyle` allowing
+# them to further change or optimize broadcasting.
+# TODO: Investigate if we should define out own `GPUArrayStyle{N} <: AbstractArrayStyle{N}`
+# NOTE: This uses the specific `T` that was used e.g. `JLArray` or `CLArray` for ArrayStyle, instead
+#       of using `ArrayStyle{GPUArray}`, this is due to the fact how `similar` works.
+BroadcastStyle(::Type{T}) where {T<:GPUArray} = ArrayStyle{T}()
 
+# These wrapper types otherwise forget that they are GPU compatible
+# Note: Don't directly use ArrayStyle{GPUArray} here since that would mean that `CuArrays`
+# customizations no longer take effect.
+BroadcastStyle(::Type{<:LinearAlgebra.Transpose{<:Any,T}}) where {T<:GPUArray} = BroadcastStyle(T)
+BroadcastStyle(::Type{<:LinearAlgebra.Adjoint{<:Any,T}}) where {T<:GPUArray} = BroadcastStyle(T)
+
+# This method is responsible for selection the output type of broadcast
 function Base.similar(bc::Broadcasted{<:ArrayStyle{GPU}}, ::Type{ElType}) where {GPU <: GPUArray, ElType}
     similar(GPU, ElType, axes(bc))
 end
 
+# We purposefully only specialise `copyto!`, dependent packages need to make sure that they can handle:
+# - `bc::Broadcast.Broadcasted{Style}`
+# - `ex::Broadcast.Extruded`
+# - `LinearAlgebra.Transpose{,<:GPUArray}` and  `LinearAlgebra.Adjoint{,<:GPUArray}`
+# as arguments to a kernel and that they do the right conversion.
+#
+# This Broadcast can be further customised by:
+# - `Broadcast.preprocess(dest::GPUArray, bc::Broadcasted{Nothing})` which allows for a complete transformation
+#   Broadcasted based on the output type just at the end of the pipeline.
+# - `Broadcast.broadcasted(::Style, f)` selection of an implementation of `f` compatible with `Style`
+# For more information see the Base documentation.
 @inline function Base.copyto!(dest::GPUArray, bc::Broadcasted{Nothing})
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     bc′ = Broadcast.preprocess(dest, bc)
@@ -20,6 +44,7 @@ end
     return dest
 end
 
+# TODO: is this still necessary?
 function mapidx(f, A::GPUArray, args::NTuple{N, Any}) where N
     gpu_call(A, (f, A, args)) do state, f, A, args
         ilin = @linearidx(A, state)
