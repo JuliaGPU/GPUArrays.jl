@@ -16,6 +16,12 @@ BroadcastStyle(::Type{T}) where {T<:GPUArray} = ArrayStyle{T}()
 BroadcastStyle(::Type{<:LinearAlgebra.Transpose{<:Any,T}}) where {T<:GPUArray} = BroadcastStyle(T)
 BroadcastStyle(::Type{<:LinearAlgebra.Adjoint{<:Any,T}}) where {T<:GPUArray} = BroadcastStyle(T)
 
+# This Union is a hack. Ideally Base would have a Transpose <: WrappedArray <: AbstractArray
+# and we could define our methods in terms of Union{GPUArray, WrappedArray{<:Any, <:GPUArray}}
+const GPUDestArray = Union{GPUArray,
+                           LinearAlgebra.Transpose{<:Any,<:GPUArray},
+                           LinearAlgebra.Adjoint{<:Any,<:GPUArray}}
+
 # This method is responsible for selection the output type of broadcast
 function Base.similar(bc::Broadcasted{<:ArrayStyle{GPU}}, ::Type{ElType}) where {GPU <: GPUArray, ElType}
     similar(GPU, ElType, axes(bc))
@@ -32,7 +38,7 @@ end
 #   Broadcasted based on the output type just at the end of the pipeline.
 # - `Broadcast.broadcasted(::Style, f)` selection of an implementation of `f` compatible with `Style`
 # For more information see the Base documentation.
-@inline function Base.copyto!(dest::GPUArray, bc::Broadcasted{Nothing})
+@inline function Base.copyto!(dest::GPUDestArray, bc::Broadcasted{Nothing})
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     bc′ = Broadcast.preprocess(dest, bc)
     gpu_call(dest, (dest, bc′)) do state, dest, bc′
@@ -42,6 +48,12 @@ end
     end
 
     return dest
+end
+
+# Base defines this method as a performance optimization, but we don't know how
+# to do `fill!` in general for all `GPUDestArray` so we just straight go to the fallback
+@inline function Base.copyto!(dest::GPUDestArray, bc::Broadcasted{<:Broadcast.AbstractArrayStyle{0}})
+    return copyto!(dest, convert(Broadcasted{Nothing}, bc))
 end
 
 # TODO: is this still necessary?
