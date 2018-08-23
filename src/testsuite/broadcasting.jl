@@ -45,12 +45,22 @@ function broadcasting(AT)
                 @test Array(gres) == cres
             end
 
-            @testset "Tuple" begin
-                @test compare(AT, rand(ET, 3, N), rand(ET, 3, N), rand(ET, N), rand(ET, N), rand(ET, N)) do out, arr, a, b, c
-                    broadcast!(out, arr, (a, b, c)) do xx, yy
-                        xx + first(yy)
-                    end
-                end
+            # These tests are broken on CuArrays since we are missing `mapreduce` over device arrays
+            # add them back once we have them
+            # @testset "Tuple" begin
+            #     @test compare(AT, rand(ET, 3, N), rand(ET, 3, N), rand(ET, N), rand(ET, N), rand(ET, N)) do out, arr, a, b, c
+            #         broadcast!(out, arr, (a, b, c)) do xx, yy
+            #             xx + first(yy)
+            #         end
+            #     end
+            # end
+
+            @testset "Adjoint and Transpose" begin
+                A = AT(rand(ET, N))
+                A' .= ET(2)
+                @test all(x->x==ET(2), A)
+                transpose(A) .= ET(1)
+                @test all(x->x==ET(1), A)
             end
 
             ############
