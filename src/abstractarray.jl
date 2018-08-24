@@ -62,6 +62,8 @@ Base.show(io::IO, x::LinearAlgebra.Adjoint{<:Any,<:GPUArray}) =
 Base.show(io::IO, x::LinearAlgebra.Transpose{<:Any,<:GPUArray}) =
     Base.show(io, LinearAlgebra.transpose(Array(x.parent)))
 
+Base.show_vector(io::IO, x::GPUArray) = Base.show_vector(io, Array(x))
+
 
 # memory operations
 
