@@ -5,7 +5,10 @@
 
 Base.any(A::GPUArray{Bool}) = mapreduce(identity, |, A; init = false)
 Base.all(A::GPUArray{Bool}) = mapreduce(identity, &, A; init = true)
-Base.count(pred, A::GPUArray) = Int(mapreduce(pred, +, A; init = 0))
+
+Base.any(f::Function, A::GPUArray) = mapreduce(f, |, A; init = false)
+Base.all(f::Function, A::GPUArray) = mapreduce(f, &, A; init = true)
+Base.count(pred::Function, A::GPUArray) = Int(mapreduce(pred, +, A; init = 0))
 
 Base.:(==)(A::GPUArray, B::GPUArray) = Bool(mapreduce(==, &, A, B; init = true))
 
