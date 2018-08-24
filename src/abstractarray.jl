@@ -56,9 +56,13 @@ end
 
 ## showing
 
-Base.print_array(io::IO, x::GPUArray) = Base.print_array(io, collect(x))
-Base.print_array(io::IO, x::LinearAlgebra.Adjoint{<:Any,<:GPUArray}) = Base.print_array(io, LinearAlgebra.adjoint(collect(x.parent)))
-Base.print_array(io::IO, x::LinearAlgebra.Transpose{<:Any,<:GPUArray}) = Base.print_array(io, LinearAlgebra.transpose(collect(x.parent)))
+Base.show(io::IO, x::GPUArray) = Base.show(io, Array(x))
+Base.show(io::IO, x::LinearAlgebra.Adjoint{<:Any,<:GPUArray}) =
+    Base.show(io, LinearAlgebra.adjoint(Array(x.parent)))
+Base.show(io::IO, x::LinearAlgebra.Transpose{<:Any,<:GPUArray}) =
+    Base.show(io, LinearAlgebra.transpose(Array(x.parent)))
+
+Base.show_vector(io::IO, x::GPUArray) = Base.show_vector(io, Array(x))
 
 
 # memory operations
