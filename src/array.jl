@@ -21,6 +21,8 @@ function JLArray{T, N}(size::NTuple{N, Integer}) where {T, N}
     JLArray{T, N}(Array{T, N}(undef, size), size)
 end
 
+struct JLBackend <: GPUBackend end
+backend(::Type{<:JLArray}) = JLBackend()
 
 ## getters
 
@@ -120,7 +122,7 @@ function AbstractDeviceArray(ptr::Array, shape::Vararg{Integer, N}) where N
     reshape(ptr, shape)
 end
 
-function _gpu_call(f, A::JLArray, args::Tuple, blocks_threads::Tuple{T, T}) where T <: NTuple{N, Integer} where N
+function _gpu_call(::JLBackend, f, A, args::Tuple, blocks_threads::Tuple{T, T}) where T <: NTuple{N, Integer} where N
     blocks, threads = blocks_threads
     idx = ntuple(i-> 1, length(blocks))
     blockdim = blocks

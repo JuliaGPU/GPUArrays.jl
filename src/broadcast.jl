@@ -16,6 +16,9 @@ BroadcastStyle(::Type{T}) where {T<:GPUArray} = ArrayStyle{T}()
 BroadcastStyle(::Type{<:LinearAlgebra.Transpose{<:Any,T}}) where {T<:GPUArray} = BroadcastStyle(T)
 BroadcastStyle(::Type{<:LinearAlgebra.Adjoint{<:Any,T}}) where {T<:GPUArray} = BroadcastStyle(T)
 
+backend(::Type{<:LinearAlgebra.Transpose{<:Any,T}}) where {T<:GPUArray} = backend(T)
+backend(::Type{<:LinearAlgebra.Adjoint{<:Any,T}}) where {T<:GPUArray} = backend(T)
+
 # This Union is a hack. Ideally Base would have a Transpose <: WrappedArray <: AbstractArray
 # and we could define our methods in terms of Union{GPUArray, WrappedArray{<:Any, <:GPUArray}}
 const GPUDestArray = Union{GPUArray,
