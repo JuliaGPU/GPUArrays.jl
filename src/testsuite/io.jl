@@ -12,7 +12,10 @@ function test_io(AT)
 
           show(io, A)
           seekstart(io)
-          @test String(take!(io)) == "[1]"
+          msg = String(take!(io)) # result of e.g. `print` differs on 32bit and 64bit machines
+          # due to different definition of `Int` type
+          # print([1]) shows as [1] on 64bit but Int64[1] on 32bit
+          @test msg == "[1]" || msg == "Int64[1]"
 
           show(io, MIME("text/plain"), B)
           seekstart(io)
@@ -20,7 +23,8 @@ function test_io(AT)
 
           show(io, B)
           seekstart(io)
-          @test String(take!(io)) == "[1 2; 3 4]"
+          msg = String(take!(io))
+          @test msg == "[1 2; 3 4]" || msg == "Int64[1 2; 3 4]"
 
           show(io, MIME("text/plain"), A')
           seekstart(io)
