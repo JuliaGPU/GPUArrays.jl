@@ -56,14 +56,24 @@ end
 
 ## showing
 
-Base.show(io::IO, x::GPUArray) = Base.show(io, Array(x))
-Base.show(io::IO, x::LinearAlgebra.Adjoint{<:Any,<:GPUArray}) =
-    Base.show(io, LinearAlgebra.adjoint(Array(x.parent)))
-Base.show(io::IO, x::LinearAlgebra.Transpose{<:Any,<:GPUArray}) =
-    Base.show(io, LinearAlgebra.transpose(Array(x.parent)))
+for (atype, op) in
+    [(:(GPUArray), :(Array)),
+     (:(LinearAlgebra.Adjoint{<:Any,<:GPUArray}), :(x->LinearAlgebra.adjoint(Array(x.parent)))),
+     (:(LinearAlgebra.Transpose{<:Any,<:GPUArray}), :(x->LinearAlgebra.transpose(Array(x.parent))))]
+  @eval begin
+    # for display
+    Base.print_array(io::IO, X::($atype)) =
+        Base.print_array(io,($op)(X))
 
-Base.show_vector(io::IO, x::GPUArray) = Base.show_vector(io, Array(x))
-
+    # for show
+    Base._show_nonempty(io::IO, X::($atype), prefix::String) = 
+        Base._show_nonempty(io,($op)(X),prefix)
+    Base._show_empty(io::IO, X::($atype)) =
+        Base._show_empty(io,($op)(X))
+    Base.show_vector(io::IO, v::($atype), args...) =
+        Base.show_vector(io,($op)(v),args...)
+  end
+end
 
 # memory operations
 
