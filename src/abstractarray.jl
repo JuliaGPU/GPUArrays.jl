@@ -58,8 +58,8 @@ end
 
 for (atype, op) in
     [(:(GPUArray), :(Array)),
-     (:(LinearAlgebra.Adjoint{<:Any,<:GPUArray}), :(x->LinearAlgebra.adjoint(Array(x.parent)))),
-     (:(LinearAlgebra.Transpose{<:Any,<:GPUArray}), :(x->LinearAlgebra.transpose(Array(x.parent))))]
+     (:(LinearAlgebra.Adjoint{<:Any,<:GPUArray}), :(x->LinearAlgebra.adjoint(Array(parent(x))))),
+     (:(LinearAlgebra.Transpose{<:Any,<:GPUArray}), :(x->LinearAlgebra.transpose(Array(parent(x)))))]
   @eval begin
     # for display
     Base.print_array(io::IO, X::($atype)) =

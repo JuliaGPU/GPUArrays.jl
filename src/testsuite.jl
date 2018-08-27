@@ -49,7 +49,6 @@ end
 Runs the entire GPUArrays test suite on array type `AT`
 """
 function test(AT::Type{<:GPUArray})
-    GPUArrays.allowscalar(false)
     TestSuite.test_construction(AT)
     TestSuite.test_gpuinterface(AT)
     TestSuite.test_indexing(AT)
