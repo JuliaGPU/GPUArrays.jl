@@ -21,6 +21,15 @@ function test_mapreduce(AT)
                         x = T(y)
                         @test sum(y, dims = 2) ≈ Array(sum(x, dims = 2))
                         @test sum(y, dims = 1) ≈ Array(sum(x, dims = 1))
+
+                        y = rand(range, N, N)
+                        x = T(y)
+                        _zero = zero(ET)
+                        _addone(z) = z + one(ET)
+                        @test mapreduce(_addone, +, y; dims = 2, init = _zero) ≈
+                            Array(mapreduce(_addone, +, x; dims = 2, init = _zero))
+                        @test mapreduce(_addone, +, y; init = _zero) ≈
+                            mapreduce(_addone, +, x; init = _zero)
                     end
                 end
                 @testset "sum maximum minimum prod" begin

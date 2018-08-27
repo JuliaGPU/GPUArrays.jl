@@ -3,16 +3,16 @@
 # functions in base implemented with a direct loop need to be overloaded to use mapreduce
 
 
-Base.any(A::GPUArray{Bool}) = mapreduce(identity, |, false, A)
-Base.all(A::GPUArray{Bool}) = mapreduce(identity, &, true, A)
-Base.count(pred, A::GPUArray) = Int(mapreduce(pred, +, 0, A))
+Base.any(A::GPUArray{Bool}) = mapreduce(identity, |, A; init = false)
+Base.all(A::GPUArray{Bool}) = mapreduce(identity, &, A; init = true)
+Base.count(pred, A::GPUArray) = Int(mapreduce(pred, +, A; init = 0))
 
-Base.:(==)(A::GPUArray, B::GPUArray) = Bool(mapreduce(==, &, true, A, B))
+Base.:(==)(A::GPUArray, B::GPUArray) = Bool(mapreduce(==, &, A, B; init = true))
 
 # hack to get around of fetching the first element of the GPUArray
 # as a startvalue, which is a bit complicated with the current reduce implementation
 function startvalue(f, T)
-    error("Please supply a starting value for mapreduce. E.g: mapreduce(func, $f, 1, A)")
+    error("Please supply a starting value for mapreduce. E.g: mapreduce(func, $f, A; init = 1)")
 end
 startvalue(::typeof(+), T) = zero(T)
 startvalue(::typeof(Base.add_sum), T) = zero(T)
@@ -50,20 +50,30 @@ gpu_promote_type(::typeof(Base.mul_prod), ::Type{T}) where {T<:Number} = typeof(
 gpu_promote_type(::typeof(max), ::Type{T}) where {T<: WidenReduceResult} = T
 gpu_promote_type(::typeof(min), ::Type{T}) where {T<: WidenReduceResult} = T
 
-function Base.mapreduce(f::Function, op::Function, A::GPUArray{T, N}) where {T, N}
+function Base.mapreduce(f::Function, op::Function, A::GPUArray{T, N}; dims = :, init...) where {T, N}
+    mapreduce_impl(f, op, init.data, A, dims)
+end
+
+function mapreduce_impl(f, op, ::NamedTuple{()}, A::GPUArray{T, N}, ::Colon) where {T, N}
     OT = gpu_promote_type(op, T)
     v0 = startvalue(op, OT) # TODO do this better
-    mapreduce(f, op, v0, A)
-end
-function acc_mapreduce end
-function Base.mapreduce(f, op, v0, A::GPUArray, B::GPUArray, C::Number)
-    acc_mapreduce(f, op, v0, A, (B, C))
-end
-function Base.mapreduce(f, op, v0, A::GPUArray, B::GPUArray)
-    acc_mapreduce(f, op, v0, A, (B,))
-end
-function Base.mapreduce(f, op, v0, A::GPUArray)
     acc_mapreduce(f, op, v0, A, ())
+end
+
+function mapreduce_impl(f, op, nt::NamedTuple{(:init,)}, A::GPUArray{T, N}, ::Colon) where {T, N}
+    acc_mapreduce(f, op, nt.init, A, ())
+end
+
+function mapreduce_impl(f, op, nt, A::GPUArray{T, N}, dims) where {T, N}
+    Base._mapreduce_dim(f, op, nt, A, dims)
+end
+
+function acc_mapreduce end
+function Base.mapreduce(f, op, A::GPUArray, B::GPUArray, C::Number; init)
+    acc_mapreduce(f, op, init, A, (B, C))
+end
+function Base.mapreduce(f, op, A::GPUArray, B::GPUArray; init)
+    acc_mapreduce(f, op, init, A, (B,))
 end
 
 @generated function mapreducedim_kernel(state, f, op, R, A, range::NTuple{N, Any}) where N

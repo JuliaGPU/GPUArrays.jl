@@ -3,10 +3,28 @@ function test_io(AT)
         @testset "showing" begin
           io = IOBuffer()
           A = AT(Int64[1])
+          B = AT(Int64[1 2;3 4]) # vectors and non-vector arrays showing
+                                 # are handled differently in base/arrayshow.jl
 
           show(io, MIME("text/plain"), A)
           seekstart(io)
           @test String(take!(io)) == "1-element $AT{Int64,1}:\n 1"
+
+          show(io, A)
+          seekstart(io)
+          msg = String(take!(io)) # result of e.g. `print` differs on 32bit and 64bit machines
+          # due to different definition of `Int` type
+          # print([1]) shows as [1] on 64bit but Int64[1] on 32bit
+          @test msg == "[1]" || msg == "Int64[1]"
+
+          show(io, MIME("text/plain"), B)
+          seekstart(io)
+          @test String(take!(io)) == "2×2 $AT{Int64,2}:\n 1  2\n 3  4"
+
+          show(io, B)
+          seekstart(io)
+          msg = String(take!(io))
+          @test msg == "[1 2; 3 4]" || msg == "Int64[1 2; 3 4]"
 
           show(io, MIME("text/plain"), A')
           seekstart(io)
