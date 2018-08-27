@@ -25,7 +25,7 @@ function test_mapreduce(AT)
                         y = rand(range, N, N)
                         x = T(y)
                         _zero = zero(ET)
-                        _addone(z) = z + one(ET)
+                        _addone(z) = z + one(typeof(z))
                         @test mapreduce(_addone, +, y; dims = 2, init = _zero) ≈
                             Array(mapreduce(_addone, +, x; dims = 2, init = _zero))
                         @test mapreduce(_addone, +, y; init = _zero) ≈
