@@ -52,22 +52,24 @@ end
 
 ## showing
 
-for (atype, op) in
-    [(:(GPUArray), :(Array)),
-     (:(LinearAlgebra.Adjoint{<:Any,<:GPUArray}), :(x->LinearAlgebra.adjoint(Array(parent(x))))),
-     (:(LinearAlgebra.Transpose{<:Any,<:GPUArray}), :(x->LinearAlgebra.transpose(Array(parent(x)))))]
+for (AT, f) in
+    (GPUArray                                  => Array,
+     LinearAlgebra.Adjoint{<:Any,<:GPUArray}   => x->LinearAlgebra.adjoint(Array(parent(x))),
+     LinearAlgebra.Transpose{<:Any,<:GPUArray} => x->LinearAlgebra.transpose(Array(parent(x))),
+     SubArray{<:Any,<:Any,<:GPUArray}          => x->SubArray(Array(parent(x)), parentindices(x))
+    )
   @eval begin
     # for display
-    Base.print_array(io::IO, X::($atype)) =
-        Base.print_array(io,($op)(X))
+    Base.print_array(io::IO, X::$AT) =
+        Base.print_array(io,$f(X))
 
     # for show
-    Base._show_nonempty(io::IO, X::($atype), prefix::String) = 
-        Base._show_nonempty(io,($op)(X),prefix)
-    Base._show_empty(io::IO, X::($atype)) =
-        Base._show_empty(io,($op)(X))
-    Base.show_vector(io::IO, v::($atype), args...) =
-        Base.show_vector(io,($op)(v),args...)
+    Base._show_nonempty(io::IO, X::$AT, prefix::String) =
+        Base._show_nonempty(io,$f(X),prefix)
+    Base._show_empty(io::IO, X::$AT) =
+        Base._show_empty(io,$f(X))
+    Base.show_vector(io::IO, v::$AT, args...) =
+        Base.show_vector(io,$f(v),args...)
   end
 end
 
