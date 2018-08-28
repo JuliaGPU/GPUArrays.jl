@@ -106,8 +106,8 @@ end
 #     CUDAnative.__syncthreads()
 # end
 
-
-
+abstract type GPUBackend end
+backend(::Type{T}) where T = error("Can't choose GPU backend for $T")
 
 """
     gpu_call(kernel::Function, A::GPUArray, args::Tuple, configuration = length(A))
@@ -124,7 +124,7 @@ Optionally, a launch configuration can be supplied in the following way:
     2) Pass a tuple of integer tuples to define blocks and threads per blocks!
 
 """
-function gpu_call(kernel, A::GPUArray, args::Tuple, configuration = length(A))
+function gpu_call(kernel, A::AbstractArray, args::Tuple, configuration = length(A))
     ITuple = NTuple{N, Integer} where N
     # If is a single integer, we assume it to be the global size / total number of threads one wants to launch
     thread_blocks = if isa(configuration, Integer)
@@ -148,8 +148,8 @@ function gpu_call(kernel, A::GPUArray, args::Tuple, configuration = length(A))
                 `linear_index` will be inbetween 1:prod((blocks..., threads...))
         """)
     end
-    _gpu_call(kernel, A, args, thread_blocks)
+    _gpu_call(backend(typeof(A)), kernel, A, args, thread_blocks)
 end
 
 # Internal GPU call function, that needs to be overloaded by the backends.
-_gpu_call(f, A, args, thread_blocks) = error("Not implemented")
+_gpu_call(::Any, f, A, args, thread_blocks) = error("Not implemented")

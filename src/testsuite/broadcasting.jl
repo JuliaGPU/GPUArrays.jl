@@ -53,6 +53,14 @@ function broadcasting(AT)
                 end
             end
 
+            @testset "Adjoint and Transpose" begin
+                A = AT(rand(ET, N))
+                A' .= ET(2)
+                @test all(x->x==ET(2), A)
+                transpose(A) .= ET(1)
+                @test all(x->x==ET(1), A)
+            end
+
             ############
             # issue #27
             @test compare((a, b)-> a .+ b, AT, rand(ET, 4, 5, 3), rand(ET, 1, 5, 3))
