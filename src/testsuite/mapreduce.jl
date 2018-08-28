@@ -6,40 +6,30 @@ function test_mapreduce(AT)
                 range = ET <: Integer ? (ET(-2):ET(2)) : ET
                 @testset "mapreducedim" begin
                     for N in (2, 10)
-                        y = rand(range, N, N)
-                        x = T(y)
-                        @test sum(y, dims = 2) ≈ Array(sum(x, dims = 2))
-                        @test sum(y, dims = 1) ≈ Array(sum(x, dims = 1))
-                        @test sum(y, dims = (1, 2)) ≈ Array(sum(x, dims = (1, 2)))
+                        @test compare(x -> sum(x, dims=2),      AT, rand(range, N, N))
+                        @test compare(x -> sum(x, dims=1),      AT, rand(range, N, N))
+                        @test compare(x -> sum(x, dims=(1, 2)), AT, rand(range, N, N))
 
-                        y = rand(range, N, 10)
-                        x = T(y)
-                        @test sum(y, dims = 2) ≈ Array(sum(x, dims = 2))
-                        @test sum(y, dims = 1) ≈ Array(sum(x, dims = 1))
+                        @test compare(x -> sum(x, dims=2),      AT, rand(range, N, 10))
+                        @test compare(x -> sum(x, dims=1),      AT, rand(range, N, 10))
 
-                        y = rand(range, 10, N)
-                        x = T(y)
-                        @test sum(y, dims = 2) ≈ Array(sum(x, dims = 2))
-                        @test sum(y, dims = 1) ≈ Array(sum(x, dims = 1))
+                        @test compare(x -> sum(x, dims=2),      AT, rand(range, 10, N))
+                        @test compare(x -> sum(x, dims=1),      AT, rand(range, 10, N))
 
-                        y = rand(range, N, N)
-                        x = T(y)
                         _zero = zero(ET)
-                        _addone(z) = z + one(ET)
-                        @test mapreduce(_addone, +, y; dims = 2, init = _zero) ≈
-                            Array(mapreduce(_addone, +, x; dims = 2, init = _zero))
-                        @test mapreduce(_addone, +, y; init = _zero) ≈
-                            mapreduce(_addone, +, x; init = _zero)
+                        _addone(z) = z + one(z)
+                        @test compare(x->mapreduce(_addone, +, x; dims = 2),
+                                      AT, rand(range, N, N))
+                        @test compare(x->mapreduce(_addone, +, x; dims = 2, init = _zero),
+                                      AT, rand(range, N, N))
                     end
                 end
                 @testset "sum maximum minimum prod" begin
                     for dims in ((4048,), (1024,1024), (77,), (1923,209))
-                        Ac = rand(range, dims)
-                        A = T(Ac)
-                        @test sum(A) ≈ sum(Ac)
-                        ET <: Complex || @test maximum(A) ≈ maximum(Ac)
-                        ET <: Complex || @test minimum(A) ≈ minimum(Ac)
-                        @test prod(A) ≈ prod(Ac)
+                        @test compare(sum,  AT, rand(range, dims))
+                        @test compare(prod, AT, rand(range, dims))
+                        ET <: Complex || @test compare(maximum, AT,rand(range, dims))
+                        ET <: Complex || @test compare(minimum, AT,rand(range, dims))
                     end
                 end
             end
