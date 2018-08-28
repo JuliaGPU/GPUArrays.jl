@@ -30,10 +30,6 @@ function deserialize(s::AbstractSerializer, ::Type{T}) where T <: GPUArray
     T(A)
 end
 
-@inline unpack_buffer(x) = x
-@inline unpack_buffer(x::GPUArray) = pointer(x)
-@inline unpack_buffer(x::Ref{<: GPUArray}) = unpack_buffer(x[])
-
 function to_cartesian(A, indices::Tuple)
     start = CartesianIndex(ntuple(length(indices)) do i
         val = indices[i]
