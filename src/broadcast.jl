@@ -57,7 +57,7 @@ end
     _copyto!(dest, convert(Broadcasted{Nothing}, bc))
 
 # Internal method implementing broadcast
-@inline _copyto!(dest, bc::Broadcasted{Nothing})
+@inline function _copyto!(dest, bc::Broadcasted{Nothing})
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     bc′ = Broadcast.preprocess(dest, bc)
     gpu_call(dest, (dest, bc′)) do state, dest, bc′
