@@ -47,7 +47,17 @@ end
 #   with `Style`
 #
 # For more information see the Base documentation.
-@inline function Base.copyto!(dest::GPUDestArray, bc::Broadcasted{Nothing})
+@inline Base.copyto!(dest::GPUDestArray, bc::Broadcasted{Nothing}) = _copyto!(dest, bc)
+@inline Base.copyto!(dest, bc::Broadcasted{<:GPUArray}) =
+    _copyto!(dest, convert(Broadcasted{Nothing}, bc))
+
+# Base defines this method as a performance optimization, but we don't know how to do
+# `fill!` in general for all `GPUDestArray` so we just go straight to the fallback
+@inline Base.copyto!(dest::GPUDestArray, bc::Broadcasted{<:Broadcast.AbstractArrayStyle{0}}) =
+    _copyto!(dest, convert(Broadcasted{Nothing}, bc))
+
+# Internal method implementing broadcast
+@inline _copyto!(dest, bc::Broadcasted{Nothing})
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     bc′ = Broadcast.preprocess(dest, bc)
     gpu_call(dest, (dest, bc′)) do state, dest, bc′
@@ -58,11 +68,6 @@ end
 
     return dest
 end
-
-# Base defines this method as a performance optimization, but we don't know how to do
-# `fill!` in general for all `GPUDestArray` so we just go straight to the fallback
-@inline Base.copyto!(dest::GPUDestArray, bc::Broadcasted{<:Broadcast.AbstractArrayStyle{0}}) =
-    copyto!(dest, convert(Broadcasted{Nothing}, bc))
 
 # TODO: is this still necessary?
 function mapidx(f, A::GPUArray, args::NTuple{N, Any}) where N
