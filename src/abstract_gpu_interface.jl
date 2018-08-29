@@ -106,8 +106,25 @@ end
 #     CUDAnative.__syncthreads()
 # end
 
+# Unpack wrapper types to discover the storage format
+_trecurse(::Type{<:LinearAlgebra.Transpose{<:Any,T}}) where T = _trecurse(T)
+_trecurse(::Type{<:LinearAlgebra.Adjoint{<:Any,T}}) where T = _trecurse(T)
+_trecurse(::Type{<:SubArray{<:Any,<:Any,T}}) where T = _trecurse(T)
+_trecurse(::Type{T}) where T = T
+
+"""
+    GPUBackend
+
+Defines a THTT for backend selection according to storage type.
+
+To query which GPUBackend is dispatched to use `backend(::AbstractArray)`.
+Backend providers a required to implement `_backend(::Type{T}) where T<:GPUArray`
+"""
 abstract type GPUBackend end
-backend(::Type{T}) where T = error("Can't choose GPU backend for $T")
+backend(::T) where T = backend(T)
+backend(::Type{T}) where T = _backend(_trecurse(T))
+_backend(::Type{T}) where T = error("Can't choose GPU backend for $T")
+
 
 """
     gpu_call(kernel::Function, A::GPUArray, args::Tuple, configuration = length(A))
@@ -148,7 +165,7 @@ function gpu_call(kernel, A::AbstractArray, args::Tuple, configuration = length(
                 `linear_index` will be inbetween 1:prod((blocks..., threads...))
         """)
     end
-    _gpu_call(backend(typeof(A)), kernel, A, args, thread_blocks)
+    _gpu_call(backend(A), kernel, A, args, thread_blocks)
 end
 
 # Internal GPU call function, that needs to be overloaded by the backends.

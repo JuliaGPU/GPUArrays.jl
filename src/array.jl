@@ -22,7 +22,7 @@ function JLArray{T, N}(size::NTuple{N, Integer}) where {T, N}
 end
 
 struct JLBackend <: GPUBackend end
-backend(::Type{<:JLArray}) = JLBackend()
+_backend(::Type{<:JLArray}) = JLBackend()
 
 ## getters
 
