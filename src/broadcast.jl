@@ -69,8 +69,8 @@ end
     copyto!(dest, convert(Broadcasted{Nothing}, bc))
 
 # TODO: is this still necessary?
-function mapidx(f, A::GPUArray, args::NTuple{N, Any}) where N
-    gpu_call(A, (f, A, args)) do state, f, A, args
+function mapidx(f::F, A::GPUArray, args::NTuple{N, Any}) where {F,N}
+    gpu_call(A, (f, A, args)) do state, f::F, A, args
         ilin = @linearidx(A, state)
         f(ilin, A, args...)
     end
