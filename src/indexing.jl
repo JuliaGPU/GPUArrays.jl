@@ -19,6 +19,16 @@ macro allowscalar(ex)
     end
 end
 
+macro disallowscalar(ex)
+    quote
+        local prev = _allowscalar[]
+        _allowscalar[] = false
+        local ret = $(esc(ex))
+        _allowscalar[] = prev
+        ret
+    end
+end
+
 
 # basic indexing
 
