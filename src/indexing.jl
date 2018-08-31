@@ -1,9 +1,11 @@
+# mechanism to disallow indexing
+
 const _allowscalar = Ref(true)
 
 allowscalar(flag = true) = (_allowscalar[] = flag)
 
-function assertscalar(op = "Operation")
-  _allowscalar[] || error("$op is disabled")
+function assertscalar(op = "operation")
+  _allowscalar[] || error("$op is disallowed")
   return
 end
 
@@ -17,6 +19,9 @@ macro allowscalar(ex)
     end
 end
 
+
+# basic indexing
+
 Base.IndexStyle(::Type{<:GPUArray}) = Base.IndexLinear()
 
 function _getindex(xs::GPUArray{T}, i::Integer) where T
@@ -26,7 +31,7 @@ function _getindex(xs::GPUArray{T}, i::Integer) where T
 end
 
 function Base.getindex(xs::GPUArray{T}, i::Integer) where T
-  ndims(xs) > 0 && assertscalar("scalar getindex")
+    ndims(xs) > 0 && assertscalar("scalar getindex")
     _getindex(xs, i)
 end
 
@@ -37,7 +42,7 @@ function _setindex!(xs::GPUArray{T}, v::T, i::Integer) where T
 end
 
 function Base.setindex!(xs::GPUArray{T}, v::T, i::Integer) where T
-  assertscalar("scalar setindex!")
+    assertscalar("scalar setindex!")
     _setindex!(xs, v, i)
 end
 
@@ -63,7 +68,6 @@ to_index(a, x::Base.LogicalIndex) = error("Logical indexing not implemented")
     end
 end
 
-
 function Base._unsafe_getindex!(dest::GPUArray, src::GPUArray, Is::Union{Real, AbstractArray}...)
     if length(Is) == 1 && isa(first(Is), Array) && isempty(first(Is)) # indexing with empty array
         return dest
@@ -73,7 +77,7 @@ function Base._unsafe_getindex!(dest::GPUArray, src::GPUArray, Is::Union{Real, A
     return dest
 end
 
-# simple broadcast getindex like function... could reuse another?
+# FIXME: simple broadcast getindex like function... reuse from Base
 @inline bgetindex(x::AbstractArray, i) = x[i]
 @inline bgetindex(x, i) = x
 
@@ -89,9 +93,7 @@ end
     end
 end
 
-
-#TODO this should use adapt, but I currently don't have time to figure out it's intended usage
-
+# FIXME: this should use adapt
 gpu_convert(GPUType, x::GPUArray) = x
 function gpu_convert(GPUType, x::AbstractArray)
     isbits(x) ? x : convert(GPUType, x)
