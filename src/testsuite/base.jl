@@ -28,25 +28,6 @@ end
 
 function test_base(AT)
     @testset "base functionality" begin
-        @testset "mapidx" begin
-            a = rand(ComplexF32, 77)
-            b = rand(ComplexF32, 77)
-            A = AT(a)
-            B = AT(b)
-            off = 1
-            GPUArrays.mapidx(A, (B, off, length(A))) do i, a, b, off, len
-                x = b[i]
-                x2 = b[min(i+off, len)]
-                a[i] = x * x2
-            end
-            foreach(1:length(a)) do i
-                x = b[i]
-                x2 = b[min(i+off, length(a))]
-                a[i] = x * x2
-            end
-            @test Array(A) ≈ a
-        end
-
         @testset "copyto!" begin
             x = fill(0f0, (10, 10))
             y = rand(Float32, (20, 10))
