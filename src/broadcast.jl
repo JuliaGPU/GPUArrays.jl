@@ -58,6 +58,7 @@ end
         let I = CartesianIndex(@cartesianidx(dest))
             @inbounds dest[I] = bc′[I]
         end
+        return
     end
 
     return dest
