@@ -12,6 +12,8 @@ Base.count(pred::Function, A::GPUArray) = Int(mapreduce(pred, +, A; init = 0))
 
 Base.:(==)(A::GPUArray, B::GPUArray) = Bool(mapreduce(==, &, A, B; init = true))
 
+LinearAlgebra.ishermitian(A::GPUMatrix) = acc_mapreduce(==, &, true, A, (adjoint(A),))
+
 # hack to get around of fetching the first element of the GPUArray
 # as a startvalue, which is a bit complicated with the current reduce implementation
 function startvalue(f, T)
@@ -159,6 +161,9 @@ end
 
 to_cpu(x) = x
 to_cpu(x::GPUArray) = Array(x)
+to_cpu(x::LinearAlgebra.Transpose) = LinearAlgebra.Transpose(to_cpu(parent(x)))
+to_cpu(x::LinearAlgebra.Adjoint) = LinearAlgebra.Adjoint(to_cpu(parent(x)))
+to_cpu(x::SubArray) = SubArray(to_cpu(parent(x)), parentindices(x))
 
 function acc_mapreduce(
         f, op, v0::OT, A::GPUArray{T, N}, rest::Tuple
