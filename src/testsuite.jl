@@ -17,11 +17,11 @@ using StaticArrays
 convert_array(f, x) = f(x)
 convert_array(f, x::Base.RefValue) = x[]
 
-function compare(f, AT::Type{<:GPUArray}, xs...)
+function compare(f, AT::Type{<:GPUArray}, xs...; kwargs...)
     cpu_in = convert_array.(copy, xs)
     gpu_in = convert_array.(AT, xs)
-    cpu_out = f(cpu_in...)
-    gpu_out = f(gpu_in...)
+    cpu_out = f(cpu_in...; kwargs...)
+    gpu_out = f(gpu_in...; kwargs...)
     collect(cpu_out) ≈ collect(gpu_out)
 end
 
