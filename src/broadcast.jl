@@ -64,6 +64,16 @@ end
     return dest
 end
 
+@inline function Base.copy(bc::Broadcasted{<:ArrayStyle{<:GPUArray}})
+    ElType = Broadcast.combine_eltypes(bc.f, bc.args)
+    if !Base.isconcretetype(ElType)
+        error("ElType is not concrete")
+    end
+
+    out = similar(bc, ElType)
+    copyto!(out, bc)
+end
+
 # Base defines this method as a performance optimization, but we don't know how to do
 # `fill!` in general for all `GPUDestArray` so we just go straight to the fallback
 @inline Base.copyto!(dest::GPUDestArray, bc::Broadcasted{<:Broadcast.AbstractArrayStyle{0}}) =
