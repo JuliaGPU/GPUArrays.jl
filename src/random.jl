@@ -1,5 +1,8 @@
 ## device interface
 
+# hybrid Tausworthe and Linear Congruent generator from
+# https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch37.html
+
 function TausStep(z::Unsigned, S1::Integer, S2::Integer, S3::Integer, M::Unsigned)
     b = (((z << S1) ⊻ z) >> S2)
     return (((z & M) << S3) ⊻ b)
