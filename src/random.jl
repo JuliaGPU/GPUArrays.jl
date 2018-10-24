@@ -66,8 +66,7 @@ function global_rng(A::GPUArray)
     end
 end
 
-function Random.rand!(A::GPUArray{T}) where T <: Number
-    rng = global_rng(A)
+function Random.rand!(rng::RNG, A::GPUArray{T}) where T <: Number
     gpu_call(A, (rng.state, A,)) do state, randstates, a
         idx = linear_index(state)
         idx > length(a) && return
@@ -77,13 +76,4 @@ function Random.rand!(A::GPUArray{T}) where T <: Number
     A
 end
 
-gpurand(::Type{X}, dims...) where {X<:GPUArray} = randn!(X(dims...))
-
-# FIXME: the following definitions are not part of the Random stdlib API
-Random.rand(X::Type{<: GPUArray}, i::Integer...) = rand!(X{Float32}(i...))
-Random.rand(X::Type{<: GPUArray}, size::NTuple{N, Int}) where N = rand!(X{Float32}(size...))
-Random.rand(X::Type{<: GPUArray{T}}, i::Integer...) where {T} = rand!(X(i...))
-Random.rand(X::Type{<: GPUArray{T}}, size::NTuple{N, Int}) where {T,N} = rand!(X(size...))
-Random.rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Integer}) where {T,N} = rand!(X(size...))
-Random.rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Int}) where {T,N} = rand!(X(size...))
-Random.rand(X::Type{<: GPUArray}, ::Type{T}, size::Integer...) where {T} = rand!(similar(X, T, size))
+Random.rand!(A::GPUArray) = rand!(global_rng(A), A)
