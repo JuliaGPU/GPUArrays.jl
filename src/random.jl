@@ -1,3 +1,8 @@
+## device interface
+
+# hybrid Tausworthe and Linear Congruent generator from
+# https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch37.html
+
 function TausStep(z::Unsigned, S1::Integer, S2::Integer, S3::Integer, M::Unsigned)
     b = (((z << S1) ⊻ z) >> S2)
     return (((z & M) << S3) ⊻ b)
@@ -7,7 +12,6 @@ LCGStep(z::Unsigned, A::Unsigned, C::Unsigned) = A * z + C
 
 make_rand_num(::Type{Float64}, tmp) = 2.3283064365387e-10 * Float64(tmp)
 make_rand_num(::Type{Float32}, tmp) = 2.3283064f-10 * Float32(tmp)
-
 
 function next_rand(::Type{FT}, state::NTuple{4, T}) where {FT, T <: Unsigned}
     state = (
@@ -42,22 +46,31 @@ function gpu_rand(::Type{T}, state, randstate::AbstractVector{NTuple{4, UInt32}}
     return to_number_range(f, T)
 end
 
-let rand_state_dict = Dict()
-    global cached_state, clear_cache
-    clear_cache() = (empty!(rand_state_dict); return)
-    function cached_state(x)
-        dev = GPUArrays.device(x)
-        get!(rand_state_dict, dev) do
-            N = GPUArrays.threads(dev)
-            res = similar(x, NTuple{4, UInt32}, N)
-            copyto!(res, [ntuple(i-> rand(UInt32), 4) for i=1:N])
-            res
-        end
+
+## host interface
+
+struct RNG <: AbstractRNG
+    state::GPUArray{NTuple{4,UInt32},1}
+
+    function RNG(A::GPUArray)
+        dev = GPUArrays.device(A)
+        N = GPUArrays.threads(dev)
+        state = similar(A, NTuple{4, UInt32}, N)
+        copyto!(state, [ntuple(i-> rand(UInt32), 4) for i=1:N])
+        new(state)
     end
 end
-function Random.rand!(A::GPUArray{T}) where T <: Number
-    rstates = cached_state(A)
-    gpu_call(A, (rstates, A,)) do state, randstates, a
+
+const GLOBAL_RNGS = Dict()
+function global_rng(A::GPUArray)
+    dev = GPUArrays.device(A)
+    get!(GLOBAL_RNGS, dev) do
+        RNG(A)
+    end
+end
+
+function Random.rand!(rng::RNG, A::GPUArray{T}) where T <: Number
+    gpu_call(A, (rng.state, A,)) do state, randstates, a
         idx = linear_index(state)
         idx > length(a) && return
         @inbounds a[idx] = gpu_rand(T, state, randstates)
@@ -66,14 +79,4 @@ function Random.rand!(A::GPUArray{T}) where T <: Number
     A
 end
 
-Random.rand(X::Type{<: GPUArray}, i::Integer...) = rand(X, Float32, i...)
-Random.rand(X::Type{<: GPUArray}, size::NTuple{N, Int}) where N = rand(X, Float32, size...)
-Random.rand(X::Type{<: GPUArray{T}}, i::Integer...) where T = rand(X, T, i...)
-Random.rand(X::Type{<: GPUArray{T}}, size::NTuple{N, Int}) where {T, N} = rand(X, T, size...)
-Random.rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Integer}) where {T, N} = rand(X, T, size...)
-Random.rand(X::Type{<: GPUArray{T, N}}, size::NTuple{N, Int}) where {T, N} = rand(X, T, size...)
-
-function Random.rand(X::Type{<: GPUArray}, ::Type{ET}, size::Integer...) where ET
-    A = similar(X, ET, size)
-    rand!(A)
-end
+Random.rand!(A::GPUArray) = rand!(global_rng(A), A)
