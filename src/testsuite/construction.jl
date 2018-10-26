@@ -151,8 +151,8 @@ function iterator_constructors(AT)
             if T <: Real
                 x = AT{Float32}(Fill(T(0), (10, 10)))
                 @test eltype(x) == Float32
-                @test AT(Eye{T}((10, 10))) == AT{T}(I, 10, 10)
-                x = AT{Float32}(Eye{T}((10, 10)))
+                @test AT(Eye{T}((10))) == AT{T}(I, 10, 10)
+                x = AT{Float32}(Eye{T}((10)))
                 @test eltype(x) == Float32
             end
         end
