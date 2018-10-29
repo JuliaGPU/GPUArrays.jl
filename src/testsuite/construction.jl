@@ -10,22 +10,22 @@ end
 function constructors(AT)
     @testset "constructors + similar" begin
         for T in supported_eltypes()
-            B = AT{T}(10)
+            B = AT{T}(undef, 10)
             @test B isa AT{T,1}
             @test size(B) == (10,)
             @test eltype(B) == T
 
-            B = AT{T}(10, 10)
+            B = AT{T}(undef, 10, 10)
             @test B isa AT{T,2}
             @test size(B) == (10, 10)
             @test eltype(B) == T
 
-            B = AT{T}((10, 10))
+            B = AT{T}(undef, (10, 10))
             @test B isa AT{T,2}
             @test size(B) == (10, 10)
             @test eltype(B) == T
 
-            B = similar(B, Int32, (11, 15))
+            B = similar(B, Int32, 11, 15)
             @test B isa AT{Int32,2}
             @test size(B) == (11, 15)
             @test eltype(B) == Int32
@@ -49,11 +49,6 @@ function constructors(AT)
             @test B isa AT{Int32,2}
             @test size(B) == (11, 15)
             @test eltype(B) == Int32
-
-            B = similar(AT{Int32, 2}, T, (11, 15))
-            @test B isa AT{T,2}
-            @test size(B) == (11, 15)
-            @test eltype(B) == T
 
             B = similar(AT{T}, (5,))
             @test B isa AT{T,1}
@@ -127,7 +122,7 @@ function value_constructor(AT)
             @test Array(x3) ≈ x
 
             fill!(x1, 2f0)
-            x2 = fill!(AT{Int32}((4, 4, 4)), 77f0)
+            x2 = fill!(AT{Int32}(undef, (4, 4, 4)), 77f0)
             @test all(x-> x == 2f0, Array(x1))
             @test all(x-> x == Int32(77), Array(x2))
 
@@ -152,7 +147,7 @@ function iterator_constructors(AT)
                 x = AT{Float32}(Fill(T(0), (10, 10)))
                 @test eltype(x) == Float32
                 @test AT(Eye{T}((10))) == AT{T}(I, 10, 10)
-                x = AT{Float32}(Eye{T}((10)))
+                x = AT{Float32}(Eye{T}(10))
                 @test eltype(x) == Float32
             end
         end
