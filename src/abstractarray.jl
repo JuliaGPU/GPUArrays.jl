@@ -53,10 +53,14 @@ end
 ## showing
 
 for (AT, f) in
-    (GPUArray                                  => Array,
-     LinearAlgebra.Adjoint{<:Any,<:GPUArray}   => x->LinearAlgebra.adjoint(Array(parent(x))),
-     LinearAlgebra.Transpose{<:Any,<:GPUArray} => x->LinearAlgebra.transpose(Array(parent(x))),
-     SubArray{<:Any,<:Any,<:GPUArray}          => x->SubArray(Array(parent(x)), parentindices(x))
+    (GPUArray                                             => Array,
+     SubArray{<:Any,<:Any,<:GPUArray}                     => x->SubArray(Array(parent(x)), parentindices(x)),
+     LinearAlgebra.Adjoint{<:Any,<:GPUArray}              => x->LinearAlgebra.adjoint(Array(parent(x))),
+     LinearAlgebra.Transpose{<:Any,<:GPUArray}            => x->LinearAlgebra.transpose(Array(parent(x))),
+     LinearAlgebra.LowerTriangular{<:Any,<:GPUArray}      => x->LinearAlgebra.LowerTriangular(Array(x.data)),
+     LinearAlgebra.UnitLowerTriangular{<:Any,<:GPUArray}  => x->LinearAlgebra.UnitLowerTriangular(Array(x.data)),
+     LinearAlgebra.UpperTriangular{<:Any,<:GPUArray}      => x->LinearAlgebra.UpperTriangular(Array(x.data)),
+     LinearAlgebra.UnitUpperTriangular{<:Any,<:GPUArray}  => x->LinearAlgebra.UnitUpperTriangular(Array(x.data))
     )
   @eval begin
     # for display
