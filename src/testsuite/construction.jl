@@ -61,6 +61,34 @@ function constructors(AT)
             @test eltype(B) == T
         end
     end
+    @testset "comparison against Array" begin
+        for typs in [(), (Int,), (Int,1), (Int,2), (Float32,), (Float32,1), (Float32,2)],
+            args in [(), (1,), (1,2), ((1,),), ((1,2),),
+                     (undef,), (undef, 1,), (undef, 1,2), (undef, (1,),), (undef, (1,2),),
+                     (Int,), (Int, 1,), (Int, 1,2), (Int, (1,),), (Int, (1,2),),
+                     ([1,2],), ([1 2],)]
+            cpu = try
+                Array{typs...}(args...)
+            catch ex
+                isa(ex, MethodError) || rethrow()
+                nothing
+            end
+
+            gpu = try
+                AT{typs...}(args...)
+            catch ex
+                isa(ex, MethodError) || rethrow()
+                cpu == nothing || rethrow()
+                nothing
+            end
+
+            if cpu == nothing
+                @test gpu == nothing
+            else
+                @test typeof(cpu) == typeof(convert(Array, gpu))
+            end
+        end
+    end
 end
 
 function conversion(AT)
