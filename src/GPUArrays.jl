@@ -14,6 +14,8 @@ using Base.Cartesian
 
 using FFTW
 
+using Adapt
+
 include("abstractarray.jl")
 include("abstract_gpu_interface.jl")
 include("ondevice.jl")
