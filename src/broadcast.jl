@@ -12,24 +12,21 @@ import Base.Broadcast: BroadcastStyle, Broadcasted, ArrayStyle
 #       instead of using `ArrayStyle{GPUArray}`, due to the fact how `similar` works.
 BroadcastStyle(::Type{T}) where {T<:GPUArray} = ArrayStyle{T}()
 
-# These wrapper types otherwise forget that they are GPU compatible
+# Wrapper types otherwise forget that they are GPU compatible
 #
 # NOTE: Don't directly use ArrayStyle{GPUArray} here since that would mean that `CuArrays`
 #       customization no longer take effect.
-BroadcastStyle(::Type{<:LinearAlgebra.Transpose{<:Any,T}}) where {T<:GPUArray} = BroadcastStyle(T)
-BroadcastStyle(::Type{<:LinearAlgebra.Adjoint{<:Any,T}}) where {T<:GPUArray} = BroadcastStyle(T)
-BroadcastStyle(::Type{<:SubArray{<:Any,<:Any,T}}) where {T<:GPUArray} = BroadcastStyle(T)
-
-backend(::Type{<:LinearAlgebra.Transpose{<:Any,T}}) where {T<:GPUArray} = backend(T)
-backend(::Type{<:LinearAlgebra.Adjoint{<:Any,T}}) where {T<:GPUArray} = backend(T)
-backend(::Type{<:SubArray{<:Any,<:Any,T}}) where {T<:GPUArray} = backend(T)
+for (W, ctor) in Adapt.wrappers
+  @eval begin
+    BroadcastStyle(::Type{<:$W}) where {AT<:GPUArray} = BroadcastStyle(AT)
+    backend(::Type{<:$W}) where {AT<:GPUArray} = backend(AT)
+  end
+end
 
 # This Union is a hack. Ideally Base would have a Transpose <: WrappedArray <: AbstractArray
 # and we could define our methods in terms of Union{GPUArray, WrappedArray{<:Any, <:GPUArray}}
-const GPUDestArray = Union{GPUArray,
-                           LinearAlgebra.Transpose{<:Any,<:GPUArray},
-                           LinearAlgebra.Adjoint{<:Any,<:GPUArray},
-                           SubArray{<:Any,<:Any,<:GPUArray}}
+@eval const GPUDestArray =
+  Union{GPUArray, $((:($W where {AT <: GPUArray}) for (W, _) in Adapt.wrappers)...)}
 
 # We purposefully only specialize `copyto!`, dependent packages need to make sure that they
 # can handle:

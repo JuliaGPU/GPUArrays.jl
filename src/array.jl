@@ -145,7 +145,7 @@ end
 function LocalMemory(state::JLState, ::Type{T}, ::Val{N}, ::Val{C}) where {T, N, C}
     state.localmem_counter += 1
     lmems = state.localmems[blockidx_x(state)]
-    # first invokation in block
+    # first invocation in block
     if length(lmems) < state.localmem_counter
         lmem = fill(zero(T), N)
         push!(lmems, lmem)
