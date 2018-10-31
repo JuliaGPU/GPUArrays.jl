@@ -1,12 +1,4 @@
-using GPUArrays, Test
-using GPUArrays.TestSuite
-
-using Pkg
-
-@testset "JLArray" begin
-    GPUArrays.test(JLArray)
-end
-
+# GPUArrays development often happens in lockstep with other packages, so try to match branches
 if haskey(ENV, "GITLAB_CI")
     using Pkg
 
@@ -25,7 +17,15 @@ if haskey(ENV, "GITLAB_CI")
     for package in ("Adapt", "CuArrays")
         match_package(package, branch)
     end
+end
 
+using GPUArrays, Test
+
+@testset "JLArray" begin
+    GPUArrays.test(JLArray)
+end
+
+if haskey(ENV, "GITLAB_CI")
     @testset "CuArray" begin
         Pkg.test("CuArrays")
     end
