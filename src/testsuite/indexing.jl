@@ -13,7 +13,7 @@ function test_indexing(AT)
             end
             @testset "multi dim, sliced setindex" begin
                 x = fill(AT{T}, T(0), (10, 10, 10, 10))
-                y = AT{T}(5, 5, 10, 10)
+                y = AT{T}(undef, 5, 5, 10, 10)
                 rand!(y)
                 x[2:6, 2:6, :, :] = y
                 x[2:6, 2:6, :, :] == y

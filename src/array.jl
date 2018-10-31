@@ -1,37 +1,79 @@
 # Very simple Julia back-end which is just for testing the implementation and can be used as
 # a reference implementation
 
-
-## construction
-
 struct JLArray{T, N} <: GPUArray{T, N}
     data::Array{T, N}
-    size::Dims{N}
+    dims::Dims{N}
 
-    function JLArray{T,N}(data::Array{T, N}, size::NTuple{N, Int}) where {T,N}
-        new(data, size)
+    function JLArray{T,N}(data::Array{T, N}, dims::Dims{N}) where {T,N}
+        new(data, dims)
     end
 end
 
-JLArray(data::AbstractArray{T, N}, size::Dims{N}) where {T,N} = JLArray{T,N}(data, size)
 
-(::Type{<: JLArray{T}})(x::AbstractArray) where T = JLArray(convert(Array{T}, x), size(x))
+## construction
 
-function JLArray{T, N}(size::NTuple{N, Integer}) where {T, N}
-    JLArray{T, N}(Array{T, N}(undef, size), size)
+# type and dimensionality specified, accepting dims as tuples of Ints
+JLArray{T,N}(::UndefInitializer, dims::Dims{N}) where {T,N} =
+  JLArray{T,N}(Array{T, N}(undef, dims), dims)
+
+# type and dimensionality specified, accepting dims as series of Ints
+JLArray{T,N}(::UndefInitializer, dims::Integer...) where {T,N} = JLArray{T,N}(undef, dims)
+
+# type but not dimensionality specified
+JLArray{T}(::UndefInitializer, dims::Dims{N}) where {T,N} = JLArray{T,N}(undef, dims)
+JLArray{T}(::UndefInitializer, dims::Integer...) where {T} =
+  JLArray{T}(undef, convert(Tuple{Vararg{Int}}, dims))
+
+# empty vector constructor
+JLArray{T,1}() where {T} = JLArray{T,1}(undef, 0)
+
+
+Base.similar(a::JLArray{T,N}) where {T,N} = JLArray{T,N}(undef, size(a))
+Base.similar(a::JLArray{T}, dims::Base.Dims{N}) where {T,N} = JLArray{T,N}(undef, dims)
+Base.similar(a::JLArray, ::Type{T}, dims::Base.Dims{N}) where {T,N} = JLArray{T,N}(undef, dims)
+
+
+## array interface
+
+Base.elsize(::Type{<:JLArray{T}}) where {T} = sizeof(T)
+
+Base.size(x::JLArray) = x.dims
+Base.sizeof(x::JLArray) = Base.elsize(x) * length(x)
+
+
+## interop with other arrays
+
+JLArray{T,N}(x::AbstractArray{S,N}) where {T,N,S} =
+    JLArray{T,N}(convert(Array{T}, x), size(x))
+
+# underspecified constructors
+JLArray{T}(xs::AbstractArray{S,N}) where {T,N,S} = JLArray{T,N}(xs)
+(::Type{JLArray{T,N} where T})(x::AbstractArray{S,N}) where {S,N} = JLArray{S,N}(x)
+JLArray(A::AbstractArray{T,N}) where {T,N} = JLArray{T,N}(A)
+
+# idempotency
+JLArray{T,N}(xs::JLArray{T,N}) where {T,N} = xs
+
+
+## conversions
+
+Base.convert(::Type{T}, x::T) where T <: JLArray = x
+
+
+## broadcast
+
+BroadcastStyle(::Type{<:JLArray}) = ArrayStyle{JLArray}()
+
+function Base.similar(bc::Broadcasted{ArrayStyle{JLArray}}, ::Type{T}) where T
+    similar(JLArray{T}, axes(bc))
 end
+
+
+## gpuarray interface
 
 struct JLBackend <: GPUBackend end
 backend(::Type{<:JLArray}) = JLBackend()
-
-## getters
-
-Base.size(x::JLArray) = x.size
-
-Base.pointer(x::JLArray) = pointer(x.data)
-
-
-## other
 
 """
 Thread group local memory
@@ -50,8 +92,6 @@ to_device(state, x::LocalMemory{T}) where T = LocalMem(ntuple(i-> Vector{T}(x.si
 to_blocks(state, x) = x
 # unpacks local memory for each block
 to_blocks(state, x::LocalMem) = x.x[blockidx_x(state)]
-
-Base.similar(::Type{<: JLArray}, ::Type{T}, size::Base.Dims{N}) where {T, N} = JLArray{T, N}(size)
 
 unsafe_reinterpret(::Type{T}, A::JLArray, size::Tuple) where T =
     reshape(reinterpret(T, A.data), size)

@@ -51,21 +51,16 @@ end
 
 struct RNG <: AbstractRNG
     state::GPUArray{NTuple{4,UInt32},1}
-
-    function RNG(A::GPUArray)
-        dev = GPUArrays.device(A)
-        N = GPUArrays.threads(dev)
-        state = similar(A, NTuple{4, UInt32}, N)
-        copyto!(state, [ntuple(i-> rand(UInt32), 4) for i=1:N])
-        new(state)
-    end
 end
 
 const GLOBAL_RNGS = Dict()
 function global_rng(A::GPUArray)
     dev = GPUArrays.device(A)
     get!(GLOBAL_RNGS, dev) do
-        RNG(A)
+        N = GPUArrays.threads(dev)
+        state = similar(A, NTuple{4, UInt32}, N)
+        copyto!(state, [ntuple(i-> rand(UInt32), 4) for i=1:N])
+        RNG(state)
     end
 end
 

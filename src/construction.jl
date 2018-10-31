@@ -1,9 +1,9 @@
 function Base.fill(X::Type{<: GPUArray}, val::T, dims::NTuple{N, Integer}) where {T, N}
-    res = similar(X, T, dims)
+    res = similar(X{T}, dims)
     fill!(res, val)
 end
 function Base.fill(X::Type{<: GPUArray{T}}, val, dims::NTuple{N, Integer}) where {T, N}
-    res = similar(X, T, dims)
+    res = similar(X, dims)
     fill!(res, convert(T, val))
 end
 function Base.fill!(A::GPUArray{T}, x) where T
@@ -32,17 +32,6 @@ function (T::Type{<: GPUArray})(s::UniformScaling, dims::Dims{2})
     res
 end
 (T::Type{<: GPUArray})(s::UniformScaling, m::Integer, n::Integer) = T(s, Dims((m, n)))
-
-(T::Type{<: GPUArray})(x) = convert(T, x)
-(T::Type{<: GPUArray})(dims::Integer...) = T(dims)
-(T::Type{<: GPUArray})(dims::NTuple{N, Base.OneTo{Int}}) where N = T(undef, length.(dims))
-(T::Type{<: GPUArray{X} where X})(dims::NTuple{N, Integer}) where N = similar(T, eltype(T), dims)
-(T::Type{<: GPUArray{X} where X})(::UndefInitializer, dims::NTuple{N, Integer}) where N = similar(T, eltype(T), dims)
-
-Base.similar(x::X, ::Type{T}, size::Base.Dims{N}) where {X <: GPUArray, T, N} = similar(X, T, size)
-Base.similar(::Type{X}, ::Type{T}, size::NTuple{N, Base.OneTo{Int}}) where {X <: GPUArray, T, N} = similar(X, T, length.(size))
-
-Base.convert(AT::Type{<: GPUArray{T, N}}, A::GPUArray{T, N}) where {T, N} = A
 
 function indexstyle(x::T) where T
     style = try
@@ -84,15 +73,15 @@ function Base.convert(AT::Type{<: GPUArray}, iter)
 end
 
 function Base.convert(AT::Type{<: GPUArray{T, N}}, A::DenseArray{T, N}) where {T, N}
-    copyto!(AT(Base.size(A)), A)
+    copyto!(AT(undef, size(A)), A)
 end
 
 function Base.convert(AT::Type{<: GPUArray{T1}}, A::DenseArray{T2, N}) where {T1, T2, N}
-    copyto!(similar(AT, T1, size(A)), convert(Array{T1, N}, A))
+    copyto!(similar(AT, size(A)), convert(Array{T1, N}, A))
 end
 
 function Base.convert(AT::Type{<: GPUArray}, A::DenseArray{T2, N}) where {T2, N}
-    copyto!(similar(AT, T2, size(A)), A)
+    copyto!(similar(AT{T2}, size(A)), A)
 end
 
 function Base.convert(AT::Type{Array{T, N}}, A::GPUArray{CT, CN}) where {T, N, CT, CN}

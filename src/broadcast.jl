@@ -31,12 +31,6 @@ const GPUDestArray = Union{GPUArray,
                            LinearAlgebra.Adjoint{<:Any,<:GPUArray},
                            SubArray{<:Any,<:Any,<:GPUArray}}
 
-# This method is responsible for selection the output type of broadcast
-function Base.similar(bc::Broadcasted{<:ArrayStyle{GPU}}, ::Type{ElType}) where
-                     {GPU <: GPUArray, ElType}
-    similar(GPU, ElType, axes(bc))
-end
-
 # We purposefully only specialize `copyto!`, dependent packages need to make sure that they
 # can handle:
 # - `bc::Broadcast.Broadcasted{Style}`
