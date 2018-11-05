@@ -52,29 +52,19 @@ end
 
 ## showing
 
-for (AT, f) in
-    (GPUArray                                             => Array,
-     SubArray{<:Any,<:Any,<:GPUArray}                     => x->SubArray(Array(parent(x)), parentindices(x)),
-     LinearAlgebra.Adjoint{<:Any,<:GPUArray}              => x->LinearAlgebra.adjoint(Array(parent(x))),
-     LinearAlgebra.Transpose{<:Any,<:GPUArray}            => x->LinearAlgebra.transpose(Array(parent(x))),
-     LinearAlgebra.LowerTriangular{<:Any,<:GPUArray}      => x->LinearAlgebra.LowerTriangular(Array(x.data)),
-     LinearAlgebra.UnitLowerTriangular{<:Any,<:GPUArray}  => x->LinearAlgebra.UnitLowerTriangular(Array(x.data)),
-     LinearAlgebra.UpperTriangular{<:Any,<:GPUArray}      => x->LinearAlgebra.UpperTriangular(Array(x.data)),
-     LinearAlgebra.UnitUpperTriangular{<:Any,<:GPUArray}  => x->LinearAlgebra.UnitUpperTriangular(Array(x.data))
-    )
-  @eval begin
-    # for display
-    Base.print_array(io::IO, X::$AT) =
-        Base.print_array(io,$f(X))
+for (W, ctor) in (:AT => (A,mut)->mut(A), Adapt.wrappers...)
+    @eval begin
+        # display
+        Base.print_array(io::IO, X::$W where {AT <: GPUArray}) = Base.print_array(io, $ctor(X, Array))
 
-    # for show
-    Base._show_nonempty(io::IO, X::$AT, prefix::String) =
-        Base._show_nonempty(io,$f(X),prefix)
-    Base._show_empty(io::IO, X::$AT) =
-        Base._show_empty(io,$f(X))
-    Base.show_vector(io::IO, v::$AT, args...) =
-        Base.show_vector(io,$f(v),args...)
-  end
+        # show
+        Base._show_nonempty(io::IO, X::$W where {AT <: GPUArray}, prefix::String) =
+            Base._show_nonempty(io, $ctor(X, Array), prefix)
+        Base._show_empty(io::IO, X::$W where {AT <: GPUArray}) =
+            Base._show_empty(io, $ctor(X, Array))
+        Base.show_vector(io::IO, v::$W where {AT <: GPUArray}, args...) =
+            Base.show_vector(io, $ctor(v, Array), args...)
+    end
 end
 
 # memory operations

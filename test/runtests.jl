@@ -1,36 +1,29 @@
-using GPUArrays, Test
-using GPUArrays.TestSuite
-
+# GPUArrays development often happens in lockstep with other packages, so try to match branches
 using Pkg
+function match_package(package, var)
+    try
+        branch = ENV[var]
+        Pkg.add(PackageSpec(name=package, rev=branch))
+        @info "Installed $package from branch $branch"
+    catch ex
+        @warn "Could not install $package from $branch branch, trying master" exception=ex
+        Pkg.add(PackageSpec(name=package, rev="master"))
+        @info "Installed $package from master"
+    end
+end
+haskey(ENV, "TRAVIS")    && match_package("Adapt", "TRAVIS_PULL_REQUEST_BRANCH")
+haskey(ENV, "APPVEYOR")  && match_package("Adapt", "APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH")
+haskey(ENV, "GITLAB_CI") && match_package("Adapt", "CI_COMMIT_REF_NAME")
+
+using GPUArrays, Test
 
 @testset "JLArray" begin
     GPUArrays.test(JLArray)
 end
 
-function test_package(package, branch=nothing)
-    mktempdir() do devdir
-        withenv("JULIA_PKG_DEVDIR" => devdir) do
-            # try to install from the same branch of GPUArrays
-            try
-                if branch === nothing
-                    branch = chomp(read(`git -C $(@__DIR__) rev-parse --abbrev-ref HEAD`, String))
-                    branch == "HEAD" && error("in detached HEAD state")
-                end
-                Pkg.add(PackageSpec(name=package, rev=String(branch)))
-                @info "Installed $package from $branch branch"
-            catch ex
-                @warn "Could not install $package from same branch as GPUArrays, trying master branch" exception=ex
-                Pkg.add(PackageSpec(name=package, rev="master"))
-            end
-
-            Pkg.test(package)
-        end
-    end
-end
-
 if haskey(ENV, "GITLAB_CI")
-    branch = ENV["CI_COMMIT_REF_NAME"]
+    match_package("CuArrays", "CI_COMMIT_REF_NAME")
     @testset "CuArray" begin
-        test_package("CuArrays", branch)
+        Pkg.test("CuArrays")
     end
 end
