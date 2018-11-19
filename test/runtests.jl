@@ -1,19 +1,9 @@
-# GPUArrays development often happens in lockstep with other packages, so try to match branches
+# development often happens in lockstep with other packages,
+# so check-out the master branch of those packages.
 using Pkg
-function match_package(package, var)
-    try
-        branch = ENV[var]
-        Pkg.add(PackageSpec(name=package, rev=branch))
-        @info "Installed $package from branch $branch"
-    catch ex
-        @warn "Could not install $package from $branch branch, trying master" exception=ex
-        Pkg.add(PackageSpec(name=package, rev="master"))
-        @info "Installed $package from master"
-    end
+if haskey(ENV, "TRAVIS") || haskey(ENV, "APPVEYOR") || haskey(ENV, "GITLAB_CI")
+    Pkg.add(PackageSpec(name="Adapt", rev="master"))
 end
-haskey(ENV, "TRAVIS")    && match_package("Adapt", "TRAVIS_PULL_REQUEST_BRANCH")
-haskey(ENV, "APPVEYOR")  && match_package("Adapt", "APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH")
-haskey(ENV, "GITLAB_CI") && match_package("Adapt", "CI_COMMIT_REF_NAME")
 
 using GPUArrays, Test
 
@@ -22,7 +12,7 @@ using GPUArrays, Test
 end
 
 if haskey(ENV, "GITLAB_CI")
-    match_package("CuArrays", "CI_COMMIT_REF_NAME")
+    Pkg.add(PackageSpec(name="CuArrays", rev="master"))
     @testset "CuArray" begin
         Pkg.test("CuArrays")
     end
