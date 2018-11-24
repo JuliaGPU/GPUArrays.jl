@@ -80,7 +80,8 @@ function genperm(I::NTuple{N}, perm::NTuple{N}) where N
     ntuple(d-> (@inbounds return I[perm[d]]), Val(N))
 end
 
-function LinearAlgebra.permutedims!(dest::GPUArray, src::GPUArray, perm::NTuple{N, Integer}) where N
+function LinearAlgebra.permutedims!(dest::GPUArray, src::GPUArray, perm) where N
+    perm isa Tuple || (perm = Tuple(perm))
     gpu_call(dest, (dest, src, perm)) do state, dest, src, perm
         I = @cartesianidx src state
         @inbounds dest[genperm(I, perm)...] = src[I...]

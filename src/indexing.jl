@@ -62,7 +62,7 @@ Base.setindex!(xs::GPUArray, v, i::Integer) = xs[i] = convert(eltype(xs), v)
 # Vector indexing
 
 to_index(a, x) = x
-to_index(::A, x::Array{ET}) where {A, ET} = copyto!(similar(A, ET, size(x)), x)
+to_index(a::A, x::Array{ET}) where {A, ET} = copyto!(similar(a, ET, size(x)...), x)
 to_index(a, x::UnitRange{<: Integer}) = convert(UnitRange{Int}, x)
 to_index(a, x::Base.LogicalIndex) = error("Logical indexing not implemented")
 
