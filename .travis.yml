@@ -1,17 +1,27 @@
-# Documentation: http://docs.travis-ci.com/user/languages/julia/
 language: julia
+
 os:
   - linux
   - osx
+
 dist: trusty
+
 julia:
   - 1.0
   - nightly
+
 matrix:
- allow_failures:
- - julia: nightly
+  allow_failures:
+    - julia: nightly
+
+branches:
+  only:
+    - staging
+    - trying
+
 notifications:
   email: false
+
 after_success:
   - julia -e 'ps=Pkg.PackageSpec(name="Documenter", version="0.19"); Pkg.add(ps); Pkg.pin(ps)'
   - julia -e 'cd(Pkg.dir("GPUArrays")); include(joinpath("docs", "make.jl"))'

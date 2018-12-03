@@ -1,7 +1,7 @@
 environment:
   matrix:
-  - julia_version: 1.0
-  - julia_version: latest
+    - julia_version: 1.0
+    - julia_version: latest
 
 platform:
   - x86
@@ -9,12 +9,12 @@ platform:
 
 matrix:
   allow_failures:
-  - julia_version: latest
+     - julia_version: latest
 
 branches:
   only:
-    - master
-    - /release-.*/
+    - staging
+    - trying
 
 notifications:
   - provider: Email
