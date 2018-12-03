@@ -9,6 +9,7 @@ function test_linalg(AT)
             @test compare(x -> permutedims(x, (2, 1)), AT, rand(Float32, 2, 3))
             @test compare(x -> permutedims(x, (2, 1, 3)), AT, rand(Float32, 4, 5, 6))
             @test compare(x -> permutedims(x, (3, 1, 2)), AT, rand(Float32, 4, 5, 6))
+            @test compare(x -> permutedims(x, [2,1,4,3]), AT, randn(ComplexF64,3,4,5,1))
         end
 
         @testset "issymmetric/ishermitian" begin
