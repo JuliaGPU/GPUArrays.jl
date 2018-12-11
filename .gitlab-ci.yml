@@ -1,5 +1,5 @@
 variables:
-  CI_IMAGE_TAG: 'cuda'
+  CI_IMAGE_TAG: 'plain'
 
 stages:
   - test
@@ -32,6 +32,20 @@ documentation:
     - trying
 
 coverage:
+  only:
+    - master
+    - staging
+    - trying
+
+cuarrays:
+  stage: test
+  image: "juliagpu/julia:v1.0-cuda"
+  script:
+    - mkdir $JULIA_DEPOT_PATH # Pkg3.jl#325
+    - julia -e 'using Pkg;
+                Pkg.develop(PackageSpec(path=pwd()));
+                Pkg.add(PackageSpec(name="CuArrays", rev="master"));
+                Pkg.test("CuArrays");'
   only:
     - master
     - staging

@@ -10,10 +10,3 @@ using GPUArrays, Test
 @testset "JLArray" begin
     GPUArrays.test(JLArray)
 end
-
-if haskey(ENV, "GITLAB_CI")
-    Pkg.add(PackageSpec(name="CuArrays", rev="master"))
-    @testset "CuArray" begin
-        Pkg.test("CuArrays")
-    end
-end
