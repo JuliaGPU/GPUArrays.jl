@@ -46,6 +46,7 @@ cuarrays:
                 Pkg.develop(PackageSpec(path=pwd()));
                 Pkg.add(PackageSpec(name="CuArrays", rev="master"));
                 Pkg.test("CuArrays");'
+  allow_failure: true
   only:
     - master
     - staging
