@@ -1,12 +1,15 @@
 using Documenter, GPUArrays
 
-makedocs()
+makedocs(
+    modules = [GPUArrays],
+    format = Documenter.HTML(),
+    sitename = "GPUArrays.jl",
+    pages = [
+        "Home" => "index.md",
+    ],
+    doctest = true
+)
 
 deploydocs(
-    repo   = "github.com/JuliaGPU/GPUArrays.jl.git",
-    julia  = "0.7",
-    osname = "linux",
-    # no need to build anything here, re-use output of `makedocs`
-    deps   = nothing,
-    make   = nothing,
+    repo   = "github.com/JuliaGPU/GPUArrays.jl.git"
 )
