@@ -2,7 +2,7 @@ using Documenter, GPUArrays
 
 makedocs(
     modules = [GPUArrays],
-    format = Documenter.HTML(),
+    format = Documenter.HTML(prettyurls = get(ENV, "CI", nothing) == "true"),
     sitename = "GPUArrays.jl",
     pages = [
         "Home" => "index.md",
