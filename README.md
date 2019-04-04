@@ -13,7 +13,7 @@
 [Benchmarks](https://github.com/JuliaGPU/GPUBenchmarks.jl/blob/master/results/results.md)
 
 This package is the counterpart of Julia's `Base.AbstractArray` interface, but
-for GPU arary types. Currently, you either need to install
+for GPU array types. Currently, you either need to install
 [CLArrays](https://github.com/JuliaGPU/CLArrays.jl) or
 [CuArrays](https://github.com/JuliaGPU/CuArrays.jl) for a concrete
 implementation.
@@ -78,8 +78,8 @@ gemm!, scal!, gemv! and the high level functions that are implemented with these
 
 # Currently supported subset of Julia Code
 
-working with immutable isbits (not containing pointers) type should be completely supported
-non allocating code (so no constructs like `x = [1, 2, 3]`). Note that tuples are isbits, so this works x = (1, 2, 3).
+Working with immutable isbits (not containing pointers) type should be completely supported
+with non-allocating code (so no constructs like `x = [1, 2, 3]`). Note that tuples are isbits, so this works x = (1, 2, 3).
 Transpiler/OpenCL has problems with putting GPU arrays on the gpu into a struct - so no views and actually no multidimensional indexing. For that `size` is needed which would need to be part of the array struct. A fix for that is in sight, though.
 
 # JLArray
