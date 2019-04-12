@@ -96,20 +96,26 @@ to_blocks(state, x::LocalMem) = x.x[blockidx_x(state)]
 unsafe_reinterpret(::Type{T}, A::JLArray, size::Tuple) where T =
     reshape(reinterpret(T, A.data), size)
 
-function Base.unsafe_copyto!(dest::Array{T}, d_offset::Integer,
-                             source::JLArray{T}, s_offset::Integer,
-                             amount::Integer) where T
+function Base.copyto!(dest::Array{T}, d_offset::Integer,
+                      source::JLArray{T}, s_offset::Integer,
+                      amount::Integer) where T
+    @boundscheck checkbounds(dest, d_offset+amount-1)
+    @boundscheck checkbounds(source, s_offset+amount-1)
     copyto!(dest, d_offset, source.data, s_offset, amount)
 end
-function Base.unsafe_copyto!(dest::JLArray{T}, d_offset::Integer,
-                             source::Array{T}, s_offset::Integer,
-                             amount::Integer) where T
+function Base.copyto!(dest::JLArray{T}, d_offset::Integer,
+                      source::Array{T}, s_offset::Integer,
+                      amount::Integer) where T
+    @boundscheck checkbounds(dest, d_offset+amount-1)
+    @boundscheck checkbounds(source, s_offset+amount-1)
     copyto!(dest.data, d_offset, source, s_offset, amount)
     dest
 end
-function Base.unsafe_copyto!(dest::JLArray{T}, d_offset::Integer,
-                             source::JLArray{T}, s_offset::Integer,
-                             amount::Integer) where T
+function Base.copyto!(dest::JLArray{T}, d_offset::Integer,
+                      source::JLArray{T}, s_offset::Integer,
+                      amount::Integer) where T
+    @boundscheck checkbounds(dest, d_offset+amount-1)
+    @boundscheck checkbounds(source, s_offset+amount-1)
     copyto!(dest.data, d_offset, source.data, s_offset, amount)
     dest
 end
