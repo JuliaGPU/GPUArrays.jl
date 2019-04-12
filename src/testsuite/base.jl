@@ -108,5 +108,11 @@ function test_base(AT)
             @test compare(a-> repeat(a, 5),     AT, rand(Float32, 5, 4))
             @test compare(a-> repeat(a, 4, 3),  AT, rand(Float32, 10, 15))
         end
+
+        @testset "heuristics" begin
+            blocks, threads = thread_blocks_heuristic(0)
+            @test blocks == (1,)
+            @test threads == (1,)
+        end
     end
 end
