@@ -186,7 +186,7 @@ end
 Same as Base.isapprox, but without keyword args and without nans
 """
 function fast_isapprox(x::Number, y::Number, rtol::Real = Base.rtoldefault(x, y), atol::Real=0)
-    x == y || (isfinite(x) && isfinite(y) && abs(x - y) <= atol + rtol*max(abs(x), abs(y)))
+    x == y || (isfinite(x) && isfinite(y) && abs(x-y) <= max(atol, rtol*max(abs(x), abs(y))))
 end
 
 Base.isapprox(A::GPUArray{T1}, B::GPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, B, T1(rtol)|>real, T1(atol)|>real))
