@@ -2,6 +2,8 @@
 
 # hybrid Tausworthe and Linear Congruent generator from
 # https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch37.html
+#
+# only generates Float32 or Float64 numbers, conversion happens elsewhere
 
 function TausStep(z::Unsigned, S1::Integer, S2::Integer, S3::Integer, M::Unsigned)
     b = (((z << S1) ⊻ z) >> S2)
@@ -21,10 +23,7 @@ function next_rand(::Type{FT}, state::NTuple{4, T}) where {FT, T <: Unsigned}
         LCGStep(state[4], T(1664525), T(1013904223))
     )
     tmp = (state[1] ⊻ state[2] ⊻ state[3] ⊻ state[4])
-    return (
-        state,
-        make_rand_num(FT, tmp)
-    )
+    return state, make_rand_num(FT, tmp)
 end
 
 function gpu_rand(::Type{T}, state, randstate::AbstractVector{NTuple{4, UInt32}}) where T
@@ -34,16 +33,27 @@ function gpu_rand(::Type{T}, state, randstate::AbstractVector{NTuple{4, UInt32}}
     return stateful_rand[2]
 end
 
+# support for integers
+
 floattype(::Type{T}) where T <: Union{Int64, UInt64} = Float64
 floattype(::Type{T}) where T <: Union{Int32, UInt32} = Float32
 
 to_number_range(x::AbstractFloat, ::Type{T}) where T <: Unsigned = T(round(x * typemax(T)))
 
-to_number_range(x::F, ::Type{T}) where {T <: Signed, F <: AbstractFloat} = Base.unsafe_trunc(T, round(((x - F(0.5)) * typemax(T)) * T(2)))
+to_number_range(x::F, ::Type{T}) where {T <: Signed, F <: AbstractFloat} =
+    Base.unsafe_trunc(T, round(((x - F(0.5)) * typemax(T)) * T(2)))
 
 function gpu_rand(::Type{T}, state, randstate::AbstractVector{NTuple{4, UInt32}}) where T <: Integer
     f = gpu_rand(floattype(T), state, randstate)
     return to_number_range(f, T)
+end
+
+# support for complex numbers
+
+function gpu_rand(::Type{Complex{T}}, state, randstate::AbstractVector{NTuple{4, UInt32}}) where T
+    re = gpu_rand(T, state, randstate)
+    im = gpu_rand(T, state, randstate)
+    return complex(re, im)
 end
 
 
