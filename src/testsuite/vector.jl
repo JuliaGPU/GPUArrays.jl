@@ -21,5 +21,13 @@ function test_vectors(AT)
         @test length(x) == 3
         # we don't shrink buffers yet... TODO shrink them... or should we?
         @test length(GPUArrays.buffer(x)) == 5
+
+        x = AT(Array{Float32}(undef, 16))
+        reshape!(x, (2, 2, 2, 2))
+        @test size(x) == (2, 2, 2, 2)
+        x = AT(Array{Float32}(undef, 16))
+        y = AT(rand(Float32, 32))
+        update!(x, y)
+        @test size(x) == (32,)
     end
 end
