@@ -2,7 +2,7 @@
 
 *Abstract GPU Array package for Julia's various GPU backends.*
 
-[![][docs-stable-img]][docs-stable-url] [![][docs-dev-img]][docs-dev-url]
+[![][docs-stable-img]][docs-stable-url] [![][docs-dev-img]][docs-dev-url] [![codecov](https://codecov.io/gh/JuliaGPU/GPUArrays.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/JuliaGPU/GPUArrays.jl)
 
 [docs-stable-img]: https://img.shields.io/badge/docs-stable-blue.svg
 [docs-stable-url]: http://JuliaGPU.github.io/GPUArrays.jl/stable/
