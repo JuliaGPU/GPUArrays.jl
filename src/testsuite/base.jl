@@ -38,7 +38,10 @@ function test_base(AT)
             copyto!(x, r1, y, r2)
             copyto!(a, r1, b, r2)
             @test x == Array(a)
+            r2 = CartesianIndices((4:11, 3:8))
+            @test_throws DimensionMismatch copyto!(a, r1, b, r2)
 
+            r2 = CartesianIndices((4:10, 3:8))
             x2 = fill(0f0, (10, 10))
             copyto!(x2, r1, b, r2)
             @test x2 == x
@@ -46,6 +49,28 @@ function test_base(AT)
             fill!(a, 0f0)
             copyto!(a, r1, y, r2)
             @test Array(a) == x
+            
+            x = fill(0f0, (10,))
+            y = rand(Float32, (20,))
+            a = AT(x)
+            b = AT(y)
+            r1 = CartesianIndices((1:7,))
+            r2 = CartesianIndices((4:10,))
+            copyto!(x, r1, y, r2)
+            copyto!(a, r1, b, r2)
+            @test x == Array(a)
+            r2 = CartesianIndices((4:11,))
+            @test_throws ArgumentError copyto!(a, r1, b, r2)
+
+            x = fill(0f0, (10,))
+            y = rand(Float32, (20,))
+            a = AT(x)
+            b = AT(y)
+            r1 = (1:7,)
+            r2 = (4:10,)
+            copyto!(x, r1[1], y, r2[1])
+            copyto!(a, r1, b, r2)
+            @test x == Array(a)
         end
 
         @testset "vcat + hcat" begin
@@ -63,6 +88,9 @@ function test_base(AT)
             af0 = reinterpret(Float32, a)
             Af0 = reinterpret(Float32, A)
             @test Array(Af0) == af0
+            a = rand(ComplexF32, 4, 4)
+            A = AT(a)
+            @test_throws ArgumentError reinterpret(Int8, A)
 
             a = rand(ComplexF32, 10 * 10)
             A = AT(a)
