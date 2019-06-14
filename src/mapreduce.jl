@@ -16,9 +16,12 @@ LinearAlgebra.ishermitian(A::GPUMatrix) = acc_mapreduce(==, &, true, A, (adjoint
 
 # hack to get around of fetching the first element of the GPUArray
 # as a startvalue, which is a bit complicated with the current reduce implementation
-function startvalue(f, T)
-    error("Please supply a starting value for mapreduce. E.g: mapreduce(func, $f, A; init = 1)")
+_initerror(f) = error("Please supply a neutral element for $f. E.g: mapreduce(f, $f, A; init = 1)")
+startvalue(f, T) = _initerror(f)
+for op = (+, Base.add_sum, *, Base.mul_prod, max, min)
+    @eval startvalue(::typeof($op), ::Type{Any}) = _initerror($op)
 end
+
 startvalue(::typeof(+), T) = zero(T)
 startvalue(::typeof(Base.add_sum), T) = zero(T)
 startvalue(::typeof(*), T) = one(T)
@@ -55,29 +58,32 @@ gpu_promote_type(::typeof(Base.mul_prod), ::Type{T}) where {T<:Number} = typeof(
 gpu_promote_type(::typeof(max), ::Type{T}) where {T<: WidenReduceResult} = T
 gpu_promote_type(::typeof(min), ::Type{T}) where {T<: WidenReduceResult} = T
 
-function Base.mapreduce(f::Function, op::Function, A::GPUArray{T, N}; dims = :, init...) where {T, N}
+import Base.Broadcast: Broadcasted, ArrayStyle
+const GPUSrcArray = Union{Broadcasted{ArrayStyle{AT}}, GPUArray{T, N}} where {T, N, AT<:GPUArray}
+
+function Base.mapreduce(f::Function, op::Function, A::GPUSrcArray; dims = :, init...)
     mapreduce_impl(f, op, init.data, A, dims)
 end
 
-function mapreduce_impl(f, op, ::NamedTuple{()}, A::GPUArray{T, N}, ::Colon) where {T, N}
-    OT = gpu_promote_type(op, T)
+function mapreduce_impl(f, op, ::NamedTuple{()}, A::GPUSrcArray, ::Colon)
+    OT = gpu_promote_type(op, eltype(A))
     v0 = startvalue(op, OT) # TODO do this better
     acc_mapreduce(f, op, v0, A, ())
 end
 
-function mapreduce_impl(f, op, nt::NamedTuple{(:init,)}, A::GPUArray{T, N}, ::Colon) where {T, N}
+function mapreduce_impl(f, op, nt::NamedTuple{(:init,)}, A::GPUSrcArray, ::Colon)
     acc_mapreduce(f, op, nt.init, A, ())
 end
 
-function mapreduce_impl(f, op, nt, A::GPUArray{T, N}, dims) where {T, N}
+function mapreduce_impl(f, op, nt, A::GPUSrcArray, dims)
     Base._mapreduce_dim(f, op, nt, A, dims)
 end
 
 function acc_mapreduce end
-function Base.mapreduce(f, op, A::GPUArray, B::GPUArray, C::Number; init)
+function Base.mapreduce(f, op, A::GPUSrcArray, B::GPUSrcArray, C::Number; init)
     acc_mapreduce(f, op, init, A, (B, C))
 end
-function Base.mapreduce(f, op, A::GPUArray, B::GPUArray; init)
+function Base.mapreduce(f, op, A::GPUSrcArray, B::GPUSrcArray; init)
     acc_mapreduce(f, op, init, A, (B,))
 end
 
@@ -111,7 +117,7 @@ end
     end
 end
 
-function Base._mapreducedim!(f, op, R::GPUArray, A::GPUArray)
+function Base._mapreducedim!(f, op, R::GPUArray, A::GPUSrcArray)
     range = ifelse.(length.(axes(R)) .== 1, axes(A), nothing)
     gpu_call(mapreducedim_kernel, R, (f, op, R, A, range))
     return R
@@ -122,7 +128,7 @@ simple_broadcast_index(x, i) = x
 
 for i = 0:10
     args = ntuple(x-> Symbol("arg_", x), i)
-    fargs = ntuple(x-> :(simple_broadcast_index($(args[x]), global_index)), i)
+    fargs = ntuple(x-> :(simple_broadcast_index($(args[x]), cartesian_global_index...)), i)
     @eval begin
         # http://developer.amd.com/resources/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
         function reduce_kernel(state, f, op, v0::T, A, ::Val{LMEM}, result, $(args...)) where {T, LMEM}
@@ -131,7 +137,8 @@ for i = 0:10
             acc = v0
             # # Loop sequentially over chunks of input vector
             while global_index <= length(A)
-                element = f(A[global_index], $(fargs...))
+                cartesian_global_index = Tuple(CartesianIndices(axes(A))[global_index])
+                element = f(A[cartesian_global_index...], $(fargs...))
                 acc = op(acc, element)
                 global_index += global_size(state)
             end
@@ -161,24 +168,22 @@ end
 
 to_cpu(x) = x
 to_cpu(x::GPUArray) = Array(x)
+to_cpu(x::Broadcasted{ArrayStyle{AT}}) where {AT <: GPUArray} = to_cpu(Base.Broadcast.materialize(x))
 to_cpu(x::LinearAlgebra.Transpose) = LinearAlgebra.Transpose(to_cpu(parent(x)))
 to_cpu(x::LinearAlgebra.Adjoint) = LinearAlgebra.Adjoint(to_cpu(parent(x)))
 to_cpu(x::SubArray) = SubArray(to_cpu(parent(x)), parentindices(x))
 
-function acc_mapreduce(
-        f, op, v0::OT, A::GPUArray{T, N}, rest::Tuple
-    ) where {T, OT, N}
-    dev = device(A)
+function acc_mapreduce(f, op, v0::OT, A::GPUSrcArray, rest::Tuple) where {OT}
     blocksize = 80
     threads = 256
     if length(A) <= blocksize * threads
-        args = zip(Array(A), to_cpu.(rest)...)
+        args = zip(to_cpu(A), to_cpu.(rest)...)
         return mapreduce(x-> f(x...), op, args, init = v0)
     end
     out = similar(A, OT, (blocksize,))
     fill!(out, v0)
     args = (f, op, v0, A, Val{threads}(), out, rest...)
-    gpu_call(reduce_kernel, A, args, ((blocksize,), (threads,)))
+    gpu_call(reduce_kernel, out, args, ((blocksize,), (threads,)))
     reduce(op, Array(out))
 end
 
