@@ -69,6 +69,7 @@ function Base.similar(bc::Broadcasted{ArrayStyle{JLArray}}, ::Type{T}) where T
     similar(JLArray{T}, axes(bc))
 end
 
+Base.similar(bc::Broadcasted{ArrayStyle{JLArray}}, ::Type{T}, dims...) where {T} = JLArray{T}(undef, dims...)
 
 ## gpuarray interface
 

@@ -32,6 +32,14 @@ function test_mapreduce(AT)
                         ET <: Complex || @test compare(minimum, AT,rand(range, dims))
                     end
                 end
+
+                @testset "broadcasted arrays" begin
+                    for dims in ((4048,), (1024,1024), (77,), (1923,209))
+                        @test compare(x->mapreduce(z -> z + one(z), +,
+                                                   Broadcast.Broadcasted(+, (x, x));
+                                                   init = zero(ET)), AT, rand(range, dims))
+                    end
+                end
             end
         end
         @testset "any all ==" begin
