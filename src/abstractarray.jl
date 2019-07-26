@@ -52,18 +52,21 @@ end
 
 ## showing
 
+Adapt.adapt_storage(::Type{<:Array}, xs::AbstractArray) = convert(Array, xs)
+cpu(xs) = adapt(Array, xs)
+
 for (W, ctor) in (:AT => (A,mut)->mut(A), Adapt.wrappers...)
     @eval begin
         # display
-        Base.print_array(io::IO, X::$W where {AT <: GPUArray}) = Base.print_array(io, $ctor(X, Array))
+        Base.print_array(io::IO, X::$W where {AT <: GPUArray}) = Base.print_array(io, $ctor(X, cpu))
 
         # show
         Base._show_nonempty(io::IO, X::$W where {AT <: GPUArray}, prefix::String) =
-            Base._show_nonempty(io, $ctor(X, Array), prefix)
+            Base._show_nonempty(io, $ctor(X, cpu), prefix)
         Base._show_empty(io::IO, X::$W where {AT <: GPUArray}) =
-            Base._show_empty(io, $ctor(X, Array))
+            Base._show_empty(io, $ctor(X, cpu))
         Base.show_vector(io::IO, v::$W where {AT <: GPUArray}, args...) =
-            Base.show_vector(io, $ctor(v, Array), args...)
+            Base.show_vector(io, $ctor(v, cpu), args...)
     end
 end
 
