@@ -1,30 +1,40 @@
-# mechanism to disallow indexing
+# mechanism to disallow scalar operations
 
-const _allowscalar = Ref(true)
+const scalar_allowed = Ref(true)
+const scalar_warned = Ref(false)
 
-allowscalar(flag = true) = (_allowscalar[] = flag)
+function allowscalar(flag = true)
+    scalar_allowed[] = flag
+    scalar_warned[] = false
+    return
+end
 
 function assertscalar(op = "operation")
-  _allowscalar[] || error("$op is disallowed")
-  return
+    if !scalar_allowed[]
+        error("$op is disallowed")
+    elseif !scalar_warned[]
+        @warn "Performing scalar operations on GPU arrays: This is very slow, consider disallowing these operations with `allowscalar(false)`"
+        scalar_warned[] = true
+    end
+    return
 end
 
 macro allowscalar(ex)
     quote
-        local prev = _allowscalar[]
-        _allowscalar[] = true
+        local prev = scalar_allowed[]
+        scalar_allowed[] = true
         local ret = $(esc(ex))
-        _allowscalar[] = prev
+        scalar_allowed[] = prev
         ret
     end
 end
 
 macro disallowscalar(ex)
     quote
-        local prev = _allowscalar[]
-        _allowscalar[] = false
+        local prev = scalar_allowed[]
+        scalar_allowed[] = false
         local ret = $(esc(ex))
-        _allowscalar[] = prev
+        scalar_allowed[] = prev
         ret
     end
 end
