@@ -131,14 +131,16 @@ for i = 0:10
     fargs = ntuple(x-> :(simple_broadcast_index($(args[x]), cartesian_global_index...)), i)
     @eval begin
         # http://developer.amd.com/resources/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
-        function reduce_kernel(state, f, op, v0::T, A, ::Val{LMEM}, result, $(args...)) where {T, LMEM}
+        function reduce_kernel(state, f, op, v0::T, A, len, ax, ::Val{LMEM}, result, $(args...)) where {T, LMEM}
             tmp_local = @LocalMemory(state, T, LMEM)
             global_index = linear_index(state)
             acc = v0
             # # Loop sequentially over chunks of input vector
-            while global_index <= length(A)
-                cartesian_global_index = Tuple(CartesianIndices(axes(A))[global_index])
-                element = f(A[cartesian_global_index...], $(fargs...))
+            # HACK: length(A) and axes(A) aren't GPU compatible, so pass them instead
+            #       https://github.com/JuliaGPU/CUDAnative.jl/issues/367
+            while global_index <= len
+                cartesian_global_index = Tuple(CartesianIndices(ax)[global_index])
+                @inbounds element = f(A[cartesian_global_index...], $(fargs...))
                 acc = op(acc, element)
                 global_index += global_size(state)
             end
@@ -182,7 +184,7 @@ function acc_mapreduce(f, op, v0::OT, A::GPUSrcArray, rest::Tuple) where {OT}
     end
     out = similar(A, OT, (blocksize,))
     fill!(out, v0)
-    args = (f, op, v0, A, Val{threads}(), out, rest...)
+    args = (f, op, v0, A, length(A), axes(A), Val{threads}(), out, rest...)
     gpu_call(reduce_kernel, out, args, ((blocksize,), (threads,)))
     reduce(op, Array(out))
 end
