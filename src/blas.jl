@@ -12,9 +12,9 @@ end
 for T in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin
         function BLAS.gemm!(
-                transA::Char, transB::Char, alpha::$T,
+                transA::AbstractChar, transB::AbstractChar, alpha::Union{($T), Bool},
                 A::GPUVecOrMat{$T}, B::GPUVecOrMat{$T},
-                beta::$T, C::GPUVecOrMat{$T}
+                beta::Union{($T), Bool}, C::GPUVecOrMat{$T}
             )
             blasmod = blas_module(A)
             result = blasmod.gemm!(
@@ -55,7 +55,7 @@ end
 
 for elty in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin
-        function BLAS.gemv!(trans::Char, alpha::($elty), A::GPUVecOrMat{$elty}, X::GPUVector{$elty}, beta::($elty), Y::GPUVector{$elty})
+        function BLAS.gemv!(trans::AbstractChar, alpha::Union{($elty), Bool}, A::GPUVecOrMat{$elty}, X::GPUVector{$elty}, beta::Union{($elty), Bool}, Y::GPUVector{$elty})
             m, n = size(A, 1), size(A, 2)
             if trans == 'N' && (length(X) != n || length(Y) != m)
                 throw(DimensionMismatch("A has dimensions $(size(A)), X has length $(length(X)) and Y has length $(length(Y))"))
