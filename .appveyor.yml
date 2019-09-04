@@ -13,12 +13,6 @@ matrix:
   allow_failures:
      - julia_version: nightly
 
-branches:
-  only:
-    - master
-    - staging
-    - trying
-
 notifications:
   - provider: Email
     on_build_success: false

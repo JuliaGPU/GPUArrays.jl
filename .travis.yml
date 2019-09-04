@@ -14,12 +14,6 @@ matrix:
   allow_failures:
     - julia: nightly
 
-branches:
-  only:
-    - master
-    - staging
-    - trying
-
 notifications:
   email: false
 
