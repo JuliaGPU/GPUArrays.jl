@@ -9,12 +9,13 @@ function blasbuffer(A)
     error("$(typeof(A)) doesn't support BLAS operations")
 end
 
-for T in (Float32, Float64, ComplexF32, ComplexF64)
+for elty in (Float32, Float64, ComplexF32, ComplexF64)
+    T = VERSION >= v"1.3.0-alpha.115" ? :(Union{($elty), Bool}) : elty
     @eval begin
         function BLAS.gemm!(
-                transA::Char, transB::Char, alpha::$T,
-                A::GPUVecOrMat{$T}, B::GPUVecOrMat{$T},
-                beta::$T, C::GPUVecOrMat{$T}
+                transA::AbstractChar, transB::AbstractChar, alpha::$T,
+                A::GPUVecOrMat{$elty}, B::GPUVecOrMat{$elty},
+                beta::$T, C::GPUVecOrMat{$elty}
             )
             blasmod = blas_module(A)
             result = blasmod.gemm!(
@@ -54,8 +55,9 @@ end
 
 
 for elty in (Float32, Float64, ComplexF32, ComplexF64)
+    T = VERSION >= v"1.3.0-alpha.115" ? :(Union{($elty), Bool}) : elty
     @eval begin
-        function BLAS.gemv!(trans::Char, alpha::($elty), A::GPUVecOrMat{$elty}, X::GPUVector{$elty}, beta::($elty), Y::GPUVector{$elty})
+        function BLAS.gemv!(trans::AbstractChar, alpha::$T, A::GPUVecOrMat{$elty}, X::GPUVector{$elty}, beta::$T, Y::GPUVector{$elty})
             m, n = size(A, 1), size(A, 2)
             if trans == 'N' && (length(X) != n || length(Y) != m)
                 throw(DimensionMismatch("A has dimensions $(size(A)), X has length $(length(X)) and Y has length $(length(Y))"))
@@ -93,7 +95,7 @@ end
 
 for elty in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin
-        function BLAS.gbmv!(trans::Char, m::Int, kl::Int, ku::Int, alpha::($elty), A::GPUMatrix{$elty}, X::GPUVector{$elty}, beta::($elty), Y::GPUVector{$elty})
+        function BLAS.gbmv!(trans::AbstractChar, m::Integer, kl::Integer, ku::Integer, alpha::($elty), A::GPUMatrix{$elty}, X::GPUVector{$elty}, beta::($elty), Y::GPUVector{$elty})
             n = size(A, 2)
             if trans == 'N' && (length(X) != n || length(Y) != m)
                 throw(DimensionMismatch("A has dimensions $n, $m, X has length $(length(X)) and Y has length $(length(Y))"))
