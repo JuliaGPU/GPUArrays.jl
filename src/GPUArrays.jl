@@ -16,6 +16,7 @@ using FFTW
 
 using Adapt
 
+# GPU interface
 include("abstractarray.jl")
 include("abstract_gpu_interface.jl")
 include("ondevice.jl")
@@ -32,6 +33,7 @@ include("vectors.jl")
 include("convolution.jl")
 include("random.jl")
 
+# CPU implementation
 include("array.jl")
 
 include("testsuite.jl")
