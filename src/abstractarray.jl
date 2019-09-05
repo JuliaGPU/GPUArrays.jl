@@ -231,3 +231,11 @@ function Base._reshape(A::GPUArray{T, 1}, dims::Tuple{Integer}) where T
     prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
     return unsafe_reinterpret(T, A, dims)
 end
+
+
+# filtering
+
+# TODO: filter!
+
+# revert of JuliaLang/julia#31929
+Base.filter(f, As::GPUArray) = As[map(f, As)::GPUArray{Bool}]
