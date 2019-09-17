@@ -123,8 +123,8 @@ function Base._mapreducedim!(f, op, R::GPUArray, A::GPUSrcArray)
     return R
 end
 
-simple_broadcast_index(A::AbstractArray, i) = A[i]
-simple_broadcast_index(x, i) = x
+@inline simple_broadcast_index(A::AbstractArray, i...) = @inbounds A[i...]
+@inline simple_broadcast_index(x, i...) = x
 
 for i = 0:10
     args = ntuple(x-> Symbol("arg_", x), i)
@@ -138,7 +138,7 @@ for i = 0:10
             # # Loop sequentially over chunks of input vector
             # HACK: length(A) and axes(A) aren't GPU compatible, so pass them instead
             #       https://github.com/JuliaGPU/CUDAnative.jl/issues/367
-            while global_index <= len
+            @inbounds while global_index <= len
                 cartesian_global_index = Tuple(CartesianIndices(ax)[global_index])
                 @inbounds element = f(A[cartesian_global_index...], $(fargs...))
                 acc = op(acc, element)
@@ -146,11 +146,11 @@ for i = 0:10
             end
             # Perform parallel reduction
             local_index = threadidx_x(state) - 1
-            tmp_local[local_index + 1] = acc
+            @inbounds tmp_local[local_index + 1] = acc
             synchronize_threads(state)
 
             offset = blockdim_x(state) ÷ 2
-            while offset > 0
+            @inbounds while offset > 0
                 if (local_index < offset)
                     other = tmp_local[local_index + offset + 1]
                     mine = tmp_local[local_index + 1]
@@ -160,7 +160,7 @@ for i = 0:10
                 offset = offset ÷ 2
             end
             if local_index == 0
-                result[blockidx_x(state)] = tmp_local[1]
+                @inbounds result[blockidx_x(state)] = tmp_local[1]
             end
             return
         end
