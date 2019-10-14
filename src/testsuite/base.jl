@@ -49,7 +49,7 @@ function test_base(AT)
             fill!(a, 0f0)
             copyto!(a, r1, y, r2)
             @test Array(a) == x
-            
+
             x = fill(0f0, (10,))
             y = rand(Float32, (20,))
             a = AT(x)
@@ -71,6 +71,13 @@ function test_base(AT)
             copyto!(x, r1[1], y, r2[1])
             copyto!(a, r1, b, r2)
             @test x == Array(a)
+
+            x = fill(0., (10,))
+            y = fill(1, (10,))
+            a = AT(x)
+            b = AT(y)
+            copyto!(a, b)
+            @test Float64.(y) == Array(a)
         end
 
         @testset "vcat + hcat" begin

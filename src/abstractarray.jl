@@ -70,9 +70,10 @@ for (W, ctor) in (:AT => (A,mut)->mut(A), Adapt.wrappers...)
     end
 end
 
-# memory operations
 
-## basic copy methods that dispatch to copyto! for linear copies
+# memory copying
+
+## basic linear copies of identically-typed memory
 
 materialize(x::AbstractArray) = Array(x)
 materialize(x::GPUArray) = x
@@ -106,8 +107,10 @@ for (D, S) in ((GPUArray, AbstractArray), (Array, GPUArray), (GPUArray, GPUArray
     end
 end
 
+## generalized blocks of heterogeneous memory
 
-## higher-dimensional copy methods that dispatch to a kernel
+Base.copyto!(dest::GPUArray, src::GPUArray) =
+    copyto!(dest, CartesianIndices(dest), src, CartesianIndices(src))
 
 function copy_kernel!(state, dest, dest_offsets, src, src_offsets, shape, shape_dest, shape_source, length)
     i = linear_index(state)
@@ -121,10 +124,8 @@ function copy_kernel!(state, dest, dest_offsets, src, src_offsets, shape, shape_
     return
 end
 
-function Base.copyto!(
-        dest::GPUArray{T, N}, destcrange::CartesianIndices{N},
-        src::GPUArray{T, N}, srccrange::CartesianIndices{N}
-    ) where {T, N}
+function Base.copyto!(dest::GPUArray{T, N}, destcrange::CartesianIndices{N},
+                      src::GPUArray{U, N}, srccrange::CartesianIndices{N}) where {T, U, N}
     shape = size(destcrange)
     if shape != size(srccrange)
         throw(DimensionMismatch("Ranges don't match their size. Found: $shape, $(size(srccrange))"))
@@ -133,20 +134,14 @@ function Base.copyto!(
 
     dest_offsets = first.(destcrange.indices) .- 1
     src_offsets = first.(srccrange.indices) .- 1
-    ui_shape = shape
-    gpu_call(
-        copy_kernel!, dest,
-        (dest, dest_offsets, src, src_offsets, ui_shape, size(dest), size(src), len),
-        len
-    )
+    gpu_call(copy_kernel!, dest,
+             (dest, dest_offsets, src, src_offsets, shape, size(dest), size(src), len),
+             len)
     dest
 end
 
-
-function Base.copyto!(
-        dest::GPUArray{T, N}, destcrange::CartesianIndices{N},
-        src::AbstractArray{T, N}, srccrange::CartesianIndices{N}
-    ) where {T, N}
+function Base.copyto!(dest::GPUArray{T, N}, destcrange::CartesianIndices{N},
+                      src::AbstractArray{T, N}, srccrange::CartesianIndices{N}) where {T, N}
     # Is this efficient? Maybe!
     # TODO: compare to a pure intrinsic copyto implementation!
     # this would mean looping over linear sections of memory and
@@ -157,11 +152,8 @@ function Base.copyto!(
     dest
 end
 
-
-function Base.copyto!(
-        dest::AbstractArray{T, N}, destcrange::CartesianIndices{N},
-        src::GPUArray{T, N}, srccrange::CartesianIndices{N}
-    ) where {T, N}
+function Base.copyto!(dest::AbstractArray{T, N}, destcrange::CartesianIndices{N},
+                      src::GPUArray{T, N}, srccrange::CartesianIndices{N}) where {T, N}
     # Is this efficient? Maybe!
     dest_gpu = similar(src, size(destcrange))
     nrange = CartesianIndices(size(dest_gpu))
@@ -170,21 +162,38 @@ function Base.copyto!(
     dest
 end
 
+## other
+
 Base.copy(x::GPUArray) = identity.(x)
+
 Base.deepcopy(x::GPUArray) = copy(x)
 
+
+# reinterpret
+
 #=
-reinterpret taken from julia base/array.jl
+copied from julia base/array.jl
 Copyright (c) 2009-2016: Jeff Bezanson, Stefan Karpinski, Viral B. Shah, and other contributors:
 
 https://github.com/JuliaLang/julia/contributors
 
-Permission is hereby granted, free of charge, to any person obtaining a copie of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copie of this
+software and associated documentation files (the "Software"), to deal in the Software
+without restriction, including without limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons
+to whom the Software is furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
 =#
+
 import Base.reinterpret
 
 """
