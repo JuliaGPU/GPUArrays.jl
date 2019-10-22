@@ -26,5 +26,15 @@ function test_linalg(AT)
                 @test ishermitian(aherm)
             end
         end
+        @testset "Array + Diagonal" begin
+            n = 128
+            A = AT{Float32}(undef, n, n)
+            d = AT{Float32}(undef, n)
+            rand!(A)
+            rand!(d)
+            D = Diagonal(d)
+            B = A + D
+            @test collect(B) ≈ collect(A) + collect(D)
+        end
     end
 end
