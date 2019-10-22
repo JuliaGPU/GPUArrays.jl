@@ -26,5 +26,13 @@ function test_linalg(AT)
                 @test ishermitian(aherm)
             end
         end
+        @testset "transpose fallback" begin
+            m = 64
+            n = 128
+            a = randn(m,n)
+            b = zeros(n,m)
+            transpose!(b, a)
+            @test b == transpose(a)
+        end
     end
 end
