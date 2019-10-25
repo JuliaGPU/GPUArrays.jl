@@ -1,31 +1,64 @@
-variables:
-  CI_IMAGE_TAG: 'plain'
-
 include:
-  - 'https://raw.githubusercontent.com/JuliaGPU/gitlab-ci/master/templates/v4/common.yml'
-  - 'https://raw.githubusercontent.com/JuliaGPU/gitlab-ci/master/templates/v4/test_v1.0.yml'
-  - 'https://raw.githubusercontent.com/JuliaGPU/gitlab-ci/master/templates/v4/test_v1.1.yml'
-  - 'https://raw.githubusercontent.com/JuliaGPU/gitlab-ci/master/templates/v4/test_v1.2.yml'
-  - 'https://raw.githubusercontent.com/JuliaGPU/gitlab-ci/master/templates/v4/test_v1.3.yml'
-  - 'https://raw.githubusercontent.com/JuliaGPU/gitlab-ci/master/templates/v4/test_dev.yml'
-  - 'https://raw.githubusercontent.com/JuliaGPU/gitlab-ci/master/templates/v4/coverage_v1.2.yml'
+  - 'https://raw.githubusercontent.com/JuliaGPU/gitlab-ci/master/templates/v6.yml'
 
-test:dev:
+
+# Julia versions
+
+julia:1.0:
+  extends:
+    - .julia:1.0
+    - .test
+
+julia:1.1:
+  extends:
+    - .julia:1.1
+    - .test
+
+julia:1.2:
+  extends:
+    - .julia:1.2
+    - .test
+
+julia:1.3:
+  extends:
+    - .julia:1.3
+    - .test
+
+julia:nightly:
+  extends:
+    - .julia:nightly
+    - .test
   allow_failure: true
 
-coverage:
-  allow_failure: true
-  only:
-    - master
+
+# reverse tests
+
+# NOTE: reverse testing is tricky because of Manifests. we instantiate both, give priority
+#       to this package's Manifest, and manually run tests outside of the test environment.
+#       that means we have to manually install CuArrays' test dependencies though.
 
 cuarrays:
-  stage: test
-  image: "juliagpu/julia:v1.2-cuda"
+  extends: .julia:1.2
+  tags:
+    - nvidia
+    - sm_75
+  image: juliagpu/cuda:10.1-cudnn7-cutensor-devel-ubuntu18.04
   script:
-    - mkdir $JULIA_DEPOT_PATH # Pkg3.jl#325
+    - export CUARRAYS="$HOME/.julia/dev/CuArrays"
     - julia -e 'using Pkg;
-                Pkg.develop(PackageSpec(path=pwd()));
-                Pkg.build();
-                Pkg.add(PackageSpec(name="CuArrays", rev="master"));
-                Pkg.test("CuArrays");'
+                Pkg.develop("CuArrays");'
+    - julia --project -e 'using Pkg;
+                          Pkg.instantiate()'
+    - julia --project=$CUARRAYS -e 'using Pkg;
+                                    Pkg.instantiate();
+                                    Pkg.add(["FFTW", "ForwardDiff"])'
+    - JULIA_LOAD_PATH=".:$CUARRAYS::" julia $CUARRAYS/test/runtests.jl
   allow_failure: true
+
+
+# other tasks
+
+coverage:
+  extends:
+    - .julia:1.2
+    - .coverage
