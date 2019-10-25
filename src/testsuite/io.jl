@@ -8,7 +8,7 @@ function test_io(AT)
 
           show(io, MIME("text/plain"), A)
           seekstart(io)
-          @test String(take!(io)) == "1-element $AT{Int64,1}:\n 1"
+          @test occursin(Regex("^1-element $AT{Int64,1.*}:\n 1\$"), String(take!(io)))
 
           show(io, A)
           seekstart(io)
@@ -19,7 +19,7 @@ function test_io(AT)
 
           show(io, MIME("text/plain"), B)
           seekstart(io)
-          @test String(take!(io)) == "2×2 $AT{Int64,2}:\n 1  2\n 3  4"
+          @test occursin(Regex("^2×2 $AT{Int64,2.*}:\n 1  2\n 3  4\$"), String(take!(io)))
 
           show(io, B)
           seekstart(io)
@@ -29,8 +29,8 @@ function test_io(AT)
           show(io, MIME("text/plain"), A')
           seekstart(io)
           msg = String(take!(io)) # the printing of Adjoint depends on global state
-          @test msg == "1×1 Adjoint{Int64,$AT{Int64,1}}:\n 1" ||
-                msg == "1×1 LinearAlgebra.Adjoint{Int64,$AT{Int64,1}}:\n 1"
+          @test occursin(Regex("^1×1 Adjoint{Int64,$AT{Int64,1.*}}:\n 1\$"), msg) ||
+                occursin(Regex("^1×1 LinearAlgebra.Adjoint{Int64,$AT{Int64,1.*}}:\n 1\$"), msg)
         end
     end
 end

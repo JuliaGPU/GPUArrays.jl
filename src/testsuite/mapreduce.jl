@@ -45,7 +45,7 @@ function test_mapreduce(AT)
         @testset "any all ==" begin
             for Ac in ([false, false], [false, true], [true, true])
                 A = AT(Ac)
-                @test typeof(A) == AT{Bool,1}
+                @test A isa AT{Bool,1}
                 @test any(A) == any(Ac)
                 @test all(A) == all(Ac)
                 @test A == copy(A)
