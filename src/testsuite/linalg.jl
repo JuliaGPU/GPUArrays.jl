@@ -4,8 +4,21 @@ function test_linalg(AT)
             @test compare(adjoint, AT, rand(Float32, 32, 32))
             @test compare(transpose, AT, rand(Float32, 32, 32))
             @test compare(transpose!, AT, Array{Float32}(undef, 32, 32), rand(Float32, 32, 32))
+            @test compare(transpose!, AT, Array{Float32}(undef, 128, 32), rand(Float32, 32, 128))
         end
-
+        
+        @testset "copyto! for triangular" begin
+            ga = Array{Float32}(undef, 128, 128) 
+            gb = AT{Float32}(undef, 128, 128)
+            rand!(gb)
+            copyto!(ga, UpperTriangular(gb))
+            @test ga == Array(collect(UpperTriangular(gb)))
+            ga = Array{Float32}(undef, 128, 128) 
+            gb = AT{Float32}(undef, 128, 128)
+            rand!(gb)
+            copyto!(ga, LowerTriangular(gb))
+            @test ga == Array(collect(LowerTriangular(gb)))
+        end
         @testset "permutedims" begin
             @test compare(x -> permutedims(x, (2, 1)), AT, rand(Float32, 2, 3))
             @test compare(x -> permutedims(x, (2, 1, 3)), AT, rand(Float32, 4, 5, 6))
