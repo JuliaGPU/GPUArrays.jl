@@ -166,18 +166,11 @@ for i = 0:10
 
 end
 
-to_cpu(x) = x
-to_cpu(x::GPUArray) = Array(x)
-to_cpu(x::Broadcasted{ArrayStyle{AT}}) where {AT <: GPUArray} = to_cpu(Base.Broadcast.materialize(x))
-to_cpu(x::LinearAlgebra.Transpose) = LinearAlgebra.Transpose(to_cpu(parent(x)))
-to_cpu(x::LinearAlgebra.Adjoint) = LinearAlgebra.Adjoint(to_cpu(parent(x)))
-to_cpu(x::SubArray) = SubArray(to_cpu(parent(x)), parentindices(x))
-
 function acc_mapreduce(f, op, v0::OT, A::GPUSrcArray, rest::Tuple) where {OT}
     blocksize = 80
     threads = 256
     if length(A) <= blocksize * threads
-        args = zip(to_cpu(A), to_cpu.(rest)...)
+        args = zip(convert_to_cpu(A), convert_to_cpu.(rest)...)
         return mapreduce(x-> f(x...), op, args, init = v0)
     end
     out = similar(A, OT, (blocksize,))

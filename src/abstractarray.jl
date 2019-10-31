@@ -50,23 +50,36 @@ function to_cartesian(A, indices::Tuple)
     CartesianIndices(start, stop)
 end
 
-## showing
+## convert to CPU (keeping wrapper type)
 
 Adapt.adapt_storage(::Type{<:Array}, xs::AbstractArray) = convert(Array, xs)
-cpu(xs) = adapt(Array, xs)
+convert_to_cpu(xs) = adapt(Array, xs)
+
+## showing
 
 for (W, ctor) in (:AT => (A,mut)->mut(A), Adapt.wrappers...)
     @eval begin
         # display
-        Base.print_array(io::IO, X::$W where {AT <: GPUArray}) = Base.print_array(io, $ctor(X, cpu))
+        Base.print_array(io::IO, X::$W where {AT <: GPUArray}) =
+            Base.print_array(io, $ctor(X, convert_to_cpu))
 
         # show
         Base._show_nonempty(io::IO, X::$W where {AT <: GPUArray}, prefix::String) =
-            Base._show_nonempty(io, $ctor(X, cpu), prefix)
+            Base._show_nonempty(io, $ctor(X, convert_to_cpu), prefix)
         Base._show_empty(io::IO, X::$W where {AT <: GPUArray}) =
-            Base._show_empty(io, $ctor(X, cpu))
+            Base._show_empty(io, $ctor(X, convert_to_cpu))
         Base.show_vector(io::IO, v::$W where {AT <: GPUArray}, args...) =
-            Base.show_vector(io, $ctor(v, cpu), args...)
+            Base.show_vector(io, $ctor(v, convert_to_cpu), args...)
+    end
+end
+
+## collect to CPU (discarding wrapper type)
+
+collect_to_cpu(xs::AbstractArray) = collect(convert_to_cpu(xs))
+
+for (W, ctor) in (:AT => (A,mut)->mut(A), Adapt.wrappers...)
+    @eval begin
+        Base.collect(X::$W where {AT <: GPUArray}) = collect_to_cpu(X)
     end
 end
 
