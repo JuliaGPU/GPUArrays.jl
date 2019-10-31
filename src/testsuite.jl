@@ -12,7 +12,6 @@ using Test
 
 using FFTW
 using FillArrays
-using StaticArrays
 
 convert_array(f, x) = f(x)
 convert_array(f, x::Base.RefValue) = x[]
