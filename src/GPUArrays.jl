@@ -12,7 +12,7 @@ using Printf
 using LinearAlgebra.BLAS
 using Base.Cartesian
 
-using FFTW
+using AbstractFFTs
 
 using Adapt
 
