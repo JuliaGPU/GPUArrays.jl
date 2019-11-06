@@ -1,5 +1,7 @@
 using GPUArrays, Test
 
+include("testsuite.jl")
+
 @testset "JLArray" begin
-    GPUArrays.test(JLArray)
+    TestSuite.test(JLArray)
 end

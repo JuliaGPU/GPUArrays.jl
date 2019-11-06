@@ -12,7 +12,7 @@ using Printf
 using LinearAlgebra.BLAS
 using Base.Cartesian
 
-using FFTW
+using AbstractFFTs
 
 using Adapt
 
@@ -35,8 +35,6 @@ include("random.jl")
 
 # CPU implementation
 include("array.jl")
-
-include("testsuite.jl")
 
 include("quirks.jl")
 
