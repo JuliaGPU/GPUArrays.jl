@@ -36,8 +36,6 @@ include("random.jl")
 # CPU implementation
 include("array.jl")
 
-include("testsuite.jl")
-
 include("quirks.jl")
 
 end # module
