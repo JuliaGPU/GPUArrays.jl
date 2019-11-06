@@ -41,8 +41,6 @@ include("testsuite/fft.jl")
 include("testsuite/blas.jl")
 include("testsuite/random.jl")
 
-end
-
 
 """
 Runs the entire GPUArrays test suite on array type `AT`
@@ -60,4 +58,6 @@ function test(AT::Type{<:GPUArray})
     TestSuite.test_fft(AT)
     TestSuite.test_blas(AT)
     TestSuite.test_random(AT)
+end
+
 end
