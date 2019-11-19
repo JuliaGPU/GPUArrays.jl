@@ -18,7 +18,13 @@ function test_indexing(AT)
                 x[2:6, 2:6, :, :] = y
                 x[2:6, 2:6, :, :] == y
            end
-
+            @testset "multi dim, sliced setindex, CPU source" begin
+                x = fill(AT{T}, T(0), (2,3,4))
+                y = Array{T}(undef, 2,3)
+                rand!(y)
+                x[:, :, 2] = y
+                x[:, :, 2] == y
+           end
         end
 
         for T in (Float32, Int32)

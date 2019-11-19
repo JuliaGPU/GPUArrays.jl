@@ -113,22 +113,13 @@ end
     end
 end
 
-# FIXME: this should use adapt
-gpu_convert(GPUType, x::GPUArray) = x
-function gpu_convert(GPUType, x::AbstractArray)
-    isbits(x) ? x : convert(GPUType, x)
-end
-function gpu_convert(GPUType, x)
-    isbits(x) ? x : error("Only isbits types are allowed for indexing. Found: $(typeof(x))")
-end
-
 function Base._unsafe_setindex!(::IndexStyle, dest::T, src, Is::Union{Real, AbstractArray}...) where T <: GPUArray
     if length(Is) == 1 && isa(first(Is), Array) && isempty(first(Is)) # indexing with empty array
         return dest
     end
     idims = length.(Is)
     len = prod(idims)
-    src_gpu = gpu_convert(T, src)
+    src_gpu = adapt(T, src)
     gpu_call(setindex_kernel!, dest, (dest, src_gpu, idims, map(x-> to_index(dest, x), Is), len), len)
     return dest
 end
