@@ -112,14 +112,14 @@ for (D, S) in ((GPUArray, AbstractArray), (Array, GPUArray), (GPUArray, GPUArray
 
         function Base.copyto!(dest::$D{T}, d_range::CartesianIndices{1},
                               src::$S{T}, s_range::CartesianIndices{1}) where T
-            amount = length(d_range)
-            if length(s_range) != amount
-                throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
+            len = length(d_range)
+            if length(s_range) != len
+                throw(ArgumentError("Copy range needs same length. Found: dest: $len, src: $(length(s_range))"))
             end
-            amount == 0 && return dest
+            len == 0 && return dest
             d_offset = first(d_range)[1]
             s_offset = first(s_range)[1]
-            copyto!(dest, d_offset, materialize(src), s_offset, amount)
+            copyto!(dest, d_offset, materialize(src), s_offset, len)
         end
 
         function Base.copyto!(dest::$D{T, N}, src::$S{T, N}) where {T, N}
