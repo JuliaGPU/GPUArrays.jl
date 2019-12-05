@@ -88,8 +88,10 @@ end
 
 ## basic linear copies of identically-typed memory
 
+# convert to something we can get a pointer to
 materialize(x::AbstractArray) = Array(x)
 materialize(x::GPUArray) = x
+materialize(x::Array) = x
 
 for (D, S) in ((GPUArray, AbstractArray), (Array, GPUArray), (GPUArray, GPUArray))
     @eval begin
