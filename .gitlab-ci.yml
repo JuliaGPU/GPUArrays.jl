@@ -42,16 +42,16 @@ cuarrays:
   tags:
     - nvidia
     - sm_75
-  image: juliagpu/cuda:10.1-cudnn7-cutensor-devel-ubuntu18.04
+  image: juliagpu/cuda:10.1-cudnn7-cutensor1-devel-ubuntu18.04
   script:
-    - export CUARRAYS="$HOME/.julia/dev/CuArrays"
+    - export CUARRAYS=".julia/dev/CuArrays"
     - julia -e 'using Pkg;
                 Pkg.develop("CuArrays");'
     - julia --project -e 'using Pkg;
                           Pkg.instantiate()'
     - julia --project=$CUARRAYS -e 'using Pkg;
                                     Pkg.instantiate();
-                                    Pkg.add(["FFTW", "ForwardDiff"])'
+                                    Pkg.add(["FFTW", "ForwardDiff", "FillArrays"])'
     - JULIA_LOAD_PATH=".:$CUARRAYS::" julia $CUARRAYS/test/runtests.jl
   allow_failure: true
 
