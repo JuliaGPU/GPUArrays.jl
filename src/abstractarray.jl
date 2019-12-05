@@ -88,8 +88,18 @@ end
 
 ## basic linear copies of identically-typed memory
 
+# convert to something we can get a pointer to
 materialize(x::AbstractArray) = Array(x)
 materialize(x::GPUArray) = x
+materialize(x::Array) = x
+
+# TODO: do we want to support `copyto(..., WrappedArray{GPUArray})`
+# if so (does not work due to lack of copy constructors):
+#for (W, ctor) in (:AT => (A,mut)->mut(A), Adapt.wrappers...)
+#    @eval begin
+#        materialize(X::$W) where {AT <: GPUArray} = AT(X)
+#    end
+#end
 
 for (D, S) in ((GPUArray, AbstractArray), (Array, GPUArray), (GPUArray, GPUArray))
     @eval begin
@@ -102,14 +112,14 @@ for (D, S) in ((GPUArray, AbstractArray), (Array, GPUArray), (GPUArray, GPUArray
 
         function Base.copyto!(dest::$D{T}, d_range::CartesianIndices{1},
                               src::$S{T}, s_range::CartesianIndices{1}) where T
-            amount = length(d_range)
-            if length(s_range) != amount
-                throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
+            len = length(d_range)
+            if length(s_range) != len
+                throw(ArgumentError("Copy range needs same length. Found: dest: $len, src: $(length(s_range))"))
             end
-            amount == 0 && return dest
+            len == 0 && return dest
             d_offset = first(d_range)[1]
             s_offset = first(s_range)[1]
-            copyto!(dest, d_offset, materialize(src), s_offset, amount)
+            copyto!(dest, d_offset, materialize(src), s_offset, len)
         end
 
         function Base.copyto!(dest::$D{T, N}, src::$S{T, N}) where {T, N}
