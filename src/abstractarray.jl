@@ -93,6 +93,14 @@ materialize(x::AbstractArray) = Array(x)
 materialize(x::GPUArray) = x
 materialize(x::Array) = x
 
+# TODO: do we want to support `copyto(..., WrappedArray{GPUArray})`
+# if so (does not work due to lack of copy constructors):
+#for (W, ctor) in (:AT => (A,mut)->mut(A), Adapt.wrappers...)
+#    @eval begin
+#        materialize(X::$W) where {AT <: GPUArray} = AT(X)
+#    end
+#end
+
 for (D, S) in ((GPUArray, AbstractArray), (Array, GPUArray), (GPUArray, GPUArray))
     @eval begin
         function Base.copyto!(dest::$D{T, N}, rdest::NTuple{N, UnitRange},
