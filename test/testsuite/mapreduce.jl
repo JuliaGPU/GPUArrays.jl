@@ -28,6 +28,8 @@ function test_mapreduce(AT)
                     for dims in ((4048,), (1024,1024), (77,), (1923,209))
                         @test compare(sum,  AT, rand(range, dims))
                         @test compare(prod, AT, rand(range, dims))
+                        @test compare(x -> sum(abs, x),  AT, rand(range, dims))
+                        @test compare(x -> prod(abs, x), AT, rand(range, dims))
                         ET <: Complex || @test compare(maximum, AT,rand(range, dims))
                         ET <: Complex || @test compare(minimum, AT,rand(range, dims))
                     end

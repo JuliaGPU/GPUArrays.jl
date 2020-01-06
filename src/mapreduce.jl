@@ -57,6 +57,7 @@ gpu_promote_type(::typeof(Base.add_sum), ::Type{T}) where {T<:Number} = typeof(B
 gpu_promote_type(::typeof(Base.mul_prod), ::Type{T}) where {T<:Number} = typeof(Base.mul_prod(one(T), one(T)))
 gpu_promote_type(::typeof(max), ::Type{T}) where {T<: WidenReduceResult} = T
 gpu_promote_type(::typeof(min), ::Type{T}) where {T<: WidenReduceResult} = T
+gpu_promote_type(::typeof(abs), ::Type{Complex{T}}) where {T} = T
 
 import Base.Broadcast: Broadcasted, ArrayStyle
 const GPUSrcArray = Union{Broadcasted{ArrayStyle{AT}}, GPUArray{T, N}} where {T, N, AT<:GPUArray}
@@ -66,7 +67,7 @@ function Base.mapreduce(f::Function, op::Function, A::GPUSrcArray; dims = :, ini
 end
 
 function mapreduce_impl(f, op, ::NamedTuple{()}, A::GPUSrcArray, ::Colon)
-    OT = gpu_promote_type(op, eltype(A))
+    OT = gpu_promote_type(op, gpu_promote_type(f, eltype(A)))
     v0 = startvalue(op, OT) # TODO do this better
     acc_mapreduce(f, op, v0, A, ())
 end
