@@ -58,6 +58,7 @@ gpu_promote_type(::typeof(Base.mul_prod), ::Type{T}) where {T<:Number} = typeof(
 gpu_promote_type(::typeof(max), ::Type{T}) where {T<: WidenReduceResult} = T
 gpu_promote_type(::typeof(min), ::Type{T}) where {T<: WidenReduceResult} = T
 gpu_promote_type(::typeof(abs), ::Type{Complex{T}}) where {T} = T
+gpu_promote_type(::typeof(abs2), ::Type{Complex{T}}) where {T} = T
 
 import Base.Broadcast: Broadcasted, ArrayStyle
 const GPUSrcArray = Union{Broadcasted{ArrayStyle{AT}}, GPUArray{T, N}} where {T, N, AT<:GPUArray}

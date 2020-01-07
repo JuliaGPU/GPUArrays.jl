@@ -30,6 +30,8 @@ function test_mapreduce(AT)
                         @test compare(prod, AT, rand(range, dims))
                         @test compare(x -> sum(abs, x),  AT, rand(range, dims))
                         @test compare(x -> prod(abs, x), AT, rand(range, dims))
+                        @test compare(x -> sum(abs2, x),  AT, rand(range, dims))
+                        @test compare(x -> prod(abs2, x), AT, rand(range, dims))
                         ET <: Complex || @test compare(maximum, AT,rand(range, dims))
                         ET <: Complex || @test compare(minimum, AT,rand(range, dims))
                     end
