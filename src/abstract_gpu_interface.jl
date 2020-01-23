@@ -44,7 +44,7 @@ function gpu_call(kernel, A::AbstractArray, args::Tuple, configuration = length(
 end
 
 # Internal GPU call function, that needs to be overloaded by the backends.
-_gpu_call(::Any, f, A, args, thread_blocks) = error("Not implemented")
+_gpu_call(::Any, f, A, args, thread_blocks) = error("Not implemented") # COV_EXCL_LINE
 
 
 """

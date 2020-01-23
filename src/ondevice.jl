@@ -6,7 +6,7 @@
 for sym in (:x, :y, :z)
     for f in (:blockidx, :blockdim, :threadidx, :griddim)
         fname = Symbol(string(f, '_', sym))
-        @eval $fname(state)::Int = error("Not implemented")
+        @eval $fname(state)::Int = error("Not implemented") # COV_EXCL_LINE
         @eval export $fname
     end
 end
@@ -79,7 +79,7 @@ in CUDA terms `__synchronize`
 in OpenCL terms: `barrier(CLK_LOCAL_MEM_FENCE)`
 """
 function synchronize_threads(state)
-    error("Not implemented")
+    error("Not implemented") # COV_EXCL_LINE
 end
 
 
@@ -131,5 +131,5 @@ approriately get the correct Local mem id in CUDAnative.
 This is an internal method which needs to be overloaded by the GPU Array backends
 """
 function LocalMemory(state, ::Type{T}, ::Val{N}, ::Val{C}) where {N, T, C}
-    error("Not implemented")
+    error("Not implemented") # COV_EXCL_LINE
 end
