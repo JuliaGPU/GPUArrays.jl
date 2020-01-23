@@ -195,7 +195,6 @@ end
 struct JLDevice end
 device(x::JLArray) = JLDevice()
 threads(dev::JLDevice) = 256
-blocks(dev::JLDevice) = (256, 256, 256)
 
 @inline function synchronize_threads(::JLState)
     #=
