@@ -1,13 +1,17 @@
 
-# Interface that needs to be overwritten by backend
-# Slightly difference behavior from buffer, since not all blas backends work directly with
-# the gpu array buffer
+# calls to standard BLAS interfaces
+
+## interface
+
 function blas_module(A)
     error("$(typeof(A)) doesn't support BLAS operations")
 end
 function blasbuffer(A)
     error("$(typeof(A)) doesn't support BLAS operations")
 end
+
+
+## operations
 
 for elty in (Float32, Float64, ComplexF32, ComplexF64)
     T = VERSION >= v"1.3.0-alpha.115" ? :(Union{($elty), Bool}) : elty
@@ -53,7 +57,6 @@ function LinearAlgebra.rmul!(X::GPUArray{T}, s::Number) where T <: Union{Float32
     X
 end
 
-
 for elty in (Float32, Float64, ComplexF32, ComplexF64)
     T = VERSION >= v"1.3.0-alpha.115" ? :(Union{($elty), Bool}) : elty
     @eval begin
@@ -76,7 +79,6 @@ for elty in (Float32, Float64, ComplexF32, ComplexF64)
     end
 end
 
-
 for elty in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin
         function BLAS.axpy!(
@@ -91,7 +93,6 @@ for elty in (Float32, Float64, ComplexF32, ComplexF64)
         end
     end
 end
-
 
 for elty in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin

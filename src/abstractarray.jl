@@ -1,4 +1,5 @@
-# Dense GPU Array
+# core definition of the GPUArray type
+
 abstract type GPUArray{T, N} <: DenseArray{T, N} end
 
 # Sampler type that acts like a texture/image and allows interpolated access
