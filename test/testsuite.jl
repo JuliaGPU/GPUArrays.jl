@@ -1,4 +1,4 @@
-# Abstract test suite that can be used for all packages inheriting from GPUArray
+# Abstract test suite that can be used for all packages inheriting from AbstractGPUArray
 
 module TestSuite
 
@@ -16,7 +16,7 @@ using FillArrays
 convert_array(f, x) = f(x)
 convert_array(f, x::Base.RefValue) = x[]
 
-function compare(f, AT::Type{<:GPUArray}, xs...; kwargs...)
+function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
     cpu_in = convert_array.(copy, xs)
     gpu_in = convert_array.(AT, xs)
     cpu_out = f(cpu_in...; kwargs...)
@@ -45,7 +45,7 @@ include("testsuite/random.jl")
 """
 Runs the entire GPUArrays test suite on array type `AT`
 """
-function test(AT::Type{<:GPUArray})
+function test(AT::Type{<:AbstractGPUArray})
     TestSuite.test_construction(AT)
     TestSuite.test_gpuinterface(AT)
     TestSuite.test_indexing(AT)

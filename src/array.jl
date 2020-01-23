@@ -1,8 +1,8 @@
-# reference implementation of the GPUArray interfaces
+# reference implementation of the GPUArrays interfaces
 
 export JLArray
 
-struct JLArray{T, N} <: GPUArray{T, N}
+struct JLArray{T, N} <: AbstractGPUArray{T, N}
     data::Array{T, N}
     dims::Dims{N}
 

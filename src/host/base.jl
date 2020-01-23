@@ -2,22 +2,22 @@
 
 allequal(x) = true
 allequal(x, y, z...) = x == y && allequal(y, z...)
-function Base.map!(f, y::GPUArray, xs::GPUArray...)
+function Base.map!(f, y::AbstractGPUArray, xs::AbstractGPUArray...)
     @assert allequal(size.((y, xs...))...)
     return y .= f.(xs...)
 end
-function Base.map(f, y::GPUArray, xs::GPUArray...)
+function Base.map(f, y::AbstractGPUArray, xs::AbstractGPUArray...)
     @assert allequal(size.((y, xs...))...)
     return f.(y, xs...)
 end
 
 # Break ambiguities with base
-Base.map!(f, y::GPUArray) =
-    invoke(map!, Tuple{Any,GPUArray,Vararg{GPUArray}}, f, y)
-Base.map!(f, y::GPUArray, x::GPUArray) =
-    invoke(map!, Tuple{Any,GPUArray, Vararg{GPUArray}}, f, y, x)
-Base.map!(f, y::GPUArray, x1::GPUArray, x2::GPUArray) =
-    invoke(map!, Tuple{Any,GPUArray, Vararg{GPUArray}}, f, y, x1, x2)
+Base.map!(f, y::AbstractGPUArray) =
+    invoke(map!, Tuple{Any,AbstractGPUArray,Vararg{AbstractGPUArray}}, f, y)
+Base.map!(f, y::AbstractGPUArray, x::AbstractGPUArray) =
+    invoke(map!, Tuple{Any,AbstractGPUArray, Vararg{AbstractGPUArray}}, f, y, x)
+Base.map!(f, y::AbstractGPUArray, x1::AbstractGPUArray, x2::AbstractGPUArray) =
+    invoke(map!, Tuple{Any,AbstractGPUArray, Vararg{AbstractGPUArray}}, f, y, x1, x2)
 
 
 # Base functions that are sadly not fit for the the GPU yet (they only work for Int64)

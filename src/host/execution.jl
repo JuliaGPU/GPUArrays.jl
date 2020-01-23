@@ -7,10 +7,10 @@ abstract type GPUBackend end
 backend(::Type{T}) where T = error("Can't choose GPU backend for $T")
 
 """
-    gpu_call(kernel::Function, A::GPUArray, args::Tuple, configuration = length(A))
+    gpu_call(kernel::Function, A::AbstractGPUArray, args::Tuple, configuration = length(A))
 
 Calls function `kernel` on the GPU.
-`A` must be an GPUArray and will help to dispatch to the correct GPU backend
+`A` must be an AbstractGPUArray and will help to dispatch to the correct GPU backend
 and supplies queues and contexts.
 Calls the kernel function with `kernel(state, args...)`, where state is dependant on the backend
 and can be used for getting an index into `A` with `linear_index(state)`.

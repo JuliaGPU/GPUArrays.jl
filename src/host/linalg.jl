@@ -31,7 +31,7 @@ for elty in (Float64, Float32)
     @eval begin
         function BLAS.scal!(
                 n::Integer, DA::$elty,
-                DX::GPUArray{$elty, N}, incx::Integer
+                DX::AbstractGPUArray{$elty, N}, incx::Integer
             ) where N
             blasmod = blas_module(DX)
             blasmod.scal!(n, DA, blasbuffer(DX), incx)
@@ -40,15 +40,15 @@ for elty in (Float64, Float32)
     end
 end
 
-LinearAlgebra.rmul!(s::Number, X::GPUArray) = rmul!(X, s)
-function LinearAlgebra.rmul!(X::GPUArray{T}, s::Number) where T <: BLAS.BlasComplex
+LinearAlgebra.rmul!(s::Number, X::AbstractGPUArray) = rmul!(X, s)
+function LinearAlgebra.rmul!(X::AbstractGPUArray{T}, s::Number) where T <: BLAS.BlasComplex
     R = typeof(real(zero(T)))
     N = 2*length(X)
     buff = unsafe_reinterpret(R, X, (N,))
     BLAS.scal!(N, R(s), buff, 1)
     X
 end
-function LinearAlgebra.rmul!(X::GPUArray{T}, s::Number) where T <: Union{Float32, Float64}
+function LinearAlgebra.rmul!(X::AbstractGPUArray{T}, s::Number) where T <: Union{Float32, Float64}
     BLAS.scal!(length(X), T(s), X, 1)
     X
 end
@@ -78,7 +78,7 @@ end
 for elty in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin
         function BLAS.axpy!(
-                alpha::Number, x::GPUArray{$elty}, y::GPUArray{$elty}
+                alpha::Number, x::AbstractGPUArray{$elty}, y::AbstractGPUArray{$elty}
             )
             if length(x) != length(y)
                 throw(DimensionMismatch("x has length $(length(x)), but y has length $(length(y))"))
@@ -144,7 +144,7 @@ function transpose_blocks!(
     return
 end
 
-function LinearAlgebra.transpose!(At::GPUArray{T, 2}, A::GPUArray{T, 2}) where T
+function LinearAlgebra.transpose!(At::AbstractGPUArray{T, 2}, A::AbstractGPUArray{T, 2}) where T
     if size(A, 1) == size(A, 2) && all(x-> x % 32 == 0, size(A))
         outsize = size(At)
         TDIM = 32; BLOCK_ROWS = 8
@@ -172,7 +172,7 @@ function genperm(I::NTuple{N}, perm::NTuple{N}) where N
     ntuple(d-> (@inbounds return I[perm[d]]), Val(N))
 end
 
-function LinearAlgebra.permutedims!(dest::GPUArray, src::GPUArray, perm) where N
+function LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) where N
     perm isa Tuple || (perm = Tuple(perm))
     gpu_call(dest, (dest, src, perm)) do state, dest, src, perm
         I = @cartesianidx src state
@@ -182,19 +182,19 @@ function LinearAlgebra.permutedims!(dest::GPUArray, src::GPUArray, perm) where N
     return dest
 end
 
-function Base.copyto!(A::AbstractArray, B::Adjoint{<:Any, <:GPUArray})
+function Base.copyto!(A::AbstractArray, B::Adjoint{<:Any, <:AbstractGPUArray})
     copyto!(A, Adjoint(Array(parent(B))))
 end
-function Base.copyto!(A::AbstractArray, B::Transpose{<:Any, <:GPUArray})
+function Base.copyto!(A::AbstractArray, B::Transpose{<:Any, <:AbstractGPUArray})
     copyto!(A, Transpose(Array(parent(B))))
 end
-function Base.copyto!(A::AbstractArray, B::UpperTriangular{<:Any, <:GPUArray})
+function Base.copyto!(A::AbstractArray, B::UpperTriangular{<:Any, <:AbstractGPUArray})
     copyto!(A, UpperTriangular(Array(parent(B))))
 end
-function Base.copyto!(A::AbstractArray, B::LowerTriangular{<:Any, <:GPUArray})
+function Base.copyto!(A::AbstractArray, B::LowerTriangular{<:Any, <:AbstractGPUArray})
     copyto!(A, LowerTriangular(Array(parent(B))))
 end
 
-function Base.copyto!(A::GPUArray, B::Adjoint{T, <: GPUArray}) where T
+function Base.copyto!(A::AbstractGPUArray, B::Adjoint{T, <: AbstractGPUArray}) where T
     transpose!(A, B.parent)
 end

@@ -22,6 +22,6 @@ if VERSION >= v"1.3.0-alpha.107"
     @inline combine_axes(A, B...) = broadcast_shape(axes(A), combine_axes(B...))
     combine_axes(A) = axes(A)
 
-    Broadcast._axes(::Broadcasted{ArrayStyle{AT}}, axes::Tuple) where {AT <: GPUArray} = axes
-    @inline Broadcast._axes(bc::Broadcasted{ArrayStyle{AT}}, ::Nothing) where {AT <: GPUArray} = combine_axes(bc.args...)
+    Broadcast._axes(::Broadcasted{ArrayStyle{AT}}, axes::Tuple) where {AT <: AbstractGPUArray} = axes
+    @inline Broadcast._axes(bc::Broadcasted{ArrayStyle{AT}}, ::Nothing) where {AT <: AbstractGPUArray} = combine_axes(bc.args...)
 end

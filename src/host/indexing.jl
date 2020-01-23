@@ -44,31 +44,31 @@ end
 
 # basic indexing
 
-Base.IndexStyle(::Type{<:GPUArray}) = Base.IndexLinear()
+Base.IndexStyle(::Type{<:AbstractGPUArray}) = Base.IndexLinear()
 
-function _getindex(xs::GPUArray{T}, i::Integer) where T
+function _getindex(xs::AbstractGPUArray{T}, i::Integer) where T
     x = Array{T}(undef, 1)
     copyto!(x, 1, xs, i, 1)
     return x[1]
 end
 
-function Base.getindex(xs::GPUArray{T}, i::Integer) where T
+function Base.getindex(xs::AbstractGPUArray{T}, i::Integer) where T
     ndims(xs) > 0 && assertscalar("scalar getindex")
     _getindex(xs, i)
 end
 
-function _setindex!(xs::GPUArray{T}, v::T, i::Integer) where T
+function _setindex!(xs::AbstractGPUArray{T}, v::T, i::Integer) where T
     x = T[v]
     copyto!(xs, i, x, 1, 1)
     return v
 end
 
-function Base.setindex!(xs::GPUArray{T}, v::T, i::Integer) where T
+function Base.setindex!(xs::AbstractGPUArray{T}, v::T, i::Integer) where T
     assertscalar("scalar setindex!")
     _setindex!(xs, v, i)
 end
 
-Base.setindex!(xs::GPUArray, v, i::Integer) = xs[i] = convert(eltype(xs), v)
+Base.setindex!(xs::AbstractGPUArray, v, i::Integer) = xs[i] = convert(eltype(xs), v)
 
 
 # Vector indexing
@@ -90,7 +90,7 @@ to_index(a, x::Base.LogicalIndex) = error("Logical indexing not implemented")
     end
 end
 
-function Base._unsafe_getindex!(dest::GPUArray, src::GPUArray, Is::Union{Real, AbstractArray}...)
+function Base._unsafe_getindex!(dest::AbstractGPUArray, src::AbstractGPUArray, Is::Union{Real, AbstractArray}...)
     if length(Is) == 1 && isa(first(Is), Array) && isempty(first(Is)) # indexing with empty array
         return dest
     end
@@ -115,7 +115,7 @@ end
     end
 end
 
-function Base._unsafe_setindex!(::IndexStyle, dest::T, src, Is::Union{Real, AbstractArray}...) where T <: GPUArray
+function Base._unsafe_setindex!(::IndexStyle, dest::T, src, Is::Union{Real, AbstractArray}...) where T <: AbstractGPUArray
     if length(Is) == 1 && isa(first(Is), Array) && isempty(first(Is)) # indexing with empty array
         return dest
     end
