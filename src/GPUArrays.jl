@@ -29,7 +29,6 @@ include("heuristics.jl")
 include("indexing.jl")
 include("linalg.jl")
 include("mapreduce.jl")
-include("convolution.jl")
 include("random.jl")
 
 # CPU implementation
