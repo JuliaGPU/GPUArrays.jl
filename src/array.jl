@@ -1,4 +1,4 @@
-# CPU implementation of the GPUArray interface
+# reference implementation of the GPUArray interfaces
 
 export JLArray
 
@@ -88,8 +88,6 @@ to_device(state, x::JLArray) = x.data
 to_device(state, x::Tuple) = to_device.(Ref(state), x)
 to_device(state, x::Base.RefValue{<: JLArray}) = Base.RefValue(to_device(state, x[]))
 to_device(state, x) = x
-# creates a `local` vector for each thread group
-to_device(state, x::LocalMemory{T}) where T = LocalMem(ntuple(i-> Vector{T}(x.size), blockdim_x(state)))
 
 to_blocks(state, x) = x
 # unpacks local memory for each block

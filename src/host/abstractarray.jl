@@ -11,13 +11,6 @@ const GPUVector{T} = GPUArray{T, 1}
 const GPUMatrix{T} = GPUArray{T, 2}
 const GPUVecOrMat{T} = Union{GPUArray{T, 1}, GPUArray{T, 2}}
 
-# GPU Local Memory
-struct LocalMemory{T} <: GPUArray{T, 1}
-    size::Int
-    LocalMemory{T}(x::Integer) where T = new{T}(x)
-end
-
-
 # input/output
 
 ## serialization

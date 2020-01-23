@@ -12,24 +12,27 @@ using AbstractFFTs
 
 using Adapt
 
-# GPU interface
-## core definition
-include("abstractarray.jl")
-include("devices.jl")
-include("execution.jl")
-include("ondevice.jl")
-include("construction.jl")
-## integrations and specialized functionality
-include("base.jl")
-include("indexing.jl")
-include("broadcast.jl")
-include("mapreduce.jl")
-include("linalg.jl")
-include("random.jl")
+# device array
+include("device/abstractarray.jl")
+include("device/indexing.jl")
+include("device/gpu.jl")
 
-# CPU implementation
+# host array
+include("host/abstractarray.jl")
+include("host/devices.jl")
+include("host/execution.jl")
+include("host/construction.jl")
+## integrations and specialized functionality
+include("host/base.jl")
+include("host/indexing.jl")
+include("host/broadcast.jl")
+include("host/mapreduce.jl")
+include("host/linalg.jl")
+include("host/random.jl")
+include("host/quirks.jl")
+
+# CPU reference implementation
 include("array.jl")
 
-include("quirks.jl")
 
 end # module
