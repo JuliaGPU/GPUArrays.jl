@@ -1,3 +1,5 @@
+# constructors and conversions
+
 function Base.fill(X::Type{<: GPUArray}, val::T, dims::NTuple{N, Integer}) where {T, N}
     res = similar(X{T}, dims)
     fill!(res, val)

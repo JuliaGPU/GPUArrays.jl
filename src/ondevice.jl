@@ -1,4 +1,6 @@
-# functionality for vendor-agnostic kernels
+# on-device functionality
+
+export global_size, synchronize_threads, linear_index, @linearidx, @cartesianidx
 
 ## indexing
 

@@ -1,7 +1,4 @@
-#############################
-# reduce
-# functions in base implemented with a direct loop need to be overloaded to use mapreduce
-
+# map-reduce
 
 Base.any(A::GPUArray{Bool}) = mapreduce(identity, |, A; init = false)
 Base.all(A::GPUArray{Bool}) = mapreduce(identity, &, A; init = true)

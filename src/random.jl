@@ -1,3 +1,5 @@
+# integration with Random stdlib
+
 ## device interface
 
 # hybrid Tausworthe and Linear Congruent generator from

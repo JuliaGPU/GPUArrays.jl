@@ -1,3 +1,5 @@
+# host-level indexing
+
 # mechanism to disallow scalar operations
 
 const scalar_allowed = Ref(true)

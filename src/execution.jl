@@ -1,4 +1,9 @@
+# kernel execution
+
+export gpu_call, synchronize, thread_blocks_heuristic
+
 abstract type GPUBackend end
+
 backend(::Type{T}) where T = error("Can't choose GPU backend for $T")
 
 """
@@ -46,17 +51,6 @@ end
 # Internal GPU call function, that needs to be overloaded by the backends.
 _gpu_call(::Any, f, A, args, thread_blocks) = error("Not implemented") # COV_EXCL_LINE
 
-
-"""
-    device(A::AbstractArray)
-
-Gets the device associated to the Array `A`
-"""
-function device(A::AbstractArray)
-    # fallback is a noop, for backends not needing synchronization. This
-    # makes it easier to write generic code that also works for AbstractArrays
-end
-
 """
     synchronize(A::AbstractArray)
 
@@ -65,4 +59,11 @@ Blocks until all operations are finished on `A`
 function synchronize(A::AbstractArray)
     # fallback is a noop, for backends not needing synchronization. This
     # makes it easier to write generic code that also works for AbstractArrays
+end
+
+function thread_blocks_heuristic(len::Integer)
+    # TODO better threads default
+    threads = clamp(len, 1, 256)
+    blocks = max(ceil(Int, len / threads), 1)
+    (blocks,), (threads,)
 end

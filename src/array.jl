@@ -1,5 +1,6 @@
-# Very simple Julia back-end which is just for testing the implementation and can be used as
-# a reference implementation
+# CPU implementation of the GPUArray interface
+
+export JLArray
 
 struct JLArray{T, N} <: GPUArray{T, N}
     data::Array{T, N}
