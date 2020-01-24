@@ -194,7 +194,8 @@ function GPUArrays._gpu_call(::JLBackend, f, A, args::Tuple, blocks_threads::Tup
         for threadidx in CartesianIndices(threads)
             thread_state = JLState(state, threadidx.I)
             tasks[threadidx] = @async @allowscalar f(thread_state, device_args...)
-            # TODO: @async obfuscates the trace to any exception which happens during f
+            # TODO: require 1.3 and use Base.Threads.@spawn for actual multithreading
+            #       (this would require a different synchronization mechanism)
         end
         for t in tasks
             fetch(t)
