@@ -2,14 +2,19 @@
 
 export AbstractGPUArray
 
-abstract type AbstractGPUArray{T, N} <: DenseArray{T, N} end
+"""
+    AbstractGPUArray{T, N}
 
-# Sampler type that acts like a texture/image and allows interpolated access
-abstract type Sampler{T, N} <: DenseArray{T, N} end
+Supertype for `N`-dimensional GPU arrays (or array-like types) with elements of type `T`.
+This type is a subtype of `AbstractArray{T, N}`. Instances of this type are expected to live
+on the host, see [`AbstractDeviceArray`](@ref) for device-side objects.
+"""
+abstract type AbstractGPUArray{T, N} <: AbstractArray{T, N} end
 
-const GPUVector{T} = AbstractGPUArray{T, 1}
-const GPUMatrix{T} = AbstractGPUArray{T, 2}
-const GPUVecOrMat{T} = Union{AbstractGPUArray{T, 1}, AbstractGPUArray{T, 2}}
+const AbstractGPUVector{T} = AbstractGPUArray{T, 1}
+const AbstractGPUMatrix{T} = AbstractGPUArray{T, 2}
+const AbstractGPUVecOrMat{T} = Union{AbstractGPUArray{T, 1}, AbstractGPUArray{T, 2}}
+
 
 # input/output
 
@@ -216,8 +221,9 @@ DEALINGS IN THE SOFTWARE.
 import Base.reinterpret
 
 """
-Unsafe reinterpret for backends to overload.
-This makes it easier to do checks just on the high level.
+    unsafe_reinterpret(T, a, dims)
+
+Reinterpret the array `a` to have a new element type `T` and size `dims`.
 """
 function unsafe_reinterpret end
 

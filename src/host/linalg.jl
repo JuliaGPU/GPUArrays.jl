@@ -14,8 +14,8 @@ for elty in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin
         function BLAS.gemm!(
                 transA::AbstractChar, transB::AbstractChar, alpha::$T,
-                A::GPUVecOrMat{$elty}, B::GPUVecOrMat{$elty},
-                beta::$T, C::GPUVecOrMat{$elty}
+                A::AbstractGPUVecOrMat{$elty}, B::AbstractGPUVecOrMat{$elty},
+                beta::$T, C::AbstractGPUVecOrMat{$elty}
             )
             blasmod = blas_module(A)
             result = blasmod.gemm!(
@@ -56,7 +56,7 @@ end
 for elty in (Float32, Float64, ComplexF32, ComplexF64)
     T = VERSION >= v"1.3.0-alpha.115" ? :(Union{($elty), Bool}) : elty
     @eval begin
-        function BLAS.gemv!(trans::AbstractChar, alpha::$T, A::GPUVecOrMat{$elty}, X::GPUVector{$elty}, beta::$T, Y::GPUVector{$elty})
+        function BLAS.gemv!(trans::AbstractChar, alpha::$T, A::AbstractGPUVecOrMat{$elty}, X::AbstractGPUVector{$elty}, beta::$T, Y::AbstractGPUVector{$elty})
             m, n = size(A, 1), size(A, 2)
             if trans == 'N' && (length(X) != n || length(Y) != m)
                 throw(DimensionMismatch("A has dimensions $(size(A)), X has length $(length(X)) and Y has length $(length(Y))"))
@@ -92,7 +92,7 @@ end
 
 for elty in (Float32, Float64, ComplexF32, ComplexF64)
     @eval begin
-        function BLAS.gbmv!(trans::AbstractChar, m::Integer, kl::Integer, ku::Integer, alpha::($elty), A::GPUMatrix{$elty}, X::GPUVector{$elty}, beta::($elty), Y::GPUVector{$elty})
+        function BLAS.gbmv!(trans::AbstractChar, m::Integer, kl::Integer, ku::Integer, alpha::($elty), A::AbstractGPUMatrix{$elty}, X::AbstractGPUVector{$elty}, beta::($elty), Y::AbstractGPUVector{$elty})
             n = size(A, 2)
             if trans == 'N' && (length(X) != n || length(Y) != m)
                 throw(DimensionMismatch("A has dimensions $n, $m, X has length $(length(X)) and Y has length $(length(Y))"))

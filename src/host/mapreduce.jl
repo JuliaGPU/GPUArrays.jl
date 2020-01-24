@@ -9,7 +9,7 @@ Base.count(pred::Function, A::AbstractGPUArray) = Int(mapreduce(pred, +, A; init
 
 Base.:(==)(A::AbstractGPUArray, B::AbstractGPUArray) = Bool(mapreduce(==, &, A, B; init = true))
 
-LinearAlgebra.ishermitian(A::GPUMatrix) = acc_mapreduce(==, &, true, A, (adjoint(A),))
+LinearAlgebra.ishermitian(A::AbstractGPUMatrix) = acc_mapreduce(==, &, true, A, (adjoint(A),))
 
 # hack to get around of fetching the first element of the AbstractGPUArray
 # as a startvalue, which is a bit complicated with the current reduce implementation
