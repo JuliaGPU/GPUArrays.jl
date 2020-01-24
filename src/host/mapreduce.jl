@@ -1,20 +1,17 @@
-#############################
-# reduce
-# functions in base implemented with a direct loop need to be overloaded to use mapreduce
+# map-reduce
 
+Base.any(A::AbstractGPUArray{Bool}) = mapreduce(identity, |, A; init = false)
+Base.all(A::AbstractGPUArray{Bool}) = mapreduce(identity, &, A; init = true)
 
-Base.any(A::GPUArray{Bool}) = mapreduce(identity, |, A; init = false)
-Base.all(A::GPUArray{Bool}) = mapreduce(identity, &, A; init = true)
+Base.any(f::Function, A::AbstractGPUArray) = mapreduce(f, |, A; init = false)
+Base.all(f::Function, A::AbstractGPUArray) = mapreduce(f, &, A; init = true)
+Base.count(pred::Function, A::AbstractGPUArray) = Int(mapreduce(pred, +, A; init = 0))
 
-Base.any(f::Function, A::GPUArray) = mapreduce(f, |, A; init = false)
-Base.all(f::Function, A::GPUArray) = mapreduce(f, &, A; init = true)
-Base.count(pred::Function, A::GPUArray) = Int(mapreduce(pred, +, A; init = 0))
+Base.:(==)(A::AbstractGPUArray, B::AbstractGPUArray) = Bool(mapreduce(==, &, A, B; init = true))
 
-Base.:(==)(A::GPUArray, B::GPUArray) = Bool(mapreduce(==, &, A, B; init = true))
+LinearAlgebra.ishermitian(A::AbstractGPUMatrix) = acc_mapreduce(==, &, true, A, (adjoint(A),))
 
-LinearAlgebra.ishermitian(A::GPUMatrix) = acc_mapreduce(==, &, true, A, (adjoint(A),))
-
-# hack to get around of fetching the first element of the GPUArray
+# hack to get around of fetching the first element of the AbstractGPUArray
 # as a startvalue, which is a bit complicated with the current reduce implementation
 _initerror(f) = error("Please supply a neutral element for $f. E.g: mapreduce(f, $f, A; init = 1)")
 startvalue(f, T) = _initerror(f)
@@ -61,7 +58,7 @@ gpu_promote_type(::typeof(abs), ::Type{Complex{T}}) where {T} = T
 gpu_promote_type(::typeof(abs2), ::Type{Complex{T}}) where {T} = T
 
 import Base.Broadcast: Broadcasted, ArrayStyle
-const GPUSrcArray = Union{Broadcasted{ArrayStyle{AT}}, GPUArray{T, N}} where {T, N, AT<:GPUArray}
+const GPUSrcArray = Union{Broadcasted{ArrayStyle{AT}}, AbstractGPUArray{T, N}} where {T, N, AT<:AbstractGPUArray}
 
 function Base.mapreduce(f::Function, op::Function, A::GPUSrcArray; dims = :, init...)
     mapreduce_impl(f, op, init.data, A, dims)
@@ -119,7 +116,7 @@ end
     end
 end
 
-function Base._mapreducedim!(f, op, R::GPUArray, A::GPUSrcArray)
+function Base._mapreducedim!(f, op, R::AbstractGPUArray, A::GPUSrcArray)
     range = ifelse.(length.(axes(R)) .== 1, axes(A), nothing)
     gpu_call(mapreducedim_kernel, R, (f, op, R, A, range))
     return R
@@ -189,6 +186,6 @@ function fast_isapprox(x::Number, y::Number, rtol::Real = Base.rtoldefault(x, y)
     x == y || (isfinite(x) && isfinite(y) && abs(x-y) <= max(atol, rtol*max(abs(x), abs(y))))
 end
 
-Base.isapprox(A::GPUArray{T1}, B::GPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, B, T1(rtol)|>real, T1(atol)|>real))
-Base.isapprox(A::AbstractArray{T1}, B::GPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, Array(B), T1(rtol)|>real, T1(atol)|>real))
-Base.isapprox(A::GPUArray{T1}, B::AbstractArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(Array(A), B, T1(rtol)|>real, T1(atol)|>real))
+Base.isapprox(A::AbstractGPUArray{T1}, B::AbstractGPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, B, T1(rtol)|>real, T1(atol)|>real))
+Base.isapprox(A::AbstractArray{T1}, B::AbstractGPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, Array(B), T1(rtol)|>real, T1(atol)|>real))
+Base.isapprox(A::AbstractGPUArray{T1}, B::AbstractArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(Array(A), B, T1(rtol)|>real, T1(atol)|>real))

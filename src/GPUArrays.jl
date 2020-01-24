@@ -1,9 +1,5 @@
 module GPUArrays
 
-export GPUArray, gpu_call, thread_blocks_heuristic, global_size, synchronize_threads
-export linear_index, @linearidx, @cartesianidx, convolution!, device, synchronize
-export JLArray
-
 using Serialization
 using Random
 using LinearAlgebra
@@ -16,25 +12,27 @@ using AbstractFFTs
 
 using Adapt
 
-# GPU interface
-include("abstractarray.jl")
-include("abstract_gpu_interface.jl")
-include("ondevice.jl")
-include("base.jl")
-include("construction.jl")
-include("blas.jl")
-include("broadcast.jl")
-include("devices.jl")
-include("heuristics.jl")
-include("indexing.jl")
-include("linalg.jl")
-include("mapreduce.jl")
-include("convolution.jl")
-include("random.jl")
+# device array
+include("device/abstractarray.jl")
+include("device/indexing.jl")
+include("device/synchronization.jl")
 
-# CPU implementation
+# host array
+include("host/abstractarray.jl")
+include("host/devices.jl")
+include("host/execution.jl")
+include("host/construction.jl")
+## integrations and specialized functionality
+include("host/base.jl")
+include("host/indexing.jl")
+include("host/broadcast.jl")
+include("host/mapreduce.jl")
+include("host/linalg.jl")
+include("host/random.jl")
+include("host/quirks.jl")
+
+# CPU reference implementation
 include("array.jl")
 
-include("quirks.jl")
 
 end # module

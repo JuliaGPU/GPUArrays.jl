@@ -3,11 +3,15 @@ language: julia
 os:
   - linux
   - osx
+  - windows
 
 dist: trusty
 
 julia:
   - 1.0
+  - 1.1
+  - 1.2
+  - 1.3
   - nightly
 
 matrix:
@@ -20,7 +24,7 @@ notifications:
 jobs:
   include:
     - stage: "Documentation"
-      julia: 1.0
+      julia: 1.3
       os: linux
       script:
         - julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd()));

@@ -1,3 +1,5 @@
+# broadcasting operations
+
 using Base.Broadcast
 
 import Base.Broadcast: BroadcastStyle, Broadcasted, ArrayStyle
@@ -9,34 +11,34 @@ import Base.Broadcast: BroadcastStyle, Broadcasted, ArrayStyle
 # TODO: investigate if we should define out own `GPUArrayStyle{N} <: AbstractArrayStyle{N}`
 #
 # NOTE: this uses the specific `T` that was used e.g. `JLArray` or `CLArray` for ArrayStyle,
-#       instead of using `ArrayStyle{GPUArray}`, due to the fact how `similar` works.
-BroadcastStyle(::Type{T}) where {T<:GPUArray} = ArrayStyle{T}()
+#       instead of using `ArrayStyle{AbstractGPUArray}`, due to the fact how `similar` works.
+BroadcastStyle(::Type{T}) where {T<:AbstractGPUArray} = ArrayStyle{T}()
 
 # Wrapper types otherwise forget that they are GPU compatible
 #
-# NOTE: Don't directly use ArrayStyle{GPUArray} here since that would mean that `CuArrays`
+# NOTE: Don't directly use ArrayStyle{AbstractGPUArray} here since that would mean that `CuArrays`
 #       customization no longer take effect.
 for (W, ctor) in Adapt.wrappers
   @eval begin
-    BroadcastStyle(::Type{<:$W}) where {AT<:GPUArray} = BroadcastStyle(AT)
-    backend(::Type{<:$W}) where {AT<:GPUArray} = backend(AT)
+    BroadcastStyle(::Type{<:$W}) where {AT<:AbstractGPUArray} = BroadcastStyle(AT)
+    backend(::Type{<:$W}) where {AT<:AbstractGPUArray} = backend(AT)
   end
 end
 
 # This Union is a hack. Ideally Base would have a Transpose <: WrappedArray <: AbstractArray
-# and we could define our methods in terms of Union{GPUArray, WrappedArray{<:Any, <:GPUArray}}
+# and we could define our methods in terms of Union{AbstractGPUArray, WrappedArray{<:Any, <:AbstractGPUArray}}
 @eval const GPUDestArray =
-  Union{GPUArray, $((:($W where {AT <: GPUArray}) for (W, _) in Adapt.wrappers)...)}
+  Union{AbstractGPUArray, $((:($W where {AT <: AbstractGPUArray}) for (W, _) in Adapt.wrappers)...)}
 
 # We purposefully only specialize `copyto!`, dependent packages need to make sure that they
 # can handle:
 # - `bc::Broadcast.Broadcasted{Style}`
 # - `ex::Broadcast.Extruded`
-# - `LinearAlgebra.Transpose{,<:GPUArray}` and `LinearAlgebra.Adjoint{,<:GPUArray}`, etc
+# - `LinearAlgebra.Transpose{,<:AbstractGPUArray}` and `LinearAlgebra.Adjoint{,<:AbstractGPUArray}`, etc
 #    as arguments to a kernel and that they do the right conversion.
 #
 # This Broadcast can be further customize by:
-# - `Broadcast.preprocess(dest::GPUArray, bc::Broadcasted{Nothing})` which allows for a
+# - `Broadcast.preprocess(dest::AbstractGPUArray, bc::Broadcasted{Nothing})` which allows for a
 #   complete transformation based on the output type just at the end of the pipeline.
 # - `Broadcast.broadcasted(::Style, f)` selection of an implementation of `f` compatible
 #   with `Style`

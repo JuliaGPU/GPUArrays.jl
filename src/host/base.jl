@@ -1,60 +1,23 @@
+# common Base functionality
+
 allequal(x) = true
 allequal(x, y, z...) = x == y && allequal(y, z...)
-function Base.map!(f, y::GPUArray, xs::GPUArray...)
+function Base.map!(f, y::AbstractGPUArray, xs::AbstractGPUArray...)
     @assert allequal(size.((y, xs...))...)
     return y .= f.(xs...)
 end
-function Base.map(f, y::GPUArray, xs::GPUArray...)
+function Base.map(f, y::AbstractGPUArray, xs::AbstractGPUArray...)
     @assert allequal(size.((y, xs...))...)
     return f.(y, xs...)
 end
 
 # Break ambiguities with base
-Base.map!(f, y::GPUArray) =
-    invoke(map!, Tuple{Any,GPUArray,Vararg{GPUArray}}, f, y)
-Base.map!(f, y::GPUArray, x::GPUArray) =
-    invoke(map!, Tuple{Any,GPUArray, Vararg{GPUArray}}, f, y, x)
-Base.map!(f, y::GPUArray, x1::GPUArray, x2::GPUArray) =
-    invoke(map!, Tuple{Any,GPUArray, Vararg{GPUArray}}, f, y, x1, x2)
-
-
-# TODO find out why this segfaults julia without stack trace on AMD
-# produces wrong results on Titan X and passes on GTX 950..........
-
-# @generated function nindex(i::T, ls::NTuple{N}) where {T, N}
-#     quote
-#         Base.@_inline_meta
-#         $(foldr(:($T(0), $T(0)), T(1):T(N)) do n, els
-#             :(i ≤ ls[$n] ? ($T($n), i) : (i -= $T(ls[$n]); $els))
-#         end)
-#     end
-# end
-# function catindex(dim, I::NTuple{N, T}, shapes) where {T, N}
-#     xi = nindex(I[dim], map(s-> s[dim], shapes))
-#     x = xi[1]; i = xi[2]
-#     x, ntuple(n -> n == dim ? i : I[n], Val{N})
-# end
-#
-# function _cat(dim, dest, xs...)
-#     gpu_call(dest, (Int(dim), dest, xs)) do state, dim, dest, xs
-#         I = @cartesianidx dest state
-#         nI = catindex(dim, I, size.(xs))
-#         n = nI[1]; I′ = nI[2]
-#         @inbounds dest[I...] = xs[n][I′...]
-#         return
-#     end
-#     return dest
-# end
-#
-# function Base.cat_t(dims::Integer, T::Type, x::GPUArray, xs::GPUArray...)
-#     catdims = Base.dims2cat(dims)
-#     shape = Base.cat_shape(catdims, (), size.((x, xs...))...)
-#     dest = Base.cat_similar(x, T, shape)
-#     _cat(dims, dest, x, xs...)
-# end
-#
-# Base.vcat(xs::GPUArray...) = cat(1, xs...)
-# Base.hcat(xs::GPUArray...) = cat(2, xs...)
+Base.map!(f, y::AbstractGPUArray) =
+    invoke(map!, Tuple{Any,AbstractGPUArray,Vararg{AbstractGPUArray}}, f, y)
+Base.map!(f, y::AbstractGPUArray, x::AbstractGPUArray) =
+    invoke(map!, Tuple{Any,AbstractGPUArray, Vararg{AbstractGPUArray}}, f, y, x)
+Base.map!(f, y::AbstractGPUArray, x1::AbstractGPUArray, x2::AbstractGPUArray) =
+    invoke(map!, Tuple{Any,AbstractGPUArray, Vararg{AbstractGPUArray}}, f, y, x1, x2)
 
 
 # Base functions that are sadly not fit for the the GPU yet (they only work for Int64)
@@ -91,12 +54,12 @@ function _sub2ind(inds, L, ind, i::IT, I::IT...) where IT
 end
 
 # This is pretty ugly, but I feel bad to add those to device arrays, since
-# we're never bound checking... So getindex(a::GPUVector, 10, 10) would silently go unnoticed
+# we're never bound checking... So getindex(a::AbstractGPUVector, 10, 10) would silently go unnoticed
 # we need this here for easier implementation of repeat
 @inline Base.@propagate_inbounds getidx_2d1d(x::AbstractVector, i, j) = x[i]
 @inline Base.@propagate_inbounds getidx_2d1d(x::AbstractMatrix, i, j) = x[i, j]
 
-function Base.repeat(a::GPUVecOrMat, m::Int, n::Int = 1)
+function Base.repeat(a::AbstractGPUVecOrMat, m::Int, n::Int = 1)
     o, p = size(a, 1), size(a, 2)
     b = similar(a, o*m, p*n)
     gpu_call(a, (b, a, o, p, m, n), n) do state, b, a, o, p, m, n
@@ -116,7 +79,7 @@ function Base.repeat(a::GPUVecOrMat, m::Int, n::Int = 1)
     return b
 end
 
-function Base.repeat(a::GPUVector, m::Int)
+function Base.repeat(a::AbstractGPUVector, m::Int)
     o = length(a)
     b = similar(a, o*m)
     gpu_call(a, (b, a, o, m), m) do state, b, a, o, m

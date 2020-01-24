@@ -1,18 +1,19 @@
-# Dense GPU Array
-abstract type GPUArray{T, N} <: DenseArray{T, N} end
+# core definition of the AbstractGPUArray type
 
-# Sampler type that acts like a texture/image and allows interpolated access
-abstract type Sampler{T, N} <: DenseArray{T, N} end
+export AbstractGPUArray
 
-const GPUVector{T} = GPUArray{T, 1}
-const GPUMatrix{T} = GPUArray{T, 2}
-const GPUVecOrMat{T} = Union{GPUArray{T, 1}, GPUArray{T, 2}}
+"""
+    AbstractGPUArray{T, N} <: DenseArray{T, N}
 
-# GPU Local Memory
-struct LocalMemory{T} <: GPUArray{T, 1}
-    size::Int
-    LocalMemory{T}(x::Integer) where T = new{T}(x)
-end
+Supertype for `N`-dimensional GPU arrays (or array-like types) with elements of type `T`.
+Instances of this type are expected to live on the host, see [`AbstractDeviceArray`](@ref)
+for device-side objects.
+"""
+abstract type AbstractGPUArray{T, N} <: DenseArray{T, N} end
+
+const AbstractGPUVector{T} = AbstractGPUArray{T, 1}
+const AbstractGPUMatrix{T} = AbstractGPUArray{T, 2}
+const AbstractGPUVecOrMat{T} = Union{AbstractGPUArray{T, 1}, AbstractGPUArray{T, 2}}
 
 
 # input/output
@@ -21,11 +22,11 @@ end
 
 import Serialization: AbstractSerializer, serialize, deserialize, serialize_type
 
-function serialize(s::AbstractSerializer, t::T) where T <: GPUArray
+function serialize(s::AbstractSerializer, t::T) where T <: AbstractGPUArray
     serialize_type(s, T)
     serialize(s, Array(t))
 end
-function deserialize(s::AbstractSerializer, ::Type{T}) where T <: GPUArray
+function deserialize(s::AbstractSerializer, ::Type{T}) where T <: AbstractGPUArray
     A = deserialize(s)
     T(A)
 end
@@ -60,15 +61,15 @@ convert_to_cpu(xs) = adapt(Array, xs)
 for (W, ctor) in (:AT => (A,mut)->mut(A), Adapt.wrappers...)
     @eval begin
         # display
-        Base.print_array(io::IO, X::$W where {AT <: GPUArray}) =
+        Base.print_array(io::IO, X::$W where {AT <: AbstractGPUArray}) =
             Base.print_array(io, $ctor(X, convert_to_cpu))
 
         # show
-        Base._show_nonempty(io::IO, X::$W where {AT <: GPUArray}, prefix::String) =
+        Base._show_nonempty(io::IO, X::$W where {AT <: AbstractGPUArray}, prefix::String) =
             Base._show_nonempty(io, $ctor(X, convert_to_cpu), prefix)
-        Base._show_empty(io::IO, X::$W where {AT <: GPUArray}) =
+        Base._show_empty(io::IO, X::$W where {AT <: AbstractGPUArray}) =
             Base._show_empty(io, $ctor(X, convert_to_cpu))
-        Base.show_vector(io::IO, v::$W where {AT <: GPUArray}, args...) =
+        Base.show_vector(io::IO, v::$W where {AT <: AbstractGPUArray}, args...) =
             Base.show_vector(io, $ctor(v, convert_to_cpu), args...)
     end
 end
@@ -79,7 +80,7 @@ collect_to_cpu(xs::AbstractArray) = collect(convert_to_cpu(xs))
 
 for (W, ctor) in (:AT => (A,mut)->mut(A), Adapt.wrappers...)
     @eval begin
-        Base.collect(X::$W where {AT <: GPUArray}) = collect_to_cpu(X)
+        Base.collect(X::$W where {AT <: AbstractGPUArray}) = collect_to_cpu(X)
     end
 end
 
@@ -90,18 +91,18 @@ end
 
 # convert to something we can get a pointer to
 materialize(x::AbstractArray) = Array(x)
-materialize(x::GPUArray) = x
+materialize(x::AbstractGPUArray) = x
 materialize(x::Array) = x
 
-# TODO: do we want to support `copyto(..., WrappedArray{GPUArray})`
+# TODO: do we want to support `copyto(..., WrappedArray{AbstractGPUArray})`
 # if so (does not work due to lack of copy constructors):
 #for (W, ctor) in (:AT => (A,mut)->mut(A), Adapt.wrappers...)
 #    @eval begin
-#        materialize(X::$W) where {AT <: GPUArray} = AT(X)
+#        materialize(X::$W) where {AT <: AbstractGPUArray} = AT(X)
 #    end
 #end
 
-for (D, S) in ((GPUArray, AbstractArray), (Array, GPUArray), (GPUArray, GPUArray))
+for (D, S) in ((AbstractGPUArray, AbstractArray), (Array, AbstractGPUArray), (AbstractGPUArray, AbstractGPUArray))
     @eval begin
         function Base.copyto!(dest::$D{T, N}, rdest::NTuple{N, UnitRange},
                               src::$S{T, N}, ssrc::NTuple{N, UnitRange}) where {T, N}
@@ -132,7 +133,7 @@ end
 
 ## generalized blocks of heterogeneous memory
 
-Base.copyto!(dest::GPUArray, src::GPUArray) =
+Base.copyto!(dest::AbstractGPUArray, src::AbstractGPUArray) =
     copyto!(dest, CartesianIndices(dest), src, CartesianIndices(src))
 
 function copy_kernel!(state, dest, dest_offsets, src, src_offsets, shape, shape_dest, shape_source, length)
@@ -147,8 +148,8 @@ function copy_kernel!(state, dest, dest_offsets, src, src_offsets, shape, shape_
     return
 end
 
-function Base.copyto!(dest::GPUArray{T, N}, destcrange::CartesianIndices{N},
-                      src::GPUArray{U, N}, srccrange::CartesianIndices{N}) where {T, U, N}
+function Base.copyto!(dest::AbstractGPUArray{T, N}, destcrange::CartesianIndices{N},
+                      src::AbstractGPUArray{U, N}, srccrange::CartesianIndices{N}) where {T, U, N}
     shape = size(destcrange)
     if shape != size(srccrange)
         throw(DimensionMismatch("Ranges don't match their size. Found: $shape, $(size(srccrange))"))
@@ -163,7 +164,7 @@ function Base.copyto!(dest::GPUArray{T, N}, destcrange::CartesianIndices{N},
     dest
 end
 
-function Base.copyto!(dest::GPUArray{T, N}, destcrange::CartesianIndices{N},
+function Base.copyto!(dest::AbstractGPUArray{T, N}, destcrange::CartesianIndices{N},
                       src::AbstractArray{T, N}, srccrange::CartesianIndices{N}) where {T, N}
     # Is this efficient? Maybe!
     # TODO: compare to a pure intrinsic copyto implementation!
@@ -176,7 +177,7 @@ function Base.copyto!(dest::GPUArray{T, N}, destcrange::CartesianIndices{N},
 end
 
 function Base.copyto!(dest::AbstractArray{T, N}, destcrange::CartesianIndices{N},
-                      src::GPUArray{T, N}, srccrange::CartesianIndices{N}) where {T, N}
+                      src::AbstractGPUArray{T, N}, srccrange::CartesianIndices{N}) where {T, N}
     # Is this efficient? Maybe!
     dest_gpu = similar(src, size(destcrange))
     nrange = CartesianIndices(size(dest_gpu))
@@ -187,9 +188,9 @@ end
 
 ## other
 
-Base.copy(x::GPUArray) = identity.(x)
+Base.copy(x::AbstractGPUArray) = identity.(x)
 
-Base.deepcopy(x::GPUArray) = copy(x)
+Base.deepcopy(x::AbstractGPUArray) = copy(x)
 
 
 # reinterpret
@@ -220,25 +221,26 @@ DEALINGS IN THE SOFTWARE.
 import Base.reinterpret
 
 """
-Unsafe reinterpret for backends to overload.
-This makes it easier to do checks just on the high level.
+    unsafe_reinterpret(T, a, dims)
+
+Reinterpret the array `a` to have a new element type `T` and size `dims`.
 """
 function unsafe_reinterpret end
 
-function reinterpret(::Type{T}, a::GPUArray{S,1}) where T where S
+function reinterpret(::Type{T}, a::AbstractGPUArray{S,1}) where T where S
     nel = (length(a)*sizeof(S)) ÷ sizeof(T)
     # TODO: maybe check that remainder is zero?
     return reinterpret(T, a, (nel,))
 end
 
-function reinterpret(::Type{T}, a::GPUArray{S}) where T where S
+function reinterpret(::Type{T}, a::AbstractGPUArray{S}) where T where S
     if sizeof(S) != sizeof(T)
         throw(ArgumentError("result shape not specified"))
     end
     reinterpret(T, a, size(a))
 end
 
-function reinterpret(::Type{T}, a::GPUArray{S}, dims::NTuple{N, Integer}) where T where S where N
+function reinterpret(::Type{T}, a::AbstractGPUArray{S}, dims::NTuple{N, Integer}) where T where S where N
     if !isbitstype(T)
         throw(ArgumentError("cannot reinterpret Array{$(S)} to ::Type{Array{$(T)}}, type $(T) is not a bits type"))
     end
@@ -252,13 +254,13 @@ function reinterpret(::Type{T}, a::GPUArray{S}, dims::NTuple{N, Integer}) where 
     unsafe_reinterpret(T, a, dims)
 end
 
-function Base._reshape(A::GPUArray{T}, dims::Dims) where T
+function Base._reshape(A::AbstractGPUArray{T}, dims::Dims) where T
     n = length(A)
     prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
     return unsafe_reinterpret(T, A, dims)
 end
 #ambig
-function Base._reshape(A::GPUArray{T, 1}, dims::Tuple{Integer}) where T
+function Base._reshape(A::AbstractGPUArray{T, 1}, dims::Tuple{Integer}) where T
     n = Base._length(A)
     prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
     return unsafe_reinterpret(T, A, dims)
@@ -270,4 +272,4 @@ end
 # TODO: filter!
 
 # revert of JuliaLang/julia#31929
-Base.filter(f, As::GPUArray) = As[map(f, As)::GPUArray{Bool}]
+Base.filter(f, As::AbstractGPUArray) = As[map(f, As)::AbstractGPUArray{Bool}]

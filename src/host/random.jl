@@ -1,3 +1,5 @@
+# integration with Random stdlib
+
 ## device interface
 
 # hybrid Tausworthe and Linear Congruent generator from
@@ -60,11 +62,11 @@ end
 ## host interface
 
 struct RNG <: AbstractRNG
-    state::GPUArray{NTuple{4,UInt32},1}
+    state::AbstractGPUArray{NTuple{4,UInt32},1}
 end
 
 const GLOBAL_RNGS = Dict()
-function global_rng(A::GPUArray)
+function global_rng(A::AbstractGPUArray)
     dev = GPUArrays.device(A)
     get!(GLOBAL_RNGS, dev) do
         N = GPUArrays.threads(dev)
@@ -74,7 +76,7 @@ function global_rng(A::GPUArray)
     end
 end
 
-function Random.rand!(rng::RNG, A::GPUArray{T}) where T <: Number
+function Random.rand!(rng::RNG, A::AbstractGPUArray{T}) where T <: Number
     gpu_call(A, (rng.state, A,)) do state, randstates, a
         idx = linear_index(state)
         idx > length(a) && return
@@ -84,4 +86,4 @@ function Random.rand!(rng::RNG, A::GPUArray{T}) where T <: Number
     A
 end
 
-Random.rand!(A::GPUArray) = rand!(global_rng(A), A)
+Random.rand!(A::AbstractGPUArray) = rand!(global_rng(A), A)
