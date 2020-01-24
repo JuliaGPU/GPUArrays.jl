@@ -3,13 +3,13 @@
 export AbstractGPUArray
 
 """
-    AbstractGPUArray{T, N}
+    AbstractGPUArray{T, N} <: DenseArray{T, N}
 
 Supertype for `N`-dimensional GPU arrays (or array-like types) with elements of type `T`.
-This type is a subtype of `AbstractArray{T, N}`. Instances of this type are expected to live
-on the host, see [`AbstractDeviceArray`](@ref) for device-side objects.
+Instances of this type are expected to live on the host, see [`AbstractDeviceArray`](@ref)
+for device-side objects.
 """
-abstract type AbstractGPUArray{T, N} <: AbstractArray{T, N} end
+abstract type AbstractGPUArray{T, N} <: DenseArray{T, N} end
 
 const AbstractGPUVector{T} = AbstractGPUArray{T, 1}
 const AbstractGPUMatrix{T} = AbstractGPUArray{T, 2}

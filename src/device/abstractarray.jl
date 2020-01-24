@@ -6,13 +6,13 @@ export AbstractDeviceArray, @LocalMemory
 ## device array
 
 """
-    AbstractDeviceArray{T, N}
+    AbstractDeviceArray{T, N} <: DenseArray{T, N}
 
 Supertype for `N`-dimensional GPU arrays (or array-like types) with elements of type `T`.
-This type is a subtype of `AbstractArray{T, N}`. Instances of this type are expected to live
-on the device, see [`AbstractGPUArray`](@ref) for device-side objects.
+Instances of this type are expected to live on the device, see [`AbstractGPUArray`](@ref)
+for device-side objects.
 """
-abstract type AbstractDeviceArray{T, N} <: AbstractArray{T, N} end
+abstract type AbstractDeviceArray{T, N} <: DenseArray{T, N} end
 
 Base.IndexStyle(::AbstractDeviceArray) = IndexLinear()
 
