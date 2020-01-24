@@ -1,4 +1,4 @@
-# Abstract test suite that can be used for all packages inheriting from AbstractGPUArray
+# test suite that can be used for all packages inheriting from GPUArrays
 
 module TestSuite
 
