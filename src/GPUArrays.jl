@@ -15,7 +15,7 @@ using Adapt
 # device array
 include("device/abstractarray.jl")
 include("device/indexing.jl")
-include("device/gpu.jl")
+include("device/synchronization.jl")
 
 # host array
 include("host/abstractarray.jl")

@@ -6,6 +6,14 @@ using GPUArrays
 
 export JLArray
 
+
+#
+# Host array
+#
+
+# the definition of a host array type, implementing different Base interfaces
+# to make it function properly and behave like the Base Array type.
+
 struct JLArray{T, N} <: AbstractGPUArray{T, N}
     data::Array{T, N}
     dims::Dims{N}
@@ -15,12 +23,7 @@ struct JLArray{T, N} <: AbstractGPUArray{T, N}
     end
 end
 
-
-#
-# AbstractArray interface
-#
-
-## typical constructors
+## constructors
 
 # type and dimensionality specified, accepting dims as tuples of Ints
 JLArray{T,N}(::UndefInitializer, dims::Dims{N}) where {T,N} =
@@ -139,6 +142,8 @@ end
 # AbstractGPUArray interface
 #
 
+# implementation of GPUArrays-specific interfaces
+
 GPUArrays.unsafe_reinterpret(::Type{T}, A::JLArray, size::Tuple) where T =
     reshape(reinterpret(T, A.data), size)
 
@@ -177,7 +182,7 @@ function JLState(state::JLState{N}, threadidx::NTuple{N}) where N
     )
 end
 
-to_device(state, x::JLArray) = x.data
+to_device(state, x::JLArray{T,N}) where {T,N} = JLDeviceArray{T,N}(x.data, x.dims)
 to_device(state, x::Tuple) = to_device.(Ref(state), x)
 to_device(state, x::Base.RefValue{<: JLArray}) = Base.RefValue(to_device(state, x[]))
 to_device(state, x) = x
@@ -205,31 +210,6 @@ function GPUArrays._gpu_call(::JLBackend, f, A, args::Tuple, blocks_threads::Tup
 end
 
 
-## gpu intrinsics
-
-@inline function GPUArrays.synchronize_threads(::JLState)
-    # All threads are getting started asynchronously, so a yield will yield to the next
-    # execution of the same function, which should call yield at the exact same point in the
-    # program, leading to a chain of yields effectively syncing the tasks (threads).
-    yield()
-    return
-end
-
-function GPUArrays.LocalMemory(state::JLState, ::Type{T}, ::Val{N}, ::Val{C}) where {T, N, C}
-    state.localmem_counter += 1
-    lmems = state.localmems[blockidx_x(state)]
-
-    # first invocation in block
-    if length(lmems) < state.localmem_counter
-        lmem = fill(zero(T), N)
-        push!(lmems, lmem)
-        return lmem
-    else
-        return lmems[state.localmem_counter]
-    end
-end
-
-
 ## device properties
 
 struct JLDevice end
@@ -249,24 +229,65 @@ GPUArrays.blasbuffer(A::JLArray) = A.data
 
 
 #
-# AbstractDeviceArray interface
+# Device array
 #
 
-function GPUArrays.AbstractDeviceArray(ptr::Array, shape::NTuple{N, Integer}) where N
-    reshape(ptr, shape)
+# definition of a minimal device array type that supports the subset of operations
+# that are used in GPUArrays kernels
+
+struct JLDeviceArray{T, N} <: AbstractDeviceArray{T, N}
+    data::Array{T, N}
+    dims::Dims{N}
+
+    function JLDeviceArray{T,N}(data::Array{T, N}, dims::Dims{N}) where {T,N}
+        new(data, dims)
+    end
 end
-function GPUArrays.AbstractDeviceArray(ptr::Array, shape::Vararg{Integer, N}) where N
-    reshape(ptr, shape)
+
+function GPUArrays.LocalMemory(state::JLState, ::Type{T}, ::Val{dims}, ::Val{id}) where {T, dims, id}
+    state.localmem_counter += 1
+    lmems = state.localmems[blockidx_x(state)]
+
+    # first invocation in block
+    data = if length(lmems) < state.localmem_counter
+        lmem = fill(zero(T), dims)
+        push!(lmems, lmem)
+        lmem
+    else
+        lmems[state.localmem_counter]
+    end
+
+    N = length(dims)
+    JLDeviceArray{T,N}(data, tuple(dims...))
 end
+
+
+## array interface
+
+Base.size(x::JLDeviceArray) = x.dims
 
 
 ## indexing
+
+@inline Base.getindex(A::JLDeviceArray, index::Integer) = getindex(A.data, index)
+@inline Base.setindex!(A::JLDeviceArray, x, index::Integer) = setindex!(A.data, x, index)
 
 for (i, sym) in enumerate((:x, :y, :z))
     for f in (:blockidx, :blockdim, :threadidx, :griddim)
         fname = Symbol(string(f, '_', sym))
         @eval GPUArrays.$fname(state::JLState) = Int(state.$f[$i])
     end
+end
+
+
+## synchronization
+
+@inline function GPUArrays.synchronize_threads(::JLState)
+    # All threads are getting started asynchronously, so a yield will yield to the next
+    # execution of the same function, which should call yield at the exact same point in the
+    # program, leading to a chain of yields effectively syncing the tasks (threads).
+    yield()
+    return
 end
 
 end
