@@ -1,5 +1,8 @@
 # host-level indexing
 
+export allowscalar, @allowscalar, assertscalar
+
+
 # mechanism to disallow scalar operations
 
 const scalar_allowed = Ref(true)

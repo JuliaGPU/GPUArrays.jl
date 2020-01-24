@@ -1,4 +1,8 @@
-# reference implementation of the GPUArrays interfaces
+# reference implementation of a CPU-based array type
+
+module JLArrays
+
+using GPUArrays
 
 export JLArray
 
@@ -12,7 +16,11 @@ struct JLArray{T, N} <: AbstractGPUArray{T, N}
 end
 
 
-## construction
+#
+# AbstractArray interface
+#
+
+## typical constructors
 
 # type and dimensionality specified, accepting dims as tuples of Ints
 JLArray{T,N}(::UndefInitializer, dims::Dims{N}) where {T,N} =
@@ -28,7 +36,6 @@ JLArray{T}(::UndefInitializer, dims::Integer...) where {T} =
 
 # empty vector constructor
 JLArray{T,1}() where {T} = JLArray{T,1}(undef, 0)
-
 
 Base.similar(a::JLArray{T,N}) where {T,N} = JLArray{T,N}(undef, size(a))
 Base.similar(a::JLArray{T}, dims::Base.Dims{N}) where {T,N} = JLArray{T,N}(undef, dims)
@@ -64,6 +71,8 @@ Base.convert(::Type{T}, x::T) where T <: JLArray = x
 
 ## broadcast
 
+using Base.Broadcast: BroadcastStyle, Broadcasted, ArrayStyle
+
 BroadcastStyle(::Type{<:JLArray}) = ArrayStyle{JLArray}()
 
 function Base.similar(bc::Broadcasted{ArrayStyle{JLArray}}, ::Type{T}) where T
@@ -72,29 +81,8 @@ end
 
 Base.similar(bc::Broadcasted{ArrayStyle{JLArray}}, ::Type{T}, dims...) where {T} = JLArray{T}(undef, dims...)
 
-## gpuarray interface
 
-struct JLBackend <: GPUBackend end
-backend(::Type{<:JLArray}) = JLBackend()
-
-"""
-Thread group local memory
-"""
-struct LocalMem{N, T}
-    x::NTuple{N, Vector{T}}
-end
-
-to_device(state, x::JLArray) = x.data
-to_device(state, x::Tuple) = to_device.(Ref(state), x)
-to_device(state, x::Base.RefValue{<: JLArray}) = Base.RefValue(to_device(state, x[]))
-to_device(state, x) = x
-
-to_blocks(state, x) = x
-# unpacks local memory for each block
-to_blocks(state, x::LocalMem) = x.x[blockidx_x(state)]
-
-unsafe_reinterpret(::Type{T}, A::JLArray, size::Tuple) where T =
-    reshape(reinterpret(T, A.data), size)
+## memory operations
 
 function Base.copyto!(dest::Array{T}, d_offset::Integer,
                       source::JLArray{T}, s_offset::Integer,
@@ -103,6 +91,7 @@ function Base.copyto!(dest::Array{T}, d_offset::Integer,
     @boundscheck checkbounds(source, s_offset+amount-1)
     copyto!(dest, d_offset, source.data, s_offset, amount)
 end
+
 function Base.copyto!(dest::JLArray{T}, d_offset::Integer,
                       source::Array{T}, s_offset::Integer,
                       amount::Integer) where T
@@ -111,6 +100,7 @@ function Base.copyto!(dest::JLArray{T}, d_offset::Integer,
     copyto!(dest.data, d_offset, source, s_offset, amount)
     dest
 end
+
 function Base.copyto!(dest::JLArray{T}, d_offset::Integer,
                       source::JLArray{T}, s_offset::Integer,
                       amount::Integer) where T
@@ -119,6 +109,45 @@ function Base.copyto!(dest::JLArray{T}, d_offset::Integer,
     copyto!(dest.data, d_offset, source.data, s_offset, amount)
     dest
 end
+
+## fft
+
+using AbstractFFTs
+
+# defining our own plan type is the easiest way to pass around the plans in FFTW interface
+# without ambiguities
+
+struct FFTPlan{T}
+    p::T
+end
+
+AbstractFFTs.plan_fft(A::JLArray; kw_args...) = FFTPlan(plan_fft(A.data; kw_args...))
+AbstractFFTs.plan_fft!(A::JLArray; kw_args...) = FFTPlan(plan_fft!(A.data; kw_args...))
+AbstractFFTs.plan_bfft!(A::JLArray; kw_args...) = FFTPlan(plan_bfft!(A.data; kw_args...))
+AbstractFFTs.plan_bfft(A::JLArray; kw_args...) = FFTPlan(plan_bfft(A.data; kw_args...))
+AbstractFFTs.plan_ifft!(A::JLArray; kw_args...) = FFTPlan(plan_ifft!(A.data; kw_args...))
+AbstractFFTs.plan_ifft(A::JLArray; kw_args...) = FFTPlan(plan_ifft(A.data; kw_args...))
+
+function Base.:(*)(plan::FFTPlan, A::JLArray)
+    x = plan.p * A.data
+    JLArray(x)
+end
+
+
+
+#
+# AbstractGPUArray interface
+#
+
+GPUArrays.unsafe_reinterpret(::Type{T}, A::JLArray, size::Tuple) where T =
+    reshape(reinterpret(T, A.data), size)
+
+
+## execution
+
+struct JLBackend <: AbstractGPUBackend end
+
+GPUArrays.backend(::Type{<:JLArray}) = JLBackend()
 
 mutable struct JLState{N}
     blockdim::NTuple{N, Int}
@@ -148,9 +177,47 @@ function JLState(state::JLState{N}, threadidx::NTuple{N}) where N
     )
 end
 
-function LocalMemory(state::JLState, ::Type{T}, ::Val{N}, ::Val{C}) where {T, N, C}
+to_device(state, x::JLArray) = x.data
+to_device(state, x::Tuple) = to_device.(Ref(state), x)
+to_device(state, x::Base.RefValue{<: JLArray}) = Base.RefValue(to_device(state, x[]))
+to_device(state, x) = x
+
+function GPUArrays._gpu_call(::JLBackend, f, A, args::Tuple, blocks_threads::Tuple{T, T}) where T <: NTuple{N, Integer} where N
+    blocks, threads = blocks_threads
+    idx = ntuple(i-> 1, length(blocks))
+    blockdim = blocks
+    state = JLState(threads, blockdim)
+    device_args = to_device.(Ref(state), args)
+    tasks = Array{Task}(undef, threads...)
+    for blockidx in CartesianIndices(blockdim)
+        state.blockidx = blockidx.I
+        for threadidx in CartesianIndices(threads)
+            thread_state = JLState(state, threadidx.I)
+            tasks[threadidx] = @async @allowscalar f(thread_state, device_args...)
+            # TODO: @async obfuscates the trace to any exception which happens during f
+        end
+        for t in tasks
+            fetch(t)
+        end
+    end
+    return
+end
+
+
+## gpu intrinsics
+
+@inline function GPUArrays.synchronize_threads(::JLState)
+    # All threads are getting started asynchronously, so a yield will yield to the next
+    # execution of the same function, which should call yield at the exact same point in the
+    # program, leading to a chain of yields effectively syncing the tasks (threads).
+    yield()
+    return
+end
+
+function GPUArrays.LocalMemory(state::JLState, ::Type{T}, ::Val{N}, ::Val{C}) where {T, N, C}
     state.localmem_counter += 1
     lmems = state.localmems[blockidx_x(state)]
+
     # first invocation in block
     if length(lmems) < state.localmem_counter
         lmem = fill(zero(T), N)
@@ -161,76 +228,44 @@ function LocalMemory(state::JLState, ::Type{T}, ::Val{N}, ::Val{C}) where {T, N,
     end
 end
 
-function AbstractDeviceArray(ptr::Array, shape::NTuple{N, Integer}) where N
-    reshape(ptr, shape)
-end
-function AbstractDeviceArray(ptr::Array, shape::Vararg{Integer, N}) where N
-    reshape(ptr, shape)
-end
 
-function _gpu_call(::JLBackend, f, A, args::Tuple, blocks_threads::Tuple{T, T}) where T <: NTuple{N, Integer} where N
-    blocks, threads = blocks_threads
-    idx = ntuple(i-> 1, length(blocks))
-    blockdim = blocks
-    state = JLState(threads, blockdim)
-    device_args = to_device.(Ref(state), args)
-    tasks = Array{Task}(undef, threads...)
-    for blockidx in CartesianIndices(blockdim)
-        state.blockidx = blockidx.I
-        block_args = to_blocks.(Ref(state), device_args)
-        for threadidx in CartesianIndices(threads)
-            thread_state = JLState(state, threadidx.I)
-            tasks[threadidx] = @async @allowscalar f(thread_state, block_args...)
-            # TODO: @async obfuscates the trace to any exception which happens during f
-        end
-        for t in tasks
-            fetch(t)
-        end
-    end
-    return
-end
+## device properties
 
-# "intrinsics"
 struct JLDevice end
-device(x::JLArray) = JLDevice()
-threads(dev::JLDevice) = 256
 
-@inline function synchronize_threads(::JLState)
-    #=
-    All threads are getting started asynchronously,so a yield will
-    yield to the next execution of the same function, which should call yield
-    at the exact same point in the program, leading to a chain of yields  effectively syncing
-    the tasks (threads).
-    =#
-    yield()
-    return
+GPUArrays.device(x::JLArray) = JLDevice()
+
+GPUArrays.threads(dev::JLDevice) = 256
+
+
+## linear algebra
+
+using LinearAlgebra
+
+GPUArrays.blas_module(::JLArray) = LinearAlgebra.BLAS
+GPUArrays.blasbuffer(A::JLArray) = A.data
+
+
+
+#
+# AbstractDeviceArray interface
+#
+
+function GPUArrays.AbstractDeviceArray(ptr::Array, shape::NTuple{N, Integer}) where N
+    reshape(ptr, shape)
 end
+function GPUArrays.AbstractDeviceArray(ptr::Array, shape::Vararg{Integer, N}) where N
+    reshape(ptr, shape)
+end
+
+
+## indexing
 
 for (i, sym) in enumerate((:x, :y, :z))
     for f in (:blockidx, :blockdim, :threadidx, :griddim)
         fname = Symbol(string(f, '_', sym))
-        @eval $fname(state::JLState) = Int(state.$f[$i])
+        @eval GPUArrays.$fname(state::JLState) = Int(state.$f[$i])
     end
 end
 
-blas_module(::JLArray) = LinearAlgebra.BLAS
-blasbuffer(A::JLArray) = A.data
-
-# defining our own plan type is the easiest way to pass around the plans in FFTW interface
-# without ambiguities
-
-struct FFTPlan{T}
-    p::T
-end
-
-AbstractFFTs.plan_fft(A::JLArray; kw_args...) = FFTPlan(plan_fft(A.data; kw_args...))
-AbstractFFTs.plan_fft!(A::JLArray; kw_args...) = FFTPlan(plan_fft!(A.data; kw_args...))
-AbstractFFTs.plan_bfft!(A::JLArray; kw_args...) = FFTPlan(plan_bfft!(A.data; kw_args...))
-AbstractFFTs.plan_bfft(A::JLArray; kw_args...) = FFTPlan(plan_bfft(A.data; kw_args...))
-AbstractFFTs.plan_ifft!(A::JLArray; kw_args...) = FFTPlan(plan_ifft!(A.data; kw_args...))
-AbstractFFTs.plan_ifft(A::JLArray; kw_args...) = FFTPlan(plan_ifft(A.data; kw_args...))
-
-function Base.:(*)(plan::FFTPlan, A::JLArray)
-    x = plan.p * A.data
-    JLArray(x)
 end

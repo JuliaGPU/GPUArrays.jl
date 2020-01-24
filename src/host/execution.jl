@@ -1,8 +1,8 @@
 # kernel execution
 
-export gpu_call, synchronize, thread_blocks_heuristic
+export AbstractGPUBackend, gpu_call, synchronize, thread_blocks_heuristic
 
-abstract type GPUBackend end
+abstract type AbstractGPUBackend end
 
 backend(::Type{T}) where T = error("Can't choose GPU backend for $T")
 
