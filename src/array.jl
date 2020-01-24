@@ -154,25 +154,24 @@ struct JLBackend <: AbstractGPUBackend end
 
 GPUArrays.backend(::Type{<:JLArray}) = JLBackend()
 
-mutable struct JLState{N}
-    blockdim::NTuple{N, Int}
-    griddim::NTuple{N, Int}
+mutable struct JLState
+    blockdim::Int
+    griddim::Int
 
-    blockidx::NTuple{N, Int}
-    threadidx::NTuple{N, Int}
+    blockidx::Int
+    threadidx::Int
     localmem_counter::Int
     localmems::Vector{Vector{Array}}
 end
 
-function JLState(threads::NTuple{N}, blockdim::NTuple{N}) where N
-    idx = ntuple(i-> 1, Val(N))
+function JLState(threads::Int, blockdim::Int)
     blockcount = prod(blockdim)
     lmems = [Vector{Array}() for i in 1:blockcount]
-    JLState{N}(threads, blockdim, idx, idx, 0, lmems)
+    JLState(threads, blockdim, 1, 1, 0, lmems)
 end
 
-function JLState(state::JLState{N}, threadidx::NTuple{N}) where N
-    JLState{N}(
+function JLState(state::JLState, threadidx::Int)
+    JLState(
         state.blockdim,
         state.griddim,
         state.blockidx,
@@ -187,17 +186,15 @@ to_device(state, x::Tuple) = to_device.(Ref(state), x)
 to_device(state, x::Base.RefValue{<: JLArray}) = Base.RefValue(to_device(state, x[]))
 to_device(state, x) = x
 
-function GPUArrays._gpu_call(::JLBackend, f, A, args::Tuple, blocks_threads::Tuple{T, T}) where T <: NTuple{N, Integer} where N
+function GPUArrays._gpu_call(::JLBackend, f, A, args::Tuple, blocks_threads::Tuple{Int, Int})
     blocks, threads = blocks_threads
-    idx = ntuple(i-> 1, length(blocks))
-    blockdim = blocks
-    state = JLState(threads, blockdim)
+    state = JLState(threads, blocks)
     device_args = to_device.(Ref(state), args)
-    tasks = Array{Task}(undef, threads...)
-    for blockidx in CartesianIndices(blockdim)
-        state.blockidx = blockidx.I
-        for threadidx in CartesianIndices(threads)
-            thread_state = JLState(state, threadidx.I)
+    tasks = Array{Task}(undef, threads)
+    for blockidx in 1:blocks
+        state.blockidx = blockidx
+        for threadidx in 1:threads
+            thread_state = JLState(state, threadidx)
             tasks[threadidx] = @async @allowscalar f(thread_state, device_args...)
             # TODO: require 1.3 and use Base.Threads.@spawn for actual multithreading
             #       (this would require a different synchronization mechanism)
@@ -246,7 +243,7 @@ end
 
 function GPUArrays.LocalMemory(state::JLState, ::Type{T}, ::Val{dims}, ::Val{id}) where {T, dims, id}
     state.localmem_counter += 1
-    lmems = state.localmems[blockidx_x(state)]
+    lmems = state.localmems[blockidx(state)]
 
     # first invocation in block
     data = if length(lmems) < state.localmem_counter
@@ -272,11 +269,8 @@ Base.size(x::JLDeviceArray) = x.dims
 @inline Base.getindex(A::JLDeviceArray, index::Integer) = getindex(A.data, index)
 @inline Base.setindex!(A::JLDeviceArray, x, index::Integer) = setindex!(A.data, x, index)
 
-for (i, sym) in enumerate((:x, :y, :z))
-    for f in (:blockidx, :blockdim, :threadidx, :griddim)
-        fname = Symbol(string(f, '_', sym))
-        @eval GPUArrays.$fname(state::JLState) = Int(state.$f[$i])
-    end
+for f in (:blockidx, :blockdim, :threadidx, :griddim)
+    @eval GPUArrays.$f(state::JLState) = state.$f
 end
 
 

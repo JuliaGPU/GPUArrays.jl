@@ -142,11 +142,11 @@ for i = 0:10
                 global_index += global_size(state)
             end
             # Perform parallel reduction
-            local_index = threadidx_x(state) - 1
+            local_index = threadidx(state) - 1
             @inbounds tmp_local[local_index + 1] = acc
             synchronize_threads(state)
 
-            offset = blockdim_x(state) ÷ 2
+            offset = blockdim(state) ÷ 2
             @inbounds while offset > 0
                 if (local_index < offset)
                     other = tmp_local[local_index + offset + 1]
@@ -157,7 +157,7 @@ for i = 0:10
                 offset = offset ÷ 2
             end
             if local_index == 0
-                @inbounds result[blockidx_x(state)] = tmp_local[1]
+                @inbounds result[blockidx(state)] = tmp_local[1]
             end
             return
         end

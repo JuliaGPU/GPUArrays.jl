@@ -4,12 +4,9 @@ export global_size, synchronize_threads, linear_index
 
 
 # thread indexing functions
-for sym in (:x, :y, :z)
-    for f in (:blockidx, :blockdim, :threadidx, :griddim)
-        fname = Symbol(string(f, '_', sym))
-        @eval $fname(state)::Int = error("Not implemented") # COV_EXCL_LINE
-        @eval export $fname
-    end
+for f in (:blockidx, :blockdim, :threadidx, :griddim)
+    @eval $f(state)::Int = error("Not implemented") # COV_EXCL_LINE
+    @eval export $f
 end
 
 """
@@ -18,8 +15,7 @@ end
 Global size == blockdim * griddim == total number of kernel execution
 """
 @inline function global_size(state)
-    # TODO nd version
-    griddim_x(state) * blockdim_x(state)
+    griddim(state) * blockdim(state)
 end
 
 """
@@ -29,7 +25,7 @@ linear index corresponding to each kernel launch (in OpenCL equal to get_global_
 
 """
 @inline function linear_index(state)
-    (blockidx_x(state) - 1) * blockdim_x(state) + threadidx_x(state)
+    (blockidx(state) - 1) * blockdim(state) + threadidx(state)
 end
 
 """
