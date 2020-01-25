@@ -30,6 +30,7 @@ include("host/indexing.jl")
 include("host/broadcast.jl")
 include("host/mapreduce.jl")
 include("host/linalg.jl")
+include("host/math.jl")
 include("host/random.jl")
 include("host/quirks.jl")
 
