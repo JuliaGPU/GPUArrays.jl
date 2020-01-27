@@ -30,8 +30,7 @@ test = [..., "FFTW", "ForwardDiff", "FillArrays"]
 With this set-up, you can run the test suite like this:
 
 ```julia
-using GPUArrays, GPUArrays.TestSuite
-TestSuite.run_tests(MyGPUArrayType)
+TestSuite.test(MyGPUArrayType)
 ```
 If you don't want to run the whole suite, you can also run parts of it:
 
@@ -40,13 +39,15 @@ If you don't want to run the whole suite, you can also run parts of it:
 T = JLArray
 GPUArrays.allowscalar(false) # fail tests when slow indexing path into Array type is used.
 
-TestSuite.run_gpuinterface(T) # interface functions like gpu_call, threadidx, etc
-TestSuite.run_base(T) # basic functionality like launching a kernel on the GPU and Base operations
-TestSuite.run_blas(T) # tests the blas interface
-TestSuite.run_broadcasting(T) # tests the broadcasting implementation
-TestSuite.run_construction(T) # tests all kinds of different ways of constructing the array
-TestSuite.run_fft(T) # fft tests
-TestSuite.run_linalg(T) # linalg function tests
-TestSuite.run_mapreduce(T) # mapreduce sum, etc
-TestSuite.run_indexing(T) # indexing tests
+TestSuite.test_gpuinterface(T) # interface functions like gpu_call, threadidx, etc
+TestSuite.test_base(T) # basic functionality like launching a kernel on the GPU and Base operations
+TestSuite.test_blas(T) # tests the blas interface
+TestSuite.test_broadcasting(T) # tests the broadcasting implementation
+TestSuite.test_construction(T) # tests all kinds of different ways of constructing the array
+TestSuite.test_fft(T) # fft tests
+TestSuite.test_linalg(T) # linalg function tests
+TestSuite.test_mapreduce(T) # mapreduce sum, etc
+TestSuite.test_indexing(T) # indexing tests
+TestSuite.test_random(T) # randomly constructed arrays
+TestSuite.test_io(T)
 ```
