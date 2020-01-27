@@ -98,7 +98,7 @@ function Base._unsafe_getindex!(dest::AbstractGPUArray, src::AbstractGPUArray, I
         return dest
     end
     idims = map(length, Is)
-    gpu_call(index_kernel, dest, dest, src, idims, map(x-> to_index(dest, x), Is))
+    gpu_call(index_kernel, dest, src, idims, map(x-> to_index(dest, x), Is))
     return dest
 end
 
@@ -125,7 +125,7 @@ function Base._unsafe_setindex!(::IndexStyle, dest::T, src, Is::Union{Real, Abst
     idims = length.(Is)
     len = prod(idims)
     src_gpu = adapt(T, src)
-    gpu_call(setindex_kernel!, dest, dest, src_gpu, idims, map(x-> to_index(dest, x), Is), len;
+    gpu_call(setindex_kernel!, dest, src_gpu, idims, map(x-> to_index(dest, x), Is), len;
              total_threads=len)
     return dest
 end

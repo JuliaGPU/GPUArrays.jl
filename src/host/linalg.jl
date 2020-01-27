@@ -115,7 +115,7 @@ end
 ## high-level functionality
 
 function LinearAlgebra.transpose!(At::AbstractGPUArray{T, 2}, A::AbstractGPUArray{T, 2}) where T
-    gpu_call(At, At, A) do ctx, At, A
+    gpu_call(At, A) do ctx, At, A
         idx = @cartesianidx A ctx
         @inbounds At[idx[2], idx[1]] = A[idx[1], idx[2]]
         return
@@ -129,7 +129,7 @@ end
 
 function LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) where N
     perm isa Tuple || (perm = Tuple(perm))
-    gpu_call(dest, dest, src, perm) do ctx, dest, src, perm
+    gpu_call(dest, src, perm) do ctx, dest, src, perm
         I = @cartesianidx src ctx
         @inbounds dest[genperm(I, perm)...] = src[I...]
         return

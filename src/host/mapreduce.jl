@@ -118,7 +118,7 @@ end
 
 function Base._mapreducedim!(f, op, R::AbstractGPUArray, A::GPUSrcArray)
     range = ifelse.(length.(axes(R)) .== 1, axes(A), nothing)
-    gpu_call(mapreducedim_kernel, R, f, op, R, A, range)
+    gpu_call(mapreducedim_kernel, f, op, R, A, range; target=R)
     return R
 end
 
@@ -174,8 +174,8 @@ function acc_mapreduce(f, op, v0::OT, A::GPUSrcArray, rest...) where {OT}
     end
     out = similar(A, OT, (blocks,))
     fill!(out, v0)
-    gpu_call(reduce_kernel, out, f, op, v0, A, Val{threads}(), out, rest...;
-             threads=threads, blocks=blocks)
+    gpu_call(reduce_kernel, f, op, v0, A, Val{threads}(), out, rest...;
+             target=out, threads=threads, blocks=blocks)
     reduce(op, Array(out))
 end
 

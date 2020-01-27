@@ -7,33 +7,42 @@ abstract type AbstractGPUBackend end
 abstract type AbstractKernelContext end
 
 """
-    backend(T::Type{<:AbstractArray})
+    backend(T::Type)
+    backend(x)
 
 Gets the GPUArrays back-end responsible for managing arrays of type `T`.
 """
-backend(::Type{<:AbstractArray}) = error("This array is not a GPU array") # COV_EXCL_LINE
+backend(::Type) = error("This object is not a GPU array") # COV_EXCL_LINE
+backend(x) = backend(typeof(x))
 
 """
-    gpu_call(kernel::Function, A::AbstractGPUArray, args...; kwargs...)
+    gpu_call(kernel::Function, arg0, args...; kwargs...)
 
-Calls function `kernel` on the GPU device that backs array `A`, passing along arguments
-`args`. The keyword arguments `kwargs` are not passed along, but are interpreted on the host
-to influence how the kernel is executed. The following keyword arguments are supported:
+Executes `kernel` on the device that backs `arg` (see [`backend`](@ref)), passing along any
+arguments `args`. Additionally, the kernel will be passed the kernel execution context (see
+[`AbstractKernelContext`]), so its signature should be `(ctx::AbstractKernelContext, arg0,
+args...)`.
 
+The keyword arguments `kwargs` are not passed to the function, but are interpreted on the
+host to influence how the kernel is executed. The following keyword arguments are supported:
+
+- `target::AbstractArray`: specify which array object to use for determining execution
+  properties (defaults to the first argument `arg0`).
 - `total_threads::Int`: how many threads should be launched _in total_. The actual number of
-   threads and blocks is determined using a heuristic. Defaults to the length of `A` if no
-   other keyword arguments that influence the launch configuration are specified.
+  threads and blocks is determined using a heuristic. Defaults to the length of `arg0` if
+  no other keyword arguments that influence the launch configuration are specified.
 - `threads::Int` and `blocks::Int`: configure exactly how many threads and blocks are
-   launched. This cannot be used in combination with the `total_threads` argument.
+  launched. This cannot be used in combination with the `total_threads` argument.
 """
-function gpu_call(kernel::Base.Callable, A::AbstractArray, args...;
+function gpu_call(kernel::Base.Callable, args...;
+                  target::AbstractArray=first(args),
                   total_threads::Union{Int,Nothing}=nothing,
                   threads::Union{Int,Nothing}=nothing,
                   blocks::Union{Int,Nothing}=nothing,
                   kwargs...)
     # determine how many threads/blocks to launch
     if total_threads===nothing && threads===nothing && blocks===nothing
-        total_threads = length(A)
+        total_threads = length(target)
     end
     if total_threads !== nothing
         if threads !== nothing || blocks !== nothing
@@ -49,7 +58,7 @@ function gpu_call(kernel::Base.Callable, A::AbstractArray, args...;
         end
     end
 
-    gpu_call(backend(typeof(A)), kernel, args...; threads=threads, blocks=blocks, kwargs...)
+    gpu_call(backend(target), kernel, args...; threads=threads, blocks=blocks, kwargs...)
 end
 
 gpu_call(backend::AbstractGPUBackend, kernel, args...; kwargs...) = error("Not implemented") # COV_EXCL_LINE
