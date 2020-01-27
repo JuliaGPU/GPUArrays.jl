@@ -1,4 +1,4 @@
-function cartesian_iter(state, A, res, Asize)
+function cartesian_iter(state, res, A, Asize)
     for i in CartesianIndices(Asize)
         idx = GPUArrays.gpu_sub2ind(Asize, i.I)
         res[idx] = A[idx]
@@ -119,7 +119,7 @@ function test_base(AT)
             Ac = rand(Float32, 32, 32)
             A = AT(Ac)
             result = fill!(copy(A), 0.0)
-            gpu_call(cartesian_iter, A, result, size(A); target=result)
+            gpu_call(cartesian_iter, result, A, size(A))
             Array(result) == Ac
         end
 
