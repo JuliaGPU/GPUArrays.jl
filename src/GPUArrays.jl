@@ -15,13 +15,13 @@ using Adapt
 # device functionality
 include("device/device.jl")
 include("device/execution.jl")
-## on-device
+## executed on-device
 include("device/abstractarray.jl")
 include("device/indexing.jl")
 include("device/memory.jl")
 include("device/synchronization.jl")
 
-# host array abstraction
+# host abstractions
 include("host/abstractarray.jl")
 include("host/construction.jl")
 ## integrations and specialized methods

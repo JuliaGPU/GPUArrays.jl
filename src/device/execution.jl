@@ -6,7 +6,12 @@ abstract type AbstractGPUBackend end
 
 abstract type AbstractKernelContext end
 
-backend(::Type{T}) where T = error("Can't choose GPU backend for $T")
+"""
+    backend(T::Type{<:AbstractArray})
+
+Gets the GPUArrays back-end responsible for managing arrays of type `T`.
+"""
+backend(::Type{<:AbstractArray}) = error("This array is not a GPU array") # COV_EXCL_LINE
 
 """
     gpu_call(kernel::Function, A::AbstractGPUArray, args::Tuple, configuration = length(A))

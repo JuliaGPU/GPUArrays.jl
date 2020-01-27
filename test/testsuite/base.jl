@@ -6,20 +6,20 @@ function cartesian_iter(state, A, res, Asize)
     return
 end
 
-function clmap!(state, f, out, b)
-    i = linear_index(state) # get the kernel index it gets scheduled on
+function clmap!(ctx, f, out, b)
+    i = linear_index(ctx) # get the kernel index it gets scheduled on
     out[i] = f(b[i])
     return
 end
 
-function ntuple_test(state, result, ::Val{N}) where N
+function ntuple_test(ctx, result, ::Val{N}) where N
     result[1] = ntuple(Val(N)) do i
         Float32(i) * 77f0
     end
     return
 end
 
-function ntuple_closure(state, result, ::Val{N}, testval) where N
+function ntuple_closure(ctx, result, ::Val{N}, testval) where N
     result[1] = ntuple(Val(N)) do i
         Float32(i) * testval
     end

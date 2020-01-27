@@ -15,12 +15,8 @@ const AbstractGPUVector{T} = AbstractGPUArray{T, 1}
 const AbstractGPUMatrix{T} = AbstractGPUArray{T, 2}
 const AbstractGPUVecOrMat{T} = Union{AbstractGPUArray{T, 1}, AbstractGPUArray{T, 2}}
 
-"""
-    device(A::AbstractArray)
-
-Gets the device associated to the Array `A`
-"""
-device(A::AbstractArray) = error("Not implemented") # COV_EXCL_LINE
+device(::AbstractGPUDevice) = error("Not implemented") # COV_EXCL_LINE
+backend(::Type{<:AbstractGPUDevice}) = error("Not implemented") # COV_EXCL_LINE
 
 
 # input/output
