@@ -81,10 +81,10 @@ to_index(a::A, x::Array{ET}) where {A, ET} = copyto!(similar(a, ET, size(x)...),
 to_index(a, x::UnitRange{<: Integer}) = convert(UnitRange{Int}, x)
 to_index(a, x::Base.LogicalIndex) = error("Logical indexing not implemented")
 
-@generated function index_kernel(state, dest::AbstractArray, src::AbstractArray, idims, Is)
+@generated function index_kernel(ctx::AbstractKernelContext, dest::AbstractArray, src::AbstractArray, idims, Is)
     N = length(Is.parameters)
     quote
-        i = linear_index(state)
+        i = linear_index(ctx)
         i > length(dest) && return
         is = gpu_ind2sub(idims, i)
         @nexprs $N i -> @inbounds I_i = Is[i][is[i]]
@@ -106,11 +106,11 @@ end
 @inline bgetindex(x::AbstractArray, i) = x[i]
 @inline bgetindex(x, i) = x
 
-@generated function setindex_kernel!(state, dest::AbstractArray, src, idims, Is, len)
+@generated function setindex_kernel!(ctx::AbstractKernelContext, dest::AbstractArray, src, idims, Is, len)
     N = length(Is.parameters)
     idx = ntuple(i-> :(Is[$i][is[$i]]), N)
     quote
-        i = linear_index(state)
+        i = linear_index(ctx)
         i > len && return
         is = gpu_ind2sub(idims, i)
         @inbounds setindex!(dest, bgetindex(src, i), $(idx...))

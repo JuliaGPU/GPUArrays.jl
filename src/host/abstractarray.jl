@@ -15,6 +15,13 @@ const AbstractGPUVector{T} = AbstractGPUArray{T, 1}
 const AbstractGPUMatrix{T} = AbstractGPUArray{T, 2}
 const AbstractGPUVecOrMat{T} = Union{AbstractGPUArray{T, 1}, AbstractGPUArray{T, 2}}
 
+"""
+    device(A::AbstractArray)
+
+Gets the device associated to the Array `A`
+"""
+device(A::AbstractArray) = error("Not implemented") # COV_EXCL_LINE
+
 
 # input/output
 
@@ -136,8 +143,8 @@ end
 Base.copyto!(dest::AbstractGPUArray, src::AbstractGPUArray) =
     copyto!(dest, CartesianIndices(dest), src, CartesianIndices(src))
 
-function copy_kernel!(state, dest, dest_offsets, src, src_offsets, shape, shape_dest, shape_source, length)
-    i = linear_index(state)
+function copy_kernel!(ctx::AbstractKernelContext, dest, dest_offsets, src, src_offsets, shape, shape_dest, shape_source, length)
+    i = linear_index(ctx)
     if i <= length
         # TODO can this be done faster and smarter?
         idx = gpu_ind2sub(shape, i)

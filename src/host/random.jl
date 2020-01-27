@@ -28,8 +28,8 @@ function next_rand(::Type{FT}, state::NTuple{4, T}) where {FT, T <: Unsigned}
     return state, make_rand_num(FT, tmp)
 end
 
-function gpu_rand(::Type{T}, state, randstate::AbstractVector{NTuple{4, UInt32}}) where T
-    threadid = GPUArrays.threadidx(state)
+function gpu_rand(::Type{T}, ctx::AbstractKernelContext, randstate::AbstractVector{NTuple{4, UInt32}}) where T
+    threadid = GPUArrays.threadidx(ctx)
     stateful_rand = next_rand(T, randstate[threadid])
     randstate[threadid] = stateful_rand[1]
     return stateful_rand[2]
@@ -45,16 +45,16 @@ to_number_range(x::AbstractFloat, ::Type{T}) where T <: Unsigned = T(round(x * t
 to_number_range(x::F, ::Type{T}) where {T <: Signed, F <: AbstractFloat} =
     Base.unsafe_trunc(T, round(((x - F(0.5)) * typemax(T)) * T(2)))
 
-function gpu_rand(::Type{T}, state, randstate::AbstractVector{NTuple{4, UInt32}}) where T <: Integer
-    f = gpu_rand(floattype(T), state, randstate)
+function gpu_rand(::Type{T}, ctx::AbstractKernelContext, randstate::AbstractVector{NTuple{4, UInt32}}) where T <: Integer
+    f = gpu_rand(floattype(T), ctx, randstate)
     return to_number_range(f, T)
 end
 
 # support for complex numbers
 
-function gpu_rand(::Type{Complex{T}}, state, randstate::AbstractVector{NTuple{4, UInt32}}) where T
-    re = gpu_rand(T, state, randstate)
-    im = gpu_rand(T, state, randstate)
+function gpu_rand(::Type{Complex{T}}, ctx::AbstractKernelContext, randstate::AbstractVector{NTuple{4, UInt32}}) where T
+    re = gpu_rand(T, ctx, randstate)
+    im = gpu_rand(T, ctx, randstate)
     return complex(re, im)
 end
 
@@ -77,10 +77,10 @@ function global_rng(A::AbstractGPUArray)
 end
 
 function Random.rand!(rng::RNG, A::AbstractGPUArray{T}) where T <: Number
-    gpu_call(A, (rng.state, A,)) do state, randstates, a
-        idx = linear_index(state)
+    gpu_call(A, (rng.state, A,)) do ctx, randstates, a
+        idx = linear_index(ctx)
         idx > length(a) && return
-        @inbounds a[idx] = gpu_rand(T, state, randstates)
+        @inbounds a[idx] = gpu_rand(T, ctx, randstates)
         return
     end
     A

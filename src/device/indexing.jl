@@ -5,38 +5,38 @@ export global_size, synchronize_threads, linear_index
 
 # thread indexing functions
 for f in (:blockidx, :blockdim, :threadidx, :griddim)
-    @eval $f(state)::Int = error("Not implemented") # COV_EXCL_LINE
+    @eval $f(ctx::AbstractKernelContext)::Int = error("Not implemented") # COV_EXCL_LINE
     @eval export $f
 end
 
 """
-    global_size(state)
+    global_size(ctx::AbstractKernelContext)
 
 Global size == blockdim * griddim == total number of kernel execution
 """
-@inline function global_size(state)
-    griddim(state) * blockdim(state)
+@inline function global_size(ctx::AbstractKernelContext)
+    griddim(ctx) * blockdim(ctx)
 end
 
 """
-    linear_index(state)
+    linear_index(ctx::AbstractKernelContext)
 
 linear index corresponding to each kernel launch (in OpenCL equal to get_global_id).
 
 """
-@inline function linear_index(state)
-    (blockidx(state) - 1) * blockdim(state) + threadidx(state)
+@inline function linear_index(ctx::AbstractKernelContext)
+    (blockidx(ctx) - 1) * blockdim(ctx) + threadidx(ctx)
 end
 
 """
-    linearidx(A, statesym = :state)
+    linearidx(A, ctxsym = :ctx)
 
 Macro form of `linear_index`, which calls return when out of bounds.
 So it can be used like this:
 
     ```julia
-    function kernel(state, A)
-        idx = @linear_index A state
+    function kernel(ctx::AbstractKernelContext, A)
+        idx = @linear_index A ctx
         # from here on it's save to index into A with idx
         @inbounds begin
             A[idx] = ...
@@ -44,24 +44,24 @@ So it can be used like this:
     end
     ```
 """
-macro linearidx(A, statesym = :state)
+macro linearidx(A, ctxsym = :ctx)
     quote
         x1 = $(esc(A))
-        i1 = linear_index($(esc(statesym)))
+        i1 = linear_index($(esc(ctxsym)))
         i1 > length(x1) && return
         i1
     end
 end
 
 """
-    cartesianidx(A, statesym = :state)
+    cartesianidx(A, ctxsym = :ctx)
 
-Like [`@linearidx(A, statesym = :state)`](@ref), but returns an N-dimensional `NTuple{ndim(A), Int}` as index
+Like [`@linearidx(A, ctxsym = :ctx)`](@ref), but returns an N-dimensional `NTuple{ndim(A), Int}` as index
 """
-macro cartesianidx(A, statesym = :state)
+macro cartesianidx(A, ctxsym = :ctx)
     quote
         x = $(esc(A))
-        i2 = @linearidx(x, $(esc(statesym)))
+        i2 = @linearidx(x, $(esc(ctxsym)))
         gpu_ind2sub(x, i2)
     end
 end

@@ -1,8 +1,10 @@
 # kernel execution
 
-export AbstractGPUBackend, gpu_call, synchronize, thread_blocks_heuristic
+export AbstractGPUBackend, AbstractKernelContext, gpu_call, synchronize, thread_blocks_heuristic
 
 abstract type AbstractGPUBackend end
+
+abstract type AbstractKernelContext end
 
 backend(::Type{T}) where T = error("Can't choose GPU backend for $T")
 
@@ -12,12 +14,12 @@ backend(::Type{T}) where T = error("Can't choose GPU backend for $T")
 Calls function `kernel` on the GPU.
 `A` must be an AbstractGPUArray and will help to dispatch to the correct GPU backend
 and supplies queues and contexts.
-Calls the kernel function with `kernel(state, args...)`, where state is dependant on the backend
-and can be used for getting an index into `A` with `linear_index(state)`.
+Calls the kernel function with `kernel(ctx, args...)`, where ctx is dependant on the backend
+and can be used for getting an index into `A` with `linear_index(ctx)`.
 Optionally, a launch configuration can be supplied in the following way:
 
     1) A single integer, indicating how many work items (total number of threads) you want to launch.
-        in this case `linear_index(state)` will be a number in the range `1:configuration`
+        in this case `linear_index(ctx)` will be a number in the range `1:configuration`
     2) Pass a tuple of integer tuples to define blocks and threads per blocks!
 
 """
@@ -38,7 +40,7 @@ function gpu_call(kernel, A::AbstractArray, args::Tuple, configuration = length(
             Found: $configurations
             Configuration needs to be:
             1) A single integer, indicating how many work items (total number of threads) you want to launch.
-                in this case `linear_index(state)` will be a number in the range 1:configuration
+                in this case `linear_index(ctx)` will be a number in the range 1:configuration
             2) Pass a tuple of integer tuples to define blocks and threads per blocks!
                 `linear_index` will be inbetween 1:prod((blocks..., threads...))
         """)

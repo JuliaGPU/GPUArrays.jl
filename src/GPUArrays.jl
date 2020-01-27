@@ -12,17 +12,19 @@ using AbstractFFTs
 
 using Adapt
 
-# device array
+# device functionality
+include("device/device.jl")
+include("device/execution.jl")
+## on-device
 include("device/abstractarray.jl")
 include("device/indexing.jl")
+include("device/memory.jl")
 include("device/synchronization.jl")
 
-# host array
+# host array abstraction
 include("host/abstractarray.jl")
-include("host/devices.jl")
-include("host/execution.jl")
 include("host/construction.jl")
-## integrations and specialized functionality
+## integrations and specialized methods
 include("host/base.jl")
 include("host/indexing.jl")
 include("host/broadcast.jl")
@@ -32,7 +34,7 @@ include("host/random.jl")
 include("host/quirks.jl")
 
 # CPU reference implementation
-include("array.jl")
+include("reference.jl")
 
 
 end # module

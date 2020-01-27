@@ -86,7 +86,7 @@ function Base.mapreduce(f, op, A::GPUSrcArray, B::GPUSrcArray; init)
     acc_mapreduce(f, op, init, A, (B,))
 end
 
-@generated function mapreducedim_kernel(state, f, op, R, A, range::NTuple{N, Any}) where N
+@generated function mapreducedim_kernel(ctx::AbstractKernelContext, f, op, R, A, range::NTuple{N, Any}) where N
     types = (range.parameters...,)
     indices = ntuple(i-> Symbol("I_$i"), N)
     Iexpr = ntuple(i-> :(I[$i]), N)
@@ -110,7 +110,7 @@ end
         body
     end
     quote
-        I = @cartesianidx R state
+        I = @cartesianidx R ctx
         $body
         return
     end
@@ -130,34 +130,34 @@ for i = 0:10
     fargs = ntuple(x-> :(simple_broadcast_index($(args[x]), cartesian_global_index...)), i)
     @eval begin
         # http://developer.amd.com/resources/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
-        function reduce_kernel(state, f, op, v0::T, A, ::Val{LMEM}, result, $(args...)) where {T, LMEM}
-            tmp_local = @LocalMemory(state, T, LMEM)
-            global_index = linear_index(state)
+        function reduce_kernel(ctx::AbstractKernelContext, f, op, v0::T, A, ::Val{LMEM}, result, $(args...)) where {T, LMEM}
+            tmp_local = @LocalMemory(ctx, T, LMEM)
+            global_index = linear_index(ctx)
             acc = v0
             # # Loop sequentially over chunks of input vector
             @inbounds while global_index <= length(A)
                 cartesian_global_index = Tuple(CartesianIndices(axes(A))[global_index])
                 @inbounds element = f(A[cartesian_global_index...], $(fargs...))
                 acc = op(acc, element)
-                global_index += global_size(state)
+                global_index += global_size(ctx)
             end
             # Perform parallel reduction
-            local_index = threadidx(state) - 1
+            local_index = threadidx(ctx) - 1
             @inbounds tmp_local[local_index + 1] = acc
-            synchronize_threads(state)
+            synchronize_threads(ctx)
 
-            offset = blockdim(state) ÷ 2
+            offset = blockdim(ctx) ÷ 2
             @inbounds while offset > 0
                 if (local_index < offset)
                     other = tmp_local[local_index + offset + 1]
                     mine = tmp_local[local_index + 1]
                     tmp_local[local_index + 1] = op(mine, other)
                 end
-                synchronize_threads(state)
+                synchronize_threads(ctx)
                 offset = offset ÷ 2
             end
             if local_index == 0
-                @inbounds result[blockidx(state)] = tmp_local[1]
+                @inbounds result[blockidx(ctx)] = tmp_local[1]
             end
             return
         end
