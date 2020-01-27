@@ -16,16 +16,17 @@ ForwardDiff = &quot;f6369f11-7733-5829-9624-2563aa707210&quot;
 ...
 
 [targets]
-test = [..., &quot;FFTW&quot;, &quot;ForwardDiff&quot;, &quot;FillArrays&quot;]</code></pre><p>With this set-up, you can run the test suite like this:</p><pre><code class="language-julia">using GPUArrays, GPUArrays.TestSuite
-TestSuite.run_tests(MyGPUArrayType)</code></pre><p>If you don&#39;t want to run the whole suite, you can also run parts of it:</p><pre><code class="language-julia">T = JLArray
+test = [..., &quot;FFTW&quot;, &quot;ForwardDiff&quot;, &quot;FillArrays&quot;]</code></pre><p>With this set-up, you can run the test suite like this:</p><pre><code class="language-julia">TestSuite.test(MyGPUArrayType)</code></pre><p>If you don&#39;t want to run the whole suite, you can also run parts of it:</p><pre><code class="language-julia">T = JLArray
 GPUArrays.allowscalar(false) # fail tests when slow indexing path into Array type is used.
 
-TestSuite.run_gpuinterface(T) # interface functions like gpu_call, threadidx, etc
-TestSuite.run_base(T) # basic functionality like launching a kernel on the GPU and Base operations
-TestSuite.run_blas(T) # tests the blas interface
-TestSuite.run_broadcasting(T) # tests the broadcasting implementation
-TestSuite.run_construction(T) # tests all kinds of different ways of constructing the array
-TestSuite.run_fft(T) # fft tests
-TestSuite.run_linalg(T) # linalg function tests
-TestSuite.run_mapreduce(T) # mapreduce sum, etc
-TestSuite.run_indexing(T) # indexing tests</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../functionality/device/">« <code>AbstractDeviceArray</code></a></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Monday 27 January 2020 11:51">Monday 27 January 2020</span>. Using Julia version 1.3.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+TestSuite.test_gpuinterface(T) # interface functions like gpu_call, threadidx, etc
+TestSuite.test_base(T) # basic functionality like launching a kernel on the GPU and Base operations
+TestSuite.test_blas(T) # tests the blas interface
+TestSuite.test_broadcasting(T) # tests the broadcasting implementation
+TestSuite.test_construction(T) # tests all kinds of different ways of constructing the array
+TestSuite.test_fft(T) # fft tests
+TestSuite.test_linalg(T) # linalg function tests
+TestSuite.test_mapreduce(T) # mapreduce sum, etc
+TestSuite.test_indexing(T) # indexing tests
+TestSuite.test_random(T) # randomly constructed arrays
+TestSuite.test_io(T)</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../functionality/device/">« <code>AbstractDeviceArray</code></a></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Monday 27 January 2020 12:31">Monday 27 January 2020</span>. Using Julia version 1.3.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
