@@ -39,7 +39,7 @@ function gpu_call(kernel::Base.Callable, A::AbstractArray, args...;
         if threads !== nothing || blocks !== nothing
             error("Cannot specify both total_threads and threads/blocks configuration")
         end
-        threads, blocks = thread_blocks_heuristic(total_threads)
+        blocks, threads = thread_blocks_heuristic(total_threads)
     else
         if threads === nothing
             threads = 1
