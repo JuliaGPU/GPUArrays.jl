@@ -9,7 +9,7 @@ function Base.fill(X::Type{<: AbstractGPUArray{T}}, val, dims::NTuple{N, Integer
     fill!(res, convert(T, val))
 end
 function Base.fill!(A::AbstractGPUArray{T}, x) where T
-    gpu_call(A, (A, convert(T, x))) do ctx, a, val
+    gpu_call(A, A, convert(T, x)) do ctx, a, val
         idx = @linearidx(a, ctx)
         @inbounds a[idx] = val
         return
@@ -30,7 +30,7 @@ end
 
 function (T::Type{<: AbstractGPUArray})(s::UniformScaling, dims::Dims{2})
     res = zeros(T, dims)
-    gpu_call(uniformscaling_kernel, res, (res, size(res, 1), s), minimum(dims))
+    gpu_call(uniformscaling_kernel, res, res, size(res, 1), s; total_threads=minimum(dims))
     res
 end
 (T::Type{<: AbstractGPUArray})(s::UniformScaling, m::Integer, n::Integer) = T(s, Dims((m, n)))
@@ -67,7 +67,7 @@ function Base.convert(AT::Type{<: AbstractGPUArray}, iter)
     if isbits(iter) && isa(isize, Base.HasShape) && style != nothing && isa(ettrait, Base.HasEltype)
         # We can collect on the GPU
         A = similar(AT, eltype_or(AT, eltype(iter)), size(iter))
-        gpu_call(collect_kernel, A, (A, iter, style))
+        gpu_call(collect_kernel, A, A, iter, style)
         A
     else
         convert(AT, collect(iter))

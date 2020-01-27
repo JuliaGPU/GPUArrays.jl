@@ -77,7 +77,7 @@ function global_rng(A::AbstractGPUArray)
 end
 
 function Random.rand!(rng::RNG, A::AbstractGPUArray{T}) where T <: Number
-    gpu_call(A, (rng.state, A,)) do ctx, randstates, a
+    gpu_call(A, rng.state, A) do ctx, randstates, a
         idx = linear_index(ctx)
         idx > length(a) && return
         @inbounds a[idx] = gpu_rand(T, ctx, randstates)

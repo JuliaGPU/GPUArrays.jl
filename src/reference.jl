@@ -52,8 +52,7 @@ end
 to_device(ctx, x::Tuple) = to_device.(Ref(ctx), x)
 to_device(ctx, x) = x
 
-function GPUArrays._gpu_call(::JLBackend, f, A, args::Tuple, blocks_threads::Tuple{Int, Int})
-    blocks, threads = blocks_threads
+function GPUArrays.gpu_call(::JLBackend, f, args...; blocks::Int, threads::Int)
     ctx = JLKernelContext(threads, blocks)
     device_args = to_device.(Ref(ctx), args)
     tasks = Array{Task}(undef, threads)

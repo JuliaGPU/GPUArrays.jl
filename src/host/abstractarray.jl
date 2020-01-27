@@ -162,8 +162,8 @@ function Base.copyto!(dest::AbstractGPUArray{T, N}, destcrange::CartesianIndices
     dest_offsets = first.(destcrange.indices) .- 1
     src_offsets = first.(srccrange.indices) .- 1
     gpu_call(copy_kernel!, dest,
-             (dest, dest_offsets, src, src_offsets, shape, size(dest), size(src), len),
-             len)
+             dest, dest_offsets, src, src_offsets, shape, size(dest), size(src), len;
+             total_threads=len)
     dest
 end
 

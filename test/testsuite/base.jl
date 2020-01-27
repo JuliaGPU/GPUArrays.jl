@@ -108,10 +108,10 @@ function test_base(AT)
 
         @testset "ntuple test" begin
             result = AT(Vector{NTuple{3, Float32}}(undef, 1))
-            gpu_call(ntuple_test, result, (result, Val(3)))
+            gpu_call(ntuple_test, result, result, Val(3))
             @test Array(result)[1] == (77, 2*77, 3*77)
             x = 88f0
-            gpu_call(ntuple_closure, result, (result, Val(3), x))
+            gpu_call(ntuple_closure, result, result, Val(3), x)
             @test Array(result)[1] == (x, 2*x, 3*x)
         end
 
@@ -119,14 +119,14 @@ function test_base(AT)
             Ac = rand(Float32, 32, 32)
             A = AT(Ac)
             result = fill!(copy(A), 0.0)
-            gpu_call(cartesian_iter, result, (A, result, size(A)))
+            gpu_call(cartesian_iter, result, A, result, size(A))
             Array(result) == Ac
         end
 
         @testset "Custom kernel from Julia function" begin
             x = AT(rand(Float32, 100))
             y = AT(rand(Float32, 100))
-            gpu_call(clmap!, x, (-, x, y))
+            gpu_call(clmap!, x, -, x, y)
             jy = Array(y)
             @test map!(-, jy, jy) ≈ Array(x)
         end

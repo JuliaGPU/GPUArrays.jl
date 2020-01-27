@@ -9,7 +9,7 @@ Base.count(pred::Function, A::AbstractGPUArray) = Int(mapreduce(pred, +, A; init
 
 Base.:(==)(A::AbstractGPUArray, B::AbstractGPUArray) = Bool(mapreduce(==, &, A, B; init = true))
 
-LinearAlgebra.ishermitian(A::AbstractGPUMatrix) = acc_mapreduce(==, &, true, A, (adjoint(A),))
+LinearAlgebra.ishermitian(A::AbstractGPUMatrix) = acc_mapreduce(==, &, true, A, adjoint(A))
 
 # hack to get around of fetching the first element of the AbstractGPUArray
 # as a startvalue, which is a bit complicated with the current reduce implementation
@@ -67,11 +67,11 @@ end
 function mapreduce_impl(f, op, ::NamedTuple{()}, A::GPUSrcArray, ::Colon)
     OT = gpu_promote_type(op, gpu_promote_type(f, eltype(A)))
     v0 = startvalue(op, OT) # TODO do this better
-    acc_mapreduce(f, op, v0, A, ())
+    acc_mapreduce(f, op, v0, A)
 end
 
 function mapreduce_impl(f, op, nt::NamedTuple{(:init,)}, A::GPUSrcArray, ::Colon)
-    acc_mapreduce(f, op, nt.init, A, ())
+    acc_mapreduce(f, op, nt.init, A)
 end
 
 function mapreduce_impl(f, op, nt, A::GPUSrcArray, dims)
@@ -80,10 +80,10 @@ end
 
 function acc_mapreduce end
 function Base.mapreduce(f, op, A::GPUSrcArray, B::GPUSrcArray, C::Number; init)
-    acc_mapreduce(f, op, init, A, (B, C))
+    acc_mapreduce(f, op, init, A, B, C)
 end
 function Base.mapreduce(f, op, A::GPUSrcArray, B::GPUSrcArray; init)
-    acc_mapreduce(f, op, init, A, (B,))
+    acc_mapreduce(f, op, init, A, B)
 end
 
 @generated function mapreducedim_kernel(ctx::AbstractKernelContext, f, op, R, A, range::NTuple{N, Any}) where N
@@ -118,7 +118,7 @@ end
 
 function Base._mapreducedim!(f, op, R::AbstractGPUArray, A::GPUSrcArray)
     range = ifelse.(length.(axes(R)) .== 1, axes(A), nothing)
-    gpu_call(mapreducedim_kernel, R, (f, op, R, A, range))
+    gpu_call(mapreducedim_kernel, R, f, op, R, A, range)
     return R
 end
 
@@ -165,17 +165,17 @@ for i = 0:10
 
 end
 
-function acc_mapreduce(f, op, v0::OT, A::GPUSrcArray, rest::Tuple) where {OT}
-    blocksize = 80
+function acc_mapreduce(f, op, v0::OT, A::GPUSrcArray, rest...) where {OT}
+    blocks = 80
     threads = 256
-    if length(A) <= blocksize * threads
+    if length(A) <= blocks * threads
         args = zip(convert_to_cpu(A), convert_to_cpu.(rest)...)
         return mapreduce(x-> f(x...), op, args, init = v0)
     end
-    out = similar(A, OT, (blocksize,))
+    out = similar(A, OT, (blocks,))
     fill!(out, v0)
-    args = (f, op, v0, A, Val{threads}(), out, rest...)
-    gpu_call(reduce_kernel, out, args, ((blocksize,), (threads,)))
+    gpu_call(reduce_kernel, out, f, op, v0, A, Val{threads}(), out, rest...;
+             threads=threads, blocks=blocks)
     reduce(op, Array(out))
 end
 
