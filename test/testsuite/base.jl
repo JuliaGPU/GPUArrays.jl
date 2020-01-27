@@ -1,4 +1,4 @@
-function cartesian_iter(state, A, res, Asize)
+function cartesian_iter(state, res, A, Asize)
     for i in CartesianIndices(Asize)
         idx = GPUArrays.gpu_sub2ind(Asize, i.I)
         res[idx] = A[idx]
@@ -6,20 +6,20 @@ function cartesian_iter(state, A, res, Asize)
     return
 end
 
-function clmap!(state, f, out, b)
-    i = linear_index(state) # get the kernel index it gets scheduled on
+function clmap!(ctx, f, out, b)
+    i = linear_index(ctx) # get the kernel index it gets scheduled on
     out[i] = f(b[i])
     return
 end
 
-function ntuple_test(state, result, ::Val{N}) where N
+function ntuple_test(ctx, result, ::Val{N}) where N
     result[1] = ntuple(Val(N)) do i
         Float32(i) * 77f0
     end
     return
 end
 
-function ntuple_closure(state, result, ::Val{N}, testval) where N
+function ntuple_closure(ctx, result, ::Val{N}, testval) where N
     result[1] = ntuple(Val(N)) do i
         Float32(i) * testval
     end
@@ -108,10 +108,10 @@ function test_base(AT)
 
         @testset "ntuple test" begin
             result = AT(Vector{NTuple{3, Float32}}(undef, 1))
-            gpu_call(ntuple_test, result, (result, Val(3)))
+            gpu_call(ntuple_test, result, Val(3))
             @test Array(result)[1] == (77, 2*77, 3*77)
             x = 88f0
-            gpu_call(ntuple_closure, result, (result, Val(3), x))
+            gpu_call(ntuple_closure, result, Val(3), x)
             @test Array(result)[1] == (x, 2*x, 3*x)
         end
 
@@ -119,14 +119,14 @@ function test_base(AT)
             Ac = rand(Float32, 32, 32)
             A = AT(Ac)
             result = fill!(copy(A), 0.0)
-            gpu_call(cartesian_iter, result, (A, result, size(A)))
+            gpu_call(cartesian_iter, result, A, size(A))
             Array(result) == Ac
         end
 
         @testset "Custom kernel from Julia function" begin
             x = AT(rand(Float32, 100))
             y = AT(rand(Float32, 100))
-            gpu_call(clmap!, x, (-, x, y))
+            gpu_call(clmap!, -, x, y; target=x)
             jy = Array(y)
             @test map!(-, jy, jy) ≈ Array(x)
         end

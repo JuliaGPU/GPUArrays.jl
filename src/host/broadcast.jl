@@ -47,7 +47,7 @@ end
 @inline function Base.copyto!(dest::GPUDestArray, bc::Broadcasted{Nothing})
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     bc′ = Broadcast.preprocess(dest, bc)
-    gpu_call(dest, (dest, bc′)) do state, dest, bc′
+    gpu_call(dest, bc′) do ctx, dest, bc′
         let I = CartesianIndex(@cartesianidx(dest))
             @inbounds dest[I] = bc′[I]
         end
