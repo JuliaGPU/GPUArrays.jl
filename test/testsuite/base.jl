@@ -146,8 +146,8 @@ function test_base(AT)
 
         @testset "heuristics" begin
             blocks, threads = thread_blocks_heuristic(0)
-            @test blocks == (1,)
-            @test threads == (1,)
+            @test blocks == 1
+            @test threads == 1
         end
     end
 end

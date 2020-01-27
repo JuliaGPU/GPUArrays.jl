@@ -29,7 +29,7 @@ function next_rand(::Type{FT}, state::NTuple{4, T}) where {FT, T <: Unsigned}
 end
 
 function gpu_rand(::Type{T}, state, randstate::AbstractVector{NTuple{4, UInt32}}) where T
-    threadid = GPUArrays.threadidx_x(state)
+    threadid = GPUArrays.threadidx(state)
     stateful_rand = next_rand(T, randstate[threadid])
     randstate[threadid] = stateful_rand[1]
     return stateful_rand[2]

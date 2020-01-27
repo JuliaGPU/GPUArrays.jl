@@ -27,14 +27,12 @@ function gpu_call(kernel, A::AbstractArray, args::Tuple, configuration = length(
     thread_blocks = if isa(configuration, Integer)
         thread_blocks_heuristic(configuration)
     elseif isa(configuration, ITuple)
-        # if a single integer ntuple, we assume it to configure the blocks
-        configuration,  ntuple(x-> x == 1 ? 256 : 1, length(configuration))
+        @assert length(configuration) == 1
+        configuration[1], 1
     elseif isa(configuration, Tuple{ITuple, ITuple})
-        # 2 dim tuple of ints == blocks + threads per block
-        if any(x-> length(x) > 3 || length(x) < 1, configuration)
-            error("blocks & threads must be 1-3 dimensional. Found: $configuration")
-        end
-        map(x-> Int.(x), configuration) # make sure it all has the same int type
+        @assert length(configuration[1]) == 1
+        @assert length(configuration[2]) == 1
+        configuration[1][1], configuration[2][1]
     else
         error("""Please launch a gpu kernel with a valid configuration.
             Found: $configurations
@@ -65,5 +63,5 @@ function thread_blocks_heuristic(len::Integer)
     # TODO better threads default
     threads = clamp(len, 1, 256)
     blocks = max(ceil(Int, len / threads), 1)
-    (blocks,), (threads,)
+    (blocks, threads)
 end

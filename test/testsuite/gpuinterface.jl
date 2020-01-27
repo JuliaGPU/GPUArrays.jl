@@ -16,25 +16,25 @@ function test_gpuinterface(AT)
         @test all(x-> x == 2, Array(x))
         configuration = ((N ÷ 2,), (2,))
         gpu_call(x, (x,), configuration) do state, x
-            x[linear_index(state)] = threadidx_x(state)
+            x[linear_index(state)] = threadidx(state)
             return
         end
         @test Array(x) == [1,2,1,2,1,2,1,2,1,2]
 
         gpu_call(x, (x,), configuration) do state, x
-            x[linear_index(state)] = blockidx_x(state)
+            x[linear_index(state)] = blockidx(state)
             return
         end
         @test Array(x) == [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
         x2 = AT([0])
         gpu_call(x, (x2,), configuration) do state, x
-            x[1] = blockdim_x(state)
+            x[1] = blockdim(state)
             return
         end
         @test Array(x2) == [2]
 
         gpu_call(x, (x2,), configuration) do state, x
-            x[1] = griddim_x(state)
+            x[1] = griddim(state)
             return
         end
         @test Array(x2) == [5]
