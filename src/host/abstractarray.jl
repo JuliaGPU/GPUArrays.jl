@@ -139,14 +139,12 @@ end
 Base.copyto!(dest::AbstractGPUArray, src::AbstractGPUArray) =
     copyto!(dest, CartesianIndices(dest), src, CartesianIndices(src))
 
-function copy_kernel!(ctx::AbstractKernelContext, dest, dest_offsets, src, src_offsets, shape, shape_dest, shape_source, length)
+function copy_kernel!(ctx::AbstractKernelContext, dest, dest_offsets, src, src_offsets, shape, length)
     i = linear_index(ctx)
     if i <= length
         # TODO can this be done faster and smarter?
-        idx = gpu_ind2sub(shape, i)
-        dest_idx = gpu_sub2ind(shape_dest, idx .+ dest_offsets)
-        src_idx = gpu_sub2ind(shape_source, idx .+ src_offsets)
-        @inbounds dest[dest_idx] = src[src_idx]
+        idx = CartesianIndices(shape)[i]
+        @inbounds dest[idx + dest_offsets] = src[idx + src_offsets]
     end
     return
 end
@@ -159,10 +157,10 @@ function Base.copyto!(dest::AbstractGPUArray{T, N}, destcrange::CartesianIndices
     end
     len = length(destcrange)
 
-    dest_offsets = first.(destcrange.indices) .- 1
-    src_offsets = first.(srccrange.indices) .- 1
+    dest_offsets = first(destcrange) - one(CartesianIndex{N})
+    src_offsets = first(srccrange) - one(CartesianIndex{N})
     gpu_call(copy_kernel!,
-             dest, dest_offsets, src, src_offsets, shape, size(dest), size(src), len;
+             dest, dest_offsets, src, src_offsets, shape, len;
              total_threads=len)
     dest
 end

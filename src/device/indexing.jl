@@ -36,7 +36,7 @@ So it can be used like this:
 
     ```julia
     function kernel(ctx::AbstractKernelContext, A)
-        idx = @linear_index A ctx
+        idx = @linearidx A ctx
         # from here on it's save to index into A with idx
         @inbounds begin
             A[idx] = ...
@@ -56,12 +56,12 @@ end
 """
     cartesianidx(A, ctxsym = :ctx)
 
-Like [`@linearidx(A, ctxsym = :ctx)`](@ref), but returns an N-dimensional `NTuple{ndim(A), Int}` as index
+Like [`@linearidx(A, ctxsym = :ctx)`](@ref), but returns a N-dimensional `CartesianIndex`.
 """
 macro cartesianidx(A, ctxsym = :ctx)
     quote
         x = $(esc(A))
-        i2 = @linearidx(x, $(esc(ctxsym)))
-        gpu_ind2sub(x, i2)
+        i = @linearidx(x, $(esc(ctxsym)))
+        CartesianIndices(x)[i]
     end
 end

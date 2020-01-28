@@ -84,9 +84,8 @@ to_index(a, x::Base.LogicalIndex) = error("Logical indexing not implemented")
 @generated function index_kernel(ctx::AbstractKernelContext, dest::AbstractArray, src::AbstractArray, idims, Is)
     N = length(Is.parameters)
     quote
-        i = linear_index(ctx)
-        i > length(dest) && return
-        is = gpu_ind2sub(idims, i)
+        i = @linearidx dest
+        is = CartesianIndices(idims)[i]
         @nexprs $N i -> @inbounds I_i = Is[i][is[i]]
         @inbounds dest[i] = @ncall $N getindex src i -> I_i
         return
@@ -112,7 +111,7 @@ end
     quote
         i = linear_index(ctx)
         i > len && return
-        is = gpu_ind2sub(idims, i)
+        is = CartesianIndices(idims)[i]
         @inbounds setindex!(dest, bgetindex(src, i), $(idx...))
         return
     end

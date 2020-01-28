@@ -6,14 +6,14 @@ function test_linalg(AT)
             @test compare(transpose!, AT, Array{Float32}(undef, 32, 32), rand(Float32, 32, 32))
             @test compare(transpose!, AT, Array{Float32}(undef, 128, 32), rand(Float32, 32, 128))
         end
-        
+
         @testset "copyto! for triangular" begin
-            ga = Array{Float32}(undef, 128, 128) 
+            ga = Array{Float32}(undef, 128, 128)
             gb = AT{Float32}(undef, 128, 128)
             rand!(gb)
             copyto!(ga, UpperTriangular(gb))
             @test ga == Array(collect(UpperTriangular(gb)))
-            ga = Array{Float32}(undef, 128, 128) 
+            ga = Array{Float32}(undef, 128, 128)
             gb = AT{Float32}(undef, 128, 128)
             rand!(gb)
             copyto!(ga, LowerTriangular(gb))
@@ -48,6 +48,45 @@ function test_linalg(AT)
             D = Diagonal(d)
             B = A + D
             @test collect(B) ≈ collect(A) + collect(D)
+        end
+
+        @testset "$f! with diagonal $d" for (f, f!) in ((triu, triu!), (tril, tril!)),
+                                            d in -2:2
+            A = randn(10, 10)
+            @test f(A, d) == Array(f!(AT(A), d))
+        end
+
+        @testset "matrix multiplication" begin
+            a = rand(Int8, 3, 3)
+            b = rand(Int8, 3, 3)
+            d_a = AT{Int8}(a)
+            d_b = AT{Int8}(b)
+            d_c = d_a*d_b
+            @test collect(d_c) == a*b
+            a = rand(Complex{Int8}, 3, 3)
+            b = rand(Complex{Int8}, 3, 3)
+            d_a = AT{Complex{Int8}}(a)
+            d_b = AT{Complex{Int8}}(b)
+            d_c = d_a'*d_b
+            @test collect(d_c) == a'*b
+            d_c = d_a*d_b'
+            @test collect(d_c) == a*b'
+            d_c = d_a'*d_b'
+            @test collect(d_c) == a'*b'
+            d_c = transpose(d_a)*d_b'
+            @test collect(d_c) == transpose(a)*b'
+            d_c = d_a'*transpose(d_b)
+            @test collect(d_c) == a'*transpose(b)
+            d_c = transpose(d_a)*d_b
+            @test collect(d_c) == transpose(a)*b
+            d_c = d_a*transpose(d_b)
+            @test collect(d_c) == a*transpose(b)
+            d_c = transpose(d_a)*transpose(d_b)
+            @test collect(d_c) == transpose(a)*transpose(b)
+            d_c = rmul!(copy(d_a), Complex{Int8}(2, 2))
+            @test collect(d_c) == a*Complex{Int8}(2, 2)
+            d_c = lmul!(Complex{Int8}(2, 2), copy(d_a))
+            @test collect(d_c) == Complex{Int8}(2, 2)*a
         end
     end
 end
