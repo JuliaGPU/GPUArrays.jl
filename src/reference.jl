@@ -269,11 +269,4 @@ to_device(ctx, x::Base.RefValue{<: JLArray}) = Base.RefValue(to_device(ctx, x[])
 GPUArrays.unsafe_reinterpret(::Type{T}, A::JLArray, size::Tuple) where T =
     reshape(reinterpret(T, A.data), size)
 
-# linear algebra
-
-using LinearAlgebra
-
-GPUArrays.blas_module(::JLArray) = LinearAlgebra.BLAS
-GPUArrays.blasbuffer(A::JLArray) = A.data
-
 end
