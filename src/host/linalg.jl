@@ -40,16 +40,12 @@ function Base.copyto!(A::AbstractGPUArray, B::Adjoint{T, <: AbstractGPUArray}) w
     transpose!(A, B.parent)
 end
 
-# TODO: simplify using CartesianIdx?
 function LinearAlgebra.tril!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
   function kernel!(ctx, _A, _d)
-    li = @linearidx _A
-    m, n = size(_A)
-    if 0 < li <= m*n
-      i, j = Tuple(CartesianIndices(_A)[li])
-      if i < j - _d
-        _A[i, j] = 0
-      end
+    I = @cartesianidx _A
+    i, j = Tuple(I)
+    if i < j - _d
+      _A[i, j] = 0
     end
     return nothing
   end
@@ -58,16 +54,12 @@ function LinearAlgebra.tril!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
   return A
 end
 
-# TODO: simplify using CartesianIdx?
 function LinearAlgebra.triu!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
   function kernel!(ctx, _A, _d)
-    li = @linearidx _A
-    m, n = size(_A)
-    if 0 < li <= m*n
-      i, j = Tuple(CartesianIndices(_A)[li])
-      if j < i + _d
-        _A[i, j] = 0
-      end
+    I = @cartesianidx _A
+    i, j = Tuple(I)
+    if j < i + _d
+      _A[i, j] = 0
     end
     return nothing
   end
