@@ -1,7 +1,6 @@
 function cartesian_iter(state, res, A, Asize)
     for i in CartesianIndices(Asize)
-        idx = GPUArrays.gpu_sub2ind(Asize, i.I)
-        res[idx] = A[idx]
+        res[i] = A[i]
     end
     return
 end
