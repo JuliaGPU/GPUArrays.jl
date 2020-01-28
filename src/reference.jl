@@ -59,11 +59,11 @@ function GPUArrays.gpu_call(::JLBackend, f, args...; blocks::Int, threads::Int)
     ctx = JLKernelContext(threads, blocks)
     device_args = to_device.(Ref(ctx), args)
     tasks = Array{Task}(undef, threads)
-    for blockidx in 1:blocks
+    @allowscalar for blockidx in 1:blocks
         ctx.blockidx = blockidx
         for threadidx in 1:threads
             thread_ctx = JLKernelContext(ctx, threadidx)
-            tasks[threadidx] = @async @allowscalar f(thread_ctx, device_args...)
+            tasks[threadidx] = @async f(thread_ctx, device_args...)
             # TODO: require 1.3 and use Base.Threads.@spawn for actual multithreading
             #       (this would require a different synchronization mechanism)
         end
