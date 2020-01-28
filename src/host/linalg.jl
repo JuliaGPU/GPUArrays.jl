@@ -41,41 +41,35 @@ function Base.copyto!(A::AbstractGPUArray, B::Adjoint{T, <: AbstractGPUArray}) w
 end
 
 function LinearAlgebra.tril!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
-  function kernel!(ctx, _A, _d)
+  gpu_call(A, d) do ctx, _A, _d
     I = @cartesianidx _A
     i, j = Tuple(I)
     if i < j - _d
       _A[i, j] = 0
     end
-    return nothing
+    return
   end
-
-  gpu_call(kernel!, A, d)
   return A
 end
 
 function LinearAlgebra.triu!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
-  function kernel!(ctx, _A, _d)
+  gpu_call(A, d) do ctx, _A, _d
     I = @cartesianidx _A
     i, j = Tuple(I)
     if j < i + _d
       _A[i, j] = 0
     end
-    return nothing
+    return
   end
-
-  gpu_call(kernel!, A, d)
   return A
 end
 
 function LinearAlgebra.copy_transpose!(dst::AbstractGPUArray, src::AbstractGPUArray)
-  function kernel(ctx, dst, src)
+  gpu_call(st, src) do ctx, dst, src
     I = @cartesianidx dst
     dst[I...] = src[reverse(I)...]
     return
   end
-
-  gpu_call(kernel, dst, src)
   return dst
 end
 
@@ -93,7 +87,7 @@ function generic_matmatmul!(C::AbstractVecOrMat{R}, A::AbstractVecOrMat{T}, B::A
         return fill!(C, zero(R))
     end
 
-    function kernel(ctx, C, A, B)
+    gpu_call(C, A, B) do ctx, C, A, B
         idx = @linearidx C
         i, j = Tuple(CartesianIndices(C)[idx])
 
@@ -109,8 +103,6 @@ function generic_matmatmul!(C::AbstractVecOrMat{R}, A::AbstractVecOrMat{T}, B::A
         return
     end
 
-    gpu_call(kernel, C, A, B)
-
     C
 end
 
@@ -125,25 +117,23 @@ LinearAlgebra.mul!(C::AbstractGPUVecOrMat, A::LinearAlgebra.Adjoint{<:Any, <:Abs
 LinearAlgebra.mul!(C::AbstractGPUVecOrMat, A::LinearAlgebra.Transpose{<:Any, <:AbstractGPUVecOrMat}, B::LinearAlgebra.Transpose{<:Any, <:AbstractGPUVecOrMat}) = generic_matmatmul!(C, A, B)
 
 function generic_rmul!(X::AbstractGPUArray, s::Number)
-    function kernel(ctx, X, s)
+    gpu_call(X, s) do ctx, X, s
         i = @linearidx X
         @inbounds X[i] *= s
         return
     end
-    gpu_call(kernel, X, s)
-    X
+    return X
 end
 
 LinearAlgebra.rmul!(A::AbstractGPUArray, b::Number) = generic_rmul!(A, b)
 
 function generic_lmul!(s::Number, X::AbstractGPUArray)
-    function kernel(ctx, X, s)
+    gpu_call(X, s) do ctx, X, s
         i = @linearidx X
         @inbounds X[i] = s*X[i]
         return
     end
-    gpu_call(kernel, X, s)
-    X
+    return X
 end
 
 LinearAlgebra.lmul!(a::Number, B::AbstractGPUArray) = generic_lmul!(a, B)

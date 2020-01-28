@@ -23,35 +23,15 @@ backend(::Type{<:AbstractGPUDevice}) = error("Not implemented") # COV_EXCL_LINE
 
 ## serialization
 
-import Serialization: AbstractSerializer, serialize, deserialize, serialize_type
+using Serialization: AbstractSerializer, serialize_type
 
-function serialize(s::AbstractSerializer, t::T) where T <: AbstractGPUArray
+function Serialization.serialize(s::AbstractSerializer, t::T) where T <: AbstractGPUArray
     serialize_type(s, T)
     serialize(s, Array(t))
 end
-function deserialize(s::AbstractSerializer, ::Type{T}) where T <: AbstractGPUArray
+function Serialization.deserialize(s::AbstractSerializer, ::Type{T}) where T <: AbstractGPUArray
     A = deserialize(s)
     T(A)
-end
-
-function to_cartesian(A, indices::Tuple)
-    start = CartesianIndex(ntuple(length(indices)) do i
-        val = indices[i]
-        isa(val, Integer) && return val
-        isa(val, UnitRange) && return first(val)
-        isa(val, Colon) && return 1
-        isa(val, Base.Slice{Base.OneTo{Int}}) && return 1
-        error("GPU indexing only defined for integers or unit ranges. Found: $val")
-    end)
-    stop = CartesianIndex(ntuple(length(indices)) do i
-        val = indices[i]
-        isa(val, Integer) && return val
-        isa(val, UnitRange) && return last(val)
-        isa(val, Colon) && return size(A, i)
-        isa(val, Base.Slice{Base.OneTo{Int}}) && return size(A, i)
-        error("GPU indexing only defined for integers or unit ranges. Found: $val")
-    end)
-    CartesianIndices(start, stop)
 end
 
 ## convert to CPU (keeping wrapper type)
