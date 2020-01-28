@@ -12,8 +12,8 @@
 [travis-img]: https://api.travis-ci.org/JuliaGPU/GPUArrays.jl.svg?branch=master
 [travis-url]: https://travis-ci.org/JuliaGPU/GPUArrays.jl
 
-[codecov-img]: https://codecov.io/gh/JuliaGPU/CuArrays.jl/branch/master/graph/badge.svg
-[codecov-url]: https://codecov.io/gh/JuliaGPU/CuArrays.jl
+[codecov-img]: https://codecov.io/gh/JuliaGPU/GPUArrays.jl/branch/master/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/JuliaGPU/GPUArrays.jl
 
 [docs-stable-img]: https://img.shields.io/badge/docs-stable-blue.svg
 [docs-stable-url]: http://JuliaGPU.github.io/GPUArrays.jl/stable/
