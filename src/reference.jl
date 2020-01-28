@@ -1,5 +1,8 @@
 # reference implementation on the CPU
 
+# note that most of the code in this file serves to define a functional array type,
+# the actual implementation of GPUArrays-interfaces is much more limited.
+
 module JLArrays
 
 using GPUArrays
@@ -25,9 +28,9 @@ struct JLBackend <: AbstractGPUBackend end
 mutable struct JLKernelContext <: AbstractKernelContext
     blockdim::Int
     griddim::Int
-
     blockidx::Int
     threadidx::Int
+
     localmem_counter::Int
     localmems::Vector{Vector{Array}}
 end
@@ -169,7 +172,7 @@ Base.size(x::JLArray) = x.dims
 Base.sizeof(x::JLArray) = Base.elsize(x) * length(x)
 
 
-## interop with other arrays
+## interop with Julia arrays
 
 JLArray{T,N}(x::AbstractArray{S,N}) where {T,N,S} =
     JLArray{T,N}(convert(Array{T}, x), size(x))
@@ -265,12 +268,5 @@ to_device(ctx, x::Base.RefValue{<: JLArray}) = Base.RefValue(to_device(ctx, x[])
 
 GPUArrays.unsafe_reinterpret(::Type{T}, A::JLArray, size::Tuple) where T =
     reshape(reinterpret(T, A.data), size)
-
-# linear algebra
-
-using LinearAlgebra
-
-GPUArrays.blas_module(::JLArray) = LinearAlgebra.BLAS
-GPUArrays.blasbuffer(A::JLArray) = A.data
 
 end

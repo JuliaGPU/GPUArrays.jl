@@ -38,7 +38,6 @@ include("testsuite/mapreduce.jl")
 include("testsuite/broadcasting.jl")
 include("testsuite/linalg.jl")
 include("testsuite/fft.jl")
-include("testsuite/blas.jl")
 include("testsuite/random.jl")
 
 
@@ -55,7 +54,6 @@ function test(AT::Type{<:AbstractGPUArray})
     TestSuite.test_broadcasting(AT)
     TestSuite.test_linalg(AT)
     TestSuite.test_fft(AT)
-    TestSuite.test_blas(AT)
     TestSuite.test_random(AT)
 end
 

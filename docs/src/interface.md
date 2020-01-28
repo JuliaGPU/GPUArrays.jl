@@ -60,6 +60,4 @@ should provide implementations of the following interfaces:
 GPUArrays.backend
 GPUArrays.device
 GPUArrays.unsafe_reinterpret
-GPUArrays.blas_module
-GPUArrays.blasbuffer
 ```
