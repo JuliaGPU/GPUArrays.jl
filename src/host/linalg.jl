@@ -9,15 +9,15 @@ function LinearAlgebra.transpose!(At::AbstractGPUArray{T, 2}, A::AbstractGPUArra
     At
 end
 
-function genperm(I::NTuple{N}, perm::NTuple{N}) where N
-    ntuple(d-> (@inbounds return I[perm[d]]), Val(N))
+function genperm(I::CartesianIndex{N}, perm::NTuple{N}) where N
+    CartesianIndex(ntuple(d-> (@inbounds return I[perm[d]]), Val(N)))
 end
 
 function LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) where N
     perm isa Tuple || (perm = Tuple(perm))
     gpu_call(dest, src, perm) do ctx, dest, src, perm
         I = @cartesianidx src ctx
-        @inbounds dest[genperm(I, perm)...] = src[I...]
+        @inbounds dest[genperm(I, perm)] = src[I]
         return
     end
     return dest
