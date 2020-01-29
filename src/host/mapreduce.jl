@@ -178,14 +178,3 @@ function acc_mapreduce(f, op, v0::OT, A::GPUSrcArray, rest...) where {OT}
              target=out, threads=threads, blocks=blocks)
     reduce(op, Array(out))
 end
-
-"""
-Same as Base.isapprox, but without keyword args and without nans
-"""
-function fast_isapprox(x::Number, y::Number, rtol::Real = Base.rtoldefault(x, y), atol::Real=0)
-    x == y || (isfinite(x) && isfinite(y) && abs(x-y) <= max(atol, rtol*max(abs(x), abs(y))))
-end
-
-Base.isapprox(A::AbstractGPUArray{T1}, B::AbstractGPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, B, T1(rtol)|>real, T1(atol)|>real))
-Base.isapprox(A::AbstractArray{T1}, B::AbstractGPUArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(A, Array(B), T1(rtol)|>real, T1(atol)|>real))
-Base.isapprox(A::AbstractGPUArray{T1}, B::AbstractArray{T2}, rtol::Real = Base.rtoldefault(T1, T2, 0), atol::Real=0) where {T1, T2} = all(fast_isapprox.(Array(A), B, T1(rtol)|>real, T1(atol)|>real))

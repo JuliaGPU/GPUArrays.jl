@@ -1,8 +1,12 @@
 function test_linalg(AT)
     @testset "linear algebra" begin
-        @testset "transpose" begin
+        @testset "adjoint and transpose" begin
             @test compare(adjoint, AT, rand(Float32, 32, 32))
+            @test compare(adjoint!, AT, rand(Float32, 32, 32), rand(Float32, 32, 32))
             @test compare(transpose, AT, rand(Float32, 32, 32))
+            @test compare(transpose!, AT, rand(Float32, 32, 32), rand(Float32, 32, 32))
+            @test compare((x,y)->copyto!(x, adjoint(y)), AT, rand(Float32, 32, 32), rand(Float32, 32, 32))
+            @test compare((x,y)->copyto!(x, transpose(y)), AT, rand(Float32, 32, 32), rand(Float32, 32, 32))
             @test compare(transpose!, AT, Array{Float32}(undef, 32, 32), rand(Float32, 32, 32))
             @test compare(transpose!, AT, Array{Float32}(undef, 128, 32), rand(Float32, 32, 128))
         end
@@ -19,6 +23,7 @@ function test_linalg(AT)
             copyto!(ga, LowerTriangular(gb))
             @test ga == Array(collect(LowerTriangular(gb)))
         end
+
         @testset "permutedims" begin
             @test compare(x -> permutedims(x, (2, 1)), AT, rand(Float32, 2, 3))
             @test compare(x -> permutedims(x, (2, 1, 3)), AT, rand(Float32, 4, 5, 6))
