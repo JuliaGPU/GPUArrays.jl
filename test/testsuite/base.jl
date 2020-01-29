@@ -148,5 +148,12 @@ function test_base(AT)
             @test blocks == 1
             @test threads == 1
         end
+
+        @testset "permutedims" begin
+            @test compare(x->permutedims(x, [1, 2]), AT, rand(4, 4))
+
+            inds = rand(1:100, 150, 150)
+            @test compare(x->permutedims(view(x, inds, :), (3, 2, 1)), AT, rand(100, 100))
+        end
     end
 end
