@@ -64,14 +64,6 @@ function LinearAlgebra.triu!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
   return A
 end
 
-function LinearAlgebra.copy_transpose!(dst::AbstractGPUArray, src::AbstractGPUArray)
-  gpu_call(st, src) do ctx, dst, src
-    I = @cartesianidx dst
-    dst[I...] = src[reverse(I)...]
-    return
-  end
-  return dst
-end
 
 
 # matrix multiplication
