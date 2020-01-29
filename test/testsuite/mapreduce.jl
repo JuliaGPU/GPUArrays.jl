@@ -58,23 +58,5 @@ function test_mapreduce(AT)
                 @test A !== deepcopy(A)
             end
         end
-
-        @testset "isapprox" begin
-            for ET in supported_eltypes()
-                ET <: Complex && continue
-                A = fill(AT{ET}, ET(0), (100,))
-                B = ones(AT{ET}, 100)
-                @test !(A ≈ B)
-                @test !(A ≈ Array(B))
-                @test !(Array(A) ≈ B)
-
-
-                ca = AT(randn(ComplexF64,3,3))
-                cb = copy(ca)
-                cb[1:1, 1:1] .+= 1e-7im
-                @test isapprox(ca, cb, atol=1e-5)
-                @test !isapprox(ca, cb, atol=1e-9)
-            end
-        end
     end
 end
