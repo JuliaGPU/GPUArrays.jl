@@ -1,26 +1,25 @@
 # integration with LinearAlgebra stdlib
 
-function LinearAlgebra.transpose!(At::AbstractGPUArray{T, 2}, A::AbstractGPUArray{T, 2}) where T
+## transpose and adjoint
+
+function transpose_f!(f, At::AbstractGPUArray{T, 2}, A::AbstractGPUArray{T, 2}) where T
     gpu_call(At, A) do ctx, At, A
         idx = @cartesianidx A ctx
-        @inbounds At[idx[2], idx[1]] = A[idx[1], idx[2]]
+        @inbounds At[idx[2], idx[1]] = f(A[idx[1], idx[2]])
         return
     end
     At
 end
 
-function genperm(I::CartesianIndex{N}, perm::NTuple{N}) where N
-    CartesianIndex(ntuple(d-> (@inbounds return I[perm[d]]), Val(N)))
+LinearAlgebra.transpose!(At::AbstractGPUArray, A::AbstractGPUArray) = transpose_f!(transpose, At, A)
+LinearAlgebra.adjoint!(At::AbstractGPUArray, A::AbstractGPUArray) = transpose_f!(adjoint, At, A)
+
+function Base.copyto!(A::AbstractGPUArray, B::Adjoint{T, <: AbstractGPUArray}) where T
+    adjoint!(A, B.parent)
 end
 
-function LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) where N
-    perm isa Tuple || (perm = Tuple(perm))
-    gpu_call(dest, src, perm) do ctx, dest, src, perm
-        I = @cartesianidx src ctx
-        @inbounds dest[genperm(I, perm)] = src[I]
-        return
-    end
-    return dest
+function Base.copyto!(A::AbstractGPUArray, B::Transpose{T, <: AbstractGPUArray}) where T
+    transpose!(A, B.parent)
 end
 
 function Base.copyto!(A::AbstractArray, B::Adjoint{<:Any, <:AbstractGPUArray})
@@ -29,15 +28,15 @@ end
 function Base.copyto!(A::AbstractArray, B::Transpose{<:Any, <:AbstractGPUArray})
     copyto!(A, Transpose(Array(parent(B))))
 end
+
+
+## triangular
+
 function Base.copyto!(A::AbstractArray, B::UpperTriangular{<:Any, <:AbstractGPUArray})
     copyto!(A, UpperTriangular(Array(parent(B))))
 end
 function Base.copyto!(A::AbstractArray, B::LowerTriangular{<:Any, <:AbstractGPUArray})
     copyto!(A, LowerTriangular(Array(parent(B))))
-end
-
-function Base.copyto!(A::AbstractGPUArray, B::Adjoint{T, <: AbstractGPUArray}) where T
-    transpose!(A, B.parent)
 end
 
 function LinearAlgebra.tril!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
@@ -65,8 +64,7 @@ function LinearAlgebra.triu!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
 end
 
 
-
-# matrix multiplication
+## matrix multiplication
 
 function generic_matmatmul!(C::AbstractVecOrMat{R}, A::AbstractVecOrMat{T}, B::AbstractVecOrMat{S}) where {T,S,R}
     if size(A,2) != size(B,1)
@@ -129,3 +127,20 @@ function generic_lmul!(s::Number, X::AbstractGPUArray)
 end
 
 LinearAlgebra.lmul!(a::Number, B::AbstractGPUArray) = generic_lmul!(a, B)
+
+
+## permutedims
+
+function genperm(I::CartesianIndex{N}, perm::NTuple{N}) where N
+    CartesianIndex(ntuple(d-> (@inbounds return I[perm[d]]), Val(N)))
+end
+
+function LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) where N
+    perm isa Tuple || (perm = Tuple(perm))
+    gpu_call(dest, src, perm) do ctx, dest, src, perm
+        I = @cartesianidx src ctx
+        @inbounds dest[genperm(I, perm)] = src[I]
+        return
+    end
+    return dest
+end
