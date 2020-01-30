@@ -53,7 +53,7 @@ cuarrays:
     - julia --project=$CUARRAYS -e 'using Pkg;
                                     Pkg.instantiate();
                                     Pkg.add(["FFTW", "ForwardDiff", "FillArrays"])'
-    - JULIA_LOAD_PATH=".:$CUARRAYS::" julia --code-coverage $CUARRAYS/test/runtests.jl
+    - JULIA_LOAD_PATH=".:$CUARRAYS::" julia $CUARRAYS/test/runtests.jl
   allow_failure: true
 
 
