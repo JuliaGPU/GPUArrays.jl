@@ -5,9 +5,11 @@
 
 module JLArrays
 
+export JLArray
+
 using GPUArrays
 
-export JLArray
+using Adapt
 
 
 #
@@ -52,12 +54,19 @@ function JLKernelContext(ctx::JLKernelContext, threadidx::Int)
     )
 end
 
-to_device(ctx, x::Tuple) = to_device.(Ref(ctx), x)
-to_device(ctx, x) = x
+struct Adaptor end
+jlconvert(arg) = adapt(Adaptor(), arg)
+
+# FIXME: add Ref to Adapt.jl (but make sure it doesn't cause ambiguities with CUDAnative's)
+struct JlRefValue{T} <: Ref{T}
+  x::T
+end
+Base.getindex(r::JlRefValue) = r.x
+Adapt.adapt_structure(to::Adaptor, r::Base.RefValue) = JlRefValue(adapt(to, r[]))
 
 function GPUArrays.gpu_call(::JLBackend, f, args...; blocks::Int, threads::Int)
     ctx = JLKernelContext(threads, blocks)
-    device_args = to_device.(Ref(ctx), args)
+    device_args = jlconvert.(args)
     tasks = Array{Task}(undef, threads)
     @allowscalar for blockidx in 1:blocks
         ctx.blockidx = blockidx
@@ -267,8 +276,8 @@ GPUArrays.device(x::JLArray) = JLDevice()
 
 GPUArrays.backend(::Type{<:JLArray}) = JLBackend()
 
-to_device(ctx, x::JLArray{T,N}) where {T,N} = JLDeviceArray{T,N}(x.data, x.dims)
-to_device(ctx, x::Base.RefValue{<: JLArray}) = Base.RefValue(to_device(ctx, x[]))
+Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N} =
+  JLDeviceArray{T,N}(x.data, x.dims)
 
 GPUArrays.unsafe_reinterpret(::Type{T}, A::JLArray, size::Tuple) where T =
     reshape(reinterpret(T, A.data), size)
