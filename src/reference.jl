@@ -193,15 +193,19 @@ Base.convert(::Type{T}, x::T) where T <: JLArray = x
 
 ## broadcast
 
-using Base.Broadcast: BroadcastStyle, Broadcasted, ArrayStyle
+using Base.Broadcast: BroadcastStyle, Broadcasted
 
-BroadcastStyle(::Type{<:JLArray}) = ArrayStyle{JLArray}()
+struct JLArrayStyle{N} <: AbstractGPUArrayStyle{N} end
+JLArrayStyle(::Val{N}) where N = JLArrayStyle{N}()
+JLArrayStyle{M}(::Val{N}) where {N,M} = JLArrayStyle{N}()
 
-function Base.similar(bc::Broadcasted{ArrayStyle{JLArray}}, ::Type{T}) where T
+BroadcastStyle(::Type{JLArray{T,N}}) where {T,N} = JLArrayStyle{N}()
+
+Base.similar(bc::Broadcasted{JLArrayStyle{N}}, ::Type{T}) where {N,T} =
     similar(JLArray{T}, axes(bc))
-end
 
-Base.similar(bc::Broadcasted{ArrayStyle{JLArray}}, ::Type{T}, dims...) where {T} = JLArray{T}(undef, dims...)
+Base.similar(bc::Broadcasted{JLArrayStyle{N}}, ::Type{T}, dims...) where {N,T} =
+    JLArray{T}(undef, dims...)
 
 
 ## memory operations

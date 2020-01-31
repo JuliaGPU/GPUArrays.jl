@@ -1,23 +1,21 @@
 # broadcasting operations
 
+export AbstractGPUArrayStyle
+
 using Base.Broadcast
 
-import Base.Broadcast: BroadcastStyle, Broadcasted, ArrayStyle
+import Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle
 
-# we define a generic `BroadcastStyle` here that should be sufficient for most cases.
-# dependent packages like `CuArrays` can define their own `BroadcastStyle` allowing
-# them to further change or optimize broadcasting.
-#
-# TODO: investigate if we should define out own `GPUArrayStyle{N} <: AbstractArrayStyle{N}`
-#
-# NOTE: this uses the specific `T` that was used e.g. `JLArray` or `CLArray` for ArrayStyle,
-#       instead of using `ArrayStyle{AbstractGPUArray}`, due to the fact how `similar` works.
-BroadcastStyle(::Type{T}) where {T<:AbstractGPUArray} = ArrayStyle{T}()
+"""
+Abstract supertype for GPU array styles. The `N` parameter is the dimensionality.
+
+Downstream implementations should provide a concrete array style type that inherits from
+this supertype.
+"""
+abstract type AbstractGPUArrayStyle{N} <: AbstractArrayStyle{N} end
 
 # Wrapper types otherwise forget that they are GPU compatible
-#
-# NOTE: Don't directly use ArrayStyle{AbstractGPUArray} here since that would mean that `CuArrays`
-#       customization no longer take effect.
+# NOTE: don't directly use GPUArrayStyle here not to lose downstream customizations.
 for (W, ctor) in Adapt.wrappers
   @eval begin
     BroadcastStyle(::Type{<:$W}) where {AT<:AbstractGPUArray} = BroadcastStyle(AT)

@@ -118,6 +118,14 @@ function broadcasting(AT)
             @test compare((A, B) -> A .* B .+ ET(10), AT, rand(ET, 40, 40), rand(ET, 40, 40))
         end
     end
+
+    @testset "0D" begin
+        x = AT{Float64}(undef)
+        x .= 1
+        @test collect(x)[] == 1
+        x /= 2
+        @test collect(x)[] == 0.5
+    end
 end
 
 function vec3(AT)
