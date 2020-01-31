@@ -1,6 +1,6 @@
 # host-level indexing
 
-export allowscalar, @allowscalar, assertscalar
+export allowscalar, @allowscalar, @disallowscalar, assertscalar
 
 
 # mechanism to disallow scalar operations
