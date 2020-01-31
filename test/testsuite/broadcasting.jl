@@ -126,6 +126,21 @@ function broadcasting(AT)
         x /= 2
         @test collect(x)[] == 0.5
     end
+
+    @testset "Ref" begin
+        # as first arg, 0d broadcast
+        @test compare(x->getindex.(Ref(x),1), AT, [0])
+
+        void_setindex!(args...) = (setindex!(args...); return)
+        @test compare(x->(void_setindex!.(Ref(x),1); x), AT, [0])
+
+        # regular broadcast
+        a = AT(rand(10))
+        b = AT(rand(10))
+        cpy(i,a,b) = (a[i] = b[i]; return)
+        cpy.(1:10, Ref(a), Ref(b))
+        @test Array(a) == Array(b)
+    end
 end
 
 function vec3(AT)
