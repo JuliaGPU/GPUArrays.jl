@@ -57,8 +57,8 @@ gpu_promote_type(::typeof(min), ::Type{T}) where {T<: WidenReduceResult} = T
 gpu_promote_type(::typeof(abs), ::Type{Complex{T}}) where {T} = T
 gpu_promote_type(::typeof(abs2), ::Type{Complex{T}}) where {T} = T
 
-import Base.Broadcast: Broadcasted, ArrayStyle
-const GPUSrcArray = Union{Broadcasted{ArrayStyle{AT}}, AbstractGPUArray{T, N}} where {T, N, AT<:AbstractGPUArray}
+import Base.Broadcast: Broadcasted
+const GPUSrcArray = Union{Broadcasted{<:AbstractGPUArrayStyle}, <:AbstractGPUArray}
 
 function Base.mapreduce(f::Function, op::Function, A::GPUSrcArray; dims = :, init...)
     mapreduce_impl(f, op, init.data, A, dims)

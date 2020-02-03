@@ -5,9 +5,11 @@
 
 module JLArrays
 
+export JLArray
+
 using GPUArrays
 
-export JLArray
+using Adapt
 
 
 #
@@ -52,14 +54,21 @@ function JLKernelContext(ctx::JLKernelContext, threadidx::Int)
     )
 end
 
-to_device(ctx, x::Tuple) = to_device.(Ref(ctx), x)
-to_device(ctx, x) = x
+struct Adaptor end
+jlconvert(arg) = adapt(Adaptor(), arg)
+
+# FIXME: add Ref to Adapt.jl (but make sure it doesn't cause ambiguities with CUDAnative's)
+struct JlRefValue{T} <: Ref{T}
+  x::T
+end
+Base.getindex(r::JlRefValue) = r.x
+Adapt.adapt_structure(to::Adaptor, r::Base.RefValue) = JlRefValue(adapt(to, r[]))
 
 function GPUArrays.gpu_call(::JLBackend, f, args...; blocks::Int, threads::Int)
     ctx = JLKernelContext(threads, blocks)
-    device_args = to_device.(Ref(ctx), args)
+    device_args = jlconvert.(args)
     tasks = Array{Task}(undef, threads)
-    @allowscalar for blockidx in 1:blocks
+    @disallowscalar for blockidx in 1:blocks
         ctx.blockidx = blockidx
         for threadidx in 1:threads
             thread_ctx = JLKernelContext(ctx, threadidx)
@@ -138,6 +147,7 @@ struct JLArray{T, N} <: AbstractGPUArray{T, N}
     dims::Dims{N}
 
     function JLArray{T,N}(data::Array{T, N}, dims::Dims{N}) where {T,N}
+        @assert isbitstype(T) "JLArray only supports bits types"
         new(data, dims)
     end
 end
@@ -193,15 +203,19 @@ Base.convert(::Type{T}, x::T) where T <: JLArray = x
 
 ## broadcast
 
-using Base.Broadcast: BroadcastStyle, Broadcasted, ArrayStyle
+using Base.Broadcast: BroadcastStyle, Broadcasted
 
-BroadcastStyle(::Type{<:JLArray}) = ArrayStyle{JLArray}()
+struct JLArrayStyle{N} <: AbstractGPUArrayStyle{N} end
+JLArrayStyle(::Val{N}) where N = JLArrayStyle{N}()
+JLArrayStyle{M}(::Val{N}) where {N,M} = JLArrayStyle{N}()
 
-function Base.similar(bc::Broadcasted{ArrayStyle{JLArray}}, ::Type{T}) where T
+BroadcastStyle(::Type{JLArray{T,N}}) where {T,N} = JLArrayStyle{N}()
+
+Base.similar(bc::Broadcasted{JLArrayStyle{N}}, ::Type{T}) where {N,T} =
     similar(JLArray{T}, axes(bc))
-end
 
-Base.similar(bc::Broadcasted{ArrayStyle{JLArray}}, ::Type{T}, dims...) where {T} = JLArray{T}(undef, dims...)
+Base.similar(bc::Broadcasted{JLArrayStyle{N}}, ::Type{T}, dims...) where {N,T} =
+    JLArray{T}(undef, dims...)
 
 
 ## memory operations
@@ -263,8 +277,8 @@ GPUArrays.device(x::JLArray) = JLDevice()
 
 GPUArrays.backend(::Type{<:JLArray}) = JLBackend()
 
-to_device(ctx, x::JLArray{T,N}) where {T,N} = JLDeviceArray{T,N}(x.data, x.dims)
-to_device(ctx, x::Base.RefValue{<: JLArray}) = Base.RefValue(to_device(ctx, x[]))
+Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N} =
+  JLDeviceArray{T,N}(x.data, x.dims)
 
 GPUArrays.unsafe_reinterpret(::Type{T}, A::JLArray, size::Tuple) where T =
     reshape(reinterpret(T, A.data), size)

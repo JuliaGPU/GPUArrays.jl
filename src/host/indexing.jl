@@ -1,6 +1,6 @@
 # host-level indexing
 
-export allowscalar, @allowscalar, assertscalar
+export allowscalar, @allowscalar, @disallowscalar, assertscalar
 
 
 # mechanism to disallow scalar operations
@@ -82,26 +82,18 @@ end
 
 Base.IndexStyle(::Type{<:AbstractGPUArray}) = Base.IndexLinear()
 
-function _getindex(xs::AbstractGPUArray{T}, i::Integer) where T
+function Base.getindex(xs::AbstractGPUArray{T}, i::Integer) where T
+    ndims(xs) > 0 && assertscalar("scalar getindex")
     x = Array{T}(undef, 1)
     copyto!(x, 1, xs, i, 1)
     return x[1]
 end
 
-function Base.getindex(xs::AbstractGPUArray{T}, i::Integer) where T
-    ndims(xs) > 0 && assertscalar("scalar getindex")
-    _getindex(xs, i)
-end
-
-function _setindex!(xs::AbstractGPUArray{T}, v::T, i::Integer) where T
-    x = T[v]
-    copyto!(xs, i, x, 1, 1)
-    return v
-end
-
 function Base.setindex!(xs::AbstractGPUArray{T}, v::T, i::Integer) where T
     assertscalar("scalar setindex!")
-    _setindex!(xs, v, i)
+    x = T[v]
+    copyto!(xs, i, x, 1, 1)
+    return xs
 end
 
 Base.setindex!(xs::AbstractGPUArray, v, i::Integer) = xs[i] = convert(eltype(xs), v)

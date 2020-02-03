@@ -62,5 +62,11 @@ function test_indexing(AT)
                 @test Array(A) == Ac
             end
         end
+
+        @testset "get/setindex!" begin
+            # literal calls to get/setindex! have differen return types
+            @test compare(x->getindex(x,1), AT, zeros(Int, 2))
+            @test compare(x->setindex!(x,1,1), AT, zeros(Int, 2))
+        end
     end
 end
