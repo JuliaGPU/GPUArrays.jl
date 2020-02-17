@@ -13,9 +13,9 @@ function test_random(AT)
                 rng = GPUArrays.global_rng(A)
                 Random.seed!(rng)
                 Random.seed!(rng, 1)
-                rand!(A)
+                rand!(rng, A)
                 Random.seed!(rng, 1)
-                rand!(B)
+                rand!(rng, B)
                 @test all(A .== B)
             end
         end
