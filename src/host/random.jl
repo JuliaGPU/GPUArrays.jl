@@ -66,14 +66,28 @@ struct RNG <: AbstractRNG
 end
 
 const GLOBAL_RNGS = Dict()
-function global_rng(A::AbstractGPUArray)
-    dev = GPUArrays.device(A)
+function global_rng(AT::Type{<:AbstractGPUArray}, dev)
     get!(GLOBAL_RNGS, dev) do
         N = GPUArrays.threads(dev)
-        state = similar(A, NTuple{4, UInt32}, N)
-        copyto!(state, [ntuple(i-> rand(UInt32), 4) for i=1:N])
-        RNG(state)
+        AT = Base.typename(AT).wrapper
+        state = AT{NTuple{4, UInt32}}(undef, N)
+        rng = RNG(state)
+        Random.seed!(rng)
+        rng
     end
+end
+global_rng(A::AT) where {AT <: AbstractGPUArray} = global_rng(AT, GPUArrays.device(A))
+
+make_seed(rng::RNG) = make_seed(rng, rand(UInt))
+function make_seed(rng::RNG, n::Integer)
+    rand(MersenneTwister(n), UInt32, sizeof(rng.state)÷sizeof(UInt32))
+end
+
+Random.seed!(rng::RNG) = Random.seed!(rng, make_seed(rng))
+Random.seed!(rng::RNG, seed::Integer) = Random.seed!(rng, make_seed(rng, seed))
+function Random.seed!(rng::RNG, seed::Vector{UInt32})
+    copyto!(rng.state, reinterpret(NTuple{4, UInt32}, seed))
+    return
 end
 
 function Random.rand!(rng::RNG, A::AbstractGPUArray{T}) where T <: Number

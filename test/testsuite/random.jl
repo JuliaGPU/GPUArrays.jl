@@ -9,6 +9,14 @@ function test_random(AT)
                 rand!(A)
                 rand!(B)
                 @test !any(A .== B)
+
+                rng = GPUArrays.global_rng(A)
+                Random.seed!(rng)
+                Random.seed!(rng, 1)
+                rand!(A)
+                Random.seed!(rng, 1)
+                rand!(B)
+                @test all(A .== B)
             end
         end
     end
