@@ -33,13 +33,15 @@ host to influence how the kernel is executed. The following keyword arguments ar
   no other keyword arguments that influence the launch configuration are specified.
 - `threads::Int` and `blocks::Int`: configure exactly how many threads and blocks are
   launched. This cannot be used in combination with the `total_threads` argument.
+- `name::String`: inform the back end about the name of the kernel to be executed.
+  This can be used to emit better diagnostics, and is useful with anonymous kernels.
 """
 function gpu_call(kernel::Base.Callable, args...;
                   target::AbstractArray=first(args),
                   total_threads::Union{Int,Nothing}=nothing,
                   threads::Union{Int,Nothing}=nothing,
                   blocks::Union{Int,Nothing}=nothing,
-                  kwargs...)
+                  name::Union{String,Nothing}=nothing)
     # determine how many threads/blocks to launch
     if total_threads===nothing && threads===nothing && blocks===nothing
         total_threads = length(target)
@@ -58,7 +60,7 @@ function gpu_call(kernel::Base.Callable, args...;
         end
     end
 
-    gpu_call(backend(target), kernel, args...; threads=threads, blocks=blocks, kwargs...)
+    gpu_call(backend(target), kernel, args...; threads=threads, blocks=blocks, name=name)
 end
 
 gpu_call(backend::AbstractGPUBackend, kernel, args...; kwargs...) = error("Not implemented") # COV_EXCL_LINE
