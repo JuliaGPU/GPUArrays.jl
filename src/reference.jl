@@ -64,7 +64,7 @@ end
 Base.getindex(r::JlRefValue) = r.x
 Adapt.adapt_structure(to::Adaptor, r::Base.RefValue) = JlRefValue(adapt(to, r[]))
 
-function GPUArrays.gpu_call(::JLBackend, f, args...; blocks::Int, threads::Int,
+function GPUArrays.gpu_call(::JLBackend, f, args, threads::Int, blocks::Int;
                             name::Union{String,Nothing})
     ctx = JLKernelContext(threads, blocks)
     device_args = jlconvert.(args)

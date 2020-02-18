@@ -42,28 +42,38 @@ function gpu_call(kernel::Base.Callable, args...;
                   threads::Union{Int,Nothing}=nothing,
                   blocks::Union{Int,Nothing}=nothing,
                   name::Union{String,Nothing}=nothing)
-    # determine how many threads/blocks to launch
+    # non-trivial default values for launch configuration
     if total_threads===nothing && threads===nothing && blocks===nothing
         total_threads = length(target)
-    end
-    if total_threads !== nothing
-        if threads !== nothing || blocks !== nothing
-            error("Cannot specify both total_threads and threads/blocks configuration")
-        end
-        blocks, threads = thread_blocks_heuristic(total_threads)
-    else
+    elseif total_threads===nothing
         if threads === nothing
             threads = 1
         end
         if blocks === nothing
             blocks = 1
         end
+    elseif threads!==nothing || blocks!==nothing
+        error("Cannot specify both total_threads and threads/blocks configuration")
     end
 
-    gpu_call(backend(target), kernel, args...; threads=threads, blocks=blocks, name=name)
+    if total_threads !== nothing
+        gpu_call(backend(target), kernel, args, total_threads; name=name)
+    else
+        gpu_call(backend(target), kernel, args, threads, blocks; name=name)
+    end
 end
 
-gpu_call(backend::AbstractGPUBackend, kernel, args...; kwargs...) = error("Not implemented") # COV_EXCL_LINE
+# gpu_call method with a simple launch configuration heuristic.
+# this can be specialised if more sophisticated heuristics are available.
+function gpu_call(backend::AbstractGPUBackend, kernel, args, total_threads::Int; kwargs...)
+    threads = clamp(total_threads, 1, 256)
+    blocks = max(ceil(Int, total_threads / threads), 1)
+
+    gpu_call(backend, kernel, args, threads, blocks; kwargs...)
+end
+
+# bottom-line gpu_call method that is expected to be implemented by the back end
+gpu_call(backend::AbstractGPUBackend, kernel, args, threads::Int, blocks::Int; kwargs...) = error("Not implemented") # COV_EXCL_LINE
 
 """
     synchronize(A::AbstractArray)
@@ -73,11 +83,4 @@ Blocks until all operations are finished on `A`
 function synchronize(A::AbstractArray)
     # fallback is a noop, for backends not needing synchronization. This
     # makes it easier to write generic code that also works for AbstractArrays
-end
-
-function thread_blocks_heuristic(len::Integer)
-    # TODO better threads default
-    threads = clamp(len, 1, 256)
-    blocks = max(ceil(Int, len / threads), 1)
-    (blocks, threads)
 end
