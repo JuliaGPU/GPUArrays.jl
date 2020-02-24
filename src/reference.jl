@@ -284,4 +284,11 @@ Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N} =
 GPUArrays.unsafe_reinterpret(::Type{T}, A::JLArray, size::Tuple) where T =
     reshape(reinterpret(T, A.data), size)
 
+function GPUArrays.mapreducedim!(f, op, R::JLArray, A::AbstractArray, init=nothing)
+    if init !== nothing
+        fill!(R, init)
+    end
+    @allowscalar Base.mapreducedim!(f, op, R.data, A)
+end
+
 end
