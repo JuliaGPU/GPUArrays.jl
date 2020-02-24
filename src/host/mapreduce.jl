@@ -1,180 +1,62 @@
 # map-reduce
 
-Base.any(A::AbstractGPUArray{Bool}) = mapreduce(identity, |, A; init = false)
-Base.all(A::AbstractGPUArray{Bool}) = mapreduce(identity, &, A; init = true)
+# GPUArrays' mapreduce methods build on `Base.mapreducedim!`, but with an additional
+# argument `init` value to avoid eager initialization of `R` (if set to something).
+mapreducedim!(f, op, R::AbstractGPUArray, A::AbstractArray, init=nothing) = error("Not implemented") # COV_EXCL_LINE
+Base.mapreducedim!(f, op, R::AbstractGPUArray, A::AbstractArray) = mapreducedim!(f, op, R, A)
 
-Base.any(f::Function, A::AbstractGPUArray) = mapreduce(f, |, A; init = false)
-Base.all(f::Function, A::AbstractGPUArray) = mapreduce(f, &, A; init = true)
-Base.count(pred::Function, A::AbstractGPUArray) = Int(mapreduce(pred, +, A; init = 0))
+neutral_element(op, T) =
+    error("""GPUArrays.jl needs to know the neutral element for your operator `$op`.
+             Please pass it as an explicit argument to (if possible), or register it
+             globally your operator by defining `GPUArrays.neutral_element(::typeof($op), T)`.""")
+neutral_element(::typeof(Base.:(|)), T) = zero(T)
+neutral_element(::typeof(Base.:(+)), T) = zero(T)
+neutral_element(::typeof(Base.add_sum), T) = zero(T)
+neutral_element(::typeof(Base.:(&)), T) = one(T)
+neutral_element(::typeof(Base.:(*)), T) = one(T)
+neutral_element(::typeof(Base.mul_prod), T) = one(T)
+neutral_element(::typeof(Base.min), T) = typemax(T)
+neutral_element(::typeof(Base.max), T) = typemin(T)
 
-Base.:(==)(A::AbstractGPUArray, B::AbstractGPUArray) = Bool(mapreduce(==, &, A, B; init = true))
+function Base.mapreduce(f, op, A::AbstractGPUArray; dims=:, init=nothing)
+    # figure out the destination container type by looking at the initializer element,
+    # or by relying on inference to reason through the map and reduce functions.
+    if init === nothing
+        ET = Base.promote_op(f, eltype(A))
+        ET = Base.promote_op(op, ET, ET)
+        (ET === Union{} || ET === Any) &&
+            error("mapreduce cannot figure the output element type, please pass an explicit init value")
 
-LinearAlgebra.ishermitian(A::AbstractGPUMatrix) = acc_mapreduce(==, &, true, A, adjoint(A))
-
-# hack to get around of fetching the first element of the AbstractGPUArray
-# as a startvalue, which is a bit complicated with the current reduce implementation
-_initerror(f) = error("Please supply a neutral element for $f. E.g: mapreduce(f, $f, A; init = 1)")
-startvalue(f, T) = _initerror(f)
-for op = (+, Base.add_sum, *, Base.mul_prod, max, min)
-    @eval startvalue(::typeof($op), ::Type{Any}) = _initerror($op)
-end
-
-startvalue(::typeof(+), T) = zero(T)
-startvalue(::typeof(Base.add_sum), T) = zero(T)
-startvalue(::typeof(*), T) = one(T)
-startvalue(::typeof(Base.mul_prod), T) = one(T)
-
-startvalue(::typeof(max), T) = typemin(T)
-startvalue(::typeof(min), T) = typemax(T)
-
-# TODO mirror base
-
-if Int === Int32
-const SmallSigned = Union{Int8,Int16}
-const SmallUnsigned = Union{UInt8,UInt16}
-else
-const SmallSigned = Union{Int8,Int16,Int32}
-const SmallUnsigned = Union{UInt8,UInt16,Int}
-end
-
-const CommonReduceResult = Union{UInt64,UInt128,Int64,Int128,Float16,Float32,Float64}
-const WidenReduceResult = Union{SmallSigned, SmallUnsigned}
-
-
-# TODO widen and support Int64 and use Base.r_promote_type
-gpu_promote_type(op, ::Type{T}) where {T} = T
-gpu_promote_type(op, ::Type{T}) where {T<: WidenReduceResult} = T
-gpu_promote_type(::typeof(+), ::Type{T}) where {T<: WidenReduceResult} = T
-gpu_promote_type(::typeof(*), ::Type{T}) where {T<: WidenReduceResult} = T
-gpu_promote_type(::typeof(Base.add_sum), ::Type{T}) where {T<:WidenReduceResult} = typeof(Base.add_sum(zero(T), zero(T)))
-gpu_promote_type(::typeof(Base.mul_prod), ::Type{T}) where {T<:WidenReduceResult} = typeof(Base.mul_prod(one(T), one(T)))
-gpu_promote_type(::typeof(+), ::Type{T}) where {T<:Number} = typeof(zero(T)+zero(T))
-gpu_promote_type(::typeof(*), ::Type{T}) where {T<:Number} = typeof(one(T)*one(T))
-gpu_promote_type(::typeof(Base.add_sum), ::Type{T}) where {T<:Number} = typeof(Base.add_sum(zero(T), zero(T)))
-gpu_promote_type(::typeof(Base.mul_prod), ::Type{T}) where {T<:Number} = typeof(Base.mul_prod(one(T), one(T)))
-gpu_promote_type(::typeof(max), ::Type{T}) where {T<: WidenReduceResult} = T
-gpu_promote_type(::typeof(min), ::Type{T}) where {T<: WidenReduceResult} = T
-gpu_promote_type(::typeof(abs), ::Type{Complex{T}}) where {T} = T
-gpu_promote_type(::typeof(abs2), ::Type{Complex{T}}) where {T} = T
-
-import Base.Broadcast: Broadcasted
-const GPUSrcArray = Union{Broadcasted{<:AbstractGPUArrayStyle}, <:AbstractGPUArray}
-
-function Base.mapreduce(f::Function, op::Function, A::GPUSrcArray; dims = :, init...)
-    mapreduce_impl(f, op, init.data, A, dims)
-end
-
-function mapreduce_impl(f, op, ::NamedTuple{()}, A::GPUSrcArray, ::Colon)
-    OT = gpu_promote_type(op, gpu_promote_type(f, eltype(A)))
-    v0 = startvalue(op, OT) # TODO do this better
-    acc_mapreduce(f, op, v0, A)
-end
-
-function mapreduce_impl(f, op, nt::NamedTuple{(:init,)}, A::GPUSrcArray, ::Colon)
-    acc_mapreduce(f, op, nt.init, A)
-end
-
-function mapreduce_impl(f, op, nt, A::GPUSrcArray, dims)
-    Base._mapreduce_dim(f, op, nt, A, dims)
-end
-
-function acc_mapreduce end
-function Base.mapreduce(f, op, A::GPUSrcArray, B::GPUSrcArray, C::Number; init)
-    acc_mapreduce(f, op, init, A, B, C)
-end
-function Base.mapreduce(f, op, A::GPUSrcArray, B::GPUSrcArray; init)
-    acc_mapreduce(f, op, init, A, B)
-end
-
-@generated function mapreducedim_kernel(ctx::AbstractKernelContext, f, op, R, A, range::NTuple{N, Any}) where N
-    types = (range.parameters...,)
-    indices = ntuple(i-> Symbol("I_$i"), N)
-    Iexpr = ntuple(i-> :(I[$i]), N)
-    body = :(@inbounds R[$(Iexpr...)] = op(R[$(Iexpr...)], f(A[$(indices...)])))
-    for i = N:-1:1
-        idxsym = indices[i]
-        if types[i] == Nothing
-            body = quote
-                $idxsym = I[$i]
-                $body
-            end
-        else
-            rsym = Symbol("r_$i")
-            body = quote
-                $(rsym) = range[$i]
-                for $idxsym in Int(first($rsym)):Int(last($rsym))
-                    $body
-                end
-            end
-        end
-        body
+        init = neutral_element(op, ET)
+    else
+        ET = typeof(init)
     end
-    quote
-        I = @cartesianidx R ctx
-        $body
-        return
+
+    sz = size(A)
+    red = ntuple(i->(dims==Colon() || i in dims) ? 1 : sz[i], ndims(A))
+    R = similar(A, ET, red)
+    mapreducedim!(f, op, R, A, init)
+
+    if dims==Colon()
+        @allowscalar R[]
+    else
+        R
     end
 end
 
-function Base._mapreducedim!(f, op, R::AbstractGPUArray, A::GPUSrcArray)
-    range = ifelse.(length.(axes(R)) .== 1, axes(A), nothing)
-    gpu_call(mapreducedim_kernel, f, op, R, A, range; target=R)
-    return R
-end
+Base.any(A::AbstractGPUArray{Bool}) = mapreduce(identity, |, A)
+Base.all(A::AbstractGPUArray{Bool}) = mapreduce(identity, &, A)
 
-@inline simple_broadcast_index(A::AbstractArray, i...) = @inbounds A[i...]
-@inline simple_broadcast_index(x, i...) = x
+Base.any(f::Function, A::AbstractGPUArray) = mapreduce(f, |, A)
+Base.all(f::Function, A::AbstractGPUArray) = mapreduce(f, &, A)
+Base.count(pred::Function, A::AbstractGPUArray) = mapreduce(pred, +, A; init = 0)
 
-for i = 0:10
-    args = ntuple(x-> Symbol("arg_", x), i)
-    fargs = ntuple(x-> :(simple_broadcast_index($(args[x]), cartesian_global_index...)), i)
-    @eval begin
-        # http://developer.amd.com/resources/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
-        function reduce_kernel(ctx::AbstractKernelContext, f, op, v0::T, A, ::Val{LMEM}, result, $(args...)) where {T, LMEM}
-            tmp_local = @LocalMemory(ctx, T, LMEM)
-            global_index = linear_index(ctx)
-            acc = v0
-            # # Loop sequentially over chunks of input vector
-            @inbounds while global_index <= length(A)
-                cartesian_global_index = Tuple(CartesianIndices(axes(A))[global_index])
-                @inbounds element = f(A[cartesian_global_index...], $(fargs...))
-                acc = op(acc, element)
-                global_index += global_size(ctx)
-            end
-            # Perform parallel reduction
-            local_index = threadidx(ctx) - 1
-            @inbounds tmp_local[local_index + 1] = acc
-            synchronize_threads(ctx)
+Base.:(==)(A::AbstractGPUArray, B::AbstractGPUArray) = Bool(mapreduce(==, &, A, B))
 
-            offset = blockdim(ctx) ÷ 2
-            @inbounds while offset > 0
-                if (local_index < offset)
-                    other = tmp_local[local_index + offset + 1]
-                    mine = tmp_local[local_index + 1]
-                    tmp_local[local_index + 1] = op(mine, other)
-                end
-                synchronize_threads(ctx)
-                offset = offset ÷ 2
-            end
-            if local_index == 0
-                @inbounds result[blockidx(ctx)] = tmp_local[1]
-            end
-            return
-        end
-    end
+# avoid calling into `initarray!``
+Base.sum!(R::AbstractGPUArray, A::AbstractGPUArray) = Base.reducedim!(Base.add_sum, R, A)
+Base.prod!(R::AbstractGPUArray, A::AbstractGPUArray) = Base.reducedim!(Base.mul_prod, R, A)
+Base.maximum!(R::AbstractGPUArray, A::AbstractGPUArray) = Base.reducedim!(max, R, A)
+Base.minimum!(R::AbstractGPUArray, A::AbstractGPUArray) = Base.reducedim!(min, R, A)
 
-end
-
-function acc_mapreduce(f, op, v0::OT, A::GPUSrcArray, rest...) where {OT}
-    blocks = 80
-    threads = 256
-    if length(A) <= blocks * threads
-        args = zip(convert_to_cpu(A), convert_to_cpu.(rest)...)
-        return mapreduce(x-> f(x...), op, args, init = v0)
-    end
-    out = similar(A, OT, (blocks,))
-    fill!(out, v0)
-    gpu_call(reduce_kernel, f, op, v0, A, Val{threads}(), out, rest...;
-             target=out, threads=threads, blocks=blocks)
-    reduce(op, Array(out))
-end
+LinearAlgebra.ishermitian(A::AbstractGPUMatrix) = mapreduce(==, &, A, adjoint(A))
