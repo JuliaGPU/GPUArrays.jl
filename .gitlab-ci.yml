@@ -4,21 +4,6 @@ include:
 
 # Julia versions
 
-julia:1.0:
-  extends:
-    - .julia:1.0
-    - .test
-
-julia:1.1:
-  extends:
-    - .julia:1.1
-    - .test
-
-julia:1.2:
-  extends:
-    - .julia:1.2
-    - .test
-
 julia:1.3:
   extends:
     - .julia:1.3
