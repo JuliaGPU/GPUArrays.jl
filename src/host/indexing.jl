@@ -83,7 +83,7 @@ end
 Base.IndexStyle(::Type{<:AbstractGPUArray}) = Base.IndexLinear()
 
 function Base.getindex(xs::AbstractGPUArray{T}, i::Integer) where T
-    ndims(xs) > 0 && assertscalar("scalar getindex")
+    assertscalar("scalar getindex")
     x = Array{T}(undef, 1)
     copyto!(x, 1, xs, i, 1)
     return x[1]
