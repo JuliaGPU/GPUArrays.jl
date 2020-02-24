@@ -82,3 +82,19 @@ end
 # `fill!` in general for all `GPUDestArray` so we just go straight to the fallback
 @inline Base.copyto!(dest::GPUDestArray, bc::Broadcasted{<:Broadcast.AbstractArrayStyle{0}}) =
     copyto!(dest, convert(Broadcasted{Nothing}, bc))
+
+
+## map
+
+allequal(x) = true
+allequal(x, y, z...) = x == y && allequal(y, z...)
+
+function Base.map!(f, y::AbstractGPUArray, xs::AbstractArray...)
+    @assert allequal(size.((y, xs...))...)
+    return y .= f.(xs...)
+end
+
+function Base.map(f, y::AbstractGPUArray, xs::AbstractArray...)
+    @assert allequal(size.((y, xs...))...)
+    return f.(y, xs...)
+end

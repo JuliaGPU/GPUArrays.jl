@@ -1,24 +1,5 @@
 # common Base functionality
 
-allequal(x) = true
-allequal(x, y, z...) = x == y && allequal(y, z...)
-function Base.map!(f, y::AbstractGPUArray, xs::AbstractGPUArray...)
-    @assert allequal(size.((y, xs...))...)
-    return y .= f.(xs...)
-end
-function Base.map(f, y::AbstractGPUArray, xs::AbstractGPUArray...)
-    @assert allequal(size.((y, xs...))...)
-    return f.(y, xs...)
-end
-
-# Break ambiguities with base
-Base.map!(f, y::AbstractGPUArray) =
-    invoke(map!, Tuple{Any,AbstractGPUArray,Vararg{AbstractGPUArray}}, f, y)
-Base.map!(f, y::AbstractGPUArray, x::AbstractGPUArray) =
-    invoke(map!, Tuple{Any,AbstractGPUArray, Vararg{AbstractGPUArray}}, f, y, x)
-Base.map!(f, y::AbstractGPUArray, x1::AbstractGPUArray, x2::AbstractGPUArray) =
-    invoke(map!, Tuple{Any,AbstractGPUArray, Vararg{AbstractGPUArray}}, f, y, x1, x2)
-
 function Base.repeat(a::AbstractGPUVecOrMat, m::Int, n::Int = 1)
     o, p = size(a, 1), size(a, 2)
     b = similar(a, o*m, p*n)
