@@ -62,15 +62,7 @@ end
     bc′ = Broadcast.preprocess(dest, bc)
     gpu_call(dest, bc′; name="broadcast") do ctx, dest, bc′
         let I = CartesianIndex(@cartesianidx(dest))
-            #@inbounds dest[I] = bc′[I]
-            @inbounds let
-                val = bc′[I]
-                if val !== nothing
-                  # FIXME: CuArrays.jl crashes on assigning Nothing (this happens with
-                  #        broadcasts that don't return anything but assign anyway)
-                  dest[I] = val
-                end
-            end
+            @inbounds dest[I] = bc′[I]
         end
         return
     end
