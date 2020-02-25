@@ -81,12 +81,12 @@ end
 allequal(x) = true
 allequal(x, y, z...) = x == y && allequal(y, z...)
 
-function Base.map!(f, y::AbstractGPUArray, xs::AbstractArray...)
+function Base.map!(f, y::GPUDestArray, xs::AbstractArray...)
     @assert allequal(size.((y, xs...))...)
     return y .= f.(xs...)
 end
 
-function Base.map(f, y::AbstractGPUArray, xs::AbstractArray...)
+function Base.map(f, y::GPUDestArray, xs::AbstractArray...)
     @assert allequal(size.((y, xs...))...)
     return f.(y, xs...)
 end

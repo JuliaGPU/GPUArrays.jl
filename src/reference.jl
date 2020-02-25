@@ -212,9 +212,9 @@ JLArrayStyle{M}(::Val{N}) where {N,M} = JLArrayStyle{N}()
 
 BroadcastStyle(::Type{JLArray{T,N}}) where {T,N} = JLArrayStyle{N}()
 
+# Allocating the output container
 Base.similar(bc::Broadcasted{JLArrayStyle{N}}, ::Type{T}) where {N,T} =
     similar(JLArray{T}, axes(bc))
-
 Base.similar(bc::Broadcasted{JLArrayStyle{N}}, ::Type{T}, dims...) where {N,T} =
     JLArray{T}(undef, dims...)
 
