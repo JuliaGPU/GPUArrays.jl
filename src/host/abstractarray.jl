@@ -169,6 +169,7 @@ end
 
 ## other
 
+# FIXME: this is slow, and shouldn't require broadcast in the common cast
 Base.copy(x::AbstractGPUArray) = identity.(x)
 
 Base.deepcopy(x::AbstractGPUArray) = copy(x)
