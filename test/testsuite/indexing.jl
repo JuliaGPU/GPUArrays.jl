@@ -1,7 +1,44 @@
 function test_indexing(AT)
-    # TODO: more fine-grained allowscalar within test_indexing
-    GPUArrays.@allowscalar @testset "indexing" begin
-        for T in (Float32, Int32)
+    @testset "indexing" begin
+        @allowscalar @testset "errors and warnings" begin
+            x = AT([0])
+
+            allowscalar(true, false)
+            x[1] = 1
+            @test x[1] == 1
+
+            @disallowscalar begin
+                @test_throws ErrorException x[1]
+                @test_throws ErrorException x[1] = 1
+            end
+
+            x[1] = 2
+            @test x[1] == 2
+
+            allowscalar(false)
+            @test_throws ErrorException x[1]
+            @test_throws ErrorException x[1] = 1
+
+            @allowscalar begin
+                x[1] = 3
+                @test x[1] == 3
+            end
+
+            @test_throws ErrorException x[1]
+            @test_throws ErrorException x[1] = 1
+
+            allowscalar(true, false)
+            x[1]
+
+            allowscalar(true, true)
+            @test_logs (:warn, r"Performing scalar operations on GPU arrays: .*") x[1]
+            @test_logs x[1]
+
+            # NOTE: this inner testset _needs_ to be wrapped with allowscalar
+            #       to make sure its original value is restored.
+        end
+
+        @allowscalar for T in (Float32, Int32)
             @testset "Indexing with $T" begin
                 x = rand(T, 32)
                 src = AT(x)
@@ -27,7 +64,7 @@ function test_indexing(AT)
            end
         end
 
-        for T in (Float32, Int32)
+        @allowscalar for T in (Float32, Int32)
             @testset "Indexing with $T" begin
                 x = fill(zero(T), 7)
                 src = AT(x)
@@ -43,7 +80,7 @@ function test_indexing(AT)
             end
         end
 
-        for T in (Float32, Int32)
+        @allowscalar for T in (Float32, Int32)
             @testset "issue #42 with $T" begin
                 Ac = rand(Float32, 2, 2)
                 A = AT(Ac)
@@ -52,7 +89,7 @@ function test_indexing(AT)
                 @test A[1, 1] == Ac[1, 1]
             end
         end
-        for T in (Float32, Int32)
+        @allowscalar for T in (Float32, Int32)
             @testset "Colon() $T" begin
                 Ac = rand(T, 10)
                 A = AT(Ac)
@@ -63,8 +100,8 @@ function test_indexing(AT)
             end
         end
 
-        @testset "get/setindex!" begin
-            # literal calls to get/setindex! have differen return types
+        @allowscalar @testset "get/setindex!" begin
+            # literal calls to get/setindex! have different return types
             @test compare(x->getindex(x,1), AT, zeros(Int, 2))
             @test compare(x->setindex!(x,1,1), AT, zeros(Int, 2))
         end
