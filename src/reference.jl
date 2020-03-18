@@ -201,6 +201,17 @@ JLArray{T,N}(xs::JLArray{T,N}) where {T,N} = xs
 
 Base.convert(::Type{T}, x::T) where T <: JLArray = x
 
+function Base._reshape(parent::JLArray, dims::Dims)
+  n = length(parent)
+  prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
+  return JLArray{eltype(parent),length(dims)}(reshape(parent.data, dims), dims)
+end
+function Base._reshape(parent::JLArray{T,1}, dims::Tuple{Int}) where T
+  n = length(parent)
+  prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
+  return parent
+end
+
 
 ## broadcast
 

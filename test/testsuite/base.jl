@@ -88,6 +88,15 @@ function test_base(AT)
             @test compare((a,b) -> cat(a, b; dims=4), AT, rand(Float32, 3, 4), rand(Float32, 3, 4))
         end
 
+        @testset "reshape" begin
+            @test compare(reshape, AT, rand(10), Ref((10,)))
+            @test compare(reshape, AT, rand(10), Ref((10,1)))
+            @test compare(reshape, AT, rand(10), Ref((1,10)))
+
+            @test reshape(AT(rand(10)), (10,1)) isa AT
+            @test_throws Exception reshape(AT(rand(10)), (10,2))
+        end
+
         @testset "reinterpret" begin
             a = rand(ComplexF32, 22)
             A = AT(a)
