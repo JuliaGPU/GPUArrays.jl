@@ -66,7 +66,7 @@ end
 
 ## matrix multiplication
 
-function generic_matmatmul!(C::AbstractVecOrMat{R}, A::AbstractVecOrMat{T}, B::AbstractVecOrMat{S}) where {T,S,R}
+function generic_matmatmul!(C::AbstractGPUVecOrMat{R}, A::AbstractGPUVecOrMat{T}, B::AbstractGPUVecOrMat{S}) where {T,S,R}
     if size(A,2) != size(B,1)
         throw(DimensionMismatch("matrix A has dimensions $(size(A)), matrix B has dimensions $(size(B))"))
     end
@@ -76,6 +76,11 @@ function generic_matmatmul!(C::AbstractVecOrMat{R}, A::AbstractVecOrMat{T}, B::A
     if isempty(A) || isempty(B)
         return fill!(C, zero(R))
     end
+
+    # reshape vectors to matrices
+    A = reshape(A, (size(A,1), size(A,2)))
+    B = reshape(B, (size(B,1), size(B,2)))
+    C = reshape(C, (size(C,1), size(C,2)))
 
     gpu_call(C, A, B) do ctx, C, A, B
         idx = @linearidx C

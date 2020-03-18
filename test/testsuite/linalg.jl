@@ -62,36 +62,27 @@ function test_linalg(AT)
         end
 
         @testset "matrix multiplication" begin
-            a = rand(Int8, 3, 3)
-            b = rand(Int8, 3, 3)
-            d_a = AT{Int8}(a)
-            d_b = AT{Int8}(b)
-            d_c = d_a*d_b
-            @test collect(d_c) == a*b
-            a = rand(Complex{Int8}, 3, 3)
-            b = rand(Complex{Int8}, 3, 3)
-            d_a = AT{Complex{Int8}}(a)
-            d_b = AT{Complex{Int8}}(b)
-            d_c = d_a'*d_b
-            @test collect(d_c) == a'*b
-            d_c = d_a*d_b'
-            @test collect(d_c) == a*b'
-            d_c = d_a'*d_b'
-            @test collect(d_c) == a'*b'
-            d_c = transpose(d_a)*d_b'
-            @test collect(d_c) == transpose(a)*b'
-            d_c = d_a'*transpose(d_b)
-            @test collect(d_c) == a'*transpose(b)
-            d_c = transpose(d_a)*d_b
-            @test collect(d_c) == transpose(a)*b
-            d_c = d_a*transpose(d_b)
-            @test collect(d_c) == a*transpose(b)
-            d_c = transpose(d_a)*transpose(d_b)
-            @test collect(d_c) == transpose(a)*transpose(b)
-            d_c = rmul!(copy(d_a), Complex{Int8}(2, 2))
-            @test collect(d_c) == a*Complex{Int8}(2, 2)
-            d_c = lmul!(Complex{Int8}(2, 2), copy(d_a))
-            @test collect(d_c) == Complex{Int8}(2, 2)*a
+            for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in supported_eltypes()
+                @test compare(*, AT, rand(T, a), rand(T, b))
+
+                if length(a) > 1
+                    @test compare(*, AT, transpose(rand(T, reverse(a))), rand(T, b))
+                    @test compare(*, AT, adjoint(rand(T, reverse(a))), rand(T, b))
+                end
+
+                if length(b) > 1
+                    @test compare(*, AT, rand(T, a), transpose(rand(T, reverse(b))))
+                    @test compare(*, AT, rand(T, a), adjoint(rand(T, reverse(b))))
+                end
+
+                if length(a) > 1 && length(b) > 1
+                    @test compare(*, AT, transpose(rand(T, reverse(a))), transpose(rand(T, reverse(b))))
+                    @test compare(*, AT, adjoint(rand(T, reverse(a))), adjoint(rand(T, reverse(b))))
+                end
+
+                @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))
+                @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
+            end
         end
     end
 end
