@@ -61,28 +61,21 @@ function test_linalg(AT)
             @test f(A, d) == Array(f!(AT(A), d))
         end
 
-        @testset "matrix multiplication" begin
-            for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in supported_eltypes()
-                @test compare(*, AT, rand(T, a), rand(T, b))
+        @testset "$T gemv y := $f(A) * x * a + y * b" for f in (identity, transpose, adjoint), T in supported_eltypes()
+            @test compare(*, AT, f(rand(T, 4, 4)), rand(T, 4))
+            @test compare(mul!, AT, rand(T, 4), f(rand(T, 4, 4)), rand(T, 4))
+            @test compare(mul!, AT, rand(T, 4), f(rand(T, 4, 4)), rand(T, 4), T(4), T(5))
+        end
 
-                if length(a) > 1
-                    @test compare(*, AT, transpose(rand(T, reverse(a))), rand(T, b))
-                    @test compare(*, AT, adjoint(rand(T, reverse(a))), rand(T, b))
-                end
+        @testset "$T gemm C := $f(A) * $g(B) * a + C * b" for f in (identity, transpose, adjoint), g in (identity, transpose, adjoint), T in supported_eltypes()
+            @test compare(*, AT, f(rand(T, 4, 4)), g(rand(T, 4, 4)))
+            @test compare(mul!, AT, rand(T, 4, 4), f(rand(T, 4, 4)), g(rand(T, 4, 4)))
+            @test compare(mul!, AT, rand(T, 4, 4), f(rand(T, 4, 4)), g(rand(T, 4, 4)), T(4), T(5))
+        end
 
-                if length(b) > 1
-                    @test compare(*, AT, rand(T, a), transpose(rand(T, reverse(b))))
-                    @test compare(*, AT, rand(T, a), adjoint(rand(T, reverse(b))))
-                end
-
-                if length(a) > 1 && length(b) > 1
-                    @test compare(*, AT, transpose(rand(T, reverse(a))), transpose(rand(T, reverse(b))))
-                    @test compare(*, AT, adjoint(rand(T, reverse(a))), adjoint(rand(T, reverse(b))))
-                end
-
-                @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))
-                @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
-            end
+        @testset "lmul! and rmul!" for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in supported_eltypes()
+            @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))
+            @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
         end
     end
 end
