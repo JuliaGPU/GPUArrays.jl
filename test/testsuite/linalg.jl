@@ -62,15 +62,25 @@ function test_linalg(AT)
         end
 
         @testset "$T gemv y := $f(A) * x * a + y * b" for f in (identity, transpose, adjoint), T in supported_eltypes()
-            @test compare(*, AT, f(rand(T, 4, 4)), rand(T, 4))
-            @test compare(mul!, AT, rand(T, 4), f(rand(T, 4, 4)), rand(T, 4))
-            @test compare(mul!, AT, rand(T, 4), f(rand(T, 4, 4)), rand(T, 4), Ref(T(4)), Ref(T(5)))
+            y, A, x = rand(T, 4), rand(T, 4, 4), rand(T, 4)
+
+            # workaround for https://github.com/JuliaLang/julia/issues/35163#issue-584248084
+            T <: Integer && (y .%= T(10); A .%= T(10); x .%= T(10))
+            
+            @test compare(*, AT, f(A), x)
+            @test compare(mul!, AT, y, f(A), x)
+            @test compare(mul!, AT, y, f(A), x, Ref(T(4)), Ref(T(5)))
         end
 
         @testset "$T gemm C := $f(A) * $g(B) * a + C * b" for f in (identity, transpose, adjoint), g in (identity, transpose, adjoint), T in supported_eltypes()
-            @test compare(*, AT, f(rand(T, 4, 4)), g(rand(T, 4, 4)))
-            @test compare(mul!, AT, rand(T, 4, 4), f(rand(T, 4, 4)), g(rand(T, 4, 4)))
-            @test compare(mul!, AT, rand(T, 4, 4), f(rand(T, 4, 4)), g(rand(T, 4, 4)), Ref(T(4)), Ref(T(5)))
+            A, B, C = rand(T, 4, 4), rand(T, 4, 4), rand(T, 4, 4)
+
+            # workaround for https://github.com/JuliaLang/julia/issues/35163#issue-584248084
+            T <: Integer && (A .%= T(10); B .%= T(10); C .%= T(10))
+            
+            @test compare(*, AT, f(A), g(B))
+            @test compare(mul!, AT, C, f(A), g(B))
+            @test compare(mul!, AT, C, f(A), g(B), Ref(T(4)), Ref(T(5)))
         end
 
         @testset "lmul! and rmul!" for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in supported_eltypes()
