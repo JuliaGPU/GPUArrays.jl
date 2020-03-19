@@ -61,28 +61,31 @@ function test_linalg(AT)
             @test f(A, d) == Array(f!(AT(A), d))
         end
 
-        @testset "matrix multiplication" begin
-            for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in supported_eltypes()
-                @test compare(*, AT, rand(T, a), rand(T, b))
+        @testset "$T gemv y := $f(A) * x * a + y * b" for f in (identity, transpose, adjoint), T in supported_eltypes()
+            y, A, x = rand(T, 4), rand(T, 4, 4), rand(T, 4)
 
-                if length(a) > 1
-                    @test compare(*, AT, transpose(rand(T, reverse(a))), rand(T, b))
-                    @test compare(*, AT, adjoint(rand(T, reverse(a))), rand(T, b))
-                end
+            # workaround for https://github.com/JuliaLang/julia/issues/35163#issue-584248084
+            T <: Integer && (y .%= T(10); A .%= T(10); x .%= T(10))
+            
+            @test compare(*, AT, f(A), x)
+            @test compare(mul!, AT, y, f(A), x)
+            @test compare(mul!, AT, y, f(A), x, Ref(T(4)), Ref(T(5)))
+        end
 
-                if length(b) > 1
-                    @test compare(*, AT, rand(T, a), transpose(rand(T, reverse(b))))
-                    @test compare(*, AT, rand(T, a), adjoint(rand(T, reverse(b))))
-                end
+        @testset "$T gemm C := $f(A) * $g(B) * a + C * b" for f in (identity, transpose, adjoint), g in (identity, transpose, adjoint), T in supported_eltypes()
+            A, B, C = rand(T, 4, 4), rand(T, 4, 4), rand(T, 4, 4)
 
-                if length(a) > 1 && length(b) > 1
-                    @test compare(*, AT, transpose(rand(T, reverse(a))), transpose(rand(T, reverse(b))))
-                    @test compare(*, AT, adjoint(rand(T, reverse(a))), adjoint(rand(T, reverse(b))))
-                end
+            # workaround for https://github.com/JuliaLang/julia/issues/35163#issue-584248084
+            T <: Integer && (A .%= T(10); B .%= T(10); C .%= T(10))
+            
+            @test compare(*, AT, f(A), g(B))
+            @test compare(mul!, AT, C, f(A), g(B))
+            @test compare(mul!, AT, C, f(A), g(B), Ref(T(4)), Ref(T(5)))
+        end
 
-                @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))
-                @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
-            end
+        @testset "lmul! and rmul!" for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in supported_eltypes()
+            @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))
+            @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
         end
     end
 end
