@@ -38,6 +38,12 @@ end
 
 (T::Type{<: AbstractGPUArray})(s::UniformScaling, m::Integer, n::Integer) = T(s, Dims((m, n)))
 
+function Base.copyto!(A::AbstractGPUMatrix{T}, s::UniformScaling) where T
+    fill!(A, zero(T))
+    gpu_call(uniformscaling_kernel, A, size(A, 1), s; total_threads=minimum(size(A)))
+    A
+end
+
 function indexstyle(x::T) where T
     style = try
         Base.IndexStyle(x)
