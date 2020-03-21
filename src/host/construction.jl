@@ -28,11 +28,14 @@ function uniformscaling_kernel(ctx::AbstractKernelContext, res::AbstractArray{T}
     return
 end
 
-function (T::Type{<: AbstractGPUArray})(s::UniformScaling, dims::Dims{2})
+function (T::Type{<: AbstractGPUArray{U}})(s::UniformScaling, dims::Dims{2}) where {U}
     res = zeros(T, dims)
     gpu_call(uniformscaling_kernel, res, size(res, 1), s; total_threads=minimum(dims))
     res
 end
+
+(T::Type{<: AbstractGPUArray})(s::UniformScaling{U}, dims::Dims{2}) where U = T{U}(s, dims)
+
 (T::Type{<: AbstractGPUArray})(s::UniformScaling, m::Integer, n::Integer) = T(s, Dims((m, n)))
 
 function indexstyle(x::T) where T
