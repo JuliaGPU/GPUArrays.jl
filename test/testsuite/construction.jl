@@ -164,15 +164,26 @@ function value_constructor(AT)
             @test all(x-> x == 2f0, Array(x1))
             @test all(x-> x == Int32(77), Array(x2))
 
-            x = Matrix{T}(I, 2, 2)
+            x = Matrix{T}(I, 4, 2)
 
-            x1 = AT{T, 2}(I, 2, 2)
-            x2 = AT{T}(I, (2, 2))
-            x3 = AT{T, 2}(I, (2, 2))
+            x1 = AT{T, 2}(I, 4, 2)
+            x2 = AT{T}(I, (4, 2))
+            x3 = AT{T, 2}(I, (4, 2))
 
             @test Array(x1) ≈ x
             @test Array(x2) ≈ x
             @test Array(x3) ≈ x
+
+            x = Matrix(T(3) * I, 2, 4)
+            x1 = AT(T(3) * I, 2, 4)
+            @test eltype(x1) == T
+            @test Array(x1) ≈ x
+
+            x = fill(T(3), (2, 4))
+            x1 = fill(AT{T}, T(3), (2, 4))
+            copyto!(x, 2I)
+            copyto!(x1, 2I)
+            @test Array(x1) ≈ x
         end
     end
 end
