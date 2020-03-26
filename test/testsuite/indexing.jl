@@ -24,6 +24,11 @@ function test_indexing(AT)
                 @test x[1] == 3
             end
 
+            allowscalar() do
+                x[1] = 4
+                @test x[1] == 4
+            end
+
             @test_throws ErrorException x[1]
             @test_throws ErrorException x[1] = 1
 

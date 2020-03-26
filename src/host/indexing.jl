@@ -49,6 +49,7 @@ end
 """
     @allowscalar ex...
     @disallowscalar ex...
+    allowscalar(::Function, ...)
 
 Temporarily allow or disallow scalar iteration.
 
@@ -75,6 +76,15 @@ macro disallowscalar(ex)
         scalar_allowed[] = prev
         ret
     end
+end
+
+@doc (@doc @allowscalar) ->
+function allowscalar(f::Base.Callable, allow::Bool=true, warn::Bool=false)
+    prev = scalar_allowed[]
+    allowscalar(allow, warn)
+    ret = f()
+    scalar_allowed[] = prev
+    ret
 end
 
 
