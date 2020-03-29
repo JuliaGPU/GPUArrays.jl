@@ -40,6 +40,7 @@ include("testsuite/linalg.jl")
 include("testsuite/math.jl")
 include("testsuite/fft.jl")
 include("testsuite/random.jl")
+include("testsuite/uniformscaling.jl")
 
 
 """
@@ -57,6 +58,7 @@ function test(AT::Type{<:AbstractGPUArray})
     TestSuite.test_math(AT)
     TestSuite.test_fft(AT)
     TestSuite.test_random(AT)
+    TestSuite.test_uniformscaling(AT)
 end
 
 end
