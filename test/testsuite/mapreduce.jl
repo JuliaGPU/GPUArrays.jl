@@ -7,7 +7,6 @@ function test_mapreduce(AT)
             @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, sz), zeros(ET, red))
             @test compare((A,R)->Base.mapreducedim!(identity, *, R, A), AT, rand(range, sz), ones(ET, red))
             @test compare((A,R)->Base.mapreducedim!(x->x+x, +, R, A), AT, rand(range, sz), zeros(ET, red))
-            return
         end
 
         # implicit singleton dimensions
@@ -141,14 +140,14 @@ function test_mapreduce(AT)
                         @test compare(x->mapreduce(_addone, +, x; dims = 2, init = _zero),
                                       AT, rand(range, N, N))
 
-                        @test compare(x->mapreduce(+, +, x; dims = 2),
+                        @test compare((x,y)->mapreduce(+, +, x, y; dims = 2),
                                       AT, rand(range, N, N), rand(range, N, N))
-                        @test compare(x->mapreduce(+, +, x; dims = 2, init = _zero),
-                                      AT, rand(range, N, N). rand(range, N, N))
+                        @test compare((x,y)->mapreduce(+, +, x, y; dims = 2, init = _zero),
+                                      AT, rand(range, N, N), rand(range, N, N))
                     end
                 end
                 @testset "sum maximum minimum prod" begin
-                    for dims in ((4048,), (1024,1024), (77,), (1923,209))
+                    for dims in ((4048,), (77,), (1923,209))
                         @test compare(sum,  AT, rand(range, dims))
                         @test compare(prod, AT, rand(range, dims))
                         @test compare(x -> sum(abs, x),  AT, rand(range, dims))
