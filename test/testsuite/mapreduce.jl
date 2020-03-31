@@ -136,6 +136,11 @@ function test_mapreduce(AT)
                                       AT, rand(range, N, N))
                         @test compare(x->mapreduce(_addone, +, x; dims = 2, init = _zero),
                                       AT, rand(range, N, N))
+
+                        @test compare(x->mapreduce(+, +, x; dims = 2),
+                                      AT, rand(range, N, N), rand(range, N, N))
+                        @test compare(x->mapreduce(+, +, x; dims = 2, init = _zero),
+                                      AT, rand(range, N, N). rand(range, N, N))
                     end
                 end
                 @testset "sum maximum minimum prod" begin

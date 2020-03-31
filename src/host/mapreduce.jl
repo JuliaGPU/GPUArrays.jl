@@ -2,7 +2,7 @@
 
 # GPUArrays' mapreduce methods build on `Base.mapreducedim!`, but with an additional
 # argument `init` value to avoid eager initialization of `R` (if set to something).
-mapreducedim!(f, op, R::AbstractGPUArray, A::AbstractArray, init=nothing) = error("Not implemented") # COV_EXCL_LINE
+mapreducedim!(f, op, R::AbstractGPUArray, As::AbstractArray...; init=nothing) = error("Not implemented") # COV_EXCL_LINE
 Base.mapreducedim!(f, op, R::AbstractGPUArray, A::AbstractArray) = mapreducedim!(f, op, R, A)
 
 neutral_element(op, T) =
@@ -18,11 +18,11 @@ neutral_element(::typeof(Base.mul_prod), T) = one(T)
 neutral_element(::typeof(Base.min), T) = typemax(T)
 neutral_element(::typeof(Base.max), T) = typemin(T)
 
-function Base.mapreduce(f, op, A::AbstractGPUArray; dims=:, init=nothing)
+function Base.mapreduce(f, op, As::AbstractGPUArray...; dims=:, init=nothing)
     # figure out the destination container type by looking at the initializer element,
     # or by relying on inference to reason through the map and reduce functions.
     if init === nothing
-        ET = Base.promote_op(f, eltype(A))
+        ET = Base.promote_op(f, map(eltype, As)...)
         ET = Base.promote_op(op, ET, ET)
         (ET === Union{} || ET === Any) &&
             error("mapreduce cannot figure the output element type, please pass an explicit init value")
@@ -32,10 +32,14 @@ function Base.mapreduce(f, op, A::AbstractGPUArray; dims=:, init=nothing)
         ET = typeof(init)
     end
 
+    # TODO: Broadcast-semantics after JuliaLang-julia#31020
+    A = first(As)
+    all(B -> size(A) == size(B), As) || throw(DimensionMismatch("dimensions of containers must be identical"))
+
     sz = size(A)
     red = ntuple(i->(dims==Colon() || i in dims) ? 1 : sz[i], ndims(A))
     R = similar(A, ET, red)
-    mapreducedim!(f, op, R, A, init)
+    mapreducedim!(f, op, R, As...; init=init)
 
     if dims==Colon()
         @allowscalar R[]
