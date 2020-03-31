@@ -136,6 +136,7 @@ function Base.copyto!(dest::AbstractGPUArray{T, N}, destcrange::CartesianIndices
         throw(DimensionMismatch("Ranges don't match their size. Found: $shape, $(size(srccrange))"))
     end
     len = length(destcrange)
+    len == 0 && return dest
 
     dest_offsets = first(destcrange) - one(CartesianIndex{N})
     src_offsets = first(srccrange) - one(CartesianIndex{N})
