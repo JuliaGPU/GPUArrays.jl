@@ -158,5 +158,9 @@ function test_base(AT)
             inds = rand(1:100, 150, 150)
             @test compare(x->permutedims(view(x, inds, :), (3, 2, 1)), AT, rand(100, 100))
         end
+
+        @testset "circshift" begin
+            @test compare(x->circshift(x, (0,1)), AT, reshape(Vector(1:16), (4,4)))
+        end
     end
 end
