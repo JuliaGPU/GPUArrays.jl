@@ -5,7 +5,7 @@
 
 module JLArrays
 
-export JLArray
+export JLArray, jl
 
 using GPUArrays
 
@@ -195,6 +195,9 @@ JLArray(A::AbstractArray{T,N}) where {T,N} = JLArray{T,N}(A)
 
 # idempotency
 JLArray{T,N}(xs::JLArray{T,N}) where {T,N} = xs
+
+jl(xs) = adapt(JLArray, xs)
+Adapt.adapt_storage(::Type{JLArray}, xs::AbstractArray) = convert(JLArray, xs)
 
 
 ## conversions
