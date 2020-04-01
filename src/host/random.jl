@@ -37,10 +37,12 @@ end
 
 function gpu_rand(::Type{T}, ctx::AbstractKernelContext, randstate::AbstractVector{NTuple{4, UInt32}}) where T <: Integer
     threadid = GPUArrays.threadidx(ctx)
-    foldl(1:sizeof(T) >> 2; init=T(0)) do x, i
+    result = T(0)
+    for _ in 1:sizeof(T) >> 2
         randstate[threadid], y = next_rand(randstate[threadid])
-        reinterpret(T, (|)(promote(x << 32, y)...))
+        result = reinterpret(T, (|)(promote(result << 32, y)...))
     end
+    result
 end
 
 # support for complex numbers
