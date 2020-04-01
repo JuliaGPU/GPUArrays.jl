@@ -17,7 +17,7 @@ LCGStep(z::Unsigned, A::Unsigned, C::Unsigned) = A * z + C
 make_rand_num(::Type{Float64}, tmp) = 2.3283064365387e-10 * Float64(tmp)
 make_rand_num(::Type{Float32}, tmp) = 2.3283064f-10 * Float32(tmp)
 
-function next_rand(::Type{FT}, state::NTuple{4, T}) where {FT, T <: Unsigned}
+function next_rand(state::NTuple{4, T}) where {T <: Unsigned}
     state = (
         TausStep(state[1], Cint(13), Cint(19), Cint(12), T(4294967294)),
         TausStep(state[2], Cint(2), Cint(25), Cint(4), T(4294967288)),
@@ -25,29 +25,24 @@ function next_rand(::Type{FT}, state::NTuple{4, T}) where {FT, T <: Unsigned}
         LCGStep(state[4], T(1664525), T(1013904223))
     )
     tmp = (state[1] ⊻ state[2] ⊻ state[3] ⊻ state[4])
-    return state, make_rand_num(FT, tmp)
+    return state, tmp
 end
 
 function gpu_rand(::Type{T}, ctx::AbstractKernelContext, randstate::AbstractVector{NTuple{4, UInt32}}) where T
     threadid = GPUArrays.threadidx(ctx)
-    stateful_rand = next_rand(T, randstate[threadid])
+    stateful_rand = next_rand(randstate[threadid])
     randstate[threadid] = stateful_rand[1]
-    return stateful_rand[2]
+    return make_rand_num(T, stateful_rand[2])
 end
 
-# support for integers
-
-floattype(::Type{T}) where T <: Union{Int64, UInt64} = Float64
-floattype(::Type{T}) where T <: Union{Int32, UInt32} = Float32
-
-to_number_range(x::AbstractFloat, ::Type{T}) where T <: Unsigned = T(round(x * typemax(T)))
-
-to_number_range(x::F, ::Type{T}) where {T <: Signed, F <: AbstractFloat} =
-    Base.unsafe_trunc(T, round(((x - F(0.5)) * typemax(T)) * T(2)))
-
 function gpu_rand(::Type{T}, ctx::AbstractKernelContext, randstate::AbstractVector{NTuple{4, UInt32}}) where T <: Integer
-    f = gpu_rand(floattype(T), ctx, randstate)
-    return to_number_range(f, T)
+    threadid = GPUArrays.threadidx(ctx)
+    result = T(0)
+    for _ in 1:sizeof(T) >> 2
+        randstate[threadid], y = next_rand(randstate[threadid])
+        result = reinterpret(T, (|)(promote(result << 32, y)...))
+    end
+    result
 end
 
 # support for complex numbers
