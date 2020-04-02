@@ -11,6 +11,15 @@ function test_linalg(AT)
             @test compare(transpose!, AT, Array{Float32}(undef, 128, 32), rand(Float32, 32, 128))
         end
 
+        @testset "copytri!" begin
+            @testset for uplo in ('U', 'L')
+                A = AT{Float32}(undef, 128, 128)
+                rand!(A)
+                copytri(A, uplo)
+                @test collect(A) == collect(A')
+            end
+        end
+
         @testset "copyto! for triangular" begin
             ga = Array{Float32}(undef, 128, 128)
             gb = AT{Float32}(undef, 128, 128)
