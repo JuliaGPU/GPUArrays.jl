@@ -30,6 +30,35 @@ function Base.copyto!(A::AbstractArray, B::Transpose{<:Any, <:AbstractGPUArray})
 end
 
 
+## copy upper triangle to lower and vice versa
+
+function LinearAlgebra.copytri!(A::AbstractGPUMatrix{T}, uplo::AbstractChar) where T
+  n = LinearAlgebra.checksquare(A)
+  if uplo == 'U'
+      gpu_call(A) do ctx, _A
+        I = @cartesianidx _A
+        i, j = Tuple(I)
+        if j > i
+          _A[j,i] = _A[i,j]
+        end
+        return
+      end
+  elseif uplo == 'L'
+      gpu_call(A) do ctx, _A
+        I = @cartesianidx _A
+        i, j = Tuple(I)
+        if j > i
+          _A[i,j] = _A[j,i]
+        end
+        return
+      end
+  else
+      throw(ArgumentError("uplo argument must be 'U' (upper) or 'L' (lower), got $uplo"))
+  end
+  A
+end
+
+
 ## triangular
 
 function Base.copyto!(A::AbstractArray, B::UpperTriangular{<:Any, <:AbstractGPUArray})
