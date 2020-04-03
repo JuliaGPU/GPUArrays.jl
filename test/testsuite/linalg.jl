@@ -13,10 +13,7 @@ function test_linalg(AT)
 
         @testset "copytri!" begin
             @testset for uplo in ('U', 'L')
-                A = AT{Float32}(undef, 128, 128)
-                rand!(A)
-                LinearAlgebra.copytri!(A, uplo)
-                @test collect(A) == collect(A')
+                @test compare(x -> LinearAlgebra.copytri!(x, uplo), AT, rand(Float32, 128, 128))
             end
         end
 
