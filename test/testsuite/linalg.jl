@@ -70,6 +70,7 @@ function test_linalg(AT)
             @test compare(*, AT, f(A), x)
             @test compare(mul!, AT, y, f(A), x)
             @test compare(mul!, AT, y, f(A), x, Ref(T(4)), Ref(T(5)))
+            @test typeof(AT(rand(3, 3)) * AT(rand(3))) <: AbstractVector
         end
 
         @testset "$T gemm C := $f(A) * $g(B) * a + C * b" for f in (identity, transpose, adjoint), g in (identity, transpose, adjoint), T in supported_eltypes()
@@ -81,6 +82,7 @@ function test_linalg(AT)
             @test compare(*, AT, f(A), g(B))
             @test compare(mul!, AT, C, f(A), g(B))
             @test compare(mul!, AT, C, f(A), g(B), Ref(T(4)), Ref(T(5)))
+            @test typeof(AT(rand(3, 3)) * AT(rand(3, 3))) <: AbstractMatrix
         end
 
         @testset "lmul! and rmul!" for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in supported_eltypes()

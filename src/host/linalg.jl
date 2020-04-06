@@ -78,11 +78,11 @@ function generic_matmatmul!(C::AbstractGPUVecOrMat{R}, A::AbstractGPUVecOrMat{T}
     end
 
     # reshape vectors to matrices
-    A = reshape(A, (size(A,1), size(A,2)))
-    B = reshape(B, (size(B,1), size(B,2)))
-    C = reshape(C, (size(C,1), size(C,2)))
+    A′ = reshape(A, (size(A,1), size(A,2)))
+    B′ = reshape(B, (size(B,1), size(B,2)))
+    C′= reshape(C, (size(C,1), size(C,2)))
 
-    gpu_call(C, A, B) do ctx, C, A, B
+    gpu_call(C′, A′, B′) do ctx, C, A, B
         idx = @linearidx C
         i, j = Tuple(CartesianIndices(C)[idx])
 
