@@ -128,7 +128,7 @@ to_index(a, x::Base.LogicalIndex) = error("Logical indexing not implemented")
 end
 
 function Base._unsafe_getindex!(dest::AbstractGPUArray, src::AbstractGPUArray, Is::Union{Real, AbstractArray}...)
-    if length(Is) == 1 && isa(first(Is), Array) && isempty(first(Is)) # indexing with empty array
+    if any(isempty, Is) # indexing with empty array
         return dest
     end
     idims = map(length, Is)
