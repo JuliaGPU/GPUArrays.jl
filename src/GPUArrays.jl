@@ -33,6 +33,7 @@ include("host/linalg.jl")
 include("host/math.jl")
 include("host/random.jl")
 include("host/quirks.jl")
+include("host/uniformscaling.jl")
 
 # CPU reference implementation
 include("reference.jl")
