@@ -61,11 +61,15 @@ end
 
 ## triangular
 
-function Base.copyto!(A::AbstractArray, B::UpperTriangular{<:Any, <:AbstractGPUArray})
-    copyto!(A, UpperTriangular(Array(parent(B))))
-end
-function Base.copyto!(A::AbstractArray, B::LowerTriangular{<:Any, <:AbstractGPUArray})
-    copyto!(A, LowerTriangular(Array(parent(B))))
+# mixed CPU/GPU: B -> A
+Base.copyto!(A::AbstractArray, B::UpperTriangular{<:Any, <:AbstractGPUArray}) = copyto!(A, UpperTriangular(Array(parent(B))))
+Base.copyto!(A::AbstractArray, B::LowerTriangular{<:Any, <:AbstractGPUArray}) = copyto!(A, LowerTriangular(Array(parent(B))))
+
+# GPU/GPU: B -> A
+Base.copyto!(A::AbstractGPUArray, B::UpperTriangular{<:Any, <:AbstractGPUArray}) = LinearAlgebra.triu!(copyto!(A, parent(B)))
+Base.copyto!(A::AbstractGPUArray, B::LowerTriangular{<:Any, <:AbstractGPUArray}) = LinearAlgebra.tril!(copyto!(A, parent(B)))
+for T in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
+    @eval Base.copyto!(A::$T{<:Any, <:AbstractGPUArray}, B::$T{<:Any, <:AbstractGPUArray}) = $T(copyto!(parent(A), parent(B)))
 end
 
 function LinearAlgebra.tril!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
