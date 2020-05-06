@@ -18,16 +18,32 @@ function test_linalg(AT)
         end
 
         @testset "copyto! for triangular" begin
-            ga = Array{Float32}(undef, 128, 128)
-            gb = AT{Float32}(undef, 128, 128)
-            rand!(gb)
-            copyto!(ga, UpperTriangular(gb))
-            @test ga == Array(collect(UpperTriangular(gb)))
-            ga = Array{Float32}(undef, 128, 128)
-            gb = AT{Float32}(undef, 128, 128)
-            rand!(gb)
-            copyto!(ga, LowerTriangular(gb))
-            @test ga == Array(collect(LowerTriangular(gb)))
+            for TR in (UpperTriangular, LowerTriangular)
+                @test compare(transpose!, AT, Array{Float32}(undef, 128, 32), rand(Float32, 32, 128))
+                
+                cpu_a = Array{Float32}(undef, 128, 128)
+                gpu_a = AT{Float32}(undef, 128, 128)
+                gpu_b = AT{Float32}(undef, 128, 128)
+
+                rand!(gpu_a)
+                copyto!(cpu_a, TR(gpu_a))
+                @test cpu_a == Array(collect(TR(gpu_a)))
+
+                rand!(gpu_a)
+                gpu_c = copyto!(gpu_b, TR(gpu_a))
+                @test all(gpu_b .== TR(gpu_a))
+                @test gpu_c isa AT
+            end
+
+            for TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
+                gpu_a = AT{Float32}(undef, 128, 128) |> rand! |> TR
+                gpu_b = AT{Float32}(undef, 128, 128) |> TR
+
+                gpu_c = copyto!(gpu_b, gpu_a)
+                @test all(gpu_b .== gpu_a)
+                @test all(gpu_c .== gpu_a)
+                @test gpu_c isa TR
+            end
         end
 
         @testset "permutedims" begin
