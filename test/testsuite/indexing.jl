@@ -59,14 +59,14 @@ function test_indexing(AT)
                 rand!(y)
                 x[2:6, 2:6, :, :] = y
                 x[2:6, 2:6, :, :] == y
-           end
+            end
             @testset "multi dim, sliced setindex, CPU source" begin
                 x = fill(AT{T}, T(0), (2,3,4))
                 y = Array{T}(undef, 2,3)
                 rand!(y)
                 x[:, :, 2] = y
                 x[:, :, 2] == y
-           end
+            end
         end
 
         @allowscalar for T in (Float32, Int32)
@@ -109,6 +109,27 @@ function test_indexing(AT)
             # literal calls to get/setindex! have different return types
             @test compare(x->getindex(x,1), AT, zeros(Int, 2))
             @test compare(x->setindex!(x,1,1), AT, zeros(Int, 2))
+        end
+
+        @allowscalar @testset "Index with empty array" begin
+
+            @testset "1D" begin
+                Ac = zeros(Float32, 10)
+                A = AT(Ac)
+                @test typeof(A[[]]) == typeof(AT(Ac[[]]))
+                @test size(A[[]]) == size(Ac[[]])
+            end
+
+            @testset "2D with other index $other" for other in (Colon(), 1:5, 5)
+                Ac = zeros(Float32, 10, 10)
+                A = AT(Ac)
+
+                @test typeof(A[[], other]) == typeof(AT(Ac[[], other]))
+                @test size(A[[], other]) == size(Ac[[], other])
+
+                @test typeof(A[other, []]) == typeof(AT(Ac[other, []]))
+                @test size(A[other, []]) == size(Ac[other, []])
+            end
         end
     end
 end
