@@ -158,6 +158,15 @@ function test_mapreduce(AT)
                         ET <: Complex || @test compare(minimum, AT,rand(range, dims))
                     end
                 end
+                @testset "broadcasting behavior" begin
+                        @test compare((x,y)->mapreduce(+, +, x, y), AT,
+                                      rand(range, 1), rand(range, 2, 2))
+                        @test compare(AT, rand(range, 1), rand(range, 2, 2)) do x, y
+                            bc = Broadcast.instantiate(Broadcast.broadcasted(*, x, y))
+                            reduce(+, bc)
+                        end
+
+                end
             end
         end
         @testset "any all ==" begin
