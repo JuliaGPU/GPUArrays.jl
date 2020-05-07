@@ -117,6 +117,30 @@ function broadcasting(AT)
             @test compare((A, B) -> A .* B, AT, rand(ET, 40, 40), rand(ET, 40, 40))
             @test compare((A, B) -> A .* B .+ ET(10), AT, rand(ET, 40, 40), rand(ET, 40, 40))
         end
+
+        @testset "map! $ET" begin
+            @test compare(AT, rand(2,2), rand(2,2)) do x,y
+                map!(+, x, y)
+            end
+            @test compare(AT, rand(2), rand(2,2)) do x,y
+                map!(+, x, y)
+            end
+            @test compare(AT, rand(2,2), rand(2)) do x,y
+                map!(+, x, y)
+            end
+        end
+
+        @testset "map $ET" begin
+            @test compare(AT, rand(2,2), rand(2,2)) do x,y
+                map(+, x, y)
+            end
+            @test compare(AT, rand(2), rand(2,2)) do x,y
+                map(+, x, y)
+            end
+            @test compare(AT, rand(2,2), rand(2)) do x,y
+                map(+, x, y)
+            end
+        end
     end
 
     @testset "0D" begin
