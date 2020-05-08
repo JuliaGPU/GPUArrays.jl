@@ -61,7 +61,7 @@ end
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     bc′ = Broadcast.preprocess(dest, bc)
     gpu_call(dest, bc′; name="broadcast") do ctx, dest, bc′
-        let I = CartesianIndex(@cartesianidx(dest))
+        let I = @cartesianidx(dest)
             @inbounds dest[I] = bc′[I]
         end
         return
@@ -81,12 +81,42 @@ end
 allequal(x) = true
 allequal(x, y, z...) = x == y && allequal(y, z...)
 
-function Base.map!(f, y::GPUDestArray, xs::AbstractArray...)
-    @assert allequal(size.((y, xs...))...)
-    return y .= f.(xs...)
+function Base.map!(f, dest::GPUDestArray, xs::AbstractArray...)
+    indices = LinearIndices.((dest, xs...))
+    common_length = minimum(length.(indices))
+
+    # custom broadcast, ignoring the container size mismatches
+    # (avoids the reshape + view that our mapreduce impl has to do)
+    bc = Broadcast.instantiate(Broadcast.broadcasted(f, xs...))
+    bc′ = Broadcast.preprocess(dest, bc)
+    gpu_call(dest, bc′; name="map!", total_threads=common_length) do ctx, dest, bc′
+        i = linear_index(ctx)
+        if i <= common_length
+            I = CartesianIndices(axes(bc′))[i]
+            @inbounds dest[i] = bc′[I]
+        end
+        return
+    end
+
+    return dest
 end
 
-function Base.map(f, y::GPUDestArray, xs::AbstractArray...)
-    @assert allequal(size.((y, xs...))...)
-    return f.(y, xs...)
+function Base.map(f, x::GPUDestArray, xs::AbstractArray...)
+    # if argument sizes match, their shape needs to be preserved
+    xs = (x, xs...)
+    if allequal(size.(xs)...)
+         return f.(xs...)
+    end
+
+    # if not, treat them as iterators
+    indices = LinearIndices.(xs)
+    common_length = minimum(length.(indices))
+
+    # construct a broadcast to figure out the destination container
+    bc = Broadcast.instantiate(Broadcast.broadcasted(f, xs...))
+    ElType = Broadcast.combine_eltypes(bc.f, bc.args)
+    isbitstype(ElType) || error("Cannot map function returning non-isbits $ElType.")
+    dest = similar(bc, ElType, common_length)
+
+    return map!(f, dest, xs...)
 end
