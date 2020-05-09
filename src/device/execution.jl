@@ -57,8 +57,10 @@ function gpu_call(kernel::Base.Callable, args...;
     end
 
     if total_threads !== nothing
-        @assert total_threads > 0
-        gpu_call(backend(target), kernel, args, total_threads; name=name)
+        @assert total_threads >= 0
+        if total_threads > 0
+            gpu_call(backend(target), kernel, args, total_threads; name=name)
+        end
     else
         @assert threads > 0
         @assert blocks > 0
