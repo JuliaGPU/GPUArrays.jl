@@ -1,4 +1,4 @@
-function test_mapreduce(AT)
+@testsuite "mapreduce essentials" AT->begin
     @testset "mapreducedim! $ET" for ET in supported_eltypes() begin
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
@@ -50,7 +50,9 @@ function test_mapreduce(AT)
         end
     end
     end
+end
 
+@testsuite "mapreduce derivatives" AT->begin
     @testset "sum prod minimum maximum $ET" for ET in supported_eltypes() begin
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
@@ -114,7 +116,9 @@ function test_mapreduce(AT)
             @test A != B
         end
     end
+end
 
+@testsuite "mapreduce (old tests)" AT->begin
     # old tests: can be removed, but left in here for a while to ensure the new impl works
     @testset "mapreduce" begin
         for ET in supported_eltypes()
