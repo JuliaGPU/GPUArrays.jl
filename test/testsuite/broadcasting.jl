@@ -1,8 +1,6 @@
-function test_broadcasting(AT)
-    @testset "broadcast" begin
-        broadcasting(AT)
-        vec3(AT)
-    end
+@testsuite "broadcasting" AT->begin
+    broadcasting(AT)
+    vec3(AT)
 end
 
 test_idx(idx, A::AbstractArray{T}) where T = A[idx] * T(2)
