@@ -23,33 +23,29 @@ julia:nightly:
 
 # reverse tests
 
-# NOTE: reverse testing is tricky because of Manifests. we instantiate both, give priority
-#       to this package's Manifest, and manually run tests outside of the test environment.
-#       that means we have to manually install CuArrays' test dependencies though.
-
-cuarrays:
+cuda:
   extends:
-    - .julia:1.3
+    - .julia:1.4
     - .test
   tags:
     - nvidia
-  image: nvidia/cuda:10.1-devel
+  variables:
+    JULIA_NUM_THREADS: '2'
+    NVIDIA_VISIBLE_DEVICES: 'all'
+    NVIDIA_DRIVER_CAPABILITIES: 'compute,utility'
+    JULIA_CUDA_USE_BINARYBUILDER: 'false' # reduce CI network traffic
   script:
-    - export CUARRAYS=".julia/dev/CuArrays"
     - julia -e 'using Pkg;
-                Pkg.develop("CuArrays");'
-    - julia --project -e 'using Pkg;
-                          Pkg.instantiate()'
-    - julia --project=$CUARRAYS -e 'using Pkg;
-                                    Pkg.instantiate();
-                                    Pkg.add(["FFTW", "ForwardDiff", "FillArrays"])'
-    - JULIA_LOAD_PATH=".:$CUARRAYS::" julia $CUARRAYS/test/runtests.jl
-  allow_failure: true
+                Pkg.develop(PackageSpec(path=pwd()));
+                Pkg.build();'
+    - julia -e 'using Pkg;
+                Pkg.add(PackageSpec(name="CUDA", rev="master"));
+                Pkg.test("CUDA");'
 
 
 # other tasks
 
 coverage:
   extends:
-    - .julia:1.3
+    - .julia:1.4
     - .coverage
