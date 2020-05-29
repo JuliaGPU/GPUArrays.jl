@@ -21,12 +21,6 @@ backend(::Type{<:AbstractGPUDevice}) = error("Not implemented") # COV_EXCL_LINE
 
 # convenience aliases for working with wrapped arrays
 
-# NOTE: these Unions are a hack. Ideally Base would have a Transpose <: WrappedArray <:
-# AbstractArray and we could define our methods in terms of Union{AbstractGPUArray,
-# WrappedArray{<:Any, <:AbstractGPUArray}}
-
-const WrappedArray{AT} = @eval Union{$([W for (W,ctor) in Adapt.wrappers]...)} where AT
-
 const WrappedGPUArray{T} = WrappedArray{<:AbstractGPUArray{T}}
 
 const AbstractOrWrappedGPUArray{T} = Union{AbstractGPUArray{T}, WrappedGPUArray{T}}
