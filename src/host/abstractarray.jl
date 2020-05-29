@@ -19,6 +19,19 @@ device(::AbstractGPUDevice) = error("Not implemented") # COV_EXCL_LINE
 backend(::Type{<:AbstractGPUDevice}) = error("Not implemented") # COV_EXCL_LINE
 
 
+# convenience aliases for working with wrapped arrays
+
+# NOTE: these Unions are a hack. Ideally Base would have a Transpose <: WrappedArray <:
+# AbstractArray and we could define our methods in terms of Union{AbstractGPUArray,
+# WrappedArray{<:Any, <:AbstractGPUArray}}
+
+const WrappedArray{AT} = @eval Union{$([W for (W,ctor) in Adapt.wrappers]...)} where AT
+
+const WrappedGPUArray{T} = WrappedArray{<:AbstractGPUArray{T}}
+
+const AbstractOrWrappedGPUArray{T} = Union{AbstractGPUArray{T}, WrappedGPUArray{T}}
+
+
 # input/output
 
 ## serialization
@@ -41,31 +54,22 @@ convert_to_cpu(xs) = adapt(Array, xs)
 
 ## showing
 
-for (W, ctor) in (:AT => (A,mut)->mut(A), Adapt.wrappers...)
-    @eval begin
-        # display
-        Base.print_array(io::IO, X::$W where {AT <: AbstractGPUArray}) =
-            Base.print_array(io, $ctor(X, convert_to_cpu))
+# display
+Base.print_array(io::IO, X::AbstractOrWrappedGPUArray) =
+    Base.print_array(io, adapt(Array, X))
 
-        # show
-        Base._show_nonempty(io::IO, X::$W where {AT <: AbstractGPUArray}, prefix::String) =
-            Base._show_nonempty(io, $ctor(X, convert_to_cpu), prefix)
-        Base._show_empty(io::IO, X::$W where {AT <: AbstractGPUArray}) =
-            Base._show_empty(io, $ctor(X, convert_to_cpu))
-        Base.show_vector(io::IO, v::$W where {AT <: AbstractGPUArray}, args...) =
-            Base.show_vector(io, $ctor(v, convert_to_cpu), args...)
-    end
-end
+# show
+Base._show_nonempty(io::IO, X::AbstractOrWrappedGPUArray, prefix::String) =
+    Base._show_nonempty(io, convert_to_cpu(X), prefix)
+Base._show_empty(io::IO, X::AbstractOrWrappedGPUArray) =
+    Base._show_empty(io, convert_to_cpu(X))
+Base.show_vector(io::IO, v::AbstractOrWrappedGPUArray, args...) =
+    Base.show_vector(io, convert_to_cpu(v), args...)
 
 ## collect to CPU (discarding wrapper type)
 
 collect_to_cpu(xs::AbstractArray) = collect(convert_to_cpu(xs))
-
-for (W, ctor) in (:AT => (A,mut)->mut(A), Adapt.wrappers...)
-    @eval begin
-        Base.collect(X::$W where {AT <: AbstractGPUArray}) = collect_to_cpu(X)
-    end
-end
+Base.collect(X::AbstractOrWrappedGPUArray) = collect_to_cpu(X)
 
 
 # memory copying
@@ -76,14 +80,6 @@ end
 materialize(x::AbstractArray) = Array(x)
 materialize(x::AbstractGPUArray) = x
 materialize(x::Array) = x
-
-# TODO: do we want to support `copyto(..., WrappedArray{AbstractGPUArray})`
-# if so (does not work due to lack of copy constructors):
-#for (W, ctor) in (:AT => (A,mut)->mut(A), Adapt.wrappers...)
-#    @eval begin
-#        materialize(X::$W) where {AT <: AbstractGPUArray} = AT(X)
-#    end
-#end
 
 for (D, S) in ((AbstractGPUArray, AbstractArray), (Array, AbstractGPUArray), (AbstractGPUArray, AbstractGPUArray))
     @eval begin

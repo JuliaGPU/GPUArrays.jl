@@ -6,6 +6,9 @@ using Base.Broadcast
 
 import Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle
 
+const BroadcastGPUArray{T} = Union{AbstractOrWrappedGPUArray{T},
+                                   Base.RefValue{<:AbstractGPUArray{T}}}
+
 """
 Abstract supertype for GPU array styles. The `N` parameter is the dimensionality.
 
@@ -16,24 +19,14 @@ abstract type AbstractGPUArrayStyle{N} <: AbstractArrayStyle{N} end
 
 # Wrapper types otherwise forget that they are GPU compatible
 # NOTE: don't directly use GPUArrayStyle here not to lose downstream customizations.
-for (W, ctor) in Adapt.wrappers
-  @eval begin
-    BroadcastStyle(::Type{<:$W}) where {AT<:AbstractGPUArray} = BroadcastStyle(AT)
-    backend(::Type{<:$W}) where {AT<:AbstractGPUArray} = backend(AT)
-  end
-end
-
-# This Union is a hack. Ideally Base would have a Transpose <: WrappedArray <: AbstractArray
-# and we could define our methods in terms of Union{AbstractGPUArray, WrappedArray{<:Any, <:AbstractGPUArray}}
-@eval const GPUDestArray =
-  Union{AbstractGPUArray,
-        $((:($W where {AT <: AbstractGPUArray}) for (W, _) in Adapt.wrappers)...),
-        Base.RefValue{<:AbstractGPUArray} }
+BroadcastStyle(::Type{<:WrappedArray{AT}}) where {AT<:AbstractGPUArray} = BroadcastStyle(AT)
+backend(::Type{<:WrappedArray{AT}}) where {AT<:AbstractGPUArray} = backend(AT)
 
 # Ref is special: it's not a real wrapper, so not part of Adapt,
 # but it is commonly used to bypass broadcasting of an argument
 # so we need to preserve its dimensionless properties.
-BroadcastStyle(::Type{Base.RefValue{AT}}) where {AT<:AbstractGPUArray} = typeof(BroadcastStyle(AT))(Val(0))
+BroadcastStyle(::Type{Base.RefValue{AT}}) where {AT<:AbstractGPUArray} =
+    typeof(BroadcastStyle(AT))(Val(0))
 backend(::Type{Base.RefValue{AT}}) where {AT<:AbstractGPUArray} = backend(AT)
 # but make sure we don't dispatch to the optimized copy method that directly indexes
 function Broadcast.copy(bc::Broadcasted{<:AbstractGPUArrayStyle{0}})
@@ -57,7 +50,7 @@ end
 #   with `Style`
 #
 # For more information see the Base documentation.
-@inline function Base.copyto!(dest::GPUDestArray, bc::Broadcasted{Nothing})
+@inline function Base.copyto!(dest::BroadcastGPUArray, bc::Broadcasted{Nothing})
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     bc′ = Broadcast.preprocess(dest, bc)
     gpu_call(dest, bc′; name="broadcast") do ctx, dest, bc′
@@ -71,8 +64,8 @@ end
 end
 
 # Base defines this method as a performance optimization, but we don't know how to do
-# `fill!` in general for all `GPUDestArray` so we just go straight to the fallback
-@inline Base.copyto!(dest::GPUDestArray, bc::Broadcasted{<:Broadcast.AbstractArrayStyle{0}}) =
+# `fill!` in general for all `BroadcastGPUArray` so we just go straight to the fallback
+@inline Base.copyto!(dest::BroadcastGPUArray, bc::Broadcasted{<:Broadcast.AbstractArrayStyle{0}}) =
     copyto!(dest, convert(Broadcasted{Nothing}, bc))
 
 
@@ -81,7 +74,7 @@ end
 allequal(x) = true
 allequal(x, y, z...) = x == y && allequal(y, z...)
 
-function Base.map!(f, dest::GPUDestArray, xs::AbstractArray...)
+function Base.map!(f, dest::BroadcastGPUArray, xs::AbstractArray...)
     indices = LinearIndices.((dest, xs...))
     common_length = minimum(length.(indices))
 
@@ -101,7 +94,7 @@ function Base.map!(f, dest::GPUDestArray, xs::AbstractArray...)
     return dest
 end
 
-function Base.map(f, x::GPUDestArray, xs::AbstractArray...)
+function Base.map(f, x::BroadcastGPUArray, xs::AbstractArray...)
     # if argument sizes match, their shape needs to be preserved
     xs = (x, xs...)
     if allequal(size.(xs)...)
