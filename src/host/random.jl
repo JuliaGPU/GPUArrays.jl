@@ -97,14 +97,15 @@ end
 
 function Random.randn!(rng::RNG, A::AbstractGPUArray{T}) where T <: Number
     threads = (length(A) - 1) ÷ 2 + 1
+    length(A) == 0 && return
     gpu_call(A, rng.state; total_threads = threads) do ctx, a, randstates
         idx = 2*(linear_index(ctx) - 1) + 1
-        idx > length(a) && return
         U1 = gpu_rand(T, ctx, randstates)
         U2 = gpu_rand(T, ctx, randstates)
-        Z0 = sqrt(-2.0 * log(U1)) * cos(2pi * U2)
-        Z1 = sqrt(-2.0 * log(U1)) * sin(2pi * U2)
+        Z0 = sqrt(ctx, -2.0*log(ctx, U1))*cos(ctx, 2pi*U2)
+        Z1 = sqrt(ctx, -2.0*log(ctx, U1))*sin(ctx, 2pi*U2)
         @inbounds a[idx] = Z0
+        idx + 1 > length(a) && return
         @inbounds a[idx + 1] = Z1
         return
     end
