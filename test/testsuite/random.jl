@@ -18,4 +18,22 @@
             @test all(A .== B)
         end
     end
+    
+    @testset "randn" begin  # uniform
+        for T in (Float32, Float64), d in (2, (2,2))
+            A = AT{T}(undef, d)
+            B = copy(A)
+            randn!(A)
+            randn!(B)
+            @test !any(A .== B)
+
+            rng = GPUArrays.global_rng(A)
+            Random.seed!(rng)
+            Random.seed!(rng, 1)
+            randn!(rng, A)
+            Random.seed!(rng, 1)
+            randn!(rng, B)
+            @test all(A .== B)
+        end
+    end
 end
