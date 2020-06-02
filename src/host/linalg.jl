@@ -14,18 +14,18 @@ end
 LinearAlgebra.transpose!(At::AbstractGPUArray, A::AbstractGPUArray) = transpose_f!(transpose, At, A)
 LinearAlgebra.adjoint!(At::AbstractGPUArray, A::AbstractGPUArray) = transpose_f!(adjoint, At, A)
 
-function Base.copyto!(A::AbstractGPUArray, B::Adjoint{T, <: AbstractGPUArray}) where T
+function Base.copyto!(A::AbstractGPUArray{T,N}, B::Adjoint{T, <: AbstractGPUArray{T,N}}) where {T,N}
     adjoint!(A, B.parent)
 end
 
-function Base.copyto!(A::AbstractGPUArray, B::Transpose{T, <: AbstractGPUArray}) where T
+function Base.copyto!(A::AbstractGPUArray{T,N}, B::Transpose{T, <: AbstractGPUArray{T,N}}) where {T,N}
     transpose!(A, B.parent)
 end
 
-function Base.copyto!(A::AbstractArray, B::Adjoint{<:Any, <:AbstractGPUArray})
+function Base.copyto!(A::AbstractArray{T,N}, B::Adjoint{T, <:AbstractGPUArray{T,N}}) where {T,N}
     copyto!(A, Adjoint(Array(parent(B))))
 end
-function Base.copyto!(A::AbstractArray, B::Transpose{<:Any, <:AbstractGPUArray})
+function Base.copyto!(A::AbstractArray{T,N}, B::Transpose{T, <:AbstractGPUArray{T,N}}) where {T,N}
     copyto!(A, Transpose(Array(parent(B))))
 end
 
@@ -62,14 +62,14 @@ end
 ## triangular
 
 # mixed CPU/GPU: B -> A
-Base.copyto!(A::AbstractArray, B::UpperTriangular{<:Any, <:AbstractGPUArray}) = copyto!(A, UpperTriangular(Array(parent(B))))
-Base.copyto!(A::AbstractArray, B::LowerTriangular{<:Any, <:AbstractGPUArray}) = copyto!(A, LowerTriangular(Array(parent(B))))
+Base.copyto!(A::AbstractArray{T,N}, B::UpperTriangular{T, <:AbstractGPUArray{T,N}}) where {T,N} = copyto!(A, UpperTriangular(Array(parent(B))))
+Base.copyto!(A::AbstractArray{T,N}, B::LowerTriangular{T, <:AbstractGPUArray{T,N}}) where {T,N} = copyto!(A, LowerTriangular(Array(parent(B))))
 
 # GPU/GPU: B -> A
-Base.copyto!(A::AbstractGPUArray, B::UpperTriangular{<:Any, <:AbstractGPUArray}) = LinearAlgebra.triu!(copyto!(A, parent(B)))
-Base.copyto!(A::AbstractGPUArray, B::LowerTriangular{<:Any, <:AbstractGPUArray}) = LinearAlgebra.tril!(copyto!(A, parent(B)))
+Base.copyto!(A::AbstractGPUArray{T,N}, B::UpperTriangular{T, <:AbstractGPUArray{T,N}}) where {T,N} = LinearAlgebra.triu!(copyto!(A, parent(B)))
+Base.copyto!(A::AbstractGPUArray{T,N}, B::LowerTriangular{T, <:AbstractGPUArray{T,N}}) where {T,N} = LinearAlgebra.tril!(copyto!(A, parent(B)))
 for T in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
-    @eval Base.copyto!(A::$T{<:Any, <:AbstractGPUArray}, B::$T{<:Any, <:AbstractGPUArray}) = $T(copyto!(parent(A), parent(B)))
+    @eval Base.copyto!(A::$T{T, <:AbstractGPUArray{T,N}}, B::$T{T, <:AbstractGPUArray{T,N}}) where {T,N} = $T(copyto!(parent(A), parent(B)))
 end
 
 function LinearAlgebra.tril!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
