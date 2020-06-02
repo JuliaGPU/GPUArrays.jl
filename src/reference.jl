@@ -185,7 +185,7 @@ Base.sizeof(x::JLArray) = Base.elsize(x) * length(x)
 
 ## interop with Julia arrays
 
-JLArray{T,N}(x::AbstractArray{S,N}) where {T,N,S} =
+JLArray{T,N}(x::AbstractArray{<:Any,N}) where {T,N} =
     JLArray{T,N}(convert(Array{T}, x), size(x))
 
 # underspecified constructors

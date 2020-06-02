@@ -13,16 +13,20 @@ using Random
 using Test
 
 using FFTW
+using Adapt
 using FillArrays
 
-convert_array(f, x) = f(x)
-convert_array(f, x::Base.RefValue) = x[]
+struct ArrayAdaptor{AT} end
+Adapt.adapt_storage(::Type{ArrayAdaptor{AT}}, xs::AbstractArray) where {AT} = AT(xs)
 
 function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
-    cpu_in = convert_array.(copy, xs)
-    gpu_in = convert_array.(AT, xs)
+    # copy on the CPU, adapt on the GPU, but keep Ref's
+    cpu_in = map(x -> isa(x, Base.RefValue) ? x[] : deepcopy(x), xs)
+    gpu_in = map(x -> isa(x, Base.RefValue) ? x[] : adapt(ArrayAdaptor{AT}(), x), xs)
+
     cpu_out = f(cpu_in...; kwargs...)
     gpu_out = f(gpu_in...; kwargs...)
+
     collect(cpu_out) ≈ collect(gpu_out)
 end
 

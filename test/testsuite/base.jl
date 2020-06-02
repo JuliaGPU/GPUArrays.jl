@@ -76,6 +76,28 @@ end
         b = AT(y)
         copyto!(a, b)
         @test Float64.(y) == Array(a)
+
+        # wrapped gpu array to wrapped gpu array
+        x = rand(4, 4)
+        a = AT(x)
+        b = view(a, 2:3, 2:3)
+        c = AT{eltype(b)}(undef, size(b))
+        copyto!(c, b)
+        Array(c) == Array(b)
+
+        # wrapped gpu array to cpu array
+        z = Array{eltype(b)}(undef, size(b))
+        copyto!(z, b)
+        @test z == Array(b)
+
+        # cpu array to wrapped gpu array
+        copyto!(b, z)
+
+        # bug in copyto!
+        ## needless N type parameter
+        @test compare((x,y)->copyto!(y, selectdim(x, 2, 1)), AT, ones(2,2,2), zeros(2,2))
+        ## inability to copyto! smaller destination
+        @test compare((x,y)->copyto!(y, selectdim(x, 2, 1)), AT, ones(2,2,2), zeros(3,3))
     end
 
     @testset "vcat + hcat" begin
