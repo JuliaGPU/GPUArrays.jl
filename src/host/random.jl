@@ -81,7 +81,7 @@ end
 Random.seed!(rng::RNG) = Random.seed!(rng, make_seed(rng))
 Random.seed!(rng::RNG, seed::Integer) = Random.seed!(rng, make_seed(rng, seed))
 function Random.seed!(rng::RNG, seed::Vector{UInt32})
-    copyto!(rng.state, reinterpret(NTuple{4, UInt32}, seed))
+    copyto!(rng.state, collect(reinterpret(NTuple{4, UInt32}, seed)))
     return
 end
 
