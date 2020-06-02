@@ -3,7 +3,7 @@
         io = IOBuffer()
         A = AT(Int64[1])
         B = AT(Int64[1 2;3 4]) # vectors and non-vector arrays showing
-                                # are handled differently in base/arrayshow.jl
+                               # are handled differently in base/arrayshow.jl
 
         show(io, MIME("text/plain"), A)
         seekstart(io)

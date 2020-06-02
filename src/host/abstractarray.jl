@@ -52,7 +52,7 @@ convert_to_cpu(xs) = adapt(Array, xs)
 
 # display
 Base.print_array(io::IO, X::AbstractOrWrappedGPUArray) =
-    Base.print_array(io, adapt(Array, X))
+    Base.print_array(io, convert_to_cpu(X))
 
 # show
 Base._show_nonempty(io::IO, X::AbstractOrWrappedGPUArray, prefix::String) =
@@ -111,7 +111,6 @@ end
 function cartesian_copy_kernel!(ctx::AbstractKernelContext, dest, dest_offsets, src, src_offsets, shape, length)
     i = linear_index(ctx)
     if i <= length
-        # TODO can this be done faster and smarter?
         idx = CartesianIndices(shape)[i]
         @inbounds dest[idx + dest_offsets] = src[idx + src_offsets]
     end
