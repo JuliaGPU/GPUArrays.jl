@@ -21,9 +21,11 @@ backend(::Type{<:AbstractGPUDevice}) = error("Not implemented") # COV_EXCL_LINE
 
 # convenience aliases for working with wrapped arrays
 
-const WrappedGPUArray{T} = WrappedArray{<:AbstractGPUArray{T}}
+const WrappedGPUArray{T,N} = WrappedArray{T,N,AbstractGPUArray,AbstractGPUArray{T,N}}
 
-const AbstractOrWrappedGPUArray{T} = Union{AbstractGPUArray{T}, WrappedGPUArray{T}}
+const AbstractOrWrappedGPUArray{T,N} =
+    Union{AbstractGPUArray{T,N},
+          WrappedArray{T,N,AbstractGPUArray,AbstractGPUArray{T,N}}}
 
 
 # input/output
@@ -70,22 +72,22 @@ Base.collect(X::AbstractOrWrappedGPUArray) = collect_to_cpu(X)
 
 ## basic linear copies of identically-typed memory
 
-# convert to something we can get a pointer to
-materialize(x::AbstractArray) = Array(x)
-materialize(x::AbstractGPUArray) = x
-materialize(x::Array) = x
+# expects the GPU array type to have linear `copyto!` methods (i.e. accepting an integer
+# offset and length) from and to CPU arrays and between GPU arrays.
 
-for (D, S) in ((AbstractGPUArray, AbstractArray), (Array, AbstractGPUArray), (AbstractGPUArray, AbstractGPUArray))
+for (D, S) in ((AbstractOrWrappedGPUArray, AbstractArray),
+               (AbstractArray, AbstractOrWrappedGPUArray),
+               (AbstractOrWrappedGPUArray, AbstractOrWrappedGPUArray))
     @eval begin
-        function Base.copyto!(dest::$D{T, N}, rdest::NTuple{N, UnitRange},
-                              src::$S{T, N}, ssrc::NTuple{N, UnitRange}) where {T, N}
+        function Base.copyto!(dest::$D{<:Any, N}, rdest::NTuple{N, UnitRange},
+                              src::$S{<:Any, N}, ssrc::NTuple{N, UnitRange}) where {N}
             drange = CartesianIndices(rdest)
             srange = CartesianIndices(ssrc)
             copyto!(dest, drange, src, srange)
         end
 
-        function Base.copyto!(dest::$D{T}, d_range::CartesianIndices{1},
-                              src::$S{T}, s_range::CartesianIndices{1}) where T
+        function Base.copyto!(dest::$D, d_range::CartesianIndices{1},
+                              src::$S, s_range::CartesianIndices{1})
             len = length(d_range)
             if length(s_range) != len
                 throw(ArgumentError("Copy range needs same length. Found: dest: $len, src: $(length(s_range))"))
@@ -93,23 +95,20 @@ for (D, S) in ((AbstractGPUArray, AbstractArray), (Array, AbstractGPUArray), (Ab
             len == 0 && return dest
             d_offset = first(d_range)[1]
             s_offset = first(s_range)[1]
-            copyto!(dest, d_offset, materialize(src), s_offset, len)
+            copyto!(dest, d_offset, src, s_offset, len)
         end
 
-        function Base.copyto!(dest::$D{T, N}, src::$S{T, N}) where {T, N}
+        function Base.copyto!(dest::$D, src::$S)
             len = length(src)
             len == 0 && return dest
-            copyto!(dest, 1, materialize(src), 1, len)
+            copyto!(dest, 1, src, 1, len)
         end
     end
 end
 
 ## generalized blocks of heterogeneous memory
 
-Base.copyto!(dest::AbstractGPUArray, src::AbstractGPUArray) =
-    copyto!(dest, CartesianIndices(dest), src, CartesianIndices(src))
-
-function copy_kernel!(ctx::AbstractKernelContext, dest, dest_offsets, src, src_offsets, shape, length)
+function cartesian_copy_kernel!(ctx::AbstractKernelContext, dest, dest_offsets, src, src_offsets, shape, length)
     i = linear_index(ctx)
     if i <= length
         # TODO can this be done faster and smarter?
@@ -119,8 +118,8 @@ function copy_kernel!(ctx::AbstractKernelContext, dest, dest_offsets, src, src_o
     return
 end
 
-function Base.copyto!(dest::AbstractGPUArray{T, N}, destcrange::CartesianIndices{N},
-                      src::AbstractGPUArray{U, N}, srccrange::CartesianIndices{N}) where {T, U, N}
+function Base.copyto!(dest::AbstractOrWrappedGPUArray{<:Any, N}, destcrange::CartesianIndices{N},
+                      src::AbstractOrWrappedGPUArray{<:Any, N}, srccrange::CartesianIndices{N}) where {N}
     shape = size(destcrange)
     if shape != size(srccrange)
         throw(DimensionMismatch("Ranges don't match their size. Found: $shape, $(size(srccrange))"))
@@ -130,27 +129,28 @@ function Base.copyto!(dest::AbstractGPUArray{T, N}, destcrange::CartesianIndices
 
     dest_offsets = first(destcrange) - oneunit(CartesianIndex{N})
     src_offsets = first(srccrange) - oneunit(CartesianIndex{N})
-    gpu_call(copy_kernel!,
+    gpu_call(cartesian_copy_kernel!,
              dest, dest_offsets, src, src_offsets, shape, len;
              total_threads=len)
     dest
 end
 
+# XXX: these generalizations between non-linear CPU and GPU memory are very inefficient,
+#       because it first materializes as linear memory.
+# TODO: loop over linear sections of memory and perform linear copies
+
+# NOTE: typed with Array because of ambiguities
+
 function Base.copyto!(dest::AbstractGPUArray{T, N}, destcrange::CartesianIndices{N},
-                      src::AbstractArray{T, N}, srccrange::CartesianIndices{N}) where {T, N}
-    # Is this efficient? Maybe!
-    # TODO: compare to a pure intrinsic copyto implementation!
-    # this would mean looping over linear sections of memory and
-    # use copyto!(dest, offset::Integer, buffer(src), offset::Integer, amout::Integer)
+                      src::Array{T, N}, srccrange::CartesianIndices{N}) where {T, N}
     src_gpu = typeof(dest)(map(idx-> src[idx], srccrange))
     nrange = CartesianIndices(size(src_gpu))
     copyto!(dest, destcrange, src_gpu, nrange)
     dest
 end
 
-function Base.copyto!(dest::AbstractArray{T, N}, destcrange::CartesianIndices{N},
+function Base.copyto!(dest::Array{T, N}, destcrange::CartesianIndices{N},
                       src::AbstractGPUArray{T, N}, srccrange::CartesianIndices{N}) where {T, N}
-    # Is this efficient? Maybe!
     dest_gpu = similar(src, size(destcrange))
     nrange = CartesianIndices(size(dest_gpu))
     copyto!(dest_gpu, nrange, src, srccrange)
