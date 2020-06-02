@@ -75,8 +75,8 @@ Base.collect(X::AbstractOrWrappedGPUArray) = collect_to_cpu(X)
 # expects the GPU array type to have linear `copyto!` methods (i.e. accepting an integer
 # offset and length) from and to CPU arrays and between GPU arrays.
 
-for (D, S) in ((AbstractOrWrappedGPUArray, AbstractArray),
-               (AbstractArray, AbstractOrWrappedGPUArray),
+for (D, S) in ((AbstractOrWrappedGPUArray, Array),
+               (Array, AbstractOrWrappedGPUArray),
                (AbstractOrWrappedGPUArray, AbstractOrWrappedGPUArray))
     @eval begin
         function Base.copyto!(dest::$D{<:Any, N}, rdest::NTuple{N, UnitRange},
@@ -131,9 +131,6 @@ function Base.copyto!(dest::AbstractOrWrappedGPUArray, dstart::Integer,
 end
 
 # variants that materialize the GPU wrapper before copying from or to the CPU
-
-# NOTE: we can't generalize this to AbstractArray or it's ambiguous with the above method,
-#       e.g., with `copyto!(jl(rand(Float32,2,2)), view(jl(rand(Float32,2,2)), :, :))`
 
 function Base.copyto!(dest::Array, dstart::Integer,
                       src::WrappedGPUArray, sstart::Integer, n::Integer)

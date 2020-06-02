@@ -22,10 +22,10 @@ function Base.copyto!(A::AbstractGPUArray{T,N}, B::Transpose{T, <: AbstractGPUAr
     transpose!(A, B.parent)
 end
 
-function Base.copyto!(A::AbstractArray{T,N}, B::Adjoint{T, <:AbstractGPUArray{T,N}}) where {T,N}
+function Base.copyto!(A::Array{T,N}, B::Adjoint{T, <:AbstractGPUArray{T,N}}) where {T,N}
     copyto!(A, Adjoint(Array(parent(B))))
 end
-function Base.copyto!(A::AbstractArray{T,N}, B::Transpose{T, <:AbstractGPUArray{T,N}}) where {T,N}
+function Base.copyto!(A::Array{T,N}, B::Transpose{T, <:AbstractGPUArray{T,N}}) where {T,N}
     copyto!(A, Transpose(Array(parent(B))))
 end
 
@@ -62,8 +62,8 @@ end
 ## triangular
 
 # mixed CPU/GPU: B -> A
-Base.copyto!(A::AbstractArray{T,N}, B::UpperTriangular{T, <:AbstractGPUArray{T,N}}) where {T,N} = copyto!(A, UpperTriangular(Array(parent(B))))
-Base.copyto!(A::AbstractArray{T,N}, B::LowerTriangular{T, <:AbstractGPUArray{T,N}}) where {T,N} = copyto!(A, LowerTriangular(Array(parent(B))))
+Base.copyto!(A::Array{T,N}, B::UpperTriangular{T, <:AbstractGPUArray{T,N}}) where {T,N} = copyto!(A, UpperTriangular(Array(parent(B))))
+Base.copyto!(A::Array{T,N}, B::LowerTriangular{T, <:AbstractGPUArray{T,N}}) where {T,N} = copyto!(A, LowerTriangular(Array(parent(B))))
 
 # GPU/GPU: B -> A
 Base.copyto!(A::AbstractGPUArray{T,N}, B::UpperTriangular{T, <:AbstractGPUArray{T,N}}) where {T,N} = LinearAlgebra.triu!(copyto!(A, parent(B)))
