@@ -106,6 +106,51 @@ for (D, S) in ((AbstractOrWrappedGPUArray, AbstractArray),
     end
 end
 
+# kernel-based variant for copying between wrapped GPU arrays
+
+function linear_copy_kernel!(ctx::AbstractKernelContext, dest, dstart, src, sstart, n)
+    i = linear_index(ctx)-1
+    if i < n
+        @inbounds dest[dstart+i] = src[sstart+i]
+    end
+    return
+end
+
+function Base.copyto!(dest::AbstractOrWrappedGPUArray, dstart::Integer,
+                      src::AbstractOrWrappedGPUArray, sstart::Integer, n::Integer)
+    n == 0 && return dest
+    n < 0 && throw(ArgumentError(string("tried to copy n=", n, " elements, but n should be nonnegative")))
+    destinds, srcinds = LinearIndices(dest), LinearIndices(src)
+    (checkbounds(Bool, destinds, dstart) && checkbounds(Bool, destinds, dstart+n-1)) || throw(BoundsError(dest, dstart:dstart+n-1))
+    (checkbounds(Bool, srcinds, sstart)  && checkbounds(Bool, srcinds, sstart+n-1))  || throw(BoundsError(src,  sstart:sstart+n-1))
+
+    gpu_call(linear_copy_kernel!,
+             dest, dstart, src, sstart, n;
+             total_threads=n)
+    return dest
+end
+
+# variants that materialize the GPU wrapper before copying from or to the CPU
+
+# NOTE: we can't generalize this to AbstractArray or it's ambiguous with the above method,
+#       e.g., with `copyto!(jl(rand(Float32,2,2)), view(jl(rand(Float32,2,2)), :, :))`
+
+function Base.copyto!(dest::Array, dstart::Integer,
+                      src::WrappedGPUArray, sstart::Integer, n::Integer)
+    temp = similar(src, n)
+    copyto!(temp, 1, src, sstart, n)
+    copyto!(dest, dstart, temp, 1, n)
+    return dest
+end
+
+function Base.copyto!(dest::WrappedGPUArray, dstart::Integer,
+                      src::Array, sstart::Integer, n::Integer)
+    temp = similar(dest, n)
+    copyto!(temp, 1, src, sstart, n)
+    copyto!(dest, dstart, temp, 1, n)
+    return dest
+end
+
 ## generalized blocks of heterogeneous memory
 
 function cartesian_copy_kernel!(ctx::AbstractKernelContext, dest, dest_offsets, src, src_offsets, shape, length)
