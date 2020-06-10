@@ -17,7 +17,7 @@ using Adapt
 using FillArrays
 
 struct ArrayAdaptor{AT} end
-Adapt.adapt_storage(::Type{ArrayAdaptor{AT}}, xs::AbstractArray) where {AT} = AT(xs)
+Adapt.adapt_storage(::ArrayAdaptor{AT}, xs::AbstractArray) where {AT} = AT(xs)
 
 function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
     # copy on the CPU, adapt on the GPU, but keep Ref's
