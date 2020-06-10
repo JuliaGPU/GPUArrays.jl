@@ -163,6 +163,10 @@ function broadcasting(AT)
         cpy.(1:10, Ref(a), Ref(b))
         @test Array(a) == Array(b)
     end
+
+    @testset "stackoverflow in copy(::Broadcast)" begin
+        copy(Base.broadcasted(identity, AT(Int[])))
+    end
 end
 
 function vec3(AT)

@@ -52,6 +52,7 @@ end
 # For more information see the Base documentation.
 @inline function Base.copyto!(dest::BroadcastGPUArray, bc::Broadcasted{Nothing})
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
+    isempty(dest) && return dest
     bc′ = Broadcast.preprocess(dest, bc)
     gpu_call(dest, bc′; name="broadcast") do ctx, dest, bc′
         let I = @cartesianidx(dest)
