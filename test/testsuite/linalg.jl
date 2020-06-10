@@ -96,6 +96,10 @@
         @test compare(mul!, AT, y, f(A), x)
         @test compare(mul!, AT, y, f(A), x, Ref(T(4)), Ref(T(5)))
         @test typeof(AT(rand(3, 3)) * AT(rand(3))) <: AbstractVector
+
+        if f !== identity
+            @test compare(mul!, AT, rand(T, 2,2), rand(T, 2,1), f(rand(T, 2)))
+        end
     end
 
     @testset "$T gemm C := $f(A) * $g(B) * a + C * b" for f in (identity, transpose, adjoint), g in (identity, transpose, adjoint), T in supported_eltypes()
