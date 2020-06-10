@@ -201,8 +201,7 @@ end
 
 ## other
 
-# FIXME: this is slow, and shouldn't require broadcast in the common cast
-Base.copy(x::AbstractGPUArray) = identity.(x)
+Base.copy(x::AbstractGPUArray) = error("Not implemented") # COV_EXCL_LINE
 
 Base.deepcopy(x::AbstractGPUArray) = copy(x)
 

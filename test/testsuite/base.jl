@@ -186,4 +186,12 @@ end
     @testset "circshift" begin
         @test compare(x->circshift(x, (0,1)), AT, reshape(Vector(1:16), (4,4)))
     end
+
+    @testset "copy" begin
+        a = AT([1])
+        b = copy(a)
+        fill!(b, 0)
+        @test Array(b) == [0]
+        @test Array(a) == [1]
+    end
 end
