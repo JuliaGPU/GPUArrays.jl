@@ -111,7 +111,6 @@
     end
 
     @allowscalar @testset "Index with empty array" begin
-
         @testset "1D" begin
             Ac = zeros(Float32, 10)
             A = AT(Ac)
@@ -128,6 +127,10 @@
 
             @test typeof(A[other, []]) == typeof(AT(Ac[other, []]))
             @test size(A[other, []]) == size(Ac[other, []])
+        end
+
+        @test compare(AT, rand(Float32, 2,2)) do a
+            a[:, 2:end-2] = AT{Float32}(undef,2,0)
         end
     end
 end
