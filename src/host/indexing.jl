@@ -153,11 +153,10 @@ end
 end
 
 function Base._unsafe_setindex!(::IndexStyle, dest::T, src, Is::Union{Real, AbstractArray}...) where T <: AbstractGPUArray
-    if length(Is) == 1 && isa(first(Is), Array) && isempty(first(Is)) # indexing with empty array
-        return dest
-    end
+    isempty(Is) && return dest
     idims = length.(Is)
     len = prod(idims)
+    len==0 && return dest
     src_gpu = adapt(T, src)
     gpu_call(setindex_kernel!, dest, src_gpu, idims, map(x-> to_index(dest, x), Is), len;
              total_threads=len)
