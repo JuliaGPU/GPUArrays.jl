@@ -174,6 +174,8 @@ Base.similar(a::JLArray{T,N}) where {T,N} = JLArray{T,N}(undef, size(a))
 Base.similar(a::JLArray{T}, dims::Base.Dims{N}) where {T,N} = JLArray{T,N}(undef, dims)
 Base.similar(a::JLArray, ::Type{T}, dims::Base.Dims{N}) where {T,N} = JLArray{T,N}(undef, dims)
 
+Base.copy(a::JLArray{T,N}) where {T,N} = JLArray{T,N}(copy(a.data), size(a))
+
 
 ## array interface
 
