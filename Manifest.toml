@@ -9,8 +9,6 @@ version = "0.5.0"
 [[Adapt]]
 deps = ["LinearAlgebra"]
 git-tree-sha1 = "9e31b9f5d3f9b5ec32c1d01fd8c05270bad10dc0"
-repo-rev = "a62a2568f1199d0e7b154eb6001afa629d31038e"
-repo-url = "https://github.com/JuliaGPU/Adapt.jl.git"
 uuid = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 version = "2.0.0"
 
