@@ -51,6 +51,21 @@ end
 #
 # For more information see the Base documentation.
 @inline function Base.copyto!(dest::BroadcastGPUArray, bc::Broadcasted{Nothing})
+    __copyto!(dest, bc)
+end
+
+# Base defines this method as a performance optimization, but we don't know how to do
+# `fill!` in general for all `BroadcastGPUArray` so we just go straight to the fallback
+@inline Base.copyto!(dest::BroadcastGPUArray, bc::Broadcasted{<:Broadcast.AbstractArrayStyle{0}}) =
+    copyto!(dest, convert(Broadcasted{Nothing}, bc))
+
+if VERSION >= v"1.5.0-DEV.613"
+    @inline function Base.materialize!(::AbstractGPUArrayStyle, dest, bc::Broadcasted{Style}) where Style
+        __copyto!(dest, convert(Broadcasted{Nothing}, bc))
+    end
+end
+
+@inline function __copyto!(dest, bc)
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     isempty(dest) && return dest
     bc′ = Broadcast.preprocess(dest, bc)
@@ -63,12 +78,6 @@ end
 
     return dest
 end
-
-# Base defines this method as a performance optimization, but we don't know how to do
-# `fill!` in general for all `BroadcastGPUArray` so we just go straight to the fallback
-@inline Base.copyto!(dest::BroadcastGPUArray, bc::Broadcasted{<:Broadcast.AbstractArrayStyle{0}}) =
-    copyto!(dest, convert(Broadcasted{Nothing}, bc))
-
 
 ## map
 
