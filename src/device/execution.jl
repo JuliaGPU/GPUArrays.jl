@@ -1,6 +1,6 @@
 # kernel execution
 
-export AbstractGPUBackend, AbstractKernelContext, gpu_call, synchronize, thread_blocks_heuristic
+export AbstractGPUBackend, AbstractKernelContext, gpu_call, thread_blocks_heuristic
 
 abstract type AbstractGPUBackend end
 
@@ -77,13 +77,3 @@ end
 
 # bottom-line gpu_call method that is expected to be implemented by the back end
 gpu_call(backend::AbstractGPUBackend, kernel, args, threads::Int, blocks::Int; kwargs...) = error("Not implemented") # COV_EXCL_LINE
-
-"""
-    synchronize(A::AbstractArray)
-
-Blocks until all operations are finished on `A`
-"""
-function synchronize(A::AbstractArray)
-    # fallback is a noop, for backends not needing synchronization. This
-    # makes it easier to write generic code that also works for AbstractArrays
-end

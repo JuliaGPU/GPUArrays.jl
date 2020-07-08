@@ -23,7 +23,6 @@ Another important set of interfaces relates to executing code on the device:
 GPUArrays.AbstractGPUBackend
 GPUArrays.AbstractKernelContext
 GPUArrays.gpu_call
-GPUArrays.synchronize
 GPUArrays.thread_block_heuristic
 ```
 
