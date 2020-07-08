@@ -38,5 +38,7 @@ include("host/uniformscaling.jl")
 # CPU reference implementation
 include("reference.jl")
 
+include("deprecated.jl")
+
 
 end # module
