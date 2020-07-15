@@ -9,6 +9,7 @@ function Base.fill(X::Type{<: AbstractGPUArray{T}}, val, dims::NTuple{N, Integer
     fill!(res, convert(T, val))
 end
 function Base.fill!(A::AbstractGPUArray{T}, x) where T
+    length(A) == 0 && return A
     gpu_call(A, convert(T, x)) do ctx, a, val
         idx = @linearidx(a, ctx)
         @inbounds a[idx] = val
