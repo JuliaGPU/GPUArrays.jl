@@ -152,6 +152,14 @@ end
         @test all(x-> x == 2f0, Array(x1))
         @test all(x-> x == Int32(77), Array(x2))
 
+        x = fill(zero(T), (0, 2))
+        x1 = fill(AT{T}, T(0), (0, 2))
+        x2 = fill(AT{T}, T(0), (0, 2))
+        x3 = fill(AT{T, 2}, T(0), (0, 2))
+        @test Array(x1) ≈ x
+        @test Array(x2) ≈ x
+        @test Array(x3) ≈ x
+
         x = Matrix{T}(I, 4, 2)
 
         x1 = AT{T, 2}(I, 4, 2)
