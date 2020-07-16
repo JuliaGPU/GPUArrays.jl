@@ -11,7 +11,7 @@ end
 function Base.fill!(A::AbstractGPUArray{T}, x) where T
     length(A) == 0 && return A
     gpu_call(A, convert(T, x)) do ctx, a, val
-        idx = @linearidx(a, ctx)
+        idx = @linearidx(a)
         @inbounds a[idx] = val
         return
     end
@@ -55,7 +55,7 @@ function indexstyle(x::T) where T
 end
 
 function collect_kernel(ctx::AbstractKernelContext, A, iter, ::IndexCartesian)
-    idx = @cartesianidx(A, ctx)
+    idx = @cartesianidx(A)
     @inbounds A[idx...] = iter[idx...]
     return
 end

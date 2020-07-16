@@ -4,7 +4,7 @@
 
 function transpose_f!(f, At::AbstractGPUArray{T, 2}, A::AbstractGPUArray{T, 2}) where T
     gpu_call(At, A) do ctx, At, A
-        idx = @cartesianidx A ctx
+        idx = @cartesianidx A
         @inbounds At[idx[2], idx[1]] = f(A[idx[1], idx[2]])
         return
     end
@@ -205,7 +205,7 @@ end
 function LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) where N
     perm isa Tuple || (perm = Tuple(perm))
     gpu_call(dest, src, perm) do ctx, dest, src, perm
-        I = @cartesianidx src ctx
+        I = @cartesianidx src
         @inbounds dest[genperm(I, perm)] = src[I]
         return
     end
