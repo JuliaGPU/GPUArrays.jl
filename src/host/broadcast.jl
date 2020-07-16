@@ -82,26 +82,6 @@ end
 allequal(x) = true
 allequal(x, y, z...) = x == y && allequal(y, z...)
 
-function Base.map!(f, dest::BroadcastGPUArray, xs::AbstractArray...)
-    indices = LinearIndices.((dest, xs...))
-    common_length = minimum(length.(indices))
-
-    # custom broadcast, ignoring the container size mismatches
-    # (avoids the reshape + view that our mapreduce impl has to do)
-    bc = Broadcast.instantiate(Broadcast.broadcasted(f, xs...))
-    bc′ = Broadcast.preprocess(dest, bc)
-    gpu_call(dest, bc′; name="map!", total_threads=common_length) do ctx, dest, bc′
-        i = linear_index(ctx)
-        if i <= common_length
-            I = CartesianIndices(axes(bc′))[i]
-            @inbounds dest[i] = bc′[I]
-        end
-        return
-    end
-
-    return dest
-end
-
 function Base.map(f, x::BroadcastGPUArray, xs::AbstractArray...)
     # if argument sizes match, their shape needs to be preserved
     xs = (x, xs...)
@@ -120,4 +100,33 @@ function Base.map(f, x::BroadcastGPUArray, xs::AbstractArray...)
     dest = similar(bc, ElType, common_length)
 
     return map!(f, dest, xs...)
+end
+
+function Base.map!(f, dest::BroadcastGPUArray, xs::AbstractArray...)
+    # custom broadcast, ignoring the container size mismatches
+    # (avoids the reshape + view that our mapreduce impl has to do)
+    indices = LinearIndices.((dest, xs...))
+    common_length = minimum(length.(indices))
+    common_length==0 && return
+
+    bc = Broadcast.instantiate(Broadcast.broadcasted(f, xs...))
+    bc′ = Broadcast.preprocess(dest, bc)
+
+    # grid-stride kernel
+    function map_kernel(ctx, dest, bc′, nelem)
+        for i in 1:nelem
+            j = linear_index(ctx, i)
+            j > common_length && return
+
+            J = CartesianIndices(axes(bc′))[j]
+            @inbounds dest[j] = bc′[J]
+        end
+        return
+    end
+    config = launch_configuration(backend(dest), map_kernel, dest, bc′, 1)
+    heuristic = launch_heuristic(backend(dest), config, common_length, typemax(Int))
+    gpu_call(map_kernel, dest, bc′, heuristic.elements_per_thread;
+             threads=heuristic.threads, blocks=heuristic.blocks)
+
+    return dest
 end
