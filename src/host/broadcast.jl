@@ -54,12 +54,19 @@ end
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     isempty(dest) && return dest
     bc′ = Broadcast.preprocess(dest, bc)
-    gpu_call(dest, bc′; name="broadcast") do ctx, dest, bc′
-        let I = @cartesianidx(dest)
+
+    # grid-stride kernel
+    function broadcast_kernel(ctx, dest, bc′, nelem)
+        for i in 1:nelem
+            I = @cartesianidx(dest, i)
             @inbounds dest[I] = bc′[I]
         end
         return
     end
+    config = launch_configuration(backend(dest), broadcast_kernel, dest, bc′, 1)
+    heuristic = launch_heuristic(backend(dest), config, length(dest), typemax(Int))
+    gpu_call(broadcast_kernel, dest, bc′, heuristic.elements_per_thread;
+             threads=heuristic.threads, blocks=heuristic.blocks)
 
     return dest
 end
