@@ -1,6 +1,6 @@
 # kernel execution
 
-export AbstractGPUBackend, AbstractKernelContext, gpu_call, thread_blocks_heuristic
+export AbstractGPUBackend, AbstractKernelContext, gpu_call
 
 abstract type AbstractGPUBackend end
 
