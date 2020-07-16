@@ -62,6 +62,6 @@ macro cartesianidx(A, ctxsym = :ctx)
     quote
         x = $(esc(A))
         i = @linearidx(x, $(esc(ctxsym)))
-        CartesianIndices(x)[i]
+        @inbounds CartesianIndices(x)[i]
     end
 end
