@@ -78,7 +78,10 @@ gpu_call(backend::AbstractGPUBackend, kernel, args, threads::Int, blocks::Int; k
 
 # how many threads and blocks this kernel need to fully saturate the GPU.
 # this can be specialised if more sophisticated heuristics are available.
-function launch_heuristic(backend::AbstractGPUBackend, kernel, args...)
+#
+# the `maximize_blocksize` indicates whether the kernel benifits from a large block size
+function launch_heuristic(backend::AbstractGPUBackend, kernel, args...;
+                          maximize_blocksize=false)
     return (threads=256, blocks=32)
 end
 
