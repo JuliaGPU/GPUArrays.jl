@@ -67,9 +67,9 @@ function gpu_call(kernel::Base.Callable, args...;
 end
 
 function gpu_call(backend::AbstractGPUBackend, kernel, args, total_threads::Int; kwargs...)
-    config = launch_configuration(backend, kernel, args...)
-    heuristic = launch_heuristic(backend, config, total_threads)
-    gpu_call(backend, kernel, args, heuristic.threads, heuristic.blocks; kwargs...)
+    heuristic = launch_heuristic(backend, kernel, args...)
+    config = launch_configuration(backend, heuristic, total_threads)
+    gpu_call(backend, kernel, args, config.threads, config.blocks; kwargs...)
 end
 
 # bottom-line gpu_call method that is expected to be implemented by the back end
@@ -78,22 +78,22 @@ gpu_call(backend::AbstractGPUBackend, kernel, args, threads::Int, blocks::Int; k
 
 # how many threads and blocks this kernel need to fully saturate the GPU.
 # this can be specialised if more sophisticated heuristics are available.
-function launch_configuration(backend::AbstractGPUBackend, kernel, args...)
+function launch_heuristic(backend::AbstractGPUBackend, kernel, args...)
     return (threads=256, blocks=32)
 end
 
 # determine how many threads and blocks to actually launch given upper limits.
 # returns a tuple of blocks, threads, and elements_per_thread (which is always 1
 # unless specified that the kernel can handle a number of elements per thread)
-function launch_heuristic(backend::AbstractGPUBackend, config,
-                          elements::Int, elements_per_thread::Int=1)
-    threads = clamp(elements, 1, config.threads)
+function launch_configuration(backend::AbstractGPUBackend, heuristic,
+                              elements::Int, elements_per_thread::Int=1)
+    threads = clamp(elements, 1, heuristic.threads)
     blocks = max(cld(elements, threads), 1)
 
     if elements_per_thread == 1 || blocks < config.blocks
         (threads=threads, blocks=blocks, elements_per_thread=1)
     else
-        nelem = clamp(cld(blocks, config.blocks), 1, elements_per_thread)
+        nelem = clamp(cld(blocks, heuristic.blocks), 1, elements_per_thread)
         blocks = cld(blocks, nelem)
         (threads=threads, blocks=blocks, elements_per_thread=nelem)
     end
