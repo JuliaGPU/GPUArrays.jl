@@ -1,6 +1,6 @@
 # kernel execution
 
-export AbstractGPUBackend, AbstractKernelContext, gpu_call, thread_blocks_heuristic
+export AbstractGPUBackend, AbstractKernelContext, gpu_call
 
 abstract type AbstractGPUBackend end
 
@@ -58,7 +58,9 @@ function gpu_call(kernel::Base.Callable, args...;
 
     if total_threads !== nothing
         @assert total_threads > 0
-        gpu_call(backend(target), kernel, args, total_threads; name=name)
+        heuristic = launch_heuristic(backend(target), kernel, args...)
+        config = launch_configuration(backend(target), heuristic, total_threads)
+        gpu_call(backend(target), kernel, args, config.threads, config.blocks; name=name)
     else
         @assert threads > 0
         @assert blocks > 0
@@ -66,14 +68,35 @@ function gpu_call(kernel::Base.Callable, args...;
     end
 end
 
-# gpu_call method with a simple launch configuration heuristic.
+# how many threads and blocks this kernel need to fully saturate the GPU.
 # this can be specialised if more sophisticated heuristics are available.
-function gpu_call(backend::AbstractGPUBackend, kernel, args, total_threads::Int; kwargs...)
-    threads = clamp(total_threads, 1, 256)
-    blocks = max(ceil(Int, total_threads / threads), 1)
-
-    gpu_call(backend, kernel, args, threads, blocks; kwargs...)
+#
+# the `maximize_blocksize` indicates whether the kernel benifits from a large block size
+function launch_heuristic(backend::AbstractGPUBackend, kernel, args...;
+                          maximize_blocksize=false)
+    return (threads=256, blocks=32)
 end
 
-# bottom-line gpu_call method that is expected to be implemented by the back end
-gpu_call(backend::AbstractGPUBackend, kernel, args, threads::Int, blocks::Int; kwargs...) = error("Not implemented") # COV_EXCL_LINE
+# determine how many threads and blocks to actually launch given upper limits.
+# returns a tuple of blocks, threads, and elements_per_thread (which is always 1
+# unless specified that the kernel can handle a number of elements per thread)
+function launch_configuration(backend::AbstractGPUBackend, heuristic,
+                              elements::Int, elements_per_thread::Int=1)
+    threads = clamp(elements, 1, heuristic.threads)
+    blocks = max(cld(elements, threads), 1)
+
+    # FIXME: use grid-stride loop when we can't launch the number of blocks we need
+
+    if false && elements_per_thread > 1 && blocks > config.blocks
+        # we want to launch more blocks than required, so prefer a grid-stride loop instead
+        # NOTE: this does not seem to improve performance
+        nelem = clamp(cld(blocks, heuristic.blocks), 1, elements_per_thread)
+        blocks = cld(blocks, nelem)
+        (threads=threads, blocks=blocks, elements_per_thread=nelem)
+    else
+        (threads=threads, blocks=blocks, elements_per_thread=1)
+    end
+end
+
+gpu_call(backend::AbstractGPUBackend, kernel, args, threads::Int, blocks::Int; kwargs...) =
+    error("Not implemented") # COV_EXCL_LINE
