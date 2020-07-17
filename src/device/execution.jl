@@ -58,23 +58,15 @@ function gpu_call(kernel::Base.Callable, args...;
 
     if total_threads !== nothing
         @assert total_threads > 0
-        gpu_call(backend(target), kernel, args, total_threads; name=name)
+        heuristic = launch_heuristic(backend(target), kernel, args...)
+        config = launch_configuration(backend(target), heuristic, total_threads)
+        gpu_call(backend(target), kernel, args, config.threads, config.blocks; name=name)
     else
         @assert threads > 0
         @assert blocks > 0
         gpu_call(backend(target), kernel, args, threads, blocks; name=name)
     end
 end
-
-function gpu_call(backend::AbstractGPUBackend, kernel, args, total_threads::Int; kwargs...)
-    heuristic = launch_heuristic(backend, kernel, args...)
-    config = launch_configuration(backend, heuristic, total_threads)
-    gpu_call(backend, kernel, args, config.threads, config.blocks; kwargs...)
-end
-
-# bottom-line gpu_call method that is expected to be implemented by the back end
-gpu_call(backend::AbstractGPUBackend, kernel, args, threads::Int, blocks::Int; kwargs...) =
-    error("Not implemented") # COV_EXCL_LINE
 
 # how many threads and blocks this kernel need to fully saturate the GPU.
 # this can be specialised if more sophisticated heuristics are available.
@@ -106,3 +98,5 @@ function launch_configuration(backend::AbstractGPUBackend, heuristic,
     end
 end
 
+gpu_call(backend::AbstractGPUBackend, kernel, args, threads::Int, blocks::Int; kwargs...) =
+    error("Not implemented") # COV_EXCL_LINE
