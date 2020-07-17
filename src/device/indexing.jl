@@ -1,12 +1,23 @@
 # indexing
 
-export global_size, synchronize_threads, linear_index
+export global_index, global_size, linear_index, @linearidx, @cartesianidx
 
 
-# thread indexing functions
+## hardware
+
 for f in (:blockidx, :blockdim, :threadidx, :griddim)
     @eval $f(ctx::AbstractKernelContext)::Int = error("Not implemented") # COV_EXCL_LINE
     @eval export $f
+end
+
+"""
+    global_index(ctx::AbstractKernelContext)
+
+Query the global index of the current thread in the launch configuration (i.e. as far as the
+hardware is concerned).
+"""
+@inline function global_index(ctx::AbstractKernelContext)
+    threadidx(ctx) + (blockidx(ctx) - 1) * blockdim(ctx)
 end
 
 """
@@ -18,6 +29,9 @@ Query the global size of the launch configuration (total number of threads launc
     griddim(ctx) * blockdim(ctx)
 end
 
+
+## logical
+
 """
     linear_index(ctx::AbstractKernelContext, grididx::Int=1)
 
@@ -27,7 +41,7 @@ specify `grididx`.
 
 """
 @inline function linear_index(ctx::AbstractKernelContext, grididx::Int=1)
-    threadidx(ctx) + (blockidx(ctx) - 1) * blockdim(ctx) + (grididx - 1) * global_size(ctx)
+    global_index(ctx) + (grididx - 1) * global_size(ctx)
 end
 
 """
