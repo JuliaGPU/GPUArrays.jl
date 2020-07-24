@@ -29,8 +29,8 @@ Base.mapreduce(f, op, A::AbstractGPUArray, As::AbstractArrayOrBroadcasted...;
 Base.mapreduce(f, op, A::Broadcast.Broadcasted{<:AbstractGPUArrayStyle}, As::AbstractArrayOrBroadcasted...;
                dims=:, init=nothing) = _mapreduce(f, op, A, As...; dims=dims, init=init)
 
-function _mapreduce(f, op, As...; dims, init)
-    # mapreduce should apply `f` like `map` does, consuming elements like iterators.
+function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,N,D}
+    # mapreduce should apply `f` like `map` does, consuming elements like iterators
     bc = if allequal(size.(As)...)
         Broadcast.instantiate(Broadcast.broadcasted(f, As...))
     else
@@ -44,7 +44,7 @@ function _mapreduce(f, op, As...; dims, init)
     end
 
     # figure out the destination container type by looking at the initializer element,
-    # or by relying on inference to reason through the map and reduce functions.
+    # or by relying on inference to reason through the map and reduce functions
     if init === nothing
         ET = Broadcast.combine_eltypes(bc.f, bc.args)
         ET = Base.promote_op(op, ET, ET)
@@ -61,7 +61,7 @@ function _mapreduce(f, op, As...; dims, init)
     R = similar(bc, ET, red)
     mapreducedim!(identity, op, R, bc; init=init)
 
-    if dims==Colon()
+    if dims === Colon()
         @allowscalar R[]
     else
         R
