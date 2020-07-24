@@ -73,7 +73,7 @@ for T in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriang
 end
 
 function LinearAlgebra.tril!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
-  gpu_call(A, d) do ctx, _A, _d
+  gpu_call(A, d; name="tril!") do ctx, _A, _d
     I = @cartesianidx _A
     i, j = Tuple(I)
     if i < j - _d
@@ -85,7 +85,7 @@ function LinearAlgebra.tril!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
 end
 
 function LinearAlgebra.triu!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
-  gpu_call(A, d) do ctx, _A, _d
+  gpu_call(A, d; name="triu!") do ctx, _A, _d
     I = @cartesianidx _A
     i, j = Tuple(I)
     if j < i + _d
@@ -115,7 +115,7 @@ function generic_matmatmul!(C::AbstractOrWrappedGPUArray{R}, A::AbstractOrWrappe
     B′ = reshape(B, (size(B,1), size(B,2)))
     C′= reshape(C, (size(C,1), size(C,2)))
 
-    gpu_call(C′, A′, B′) do ctx, C, A, B
+    gpu_call(C′, A′, B′; name="matmatmul!") do ctx, C, A, B
         idx = @linearidx C
         i, j = Tuple(CartesianIndices(C)[idx])
 
@@ -174,7 +174,7 @@ end
 
 
 function generic_rmul!(X::AbstractGPUArray, s::Number)
-    gpu_call(X, s) do ctx, X, s
+    gpu_call(X, s; name="rmul!") do ctx, X, s
         i = @linearidx X
         @inbounds X[i] *= s
         return
@@ -185,7 +185,7 @@ end
 LinearAlgebra.rmul!(A::AbstractGPUArray, b::Number) = generic_rmul!(A, b)
 
 function generic_lmul!(s::Number, X::AbstractGPUArray)
-    gpu_call(X, s) do ctx, X, s
+    gpu_call(X, s; name="lmul!") do ctx, X, s
         i = @linearidx X
         @inbounds X[i] = s*X[i]
         return
@@ -204,7 +204,7 @@ end
 
 function LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) where N
     perm isa Tuple || (perm = Tuple(perm))
-    gpu_call(dest, src, perm) do ctx, dest, src, perm
+    gpu_call(dest, src, perm; name="permutedims!") do ctx, dest, src, perm
         I = @cartesianidx src
         @inbounds dest[genperm(I, perm)] = src[I]
         return
