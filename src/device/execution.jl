@@ -36,12 +36,12 @@ host to influence how the kernel is executed. The following keyword arguments ar
 - `name::String`: inform the back end about the name of the kernel to be executed.
   This can be used to emit better diagnostics, and is useful with anonymous kernels.
 """
-function gpu_call(kernel::Base.Callable, args...;
+function gpu_call(kernel::F, args::Vararg{Any,N};
                   target::AbstractArray=first(args),
                   total_threads::Union{Int,Nothing}=nothing,
                   threads::Union{Int,Nothing}=nothing,
                   blocks::Union{Int,Nothing}=nothing,
-                  name::Union{String,Nothing}=nothing)
+                  name::Union{String,Nothing}=nothing) where {F,N}
     # non-trivial default values for launch configuration
     if total_threads===nothing && threads===nothing && blocks===nothing
         total_threads = length(target)
