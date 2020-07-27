@@ -60,18 +60,7 @@ struct RNG <: AbstractRNG
     state::AbstractGPUArray{NTuple{4,UInt32},1}
 end
 
-const GLOBAL_RNGS = Dict()
-function global_rng(AT::Type{<:AbstractGPUArray}, dev)
-    get!(GLOBAL_RNGS, dev) do
-        N = GPUArrays.threads(dev)
-        AT = Base.typename(AT).wrapper
-        state = AT{NTuple{4, UInt32}}(undef, N)
-        rng = RNG(state)
-        Random.seed!(rng)
-        rng
-    end
-end
-global_rng(A::AT) where {AT <: AbstractGPUArray} = global_rng(AT, GPUArrays.device(A))
+default_rng(::AbstractGPUDevice) = error("Not implemented") # COV_EXCL_LINE
 
 make_seed(rng::RNG) = make_seed(rng, rand(UInt))
 function make_seed(rng::RNG, n::Integer)
@@ -112,5 +101,5 @@ function Random.randn!(rng::RNG, A::AbstractGPUArray{T}) where T <: Number
     A
 end
 
-Random.rand!(A::AbstractGPUArray) = rand!(global_rng(A), A)
-Random.randn!(A::AbstractGPUArray) = randn!(global_rng(A), A)
+Random.rand!(A::AbstractGPUArray) = rand!(default_rng(device(A)), A)
+Random.randn!(A::AbstractGPUArray) = randn!(default_rng(device(A)), A)

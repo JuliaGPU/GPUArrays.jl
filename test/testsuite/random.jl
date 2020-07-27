@@ -9,7 +9,8 @@
             rand!(B)
             @test !any(A .== B)
 
-            rng = GPUArrays.global_rng(A)
+            dev = GPUArrays.device(A)
+            rng = GPUArrays.default_rng(dev)
             Random.seed!(rng)
             Random.seed!(rng, 1)
             rand!(rng, A)
@@ -18,7 +19,7 @@
             @test all(A .== B)
         end
     end
-    
+
     @testset "randn" begin  # uniform
         for T in (Float32, Float64), d in (2, (2,2))
             A = AT{T}(undef, d)
@@ -27,7 +28,8 @@
             randn!(B)
             @test !any(A .== B)
 
-            rng = GPUArrays.global_rng(A)
+            dev = GPUArrays.device(A)
+            rng = GPUArrays.default_rng(dev)
             Random.seed!(rng)
             Random.seed!(rng, 1)
             randn!(rng, A)

@@ -20,7 +20,7 @@ using Adapt
 
 struct JLDevice <: AbstractGPUDevice end
 
-GPUArrays.threads(dev::JLDevice) = 256
+const MAXTHREADS = 256
 
 
 ## execution
@@ -291,6 +291,22 @@ AbstractFFTs.plan_ifft(A::JLArray; kw_args...) = FFTPlan(plan_ifft(A.data; kw_ar
 function Base.:(*)(plan::FFTPlan, A::JLArray)
     x = plan.p * A.data
     JLArray(x)
+end
+
+
+## Random
+
+using Random
+
+const DEVICE_RNGs = Dict{JLDevice,GPUArrays.RNG}()
+function GPUArrays.default_rng(dev::JLDevice)
+    get!(DEVICE_RNGs, dev) do
+        N = MAXTHREADS
+        state = JLArray{NTuple{4, UInt32}}(undef, N)
+        rng = GPUArrays.RNG(state)
+        Random.seed!(rng)
+        rng
+    end
 end
 
 
