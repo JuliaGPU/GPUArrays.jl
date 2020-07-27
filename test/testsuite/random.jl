@@ -9,8 +9,7 @@
             rand!(B)
             @test !any(A .== B)
 
-            dev = GPUArrays.device(A)
-            rng = GPUArrays.default_rng(dev)
+            rng = GPUArrays.default_rng(AT)
             Random.seed!(rng)
             Random.seed!(rng, 1)
             rand!(rng, A)
@@ -28,8 +27,7 @@
             randn!(B)
             @test !any(A .== B)
 
-            dev = GPUArrays.device(A)
-            rng = GPUArrays.default_rng(dev)
+            rng = GPUArrays.default_rng(AT)
             Random.seed!(rng)
             Random.seed!(rng, 1)
             randn!(rng, A)

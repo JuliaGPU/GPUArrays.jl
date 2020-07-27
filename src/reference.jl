@@ -298,15 +298,16 @@ end
 
 using Random
 
-const DEVICE_RNGs = Dict{JLDevice,GPUArrays.RNG}()
-function GPUArrays.default_rng(dev::JLDevice)
-    get!(DEVICE_RNGs, dev) do
+const GLOBAL_RNG = Ref{Union{Nothing,GPUArrays.RNG}}(nothing)
+function GPUArrays.default_rng(::Type{<:JLArray})
+    if GLOBAL_RNG[] == nothing
         N = MAXTHREADS
         state = JLArray{NTuple{4, UInt32}}(undef, N)
         rng = GPUArrays.RNG(state)
         Random.seed!(rng)
-        rng
+        GLOBAL_RNG[] = rng
     end
+    GLOBAL_RNG[]
 end
 
 

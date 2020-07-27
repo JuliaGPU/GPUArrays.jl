@@ -60,7 +60,7 @@ struct RNG <: AbstractRNG
     state::AbstractGPUArray{NTuple{4,UInt32},1}
 end
 
-default_rng(::AbstractGPUDevice) = error("Not implemented") # COV_EXCL_LINE
+default_rng(::Type{<:AbstractGPUArray}) = error("Not implemented") # COV_EXCL_LINE
 
 make_seed(rng::RNG) = make_seed(rng, rand(UInt))
 function make_seed(rng::RNG, n::Integer)
@@ -101,5 +101,5 @@ function Random.randn!(rng::RNG, A::AbstractGPUArray{T}) where T <: Number
     A
 end
 
-Random.rand!(A::AbstractGPUArray) = rand!(default_rng(device(A)), A)
-Random.randn!(A::AbstractGPUArray) = randn!(default_rng(device(A)), A)
+Random.rand!(A::AbstractGPUArray) = rand!(default_rng(typeof(A)), A)
+Random.randn!(A::AbstractGPUArray) = randn!(default_rng(typeof(A)), A)
