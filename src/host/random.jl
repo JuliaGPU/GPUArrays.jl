@@ -60,6 +60,7 @@ struct RNG <: AbstractRNG
     state::AbstractGPUArray{NTuple{4,UInt32},1}
 end
 
+# return an instance of GPUArrays.RNG suitable for the requested array type
 default_rng(::Type{<:AbstractGPUArray}) = error("Not implemented") # COV_EXCL_LINE
 
 make_seed(rng::RNG) = make_seed(rng, rand(UInt))
@@ -100,6 +101,3 @@ function Random.randn!(rng::RNG, A::AbstractGPUArray{T}) where T <: Number
     end
     A
 end
-
-Random.rand!(A::AbstractGPUArray) = rand!(default_rng(typeof(A)), A)
-Random.randn!(A::AbstractGPUArray) = randn!(default_rng(typeof(A)), A)
