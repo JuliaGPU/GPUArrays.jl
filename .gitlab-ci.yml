@@ -2,38 +2,10 @@ include:
   - 'https://raw.githubusercontent.com/JuliaGPU/gitlab-ci/master/templates/v6.yml'
 
 
-# Julia versions
+# CUDA.jl
 
-julia:1.3:
-  extends:
-    - .julia:1.3
-    - .test
-
-julia:1.4:
-  extends:
-    - .julia:1.4
-    - .test
-
-julia:nightly:
-  extends:
-    - .julia:nightly
-    - .test
-  allow_failure: true
-
-
-# reverse tests
-
-cuda:
-  extends:
-    - .julia:1.4
-    - .test
-  tags:
-    - nvidia
-  variables:
-    JULIA_NUM_THREADS: '2'
-    NVIDIA_VISIBLE_DEVICES: 'all'
-    NVIDIA_DRIVER_CAPABILITIES: 'compute,utility'
-    JULIA_CUDA_USE_BINARYBUILDER: 'false' # reduce CI network traffic
+.test_cuda:
+  extends: .test
   script:
     - julia -e 'using Pkg;
                 Pkg.develop(PackageSpec(path=pwd()));
@@ -42,10 +14,10 @@ cuda:
                 Pkg.add(PackageSpec(name="CUDA", rev="master"));
                 Pkg.test("CUDA");'
 
-
-# other tasks
-
-coverage:
+cuda:1.5:
   extends:
-    - .julia:1.4
-    - .coverage
+    - .julia:1.5
+    - .test_cuda
+  tags:
+    - nvidia
+  allow_failure: true
