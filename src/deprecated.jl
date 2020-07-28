@@ -1,1 +1,0 @@
-function synchronize end
