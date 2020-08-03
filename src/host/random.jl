@@ -37,7 +37,7 @@ end
 
 function gpu_rand(::Type{T}, ctx::AbstractKernelContext, randstate::AbstractVector{NTuple{4, UInt32}}) where T <: Integer
     threadid = GPUArrays.threadidx(ctx)
-    result = T(0)
+    result = zero(T)
     if sizeof(T) >= 4
         for _ in 1:sizeof(T) >> 2
             randstate[threadid], y = next_rand(randstate[threadid])
