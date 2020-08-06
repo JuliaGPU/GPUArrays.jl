@@ -17,6 +17,12 @@
             rand!(rng, B)
             @test all(A .== B)
         end
+
+        # TODO: Remove @allowscalar once `in` is implemented
+        A = AT{Bool}(undef, 5)
+        rand!(A)
+        @test @allowscalar true in A
+        @test @allowscalar false in A
     end
 
     @testset "randn" begin  # uniform
