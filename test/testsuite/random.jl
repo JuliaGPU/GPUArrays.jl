@@ -1,6 +1,6 @@
 @testsuite "random" AT->begin
     @testset "rand" begin  # uniform
-        for T in (Float32, Float64, Int64, Int32,
+        for T in (Int8, Float32, Float64, Int64, Int32,
                     Complex{Float32}, Complex{Float64},
                     Complex{Int64}, Complex{Int32}), d in (2, (2,2))
             A = AT{T}(undef, d)
@@ -17,6 +17,11 @@
             rand!(rng, B)
             @test all(A .== B)
         end
+
+        A = AT{Bool}(undef, 5)
+        rand!(A)
+        @test true in Array(A)
+        @test false in Array(A)
     end
 
     @testset "randn" begin  # uniform
