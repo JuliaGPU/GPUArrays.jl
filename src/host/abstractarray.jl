@@ -176,27 +176,40 @@ function Base.copyto!(dest::AbstractOrWrappedGPUArray{<:Any, N}, destcrange::Car
     dest
 end
 
-# XXX: these generalizations between non-linear CPU and GPU memory are very inefficient,
-#       because it first materializes as linear memory.
-# TODO: loop over linear sections of memory and perform linear copies
+for (dstTyp, srcTyp) in (AbstractGPUArray=>Array, Array=>AbstractGPUArray)
+    @eval function Base.copyto!(dst::$dstTyp{T,N}, dstrange::CartesianIndices{N},
+                                src::$srcTyp{T,N}, srcrange::CartesianIndices{N}) where {T,N}
+        isempty(dstrange) && return dst
+        if size(dstrange) != size(srcrange)
+            throw(ArgumentError("source and destination must have same size (got $(size(srcrange)) and $(size(dstrange)))"))
+        end
 
-# NOTE: typed with Array because of ambiguities
+        # figure out how many dimensions of the Cartesian ranges map onto contiguous memory
+        # in both source and destination. we will copy these one by one as linear ranges.
+        contiguous_dims = 1
+        for dim in 2:N
+            # a slice is broken up if the previous dimension didn't cover the entire range
+            if axes(src, dim-1) == axes(srcrange, dim-1) &&
+            axes(dst, dim-1) == axes(dstrange, dim-1)
+                contiguous_dims = dim
+            else
+                break
+            end
+        end
 
-function Base.copyto!(dest::AbstractGPUArray{T, N}, destcrange::CartesianIndices{N},
-                      src::Array{T, N}, srccrange::CartesianIndices{N}) where {T, N}
-    src_gpu = typeof(dest)(map(idx-> src[idx], srccrange))
-    nrange = CartesianIndices(size(src_gpu))
-    copyto!(dest, destcrange, src_gpu, nrange)
-    dest
-end
+        m = prod(size(dstrange)[1:contiguous_dims])       # inner, contiguous length
+        n = prod(size(dstrange)[contiguous_dims+1:end])   # outer non-contiguous length
+        @assert m*n == length(srcrange) == length(dstrange)
 
-function Base.copyto!(dest::Array{T, N}, destcrange::CartesianIndices{N},
-                      src::AbstractGPUArray{T, N}, srccrange::CartesianIndices{N}) where {T, N}
-    dest_gpu = similar(src, size(destcrange))
-    nrange = CartesianIndices(size(dest_gpu))
-    copyto!(dest_gpu, nrange, src, srccrange)
-    copyto!(dest, destcrange, Array(dest_gpu), nrange)
-    dest
+        # copy linear slices
+        for i in 1:m:m*n
+            srcoff = LinearIndices(src)[srcrange[i]]
+            dstoff = LinearIndices(dst)[dstrange[i]]
+            copyto!(dst, dstoff, src, srcoff, m)
+        end
+
+        dst
+    end
 end
 
 ## other
