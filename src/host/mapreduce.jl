@@ -78,9 +78,14 @@ Base.count(pred::Function, A::AbstractGPUArray) = mapreduce(pred, +, A; init = 0
 Base.:(==)(A::AbstractGPUArray, B::AbstractGPUArray) = Bool(mapreduce(==, &, A, B))
 
 # avoid calling into `initarray!`
-Base.sum!(R::AbstractGPUArray, A::AbstractGPUArray) = Base.reducedim!(Base.add_sum, R, A)
-Base.prod!(R::AbstractGPUArray, A::AbstractGPUArray) = Base.reducedim!(Base.mul_prod, R, A)
-Base.maximum!(R::AbstractGPUArray, A::AbstractGPUArray) = Base.reducedim!(max, R, A)
-Base.minimum!(R::AbstractGPUArray, A::AbstractGPUArray) = Base.reducedim!(min, R, A)
+for (fname, op) in [(:sum, :(Base.add_sum)), (:prod, :(Base.mul_prod)),
+                    (:maximum, :(Base.max)), (:minimum, :(Base.min)),
+                    (:all, :&),              (:any, :|)]
+    fname! = Symbol(fname, '!')
+    @eval begin
+        Base.$(fname!)(f::Function, r::AbstractGPUArray, A::AbstractGPUArray{T}) where T =
+            GPUArrays.mapreducedim!(f, $(op), r, A; init=neutral_element($(op), T))
+    end
+end
 
 LinearAlgebra.ishermitian(A::AbstractGPUMatrix) = mapreduce(==, &, A, adjoint(A))

@@ -85,8 +85,8 @@ end
         # smaller-scale test to avoid very large values and roundoff issues
         for (sz,red) in [(2,)=>(1,), (2,2)=>(1,1), (2,2,2)=>(1,1,1), (2,2,2)=>(2,2,2),
                          (2,2,2)=>(1,2,2), (2,2,2)=>(2,1,2), (2,2,2)=>(2,2,1)]
-            @test compare((A,R)->sum!(R, A), AT, rand(range, sz), zeros(OT, red))
-            @test compare((A,R)->prod!(R, A), AT, rand(range, sz), ones(OT, red))
+            @test compare((A,R)->sum!(R, A), AT, rand(range, sz), rand(OT, red))
+            @test compare((A,R)->prod!(R, A), AT, rand(range, sz), rand(OT, red))
         end
     end
     end
