@@ -205,6 +205,7 @@ for (dstTyp, srcTyp) in (AbstractGPUArray=>Array, Array=>AbstractGPUArray)
         for i in 1:m:m*n
             srcoff = LinearIndices(src)[srcrange[i]]
             dstoff = LinearIndices(dst)[dstrange[i]]
+            # TODO: Use asynchronous memory copies
             copyto!(dst, dstoff, src, srcoff, m)
         end
 
