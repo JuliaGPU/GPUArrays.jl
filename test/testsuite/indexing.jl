@@ -57,14 +57,14 @@
             y = AT{T}(undef, 5, 5, 10, 10)
             rand!(y)
             x[2:6, 2:6, :, :] = y
-            x[2:6, 2:6, :, :] == y
+            @test Array(x[2:6, 2:6, :, :]) == Array(y)
         end
         @testset "multi dim, sliced setindex, CPU source" begin
             x = fill(AT{T}, T(0), (2,3,4))
             y = Array{T}(undef, 2,3)
             rand!(y)
             x[:, :, 2] = y
-            x[:, :, 2] == y
+            @test x[:, :, 2] == y
         end
     end
 
@@ -93,7 +93,7 @@
             @test A[1, 1] == Ac[1, 1]
         end
     end
-    @allowscalar for T in (Float32, Int32)
+    for T in (Float32, Int32)
         @testset "Colon() $T" begin
             Ac = rand(T, 10)
             A = AT(Ac)
