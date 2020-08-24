@@ -198,8 +198,17 @@ JLArray(A::AbstractArray{T,N}) where {T,N} = JLArray{T,N}(A)
 # idempotency
 JLArray{T,N}(xs::JLArray{T,N}) where {T,N} = xs
 
+# adapt for the GPU
 jl(xs) = adapt(JLArray, xs)
-Adapt.adapt_storage(::Type{JLArray}, xs::AbstractArray) = convert(JLArray, xs)
+## don't convert isbits types since they are already considered GPU-compatible
+Adapt.adapt_storage(::Type{JLArray}, xs::AbstractArray) =
+  isbits(xs) ? xs : convert(JLArray, xs)
+## if an element type is specified, convert to it
+Adapt.adapt_storage(::Type{<:JLArray{T}}, xs::AbstractArray) where {T} =
+  isbits(xs) ? xs : convert(JLArray{T}, xs)
+
+# adapt back to the CPU
+Adapt.adapt_storage(::Type{Array}, xs::JLArray) = convert(Array, xs)
 
 
 ## conversions
