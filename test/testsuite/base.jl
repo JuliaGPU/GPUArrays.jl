@@ -101,6 +101,18 @@ end
             ## (this was broken on Julia <1.5)
             @test compare((x,y)->copyto!(y, selectdim(x, 2, 1)), AT, ones(2,2,2), zeros(3,3))
         end
+
+        # mismatched types
+        let src = rand(Float32, 4)
+            dst = AT{Float64}(undef, size(src))
+            copyto!(dst, src)
+            @test Array(dst) == src
+        end
+        let dst = Array{Float64}(undef, 4)
+            src = AT(rand(Float32, size(dst)))
+            copyto!(dst, src)
+            @test Array(src) == dst
+        end
     end
 
     @testset "vcat + hcat" begin

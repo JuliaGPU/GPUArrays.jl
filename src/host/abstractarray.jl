@@ -148,6 +148,28 @@ function Base.copyto!(dest::WrappedGPUArray, dstart::Integer,
     return dest
 end
 
+# variants that converts values on the CPU when there's a type mismatch
+#
+# we prefer to convert on the CPU where there's typically more memory / less memory pressure
+# to quickly perform these very lightweight conversions
+
+function Base.copyto!(dest::Array{T}, dstart::Integer,
+                      src::AbstractOrWrappedGPUArray{U}, sstart::Integer,
+                      n::Integer) where {T,U}
+    temp = Vector{U}(undef, n)
+    copyto!(temp, 1, src, sstart, n)
+    copyto!(dest, dstart, temp, 1, n)
+    return dest
+end
+
+function Base.copyto!(dest::AbstractOrWrappedGPUArray{T}, dstart::Integer,
+                      src::Array{U}, sstart::Integer, n::Integer) where {T,U}
+    temp = Vector{T}(undef, n)
+    copyto!(temp, 1, src, sstart, n)
+    copyto!(dest, dstart, temp, 1, n)
+    return dest
+end
+
 ## generalized blocks of heterogeneous memory
 
 function cartesian_copy_kernel!(ctx::AbstractKernelContext, dest, dest_offsets, src, src_offsets, shape, length)
