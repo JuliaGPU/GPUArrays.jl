@@ -133,4 +133,13 @@
             a[:, 2:end-2] = AT{Float32}(undef,2,0)
         end
     end
+
+    @testset "indexing with indirect CPU source" begin
+        # JuliaGPU/CUDA.jl#345
+        a = rand(3,4)
+        i = rand(1:3,2,2)
+        @test compare(a->a[i,:], AT, a)
+        @test compare(a->a[i',:], AT, a)
+        @test compare(a->a[view(i,1,:),:], AT, a)
+    end
 end

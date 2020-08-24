@@ -88,19 +88,21 @@ function allowscalar(f::Base.Callable, allow::Bool=true, warn::Bool=false)
 end
 
 
-# basic indexing
+# basic indexing with integers
 
 Base.IndexStyle(::Type{<:AbstractGPUArray}) = Base.IndexLinear()
 
-function Base.getindex(xs::AbstractGPUArray{T}, i::Integer) where T
+function Base.getindex(xs::AbstractGPUArray{T}, I::Integer...) where T
     assertscalar("scalar getindex")
+    i = Base._to_linear_index(xs, I...)
     x = Array{T}(undef, 1)
     copyto!(x, 1, xs, i, 1)
     return x[1]
 end
 
-function Base.setindex!(xs::AbstractGPUArray{T}, v::T, i::Integer) where T
+function Base.setindex!(xs::AbstractGPUArray{T}, v::T, I::Integer...) where T
     assertscalar("scalar setindex!")
+    i = Base._to_linear_index(xs, I...)
     x = T[v]
     copyto!(xs, i, x, 1, 1)
     return xs
@@ -109,12 +111,15 @@ end
 Base.setindex!(xs::AbstractGPUArray, v, i::Integer) = xs[i] = convert(eltype(xs), v)
 
 
-# Vector indexing
+# basic indexing with cartesian indices
 
-to_index(a, x) = x
-to_index(a::A, x::Array{ET}) where {A, ET} = copyto!(similar(a, ET, size(x)...), x)
-to_index(a, x::UnitRange{<: Integer}) = convert(UnitRange{Int}, x)
-to_index(a, x::Base.LogicalIndex) = error("Logical indexing not implemented")
+Base.@propagate_inbounds Base.getindex(A::AbstractGPUArray, I::Union{Integer, CartesianIndex}...) =
+    A[Base.to_indices(A, I)...]
+Base.@propagate_inbounds Base.setindex!(A::AbstractGPUArray, v, I::Union{Integer, CartesianIndex}...) =
+    (A[Base.to_indices(A, I)...] = v; A)
+
+
+# generalized multidimensional indexing
 
 @generated function index_kernel(ctx::AbstractKernelContext, dest::AbstractArray, src::AbstractArray, idims, Is)
     N = length(Is.parameters)
@@ -127,12 +132,18 @@ to_index(a, x::Base.LogicalIndex) = error("Logical indexing not implemented")
     end
 end
 
-function Base._unsafe_getindex!(dest::AbstractGPUArray, src::AbstractGPUArray, Is::Union{Real, AbstractArray}...)
-    if any(isempty, Is) # indexing with empty array
-        return dest
-    end
+function Base.getindex(A::AbstractGPUArray, I...)
+    _getindex(A, to_indices(A, I)...)
+end
+
+function _getindex(src::AbstractGPUArray, Is...)
+    shape = Base.index_shape(Is...)
+    dest = similar(src, shape)
+    any(isempty, Is) && return dest # indexing with empty array
     idims = map(length, Is)
-    gpu_call(index_kernel, dest, src, idims, map(x-> to_index(dest, x), Is))
+    AT = typeof(src).name.wrapper
+    # NOTE: we are pretty liberal here supporting non-GPU indices...
+    gpu_call(index_kernel, dest, src, idims, adapt(AT, Is))
     return dest
 end
 
@@ -152,13 +163,18 @@ end
     end
 end
 
-function Base._unsafe_setindex!(::IndexStyle, dest::T, src, Is::Union{Real, AbstractArray}...) where T <: AbstractGPUArray
+function Base.setindex!(A::AbstractGPUArray, v, I...)
+    _setindex!(A, v, to_indices(A, I)...)
+end
+
+function _setindex!(dest::AbstractGPUArray, src, Is...)
     isempty(Is) && return dest
     idims = length.(Is)
     len = prod(idims)
     len==0 && return dest
-    src_gpu = adapt(T, src)
-    gpu_call(setindex_kernel!, dest, src_gpu, idims, map(x-> to_index(dest, x), Is), len;
+    AT = typeof(dest).name.wrapper
+    # NOTE: we are pretty liberal here supporting non-GPU sources and indices...
+    gpu_call(setindex_kernel!, dest, adapt(AT, src), idims, adapt(AT, Is), len;
              total_threads=len)
     return dest
 end
