@@ -79,8 +79,6 @@
             src[1:3] = T[77, 22, 11]
             @test Array(src[1:3]) == T[77, 22, 11]
             src[1] = T(0)
-            src[2:end] = T(77)
-            @test Array(src) == T[0, 77, 77, 77, 77, 77, 77]
         end
     end
 
@@ -91,16 +89,6 @@
             @test A[1] == Ac[1]
             @test A[end] == Ac[end]
             @test A[1, 1] == Ac[1, 1]
-        end
-    end
-    for T in (Float32, Int32)
-        @testset "Colon() $T" begin
-            Ac = rand(T, 10)
-            A = AT(Ac)
-            A[:] = T(1)
-            @test all(x-> x == 1, A)
-            A[:] = AT(Ac)
-            @test Array(A) == Ac
         end
     end
 

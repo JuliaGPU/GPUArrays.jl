@@ -147,10 +147,6 @@ function _getindex(src::AbstractGPUArray, Is...)
     return dest
 end
 
-# FIXME: simple broadcast getindex like function... reuse from Base
-@inline bgetindex(x::AbstractArray, i) = x[i]
-@inline bgetindex(x, i) = x
-
 @generated function setindex_kernel!(ctx::AbstractKernelContext, dest::AbstractArray, src, idims, Is, len)
     N = length(Is.parameters)
     idx = ntuple(i-> :(Is[$i][is[$i]]), N)
@@ -158,7 +154,7 @@ end
         i = linear_index(ctx)
         i > len && return
         is = CartesianIndices(idims)[i]
-        @inbounds setindex!(dest, bgetindex(src, i), $(idx...))
+        @inbounds setindex!(dest, src[is], $(idx...))
         return
     end
 end
