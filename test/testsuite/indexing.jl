@@ -57,14 +57,14 @@
             y = AT{T}(undef, 5, 5, 10, 10)
             rand!(y)
             x[2:6, 2:6, :, :] = y
-            x[2:6, 2:6, :, :] == y
+            @test Array(x[2:6, 2:6, :, :]) == Array(y)
         end
         @testset "multi dim, sliced setindex, CPU source" begin
             x = fill(AT{T}, T(0), (2,3,4))
             y = Array{T}(undef, 2,3)
             rand!(y)
             x[:, :, 2] = y
-            x[:, :, 2] == y
+            @test x[:, :, 2] == y
         end
     end
 
@@ -79,8 +79,6 @@
             src[1:3] = T[77, 22, 11]
             @test Array(src[1:3]) == T[77, 22, 11]
             src[1] = T(0)
-            src[2:end] = T(77)
-            @test Array(src) == T[0, 77, 77, 77, 77, 77, 77]
         end
     end
 
@@ -91,16 +89,6 @@
             @test A[1] == Ac[1]
             @test A[end] == Ac[end]
             @test A[1, 1] == Ac[1, 1]
-        end
-    end
-    @allowscalar for T in (Float32, Int32)
-        @testset "Colon() $T" begin
-            Ac = rand(T, 10)
-            A = AT(Ac)
-            A[:] = T(1)
-            @test all(x-> x == 1, A)
-            A[:] = AT(Ac)
-            @test Array(A) == Ac
         end
     end
 
@@ -132,5 +120,14 @@
         @test compare(AT, rand(Float32, 2,2)) do a
             a[:, 2:end-2] = AT{Float32}(undef,2,0)
         end
+    end
+
+    @testset "indexing with indirect CPU source" begin
+        # JuliaGPU/CUDA.jl#345
+        a = rand(3,4)
+        i = rand(1:3,2,2)
+        @test compare(a->a[i,:], AT, a)
+        @test compare(a->a[i',:], AT, a)
+        @test compare(a->a[view(i,1,:),:], AT, a)
     end
 end
