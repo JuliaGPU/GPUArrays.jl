@@ -79,8 +79,8 @@ for (D, S) in ((AbstractOrWrappedGPUArray, Array),
                (Array, AbstractOrWrappedGPUArray),
                (AbstractOrWrappedGPUArray, AbstractOrWrappedGPUArray))
     @eval begin
-        function Base.copyto!(dest::$D{<:Any, N}, rdest::NTuple{N, UnitRange},
-                              src::$S{<:Any, N}, ssrc::NTuple{N, UnitRange}) where {N}
+        function Base.copyto!(dest::$D{<:Any, N}, rdest::UnitRange,
+                              src::$S{<:Any, N}, ssrc::UnitRange) where {N}
             drange = CartesianIndices(rdest)
             srange = CartesianIndices(ssrc)
             copyto!(dest, drange, src, srange)
@@ -185,7 +185,7 @@ function Base.copyto!(dest::AbstractOrWrappedGPUArray{<:Any, N}, destcrange::Car
                       src::AbstractOrWrappedGPUArray{<:Any, N}, srccrange::CartesianIndices{N}) where {N}
     shape = size(destcrange)
     if shape != size(srccrange)
-        throw(DimensionMismatch("Ranges don't match their size. Found: $shape, $(size(srccrange))"))
+        throw(ArgumentError("Ranges don't match their size. Found: $shape, $(size(srccrange))"))
     end
     len = length(destcrange)
     len == 0 && return dest
@@ -298,20 +298,20 @@ function reinterpret(::Type{T}, a::AbstractGPUArray{S}, dims::NTuple{N, Integer}
     end
     nel = div(length(a)*sizeof(S),sizeof(T))
     if prod(dims) != nel
-        throw(DimensionMismatch("new dimensions $(dims) must be consistent with array size $(nel)"))
+        throw(ArgumentError("new dimensions $(dims) must be consistent with array size $(nel)"))
     end
     unsafe_reinterpret(T, a, dims)
 end
 
 function Base._reshape(A::AbstractGPUArray{T}, dims::Dims) where T
     n = length(A)
-    prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
+    prod(dims) == n || throw(ArgumentError("parent has $n elements, which is incompatible with size $dims"))
     return unsafe_reinterpret(T, A, dims)
 end
 #ambig
 function Base._reshape(A::AbstractGPUArray{T, 1}, dims::Tuple{Integer}) where T
     n = Base._length(A)
-    prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
+    prod(dims) == n || throw(ArgumentError("parent has $n elements, which is incompatible with size $dims"))
     return unsafe_reinterpret(T, A, dims)
 end
 

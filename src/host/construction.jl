@@ -1,13 +1,5 @@
 # constructors and conversions
 
-function Base.fill(X::Type{<: AbstractGPUArray}, val::T, dims::NTuple{N, Integer}) where {T, N}
-    res = similar(X{T}, dims)
-    fill!(res, val)
-end
-function Base.fill(X::Type{<: AbstractGPUArray{T}}, val, dims::NTuple{N, Integer}) where {T, N}
-    res = similar(X, dims)
-    fill!(res, convert(T, val))
-end
 function Base.fill!(A::AbstractGPUArray{T}, x) where T
     length(A) == 0 && return A
     gpu_call(A, convert(T, x)) do ctx, a, val
@@ -18,9 +10,6 @@ function Base.fill!(A::AbstractGPUArray{T}, x) where T
     A
 end
 
-Base.zeros(T::Type{<: AbstractGPUArray}, dims::NTuple{N, Integer}) where N = fill(T, zero(eltype(T)), dims)
-Base.ones(T::Type{<: AbstractGPUArray}, dims::NTuple{N, Integer}) where N = fill(T, one(eltype(T)), dims)
-
 function uniformscaling_kernel(ctx::AbstractKernelContext, res::AbstractArray{T}, stride, s::UniformScaling) where T
     i = linear_index(ctx)
     i > stride && return
@@ -30,7 +19,8 @@ function uniformscaling_kernel(ctx::AbstractKernelContext, res::AbstractArray{T}
 end
 
 function (T::Type{<: AbstractGPUArray{U}})(s::UniformScaling, dims::Dims{2}) where {U}
-    res = zeros(T, dims)
+    res = similar(T, dims)
+    fill!(res, zero(U))
     gpu_call(uniformscaling_kernel, res, size(res, 1), s; total_threads=minimum(dims))
     res
 end
