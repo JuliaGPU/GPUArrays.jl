@@ -51,7 +51,7 @@
             @test size(B) == (7,)
             @test eltype(B) == T
 
-            B = similar(Broadcast.Broadcasted(*, (B, B)), Int32, 11, 15)
+            B = similar(Broadcast.Broadcasted(*, (B, B)), Int32, (11, 15))
             @test B isa AT{Int32,2}
             @test size(B) == (11, 15)
             @test eltype(B) == Int32
@@ -62,6 +62,7 @@
             @test eltype(B) == T
         end
     end
+
     @testset "comparison against Array" begin
         for typs in [(), (Int,), (Int,1), (Int,2), (Float32,), (Float32,1), (Float32,2)],
             args in [(), (1,), (1,2), ((1,),), ((1,2),),
