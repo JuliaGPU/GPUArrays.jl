@@ -30,6 +30,15 @@ function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
     collect(cpu_out) ≈ collect(gpu_out)
 end
 
+function compare(f, AT::Type{<:Array}, xs...; kwargs...)
+    # no need to actually run this tests: we have nothing to compoare against,
+    # and we'll run it on a CPU array anyhow when comparing to a GPU array.
+    #
+    # this method exists so that we can at least run the test suite with Array,
+    # and make sure we cover other tests (that don't call `compare`) too.
+    return true
+end
+
 function supported_eltypes()
     (Float32, Float64, Int32, Int64, ComplexF32, ComplexF64)
 end
@@ -64,7 +73,7 @@ include("testsuite/uniformscaling.jl")
 """
 Runs the entire GPUArrays test suite on array type `AT`
 """
-function test(AT::Type{<:AbstractGPUArray})
+function test(AT::Type)
     for (name, fun) in tests
         code = quote
             $fun($AT)

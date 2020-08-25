@@ -10,3 +10,7 @@ include("testsuite.jl")
     JLArrays.allowscalar(false)
     TestSuite.test(JLArray)
 end
+
+@testset "Array" begin
+    TestSuite.test(Array)
+end
