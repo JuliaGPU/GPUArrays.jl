@@ -9,7 +9,11 @@
             rand!(B)
             @test !any(A .== B)
 
-            rng = GPUArrays.default_rng(AT)
+            rng = if AT <: AbstractGPUArray
+                GPUArrays.default_rng(AT)
+            else
+                Random.default_rng()
+            end
             Random.seed!(rng)
             Random.seed!(rng, 1)
             rand!(rng, A)
@@ -32,7 +36,11 @@
             randn!(B)
             @test !any(A .== B)
 
-            rng = GPUArrays.default_rng(AT)
+            rng = if AT <: AbstractGPUArray
+                GPUArrays.default_rng(AT)
+            else
+                Random.default_rng()
+            end
             Random.seed!(rng)
             Random.seed!(rng, 1)
             randn!(rng, A)
