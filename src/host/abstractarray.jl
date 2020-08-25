@@ -79,8 +79,8 @@ for (D, S) in ((AbstractOrWrappedGPUArray, Array),
                (Array, AbstractOrWrappedGPUArray),
                (AbstractOrWrappedGPUArray, AbstractOrWrappedGPUArray))
     @eval begin
-        function Base.copyto!(dest::$D{<:Any, N}, rdest::NTuple{N, UnitRange},
-                              src::$S{<:Any, N}, ssrc::NTuple{N, UnitRange}) where {N}
+        function Base.copyto!(dest::$D{<:Any, N}, rdest::UnitRange,
+                              src::$S{<:Any, N}, ssrc::UnitRange) where {N}
             drange = CartesianIndices(rdest)
             srange = CartesianIndices(ssrc)
             copyto!(dest, drange, src, srange)

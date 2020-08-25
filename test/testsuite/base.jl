@@ -64,9 +64,9 @@ end
         y = rand(Float32, (20,))
         a = AT(x)
         b = AT(y)
-        r1 = (1:7,)
-        r2 = (4:10,)
-        copyto!(x, r1[1], y, r2[1])
+        r1 = 1:7
+        r2 = 4:10
+        copyto!(x, r1, y, r2)
         copyto!(a, r1, b, r2)
         @test x == Array(a)
 
