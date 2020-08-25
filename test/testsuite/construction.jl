@@ -122,43 +122,7 @@ end
 
 @testsuite "value constructors" AT->begin
     for T in supported_eltypes()
-        x = fill(zero(T), (2, 2))
-        x1 = fill(AT{T}, T(0), (2, 2))
-        x2 = fill(AT{T}, T(0), (2, 2))
-        x3 = fill(AT{T, 2}, T(0), (2, 2))
-        @test Array(x1) ≈ x
-        @test Array(x2) ≈ x
-        @test Array(x3) ≈ x
-
-        x = fill(T(1), (2, 2))
-        x1 = fill(AT{T}, T(1), (2, 2))
-        x2 = fill(AT{T}, T(1), (2, 2))
-        x3 = fill(AT{T, 2}, T(1), (2, 2))
-        @test Array(x1) ≈ x
-        @test Array(x2) ≈ x
-        @test Array(x3) ≈ x
-
-        fill!(x, 0)
-
-        x1 = fill(AT{T}, 0f0, (2, 2))
-        x2 = fill(AT{T}, T(0), (2, 2))
-        x3 = fill(AT{T, 2}, T(0), (2, 2))
-        @test Array(x1) ≈ x
-        @test Array(x2) ≈ x
-        @test Array(x3) ≈ x
-
-        fill!(x1, 2f0)
-        x2 = fill!(AT{Int32}(undef, (4, 4, 4)), 77f0)
-        @test all(x-> x == 2f0, Array(x1))
-        @test all(x-> x == Int32(77), Array(x2))
-
-        x = fill(zero(T), (0, 2))
-        x1 = fill(AT{T}, T(0), (0, 2))
-        x2 = fill(AT{T}, T(0), (0, 2))
-        x3 = fill(AT{T, 2}, T(0), (0, 2))
-        @test Array(x1) ≈ x
-        @test Array(x2) ≈ x
-        @test Array(x3) ≈ x
+        @test compare((a,b)->fill!(a, b), AT, rand(T, 3), rand(T))
 
         x = Matrix{T}(I, 4, 2)
 
@@ -174,19 +138,13 @@ end
         x1 = AT(T(3) * I, 2, 4)
         @test eltype(x1) == T
         @test Array(x1) ≈ x
-
-        x = fill(T(3), (2, 4))
-        x1 = fill(AT{T}, T(3), (2, 4))
-        copyto!(x, 2I)
-        copyto!(x1, 2I)
-        @test Array(x1) ≈ x
     end
 end
 
 @testsuite "iterator constructors" AT->begin
     for T in supported_eltypes()
-        @test AT(Fill(T(0), (10,))) == fill(AT{T}, T(0), (10,))
-        @test AT(Fill(T(0), (10, 10))) == fill(AT{T}, T(0), (10, 10))
+        @test AT(Fill(T(0), (10,))) == fill!(similar(AT{T}, (10,)), T(0))
+        @test AT(Fill(T(0), (10, 10))) == fill!(similar(AT{T}, (10, 10)), T(0))
         if T <: Real
             x = AT{Float32}(Fill(T(0), (10, 10)))
             @test eltype(x) == Float32

@@ -53,15 +53,15 @@
             @test Array(src[3:end]) == x[3:end]
         end
         @testset "multi dim, sliced setindex" begin
-            x = fill(AT{T}, T(0), (10, 10, 10, 10))
-            y = AT{T}(undef, 5, 5, 10, 10)
+            x = AT(zeros(T, (10, 10, 10, 10)))
+            y = similar(x, (5, 5, 10, 10))
             rand!(y)
             x[2:6, 2:6, :, :] = y
             @test Array(x[2:6, 2:6, :, :]) == Array(y)
         end
         @testset "multi dim, sliced setindex, CPU source" begin
-            x = fill(AT{T}, T(0), (2,3,4))
-            y = Array{T}(undef, 2,3)
+            x = AT(zeros(T, (2,3,4)))
+            y = similar(x, (2,3))
             rand!(y)
             x[:, :, 2] = y
             @test x[:, :, 2] == y
