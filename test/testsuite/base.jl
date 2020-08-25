@@ -37,7 +37,7 @@ end
         copyto!(a, r1, b, r2)
         @test x == Array(a)
         r2 = CartesianIndices((4:11, 3:8))
-        @test_throws DimensionMismatch copyto!(a, r1, b, r2)
+        @test_throws ArgumentError copyto!(a, r1, b, r2)
 
         r2 = CartesianIndices((4:10, 3:8))
         x2 = fill(0f0, (10, 10))
