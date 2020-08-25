@@ -1,4 +1,6 @@
 @testsuite "interface" AT->begin
+    AT <: AbstractGPUArray || return
+
     N = 10
     x = AT(Vector{Int}(undef, N))
     x .= 0

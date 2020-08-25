@@ -1,5 +1,5 @@
 @testsuite "indexing" AT->begin
-    @allowscalar @testset "errors and warnings" begin
+    AT <: AbstractGPUArray && @allowscalar @testset "errors and warnings" begin
         x = AT([0])
 
         allowscalar(true, false)

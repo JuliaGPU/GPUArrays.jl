@@ -141,7 +141,10 @@ end
         @test Array(Af0) == af0
         a = rand(ComplexF32, 4, 4)
         A = AT(a)
-        @test_throws ArgumentError reinterpret(Int8, A)
+        if AT <: AbstractGPUArray
+            # FIXME: make reinterpret(::AbstractGPUArray) behave like ::Array
+            @test_throws ArgumentError reinterpret(Int8, A)
+        end
 
         a = rand(ComplexF32, 10 * 10)
         A = AT(a)
@@ -150,7 +153,7 @@ end
         @test Array(Af0) == af0
     end
 
-    @testset "ntuple test" begin
+    AT <: AbstractGPUArray && @testset "ntuple test" begin
         result = AT(Vector{NTuple{3, Float32}}(undef, 1))
         gpu_call(ntuple_test, result, Val(3))
         @test Array(result)[1] == (77, 2*77, 3*77)
@@ -159,7 +162,7 @@ end
         @test Array(result)[1] == (x, 2*x, 3*x)
     end
 
-    @testset "cartesian iteration" begin
+    AT <: AbstractGPUArray && @testset "cartesian iteration" begin
         Ac = rand(Float32, 32, 32)
         A = AT(Ac)
         result = fill!(copy(A), 0.0)
@@ -167,7 +170,7 @@ end
         Array(result) == Ac
     end
 
-    @testset "Custom kernel from Julia function" begin
+    AT <: AbstractGPUArray && @testset "Custom kernel from Julia function" begin
         x = AT(rand(Float32, 100))
         y = AT(rand(Float32, 100))
         gpu_call(clmap!, -, x, y; target=x)
