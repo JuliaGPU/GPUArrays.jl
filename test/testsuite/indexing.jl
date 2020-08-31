@@ -1,4 +1,4 @@
-@testsuite "indexing" AT->begin
+@testsuite "indexing scalar" AT->begin
     AT <: AbstractGPUArray && @allowscalar @testset "errors and warnings" begin
         x = AT([0])
 
@@ -42,54 +42,37 @@
         #       to make sure its original value is restored.
     end
 
-    @allowscalar for T in (Float32, Int32)
-        @testset "Indexing with $T" begin
-            x = rand(T, 32)
-            src = AT(x)
-            for (i, xi) in enumerate(x)
-                @test src[i] == xi
-            end
-            @test Array(src[1:3]) == x[1:3]
-            @test Array(src[3:end]) == x[3:end]
+    @allowscalar @testset "getindex with $T" for T in supported_eltypes() begin
+        x = rand(T, 32)
+        src = AT(x)
+        for (i, xi) in enumerate(x)
+            @test src[i] == xi
         end
-        @testset "multi dim, sliced setindex" begin
-            x = AT(zeros(T, (10, 10, 10, 10)))
-            y = similar(x, (5, 5, 10, 10))
-            rand!(y)
-            x[2:6, 2:6, :, :] = y
-            @test Array(x[2:6, 2:6, :, :]) == Array(y)
-        end
-        @testset "multi dim, sliced setindex, CPU source" begin
-            x = AT(zeros(T, (2,3,4)))
-            y = similar(x, (2,3))
-            rand!(y)
-            x[:, :, 2] = y
-            @test x[:, :, 2] == y
-        end
+        @test Array(src[1:3]) == x[1:3]
+        @test Array(src[3:end]) == x[3:end]
+    end
     end
 
-    @allowscalar for T in (Float32, Int32)
-        @testset "Indexing with $T" begin
-            x = fill(zero(T), 7)
-            src = AT(x)
-            for i = 1:7
-                src[i] = i
-            end
-            @test Array(src) == T[1:7;]
-            src[1:3] = T[77, 22, 11]
-            @test Array(src[1:3]) == T[77, 22, 11]
-            src[1] = T(0)
+    @allowscalar @testset "setindex! with $T" for T in supported_eltypes() begin
+        x = fill(zero(T), 7)
+        src = AT(x)
+        for i = 1:7
+            src[i] = i
         end
+        @test Array(src) == T[1:7;]
+        src[1:3] = T[77, 22, 11]
+        @test Array(src[1:3]) == T[77, 22, 11]
+        src[1] = T(0)
+    end
     end
 
-    @allowscalar for T in (Float32, Int32)
-        @testset "issue #42 with $T" begin
-            Ac = rand(Float32, 2, 2)
-            A = AT(Ac)
-            @test A[1] == Ac[1]
-            @test A[end] == Ac[end]
-            @test A[1, 1] == Ac[1, 1]
-        end
+    @allowscalar @testset "issue #42 with $T" for T in supported_eltypes() begin
+        Ac = rand(Float32, 2, 2)
+        A = AT(Ac)
+        @test A[1] == Ac[1]
+        @test A[end] == Ac[end]
+        @test A[1, 1] == Ac[1, 1]
+    end
     end
 
     @allowscalar @testset "get/setindex!" begin
@@ -97,8 +80,28 @@
         @test compare(x->getindex(x,1), AT, zeros(Int, 2))
         @test compare(x->setindex!(x,1,1), AT, zeros(Int, 2))
     end
+end
 
-    @allowscalar @testset "Index with empty array" begin
+@testsuite "indexing multidimensional" AT->begin
+    @testset "sliced setindex" for T in supported_eltypes() begin
+        x = AT(zeros(T, (10, 10, 10, 10)))
+        y = similar(x, (5, 5, 10, 10))
+        rand!(y)
+        x[2:6, 2:6, :, :] = y
+        @test Array(x[2:6, 2:6, :, :]) == Array(y)
+    end
+    end
+
+    @testset "sliced setindex, CPU source" for T in supported_eltypes() begin
+        x = AT(zeros(T, (2,3,4)))
+        y = similar(x, (2,3))
+        rand!(y)
+        x[:, :, 2] = y
+        @test x[:, :, 2] == y
+    end
+    end
+
+    @allowscalar @testset "empty array" begin
         @testset "1D" begin
             Ac = zeros(Float32, 10)
             A = AT(Ac)
@@ -122,7 +125,13 @@
         end
     end
 
-    @testset "indexing with indirect CPU source" begin
+    @testset "GPU source" begin
+        a = rand(3)
+        i = rand(1:3, 2)
+        @test compare(getindex, AT, a, i)
+    end
+
+    @testset "CPU source" begin
         # JuliaGPU/CUDA.jl#345
         a = rand(3,4)
         i = rand(1:3,2,2)
