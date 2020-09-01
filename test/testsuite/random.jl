@@ -1,13 +1,13 @@
 @testsuite "random" AT->begin
     @testset "rand" begin  # uniform
         for T in (Int8, Float32, Float64, Int64, Int32,
-                    Complex{Float32}, Complex{Float64},
-                    Complex{Int64}, Complex{Int32}), d in (2, (2,2))
+                  Complex{Float32}, Complex{Float64},
+                  Complex{Int64}, Complex{Int32}), d in (10, (10,10))
             A = AT{T}(undef, d)
             B = copy(A)
             rand!(A)
             rand!(B)
-            @test !any(A .== B)
+            @test A != B
 
             rng = if AT <: AbstractGPUArray
                 GPUArrays.default_rng(AT)
