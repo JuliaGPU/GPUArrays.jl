@@ -129,6 +129,8 @@ end
         a = rand(3)
         i = rand(1:3, 2)
         @test compare(getindex, AT, a, i)
+        @test compare(getindex, AT, a, i')
+        @test compare(getindex, AT, a, view(i, 2:2))
     end
 
     @testset "CPU source" begin
