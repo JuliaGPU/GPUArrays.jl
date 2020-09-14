@@ -27,7 +27,13 @@ function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
     cpu_out = f(cpu_in...; kwargs...)
     gpu_out = f(gpu_in...; kwargs...)
 
-    collect(cpu_out) ≈ collect(gpu_out)
+    if cpu_out isa Tuple && gpu_out isa Tuple
+        all(zip(cpu_out,gpu_out)) do (cpu, gpu)
+            collect(cpu) ≈ collect(gpu)
+        end
+    else
+        collect(cpu_out) ≈ collect(gpu_out)
+    end
 end
 
 function compare(f, AT::Type{<:Array}, xs...; kwargs...)
