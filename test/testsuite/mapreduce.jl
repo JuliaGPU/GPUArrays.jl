@@ -97,6 +97,15 @@ end
                    [true true; false false], [true true; true true])
             @test compare(A->any(A), AT, Ac)
             @test compare(A->all(A), AT, Ac)
+            @test compare(A->count(A), AT, Ac)
+
+            if ndims(Ac) > 1
+                @test compare(A->any(A; dims=2), AT, Ac)
+                @test compare(A->all(A; dims=2), AT, Ac)
+                if VERSION >= v"1.5"
+                    @test compare(A->count(A; dims=2), AT, Ac)
+                end
+            end
         end
         for Ac in ([1, 1], [1, 2], [2, 2],
                    [1 1; 1 1], [1 2; 1 1],
@@ -104,6 +113,14 @@ end
             @test compare(A->any(iseven, A), AT, Ac)
             @test compare(A->all(iseven, A), AT, Ac)
             @test compare(A->count(iseven, A), AT, Ac)
+
+            if ndims(Ac) > 1
+                @test compare(A->any(iseven, A; dims=2), AT, Ac)
+                @test compare(A->all(iseven, A; dims=2), AT, Ac)
+                if VERSION >= v"1.5"
+                    @test compare(A->count(iseven, A; dims=2), AT, Ac)
+                end
+            end
 
             A = AT(Ac)
             @test A == copy(A)
