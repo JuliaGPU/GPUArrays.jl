@@ -1,5 +1,5 @@
 @testsuite "mapreduce essentials" AT->begin
-    @testset "mapreducedim! $ET" for ET in supported_eltypes() begin
+    @testset "mapreducedim! $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
@@ -13,9 +13,8 @@
         @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,2)), zeros(ET, (2,)))
         @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,3)), zeros(ET, (2,)))
     end
-    end
 
-    @testset "reducedim! $ET" for ET in supported_eltypes() begin
+    @testset "reducedim! $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
@@ -24,9 +23,8 @@
             @test compare((A,R)->Base.reducedim!(*, R, A), AT, rand(range, sz), ones(ET, red))
         end
     end
-    end
 
-    @testset "mapreduce $ET" for ET in supported_eltypes() begin
+    @testset "mapreduce $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
@@ -37,9 +35,8 @@
             @test compare(A->mapreduce(x->x+x, +, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
         end
     end
-    end
 
-    @testset "reduce $ET" for ET in supported_eltypes() begin
+    @testset "reduce $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
@@ -49,11 +46,10 @@
             @test compare(A->reduce(*, A; dims=dims, init=one(ET)), AT, rand(range, sz))
         end
     end
-    end
 end
 
 @testsuite "mapreduce derivatives" AT->begin
-    @testset "sum prod minimum maximum $ET" for ET in supported_eltypes() begin
+    @testset "sum prod minimum maximum $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
@@ -88,7 +84,6 @@ end
             @test compare((A,R)->sum!(R, A), AT, rand(range, sz), rand(OT, red))
             @test compare((A,R)->prod!(R, A), AT, rand(range, sz), rand(OT, red))
         end
-    end
     end
 
     @testset "any all count ==" begin

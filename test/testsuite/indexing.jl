@@ -42,7 +42,7 @@
         #       to make sure its original value is restored.
     end
 
-    @allowscalar @testset "getindex with $T" for T in supported_eltypes() begin
+    @allowscalar @testset "getindex with $T" for T in supported_eltypes()
         x = rand(T, 32)
         src = AT(x)
         for (i, xi) in enumerate(x)
@@ -51,9 +51,8 @@
         @test Array(src[1:3]) == x[1:3]
         @test Array(src[3:end]) == x[3:end]
     end
-    end
 
-    @allowscalar @testset "setindex! with $T" for T in supported_eltypes() begin
+    @allowscalar @testset "setindex! with $T" for T in supported_eltypes()
         x = fill(zero(T), 7)
         src = AT(x)
         for i = 1:7
@@ -64,15 +63,13 @@
         @test Array(src[1:3]) == T[77, 22, 11]
         src[1] = T(0)
     end
-    end
 
-    @allowscalar @testset "issue #42 with $T" for T in supported_eltypes() begin
+    @allowscalar @testset "issue #42 with $T" for T in supported_eltypes()
         Ac = rand(Float32, 2, 2)
         A = AT(Ac)
         @test A[1] == Ac[1]
         @test A[end] == Ac[end]
         @test A[1, 1] == Ac[1, 1]
-    end
     end
 
     @allowscalar @testset "get/setindex!" begin
@@ -86,22 +83,20 @@
 end
 
 @testsuite "indexing multidimensional" AT->begin
-    @testset "sliced setindex" for T in supported_eltypes() begin
+    @testset "sliced setindex" for T in supported_eltypes()
         x = AT(zeros(T, (10, 10, 10, 10)))
         y = similar(x, (5, 5, 10, 10))
         rand!(y)
         x[2:6, 2:6, :, :] = y
         @test Array(x[2:6, 2:6, :, :]) == Array(y)
     end
-    end
 
-    @testset "sliced setindex, CPU source" for T in supported_eltypes() begin
+    @testset "sliced setindex, CPU source" for T in supported_eltypes()
         x = AT(zeros(T, (2,3,4)))
         y = similar(x, (2,3))
         rand!(y)
         x[:, :, 2] = y
         @test x[:, :, 2] == y
-    end
     end
 
     @allowscalar @testset "empty array" begin
