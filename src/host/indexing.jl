@@ -108,7 +108,8 @@ function Base.setindex!(xs::AbstractGPUArray{T}, v::T, I::Integer...) where T
     return xs
 end
 
-Base.setindex!(xs::AbstractGPUArray, v, i::Integer) = xs[i] = convert(eltype(xs), v)
+Base.setindex!(xs::AbstractGPUArray, v, I::Integer...) =
+    setindex!(xs, convert(eltype(xs), v), I...)
 
 
 # basic indexing with cartesian indices
