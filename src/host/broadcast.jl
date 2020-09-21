@@ -94,10 +94,9 @@ function Base.map(f, x::BroadcastGPUArray, xs::AbstractArray...)
     common_length = minimum(length.(indices))
 
     # construct a broadcast to figure out the destination container
-    bc = Broadcast.instantiate(Broadcast.broadcasted(f, xs...))
-    ElType = Broadcast.combine_eltypes(bc.f, bc.args)
+    ElType = Broadcast.combine_eltypes(f, xs)
     isbitstype(ElType) || error("Cannot map function returning non-isbits $ElType.")
-    dest = similar(bc, ElType, common_length)
+    dest = similar(x, ElType, common_length)
 
     return map!(f, dest, xs...)
 end
@@ -110,22 +109,24 @@ function Base.map!(f, dest::BroadcastGPUArray, xs::AbstractArray...)
     common_length==0 && return
 
     bc = Broadcast.instantiate(Broadcast.broadcasted(f, xs...))
-    bc′ = Broadcast.preprocess(dest, bc)
+    if bc isa Broadcast.Broadcasted
+        bc = Broadcast.preprocess(dest, bc)
+    end
 
     # grid-stride kernel
-    function map_kernel(ctx, dest, bc′, nelem)
+    function map_kernel(ctx, dest, bc, nelem)
         for i in 1:nelem
             j = linear_index(ctx, i)
             j > common_length && return
 
-            J = CartesianIndices(axes(bc′))[j]
-            @inbounds dest[j] = bc′[J]
+            J = CartesianIndices(axes(bc))[j]
+            @inbounds dest[j] = bc[J]
         end
         return
     end
-    heuristic = launch_heuristic(backend(dest), map_kernel, dest, bc′, 1)
+    heuristic = launch_heuristic(backend(dest), map_kernel, dest, bc, 1)
     config = launch_configuration(backend(dest), heuristic, common_length, typemax(Int))
-    gpu_call(map_kernel, dest, bc′, config.elements_per_thread;
+    gpu_call(map_kernel, dest, bc, config.elements_per_thread;
              threads=config.threads, blocks=config.blocks)
 
     return dest

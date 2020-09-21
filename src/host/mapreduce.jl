@@ -46,7 +46,7 @@ function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,
     # figure out the destination container type by looking at the initializer element,
     # or by relying on inference to reason through the map and reduce functions
     if init === nothing
-        ET = Broadcast.combine_eltypes(bc.f, bc.args)
+        ET = Broadcast.combine_eltypes(f, As)
         ET = Base.promote_op(op, ET, ET)
         (ET === Union{} || ET === Any) &&
             error("mapreduce cannot figure the output element type, please pass an explicit init value")
