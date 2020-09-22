@@ -153,6 +153,7 @@ struct JLArray{T, N} <: AbstractGPUArray{T, N}
     end
 end
 
+
 ## constructors
 
 # type and dimensionality specified, accepting dims as tuples of Ints
@@ -177,12 +178,46 @@ Base.similar(a::JLArray, ::Type{T}, dims::Base.Dims{N}) where {T,N} = JLArray{T,
 Base.copy(a::JLArray{T,N}) where {T,N} = JLArray{T,N}(copy(a.data), size(a))
 
 
+## derived types
+
+export DenseJLArray, DenseJLVector, DenseJLMatrix, DenseJLVecOrMat,
+       StridedJLArray, StridedJLVector, StridedJLMatrix, StridedJLVecOrMat
+
+ContiguousSubJLArray{T,N,A<:JLArray} = Base.FastContiguousSubArray{T,N,A}
+
+# dense arrays: stored contiguously in memory
+DenseReinterpretJLArray{T,N,A<:Union{JLArray,ContiguousSubJLArray}} =
+    Base.ReinterpretArray{T,N,S,A} where S
+DenseReshapedJLArray{T,N,A<:Union{JLArray,ContiguousSubJLArray,DenseReinterpretJLArray}} =
+    Base.ReshapedArray{T,N,A}
+DenseSubJLArray{T,N,A<:Union{JLArray,DenseReshapedJLArray,DenseReinterpretJLArray}} =
+    Base.FastContiguousSubArray{T,N,A}
+DenseJLArray{T,N} = Union{JLArray{T,N}, DenseSubJLArray{T,N}, DenseReshapedJLArray{T,N},
+                          DenseReinterpretJLArray{T,N}}
+DenseJLVector{T} = DenseJLArray{T,1}
+DenseJLMatrix{T} = DenseJLArray{T,2}
+DenseJLVecOrMat{T} = Union{DenseJLVector{T}, DenseJLMatrix{T}}
+
+# strided arrays
+StridedSubJLArray{T,N,A<:Union{JLArray,DenseReshapedJLArray,DenseReinterpretJLArray},
+                  I<:Tuple{Vararg{Union{Base.RangeIndex, Base.ReshapedUnitRange,
+                                        Base.AbstractCartesianIndex}}}} = SubArray{T,N,A,I}
+StridedJLArray{T,N} = Union{JLArray{T,N}, StridedSubJLArray{T,N}, DenseReshapedJLArray{T,N},
+                            DenseReinterpretJLArray{T,N}}
+StridedJLVector{T} = StridedJLArray{T,1}
+StridedJLMatrix{T} = StridedJLArray{T,2}
+StridedJLVecOrMat{T} = Union{StridedJLVector{T}, StridedJLMatrix{T}}
+
+
 ## array interface
 
 Base.elsize(::Type{<:JLArray{T}}) where {T} = sizeof(T)
 
 Base.size(x::JLArray) = x.dims
 Base.sizeof(x::JLArray) = Base.elsize(x) * length(x)
+
+Base.unsafe_convert(::Type{Ptr{T}}, x::JLArray{T}) where {T} =
+    Base.unsafe_convert(Ptr{T}, x.data)
 
 
 ## interop with Julia arrays
@@ -215,17 +250,6 @@ Adapt.adapt_storage(::Type{Array}, xs::JLArray) = convert(Array, xs)
 
 Base.convert(::Type{T}, x::T) where T <: JLArray = x
 
-function Base._reshape(parent::JLArray, dims::Dims)
-  n = length(parent)
-  prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
-  return JLArray{eltype(parent),length(dims)}(reshape(parent.data, dims), dims)
-end
-function Base._reshape(parent::JLArray{T,1}, dims::Tuple{Int}) where T
-  n = length(parent)
-  prod(dims) == n || throw(DimensionMismatch("parent has $n elements, which is incompatible with size $dims"))
-  return parent
-end
-
 
 ## broadcast
 
@@ -250,33 +274,56 @@ for f in (:cos, :sin, :sqrt, :log)
     @eval GPUArrays.$f(ctx::JLKernelContext, x) = $f(x)
 end
 
+
 ## memory operations
 
 function Base.copyto!(dest::Array{T}, d_offset::Integer,
-                      source::JLArray{T}, s_offset::Integer,
+                      source::DenseJLArray{T}, s_offset::Integer,
                       amount::Integer) where T
+    amount==0 && return dest
+    @boundscheck checkbounds(dest, d_offset)
     @boundscheck checkbounds(dest, d_offset+amount-1)
+    @boundscheck checkbounds(source, s_offset)
     @boundscheck checkbounds(source, s_offset+amount-1)
-    copyto!(dest, d_offset, source.data, s_offset, amount)
+    GC.@preserve dest source Base.unsafe_copyto!(pointer(dest, d_offset),
+                                                 pointer(source, s_offset), amount)
+    return dest
 end
 
-function Base.copyto!(dest::JLArray{T}, d_offset::Integer,
+Base.copyto!(dest::Array{T}, source::DenseJLArray{T}) where {T} =
+    copyto!(dest, 1, source, 1, length(source))
+
+function Base.copyto!(dest::DenseJLArray{T}, d_offset::Integer,
                       source::Array{T}, s_offset::Integer,
                       amount::Integer) where T
+    amount==0 && return dest
+    @boundscheck checkbounds(dest, d_offset)
     @boundscheck checkbounds(dest, d_offset+amount-1)
+    @boundscheck checkbounds(source, s_offset)
     @boundscheck checkbounds(source, s_offset+amount-1)
-    copyto!(dest.data, d_offset, source, s_offset, amount)
-    dest
+    GC.@preserve dest source Base.unsafe_copyto!(pointer(dest, d_offset),
+                                                 pointer(source, s_offset), amount)
+    return dest
 end
 
-function Base.copyto!(dest::JLArray{T}, d_offset::Integer,
-                      source::JLArray{T}, s_offset::Integer,
+Base.copyto!(dest::DenseJLArray{T}, source::Array{T}) where {T} =
+    copyto!(dest, 1, source, 1, length(source))
+
+function Base.copyto!(dest::DenseJLArray{T}, d_offset::Integer,
+                      source::DenseJLArray{T}, s_offset::Integer,
                       amount::Integer) where T
+    amount==0 && return dest
+    @boundscheck checkbounds(dest, d_offset)
     @boundscheck checkbounds(dest, d_offset+amount-1)
+    @boundscheck checkbounds(source, s_offset)
     @boundscheck checkbounds(source, s_offset+amount-1)
-    copyto!(dest.data, d_offset, source.data, s_offset, amount)
-    dest
+    GC.@preserve dest source Base.unsafe_copyto!(pointer(dest, d_offset),
+                                                 pointer(source, s_offset), amount)
+    return dest
 end
+
+Base.copyto!(dest::DenseJLArray{T}, source::DenseJLArray{T}) where {T} =
+    copyto!(dest, 1, source, 1, length(source))
 
 
 ## fft
@@ -320,9 +367,6 @@ GPUArrays.backend(::Type{<:JLArray}) = JLBackend()
 
 Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N} =
   JLDeviceArray{T,N}(x.data, x.dims)
-
-GPUArrays.unsafe_reinterpret(::Type{T}, A::JLArray, size::Tuple) where T =
-    reshape(reinterpret(T, A.data), size)
 
 function GPUArrays.mapreducedim!(f, op, R::JLArray, A::Union{AbstractArray,Broadcast.Broadcasted};
                                  init=nothing)
