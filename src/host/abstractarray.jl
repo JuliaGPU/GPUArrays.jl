@@ -98,11 +98,7 @@ for (D, S) in ((AbstractOrWrappedGPUArray, Array),
             copyto!(dest, d_offset, src, s_offset, len)
         end
 
-        function Base.copyto!(dest::$D, src::$S)
-            len = length(src)
-            len == 0 && return dest
-            copyto!(dest, 1, src, 1, len)
-        end
+        Base.copyto!(dest::$D, src::$S) = copyto!(dest, 1, src, 1, length(src))
     end
 end
 
@@ -134,6 +130,7 @@ end
 
 function Base.copyto!(dest::Array, dstart::Integer,
                       src::WrappedGPUArray, sstart::Integer, n::Integer)
+    n == 0 && return dest
     temp = similar(src, n)
     copyto!(temp, 1, src, sstart, n)
     copyto!(dest, dstart, temp, 1, n)
@@ -142,6 +139,7 @@ end
 
 function Base.copyto!(dest::WrappedGPUArray, dstart::Integer,
                       src::Array, sstart::Integer, n::Integer)
+    n == 0 && return dest
     temp = similar(dest, n)
     copyto!(temp, 1, src, sstart, n)
     copyto!(dest, dstart, temp, 1, n)
@@ -156,6 +154,7 @@ end
 function Base.copyto!(dest::Array{T}, dstart::Integer,
                       src::AbstractOrWrappedGPUArray{U}, sstart::Integer,
                       n::Integer) where {T,U}
+    n == 0 && return dest
     temp = Vector{U}(undef, n)
     copyto!(temp, 1, src, sstart, n)
     copyto!(dest, dstart, temp, 1, n)
@@ -164,6 +163,7 @@ end
 
 function Base.copyto!(dest::AbstractOrWrappedGPUArray{T}, dstart::Integer,
                       src::Array{U}, sstart::Integer, n::Integer) where {T,U}
+    n == 0 && return dest
     temp = Vector{T}(undef, n)
     copyto!(temp, 1, src, sstart, n)
     copyto!(dest, dstart, temp, 1, n)
