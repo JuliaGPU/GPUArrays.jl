@@ -57,6 +57,4 @@ should provide implementations of the following interfaces:
 
 ```@docs
 GPUArrays.backend
-GPUArrays.device
-GPUArrays.unsafe_reinterpret
 ```
