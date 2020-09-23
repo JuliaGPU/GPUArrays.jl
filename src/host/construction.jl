@@ -1,6 +1,6 @@
 # constructors and conversions
 
-function Base.fill!(A::AbstractGPUArray{T}, x) where T
+function Base.fill!(A::AbstractOrWrappedGPUArray{T}, x) where T
     length(A) == 0 && return A
     gpu_call(A, convert(T, x)) do ctx, a, val
         idx = @linearidx(a)
@@ -18,16 +18,16 @@ function uniformscaling_kernel(ctx::AbstractKernelContext, res::AbstractArray{T}
     return
 end
 
-function (T::Type{<: AbstractGPUArray{U}})(s::UniformScaling, dims::Dims{2}) where {U}
+function (T::Type{<: AbstractOrWrappedGPUArray{U}})(s::UniformScaling, dims::Dims{2}) where {U}
     res = similar(T, dims)
     fill!(res, zero(U))
     gpu_call(uniformscaling_kernel, res, size(res, 1), s; total_threads=minimum(dims))
     res
 end
 
-(T::Type{<: AbstractGPUArray})(s::UniformScaling{U}, dims::Dims{2}) where U = T{U}(s, dims)
+(T::Type{<: AbstractOrWrappedGPUArray})(s::UniformScaling{U}, dims::Dims{2}) where U = T{U}(s, dims)
 
-(T::Type{<: AbstractGPUArray})(s::UniformScaling, m::Integer, n::Integer) = T(s, Dims((m, n)))
+(T::Type{<: AbstractOrWrappedGPUArray})(s::UniformScaling, m::Integer, n::Integer) = T(s, Dims((m, n)))
 
 function Base.copyto!(A::AbstractGPUMatrix{T}, s::UniformScaling) where T
     fill!(A, zero(T))

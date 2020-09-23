@@ -98,11 +98,7 @@ for (D, S) in ((AbstractOrWrappedGPUArray, Array),
             copyto!(dest, d_offset, src, s_offset, len)
         end
 
-        function Base.copyto!(dest::$D, src::$S)
-            len = length(src)
-            len == 0 && return dest
-            copyto!(dest, 1, src, 1, len)
-        end
+        Base.copyto!(dest::$D, src::$S) = copyto!(dest, 1, src, 1, length(src))
     end
 end
 
@@ -134,6 +130,7 @@ end
 
 function Base.copyto!(dest::Array, dstart::Integer,
                       src::WrappedGPUArray, sstart::Integer, n::Integer)
+    n == 0 && return dest
     temp = similar(src, n)
     copyto!(temp, 1, src, sstart, n)
     copyto!(dest, dstart, temp, 1, n)
@@ -142,6 +139,7 @@ end
 
 function Base.copyto!(dest::WrappedGPUArray, dstart::Integer,
                       src::Array, sstart::Integer, n::Integer)
+    n == 0 && return dest
     temp = similar(dest, n)
     copyto!(temp, 1, src, sstart, n)
     copyto!(dest, dstart, temp, 1, n)
@@ -156,6 +154,7 @@ end
 function Base.copyto!(dest::Array{T}, dstart::Integer,
                       src::AbstractOrWrappedGPUArray{U}, sstart::Integer,
                       n::Integer) where {T,U}
+    n == 0 && return dest
     temp = Vector{U}(undef, n)
     copyto!(temp, 1, src, sstart, n)
     copyto!(dest, dstart, temp, 1, n)
@@ -164,6 +163,7 @@ end
 
 function Base.copyto!(dest::AbstractOrWrappedGPUArray{T}, dstart::Integer,
                       src::Array{U}, sstart::Integer, n::Integer) where {T,U}
+    n == 0 && return dest
     temp = Vector{T}(undef, n)
     copyto!(temp, 1, src, sstart, n)
     copyto!(dest, dstart, temp, 1, n)
@@ -240,80 +240,6 @@ end
 Base.copy(x::AbstractGPUArray) = error("Not implemented") # COV_EXCL_LINE
 
 Base.deepcopy(x::AbstractGPUArray) = copy(x)
-
-
-# reinterpret
-
-#=
-copied from julia base/array.jl
-Copyright (c) 2009-2016: Jeff Bezanson, Stefan Karpinski, Viral B. Shah, and other contributors:
-
-https://github.com/JuliaLang/julia/contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copie of this
-software and associated documentation files (the "Software"), to deal in the Software
-without restriction, including without limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons
-to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or
-substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
-PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
-FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-=#
-
-import Base.reinterpret
-
-"""
-    unsafe_reinterpret(T, a, dims)
-
-Reinterpret the array `a` to have a new element type `T` and size `dims`.
-"""
-function unsafe_reinterpret end
-
-function reinterpret(::Type{T}, a::AbstractGPUArray{S,1}) where T where S
-    nel = (length(a)*sizeof(S)) ÷ sizeof(T)
-    # TODO: maybe check that remainder is zero?
-    return reinterpret(T, a, (nel,))
-end
-
-function reinterpret(::Type{T}, a::AbstractGPUArray{S}) where T where S
-    if sizeof(S) != sizeof(T)
-        throw(ArgumentError("result shape not specified"))
-    end
-    reinterpret(T, a, size(a))
-end
-
-function reinterpret(::Type{T}, a::AbstractGPUArray{S}, dims::NTuple{N, Integer}) where T where S where N
-    if !isbitstype(T)
-        throw(ArgumentError("cannot reinterpret Array{$(S)} to ::Type{Array{$(T)}}, type $(T) is not a bits type"))
-    end
-    if !isbitstype(S)
-        throw(ArgumentError("cannot reinterpret Array{$(S)} to ::Type{Array{$(T)}}, type $(S) is not a bits type"))
-    end
-    nel = div(length(a)*sizeof(S),sizeof(T))
-    if prod(dims) != nel
-        throw(ArgumentError("new dimensions $(dims) must be consistent with array size $(nel)"))
-    end
-    unsafe_reinterpret(T, a, dims)
-end
-
-function Base._reshape(A::AbstractGPUArray{T}, dims::Dims) where T
-    n = length(A)
-    prod(dims) == n || throw(ArgumentError("parent has $n elements, which is incompatible with size $dims"))
-    return unsafe_reinterpret(T, A, dims)
-end
-#ambig
-function Base._reshape(A::AbstractGPUArray{T, 1}, dims::Tuple{Integer}) where T
-    n = Base._length(A)
-    prod(dims) == n || throw(ArgumentError("parent has $n elements, which is incompatible with size $dims"))
-    return unsafe_reinterpret(T, A, dims)
-end
 
 
 # filtering

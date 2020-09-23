@@ -129,7 +129,6 @@ end
         @test compare(reshape, AT, rand(10), Ref((10,1)))
         @test compare(reshape, AT, rand(10), Ref((1,10)))
 
-        @test reshape(AT(rand(10)), (10,1)) isa AT
         @test_throws Exception reshape(AT(rand(10)), (10,2))
     end
 
@@ -141,10 +140,6 @@ end
         @test Array(Af0) == af0
         a = rand(ComplexF32, 4, 4)
         A = AT(a)
-        if AT <: AbstractGPUArray
-            # FIXME: make reinterpret(::AbstractGPUArray) behave like ::Array
-            @test_throws ArgumentError reinterpret(Int8, A)
-        end
 
         a = rand(ComplexF32, 10 * 10)
         A = AT(a)
