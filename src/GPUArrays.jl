@@ -13,7 +13,6 @@ using AbstractFFTs
 using Adapt
 
 # device functionality
-include("device/device.jl")
 include("device/execution.jl")
 ## executed on-device
 include("device/abstractarray.jl")
@@ -37,6 +36,8 @@ include("host/uniformscaling.jl")
 
 # CPU reference implementation
 include("reference.jl")
+
+include("deprecated.jl")
 
 
 end # module

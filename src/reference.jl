@@ -16,10 +16,6 @@ using Adapt
 # Device functionality
 #
 
-## device properties
-
-struct JLDevice <: AbstractGPUDevice end
-
 const MAXTHREADS = 256
 
 
@@ -368,9 +364,7 @@ Random.randn!(A::AnyJLArray) = Random.randn!(GPUArrays.default_rng(JLArray), A)
 
 ## GPUArrays interfaces
 
-GPUArrays.device(x::AnyJLArray) = JLDevice()
-
-GPUArrays.backend(::Type{<:AnyJLArray}) = JLBackend()
+GPUArrays.backend(::Type{<:JLArray}) = JLBackend()
 
 Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N} =
   JLDeviceArray{T,N}(x.data, x.dims)
