@@ -6,7 +6,7 @@ using Base.Broadcast
 
 import Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle
 
-const BroadcastGPUArray{T} = Union{AbstractOrWrappedGPUArray{T},
+const BroadcastGPUArray{T} = Union{AnyGPUArray{T},
                                    Base.RefValue{<:AbstractGPUArray{T}}}
 
 """
