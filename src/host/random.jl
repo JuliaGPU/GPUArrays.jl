@@ -67,7 +67,7 @@ struct RNG <: AbstractRNG
 end
 
 # return an instance of GPUArrays.RNG suitable for the requested array type
-default_rng(::Type{<:AbstractGPUArray}) = error("Not implemented") # COV_EXCL_LINE
+default_rng(::Type{<:AnyGPUArray}) = error("Not implemented") # COV_EXCL_LINE
 
 make_seed(rng::RNG) = make_seed(rng, rand(UInt))
 function make_seed(rng::RNG, n::Integer)
@@ -81,7 +81,7 @@ function Random.seed!(rng::RNG, seed::Vector{UInt32})
     return
 end
 
-function Random.rand!(rng::RNG, A::AbstractGPUArray{T}) where T <: Number
+function Random.rand!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
     gpu_call(A, rng.state) do ctx, a, randstates
         idx = linear_index(ctx)
         idx > length(a) && return
@@ -91,7 +91,7 @@ function Random.rand!(rng::RNG, A::AbstractGPUArray{T}) where T <: Number
     A
 end
 
-function Random.randn!(rng::RNG, A::AbstractGPUArray{T}) where T <: Number
+function Random.randn!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
     threads = (length(A) - 1) ÷ 2 + 1
     length(A) == 0 && return
     gpu_call(A, rng.state; total_threads = threads) do ctx, a, randstates
