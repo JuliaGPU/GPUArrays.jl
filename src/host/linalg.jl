@@ -99,7 +99,7 @@ end
 
 ## matrix multiplication
 
-function generic_matmatmul!(C::AbstractOrWrappedGPUArray{R}, A::AbstractOrWrappedGPUArray{T}, B::AbstractOrWrappedGPUArray{S}, a::Number, b::Number) where {T,S,R}
+function generic_matmatmul!(C::AnyGPUArray{R}, A::AnyGPUArray{T}, B::AnyGPUArray{S}, a::Number, b::Number) where {T,S,R}
     if size(A,2) != size(B,1)
         throw(DimensionMismatch("matrix A has dimensions $(size(A)), matrix B has dimensions $(size(B))"))
     end

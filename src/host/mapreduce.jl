@@ -4,11 +4,11 @@ const AbstractArrayOrBroadcasted = Union{AbstractArray,Broadcast.Broadcasted}
 
 # GPUArrays' mapreduce methods build on `Base.mapreducedim!`, but with an additional
 # argument `init` value to avoid eager initialization of `R` (if set to something).
-mapreducedim!(f, op, R::AbstractGPUArray, A::AbstractArrayOrBroadcasted;
+mapreducedim!(f, op, R::AnyGPUArray, A::AbstractArrayOrBroadcasted;
               init=nothing) = error("Not implemented") # COV_EXCL_LINE
 # resolve ambiguities
-Base.mapreducedim!(f, op, R::AbstractGPUArray, A::AbstractArray) = mapreducedim!(f, op, R, A)
-Base.mapreducedim!(f, op, R::AbstractGPUArray, A::Broadcast.Broadcasted) = mapreducedim!(f, op, R, A)
+Base.mapreducedim!(f, op, R::AnyGPUArray, A::AbstractArray) = mapreducedim!(f, op, R, A)
+Base.mapreducedim!(f, op, R::AnyGPUArray, A::Broadcast.Broadcasted) = mapreducedim!(f, op, R, A)
 
 neutral_element(op, T) =
     error("""GPUArrays.jl needs to know the neutral element for your operator `$op`.
@@ -24,7 +24,7 @@ neutral_element(::typeof(Base.min), T) = typemax(T)
 neutral_element(::typeof(Base.max), T) = typemin(T)
 
 # resolve ambiguities
-Base.mapreduce(f, op, A::AbstractGPUArray, As::AbstractArrayOrBroadcasted...;
+Base.mapreduce(f, op, A::AnyGPUArray, As::AbstractArrayOrBroadcasted...;
                dims=:, init=nothing) = _mapreduce(f, op, A, As...; dims=dims, init=init)
 Base.mapreduce(f, op, A::Broadcast.Broadcasted{<:AbstractGPUArrayStyle}, As::AbstractArrayOrBroadcasted...;
                dims=:, init=nothing) = _mapreduce(f, op, A, As...; dims=dims, init=init)
@@ -68,16 +68,16 @@ function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,
     end
 end
 
-Base.any(A::AbstractGPUArray{Bool}) = mapreduce(identity, |, A)
-Base.all(A::AbstractGPUArray{Bool}) = mapreduce(identity, &, A)
+Base.any(A::AnyGPUArray{Bool}) = mapreduce(identity, |, A)
+Base.all(A::AnyGPUArray{Bool}) = mapreduce(identity, &, A)
 
-Base.any(f::Function, A::AbstractGPUArray) = mapreduce(f, |, A)
-Base.all(f::Function, A::AbstractGPUArray) = mapreduce(f, &, A)
+Base.any(f::Function, A::AnyGPUArray) = mapreduce(f, |, A)
+Base.all(f::Function, A::AnyGPUArray) = mapreduce(f, &, A)
 
-Base.count(pred::Function, A::AbstractGPUArray; dims=:) =
+Base.count(pred::Function, A::AnyGPUArray; dims=:) =
     mapreduce(pred, Base.add_sum, A; init=0, dims=dims)
 
-Base.:(==)(A::AbstractGPUArray, B::AbstractGPUArray) = Bool(mapreduce(==, &, A, B))
+Base.:(==)(A::AnyGPUArray, B::AnyGPUArray) = Bool(mapreduce(==, &, A, B))
 
 # avoid calling into `initarray!`
 for (fname, op) in [(:sum, :(Base.add_sum)), (:prod, :(Base.mul_prod)),
@@ -85,7 +85,7 @@ for (fname, op) in [(:sum, :(Base.add_sum)), (:prod, :(Base.mul_prod)),
                     (:all, :&),              (:any, :|)]
     fname! = Symbol(fname, '!')
     @eval begin
-        Base.$(fname!)(f::Function, r::AbstractGPUArray, A::AbstractGPUArray{T}) where T =
+        Base.$(fname!)(f::Function, r::AnyGPUArray, A::AnyGPUArray{T}) where T =
             GPUArrays.mapreducedim!(f, $(op), r, A; init=neutral_element($(op), T))
     end
 end

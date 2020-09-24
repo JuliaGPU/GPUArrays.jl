@@ -23,9 +23,7 @@ backend(::Type{<:AbstractGPUDevice}) = error("Not implemented") # COV_EXCL_LINE
 
 const WrappedGPUArray{T,N} = WrappedArray{T,N,AbstractGPUArray,AbstractGPUArray{T,N}}
 
-const AbstractOrWrappedGPUArray{T,N} =
-    Union{AbstractGPUArray{T,N},
-          WrappedArray{T,N,AbstractGPUArray,AbstractGPUArray{T,N}}}
+const AnyGPUArray{T,N} = Union{AbstractGPUArray{T,N}, WrappedGPUArray{T,N}}
 
 
 # input/output
@@ -51,21 +49,21 @@ convert_to_cpu(xs) = adapt(Array, xs)
 ## showing
 
 # display
-Base.print_array(io::IO, X::AbstractOrWrappedGPUArray) =
+Base.print_array(io::IO, X::AnyGPUArray) =
     Base.print_array(io, convert_to_cpu(X))
 
 # show
-Base._show_nonempty(io::IO, X::AbstractOrWrappedGPUArray, prefix::String) =
+Base._show_nonempty(io::IO, X::AnyGPUArray, prefix::String) =
     Base._show_nonempty(io, convert_to_cpu(X), prefix)
-Base._show_empty(io::IO, X::AbstractOrWrappedGPUArray) =
+Base._show_empty(io::IO, X::AnyGPUArray) =
     Base._show_empty(io, convert_to_cpu(X))
-Base.show_vector(io::IO, v::AbstractOrWrappedGPUArray, args...) =
+Base.show_vector(io::IO, v::AnyGPUArray, args...) =
     Base.show_vector(io, convert_to_cpu(v), args...)
 
 ## collect to CPU (discarding wrapper type)
 
 collect_to_cpu(xs::AbstractArray) = collect(convert_to_cpu(xs))
-Base.collect(X::AbstractOrWrappedGPUArray) = collect_to_cpu(X)
+Base.collect(X::AnyGPUArray) = collect_to_cpu(X)
 
 
 # memory copying
@@ -75,9 +73,9 @@ Base.collect(X::AbstractOrWrappedGPUArray) = collect_to_cpu(X)
 # expects the GPU array type to have linear `copyto!` methods (i.e. accepting an integer
 # offset and length) from and to CPU arrays and between GPU arrays.
 
-for (D, S) in ((AbstractOrWrappedGPUArray, Array),
-               (Array, AbstractOrWrappedGPUArray),
-               (AbstractOrWrappedGPUArray, AbstractOrWrappedGPUArray))
+for (D, S) in ((AnyGPUArray, Array),
+               (Array, AnyGPUArray),
+               (AnyGPUArray, AnyGPUArray))
     @eval begin
         function Base.copyto!(dest::$D{<:Any, N}, rdest::UnitRange,
                               src::$S{<:Any, N}, ssrc::UnitRange) where {N}
@@ -112,8 +110,8 @@ function linear_copy_kernel!(ctx::AbstractKernelContext, dest, dstart, src, ssta
     return
 end
 
-function Base.copyto!(dest::AbstractOrWrappedGPUArray, dstart::Integer,
-                      src::AbstractOrWrappedGPUArray, sstart::Integer, n::Integer)
+function Base.copyto!(dest::AnyGPUArray, dstart::Integer,
+                      src::AnyGPUArray, sstart::Integer, n::Integer)
     n == 0 && return dest
     n < 0 && throw(ArgumentError(string("tried to copy n=", n, " elements, but n should be nonnegative")))
     destinds, srcinds = LinearIndices(dest), LinearIndices(src)
@@ -152,7 +150,7 @@ end
 # to quickly perform these very lightweight conversions
 
 function Base.copyto!(dest::Array{T}, dstart::Integer,
-                      src::AbstractOrWrappedGPUArray{U}, sstart::Integer,
+                      src::AnyGPUArray{U}, sstart::Integer,
                       n::Integer) where {T,U}
     n == 0 && return dest
     temp = Vector{U}(undef, n)
@@ -161,7 +159,7 @@ function Base.copyto!(dest::Array{T}, dstart::Integer,
     return dest
 end
 
-function Base.copyto!(dest::AbstractOrWrappedGPUArray{T}, dstart::Integer,
+function Base.copyto!(dest::AnyGPUArray{T}, dstart::Integer,
                       src::Array{U}, sstart::Integer, n::Integer) where {T,U}
     n == 0 && return dest
     temp = Vector{T}(undef, n)
@@ -181,8 +179,8 @@ function cartesian_copy_kernel!(ctx::AbstractKernelContext, dest, dest_offsets, 
     return
 end
 
-function Base.copyto!(dest::AbstractOrWrappedGPUArray{<:Any, N}, destcrange::CartesianIndices{N},
-                      src::AbstractOrWrappedGPUArray{<:Any, N}, srccrange::CartesianIndices{N}) where {N}
+function Base.copyto!(dest::AnyGPUArray{<:Any, N}, destcrange::CartesianIndices{N},
+                      src::AnyGPUArray{<:Any, N}, srccrange::CartesianIndices{N}) where {N}
     shape = size(destcrange)
     if shape != size(srccrange)
         throw(ArgumentError("Ranges don't match their size. Found: $shape, $(size(srccrange))"))
