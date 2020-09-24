@@ -181,7 +181,8 @@ Base.copy(a::JLArray{T,N}) where {T,N} = JLArray{T,N}(copy(a.data), size(a))
 ## derived types
 
 export DenseJLArray, DenseJLVector, DenseJLMatrix, DenseJLVecOrMat,
-       StridedJLArray, StridedJLVector, StridedJLMatrix, StridedJLVecOrMat
+       StridedJLArray, StridedJLVector, StridedJLMatrix, StridedJLVecOrMat,
+       AnyJLArray, AnyJLVector, AnyJLMatrix, AnyJLVecOrMat
 
 ContiguousSubJLArray{T,N,A<:JLArray} = Base.FastContiguousSubArray{T,N,A}
 
@@ -207,6 +208,12 @@ StridedJLArray{T,N} = Union{JLArray{T,N}, StridedSubJLArray{T,N}, DenseReshapedJ
 StridedJLVector{T} = StridedJLArray{T,1}
 StridedJLMatrix{T} = StridedJLArray{T,2}
 StridedJLVecOrMat{T} = Union{StridedJLVector{T}, StridedJLMatrix{T}}
+
+# anything that's (secretly) backed by a JLArray
+AnyJLArray{T,N} = Union{JLArray{T,N}, WrappedArray{T,N,JLArray,JLArray{T,N}}}
+AnyJLVector{T} = AnyJLArray{T,1}
+AnyJLMatrix{T} = AnyJLArray{T,2}
+AnyJLVecOrMat{T} = Union{AnyJLVector{T}, AnyJLMatrix{T}}
 
 
 ## array interface
@@ -259,7 +266,7 @@ struct JLArrayStyle{N} <: AbstractGPUArrayStyle{N} end
 JLArrayStyle(::Val{N}) where N = JLArrayStyle{N}()
 JLArrayStyle{M}(::Val{N}) where {N,M} = JLArrayStyle{N}()
 
-BroadcastStyle(::Type{JLArray{T,N}}) where {T,N} = JLArrayStyle{N}()
+BroadcastStyle(::Type{<:AnyJLArray{T,N}}) where {T,N} = JLArrayStyle{N}()
 
 # Allocating the output container
 Base.similar(bc::Broadcasted{JLArrayStyle{N}}, ::Type{T}) where {N,T} =
@@ -355,20 +362,20 @@ end
 using Random
 
 # JLArray only supports generating random numbers with the GPUArrays RNG
-Random.rand!(A::JLArray) = Random.rand!(GPUArrays.default_rng(JLArray), A)
-Random.randn!(A::JLArray) = Random.randn!(GPUArrays.default_rng(JLArray), A)
+Random.rand!(A::AnyJLArray) = Random.rand!(GPUArrays.default_rng(JLArray), A)
+Random.randn!(A::AnyJLArray) = Random.randn!(GPUArrays.default_rng(JLArray), A)
 
 
 ## GPUArrays interfaces
 
-GPUArrays.device(x::JLArray) = JLDevice()
+GPUArrays.device(x::AnyJLArray) = JLDevice()
 
-GPUArrays.backend(::Type{<:JLArray}) = JLBackend()
+GPUArrays.backend(::Type{<:AnyJLArray}) = JLBackend()
 
 Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N} =
   JLDeviceArray{T,N}(x.data, x.dims)
 
-function GPUArrays.mapreducedim!(f, op, R::JLArray, A::Union{AbstractArray,Broadcast.Broadcasted};
+function GPUArrays.mapreducedim!(f, op, R::AnyJLArray, A::Union{AbstractArray,Broadcast.Broadcasted};
                                  init=nothing)
     if init !== nothing
         fill!(R, init)
