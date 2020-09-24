@@ -262,7 +262,7 @@ struct JLArrayStyle{N} <: AbstractGPUArrayStyle{N} end
 JLArrayStyle(::Val{N}) where N = JLArrayStyle{N}()
 JLArrayStyle{M}(::Val{N}) where {N,M} = JLArrayStyle{N}()
 
-BroadcastStyle(::Type{<:AnyJLArray{T,N}}) where {T,N} = JLArrayStyle{N}()
+BroadcastStyle(::Type{JLArray{T,N}}) where {T,N} = JLArrayStyle{N}()
 
 # Allocating the output container
 Base.similar(bc::Broadcasted{JLArrayStyle{N}}, ::Type{T}) where {N,T} =
