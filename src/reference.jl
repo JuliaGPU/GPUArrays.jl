@@ -16,10 +16,6 @@ using Adapt
 # Device functionality
 #
 
-## device properties
-
-struct JLDevice <: AbstractGPUDevice end
-
 const MAXTHREADS = 256
 
 
@@ -266,7 +262,7 @@ struct JLArrayStyle{N} <: AbstractGPUArrayStyle{N} end
 JLArrayStyle(::Val{N}) where N = JLArrayStyle{N}()
 JLArrayStyle{M}(::Val{N}) where {N,M} = JLArrayStyle{N}()
 
-BroadcastStyle(::Type{<:AnyJLArray{T,N}}) where {T,N} = JLArrayStyle{N}()
+BroadcastStyle(::Type{JLArray{T,N}}) where {T,N} = JLArrayStyle{N}()
 
 # Allocating the output container
 Base.similar(bc::Broadcasted{JLArrayStyle{N}}, ::Type{T}) where {N,T} =
@@ -368,9 +364,7 @@ Random.randn!(A::AnyJLArray) = Random.randn!(GPUArrays.default_rng(JLArray), A)
 
 ## GPUArrays interfaces
 
-GPUArrays.device(x::AnyJLArray) = JLDevice()
-
-GPUArrays.backend(::Type{<:AnyJLArray}) = JLBackend()
+GPUArrays.backend(::Type{<:JLArray}) = JLBackend()
 
 Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N} =
   JLDeviceArray{T,N}(x.data, x.dims)

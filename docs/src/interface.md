@@ -9,15 +9,8 @@ one that actually can be instantiated on the device (i.e. in kernels).
 ## Device functionality
 
 Several types and interfaces are related to the device and execution of code on it. First of
-all, you need to provide a type that represents your device and exposes some properties of
-it:
-
-```@docs
-GPUArrays.AbstractGPUDevice
-GPUArrays.threads
-```
-
-Another important set of interfaces relates to executing code on the device:
+all, you need to provide a type that represents your execution back-end and a way to call
+kernels:
 
 ```@docs
 GPUArrays.AbstractGPUBackend
@@ -26,7 +19,7 @@ GPUArrays.gpu_call
 GPUArrays.thread_block_heuristic
 ```
 
-Finally, you need to provide implementations of certain methods that will be executed on the
+You then need to provide implementations of certain methods that will be executed on the
 device itself:
 
 ```@docs
