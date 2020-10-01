@@ -15,8 +15,8 @@
 [gitlab-img]: https://gitlab.com/JuliaGPU/GPUArrays.jl/badges/master/pipeline.svg
 [gitlab-url]: https://gitlab.com/JuliaGPU/GPUArrays.jl/commits/master
 
-[travis-img]: https://api.travis-ci.org/JuliaGPU/GPUArrays.jl.svg?branch=master
-[travis-url]: https://travis-ci.org/JuliaGPU/GPUArrays.jl
+[travis-img]: https://api.travis-ci.com/JuliaGPU/GPUArrays.jl.svg?branch=master
+[travis-url]: https://travis-ci.com/JuliaGPU/GPUArrays.jl
 
 [pkgeval-img]: https://juliaci.github.io/NanosoldierReports/pkgeval_badges/G/GPUArrays.svg
 [pkgeval-url]: https://juliaci.github.io/NanosoldierReports/pkgeval_badges/G/GPUArrays.html
