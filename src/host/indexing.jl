@@ -124,50 +124,56 @@ Base.@propagate_inbounds Base.setindex!(A::AbstractGPUArray, v, I::Union{Integer
 
 Base.getindex(A::AbstractGPUArray, I...) = _getindex(A, to_indices(A, I)...)
 
-function _getindex(src::AbstractGPUArray, Is::Vararg{<:Any,N}) where {N}
+function _getindex(src::AbstractGPUArray, Is...)
     shape = Base.index_shape(Is...)
     dest = similar(src, shape)
     any(isempty, Is) && return dest # indexing with empty array
     idims = map(length, Is)
 
-    function kernel(ctx::AbstractKernelContext, dest::AbstractArray, src::AbstractArray, idims, Is)
+    AT = typeof(src).name.wrapper
+    # NOTE: we are pretty liberal here supporting non-GPU indices...
+    gpu_call(getindex_kernel, dest, src, idims, adapt(AT, Is)...)
+    return dest
+end
+
+@generated function getindex_kernel(ctx::AbstractKernelContext, dest, src, idims,
+                                    Is::Vararg{<:Any,N}) where {N}
+    quote
         i = @linearidx dest
         @inbounds begin
             is = CartesianIndices(idims)[i]
-            idx = ntuple(dim -> @inbounds(Is[dim][is[dim]]), N)
-            dest[i] = getindex(src, idx...)
+            @nexprs $N i -> I_i = Is[i][is[i]]
+            dest[i] = @ncall $N getindex src i -> I_i
         end
         return
     end
-
-    AT = typeof(src).name.wrapper
-    # NOTE: we are pretty liberal here supporting non-GPU indices...
-    gpu_call(kernel, dest, src, idims, adapt(AT, Is); name="getindex!")
-    return dest
 end
 
 Base.setindex!(A::AbstractGPUArray, v, I...) = _setindex!(A, v, to_indices(A, I)...)
 
-function _setindex!(dest::AbstractGPUArray, src, Is::Vararg{<:Any,N}) where {N}
+function _setindex!(dest::AbstractGPUArray, src, Is...)
     isempty(Is) && return dest
     idims = length.(Is)
     len = prod(idims)
     len==0 && return dest
 
-    function kernel(ctx::AbstractKernelContext, dest, src, idims, len, Is)
+    AT = typeof(dest).name.wrapper
+    # NOTE: we are pretty liberal here supporting non-GPU sources and indices...
+    gpu_call(setindex_kernel, dest, adapt(AT, src), idims, len, adapt(AT, Is)...;
+             total_threads=len)
+    return dest
+end
+
+@generated function setindex_kernel(ctx::AbstractKernelContext, dest, src, idims, len,
+                                    Is::Vararg{<:Any,N}) where {N}
+    quote
         i = linear_index(ctx)
         i > len && return
         @inbounds begin
             is = CartesianIndices(idims)[i]
-            idx = ntuple(dim -> @inbounds(Is[dim][is[dim]]), N)
-            setindex!(dest, src[i], idx...)
+            @nexprs $N i -> I_i = Is[i][is[i]]
+            @ncall $N setindex! dest src[i] i -> I_i
         end
         return
     end
-
-    AT = typeof(dest).name.wrapper
-    # NOTE: we are pretty liberal here supporting non-GPU sources and indices...
-    gpu_call(kernel, dest, adapt(AT, src), idims, len, adapt(AT, Is);
-             total_threads=len, name="setindex!")
-    return dest
 end
