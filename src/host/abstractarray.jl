@@ -33,6 +33,7 @@ function Serialization.serialize(s::AbstractSerializer, t::T) where T <: Abstrac
     serialize_type(s, T)
     serialize(s, Array(t))
 end
+
 function Serialization.deserialize(s::AbstractSerializer, ::Type{T}) where T <: AbstractGPUArray
     A = deserialize(s)
     T(A)
