@@ -140,11 +140,10 @@ end
                                     Is::Vararg{<:Any,N}) where {N}
     quote
         i = @linearidx dest
-        @inbounds begin
-            is = CartesianIndices(idims)[i]
-            @nexprs $N i -> I_i = Is[i][is[i]]
-            dest[i] = @ncall $N getindex src i -> I_i
-        end
+        is = @inbounds CartesianIndices(idims)[i]
+        @nexprs $N i -> I_i = @inbounds(Is[i][is[i]])
+        val = @ncall $N getindex src i -> I_i
+        @inbounds dest[i] = val
         return
     end
 end
@@ -169,11 +168,9 @@ end
     quote
         i = linear_index(ctx)
         i > len && return
-        @inbounds begin
-            is = CartesianIndices(idims)[i]
-            @nexprs $N i -> I_i = Is[i][is[i]]
-            @ncall $N setindex! dest src[i] i -> I_i
-        end
+        is = @inbounds CartesianIndices(idims)[i]
+        @nexprs $N i -> I_i = @inbounds(Is[i][is[i]])
+        @ncall $N setindex! dest src[i] i -> I_i
         return
     end
 end
