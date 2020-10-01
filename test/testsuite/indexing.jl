@@ -139,4 +139,8 @@ end
         @test compare(a->a[i',:], AT, a)
         @test compare(a->a[view(i,1,:),:], AT, a)
     end
+
+    @testset "JuliaGPU/CUDA.jl#461: sliced setindex" begin
+        @test compare((X,Y)->(X[1,:] = Y), AT, zeros(2,2), ones(2))
+    end
 end
