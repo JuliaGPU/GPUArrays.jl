@@ -146,12 +146,12 @@ end
 
 @testsuite "iterator constructors" AT->begin
     for T in supported_eltypes()
-        @test AT(Fill(T(0), (10,))) == fill!(similar(AT{T}, (10,)), T(0))
-        @test AT(Fill(T(0), (10, 10))) == fill!(similar(AT{T}, (10, 10)), T(0))
+        @test Array(AT(Fill(T(0), (10,)))) == Array(fill!(similar(AT{T}, (10,)), T(0)))
+        @test Array(AT(Fill(T(0), (10, 10)))) == Array(fill!(similar(AT{T}, (10, 10)), T(0)))
         if T <: Real
             x = AT{Float32}(Fill(T(0), (10, 10)))
             @test eltype(x) == Float32
-            @test AT(Eye{T}((10))) == AT{T}(I, 10, 10)
+            @test Array(AT(Eye{T}((10)))) == Array(AT{T}(I, 10, 10))
             x = AT{Float32}(Eye{T}(10))
             @test eltype(x) == Float32
         end

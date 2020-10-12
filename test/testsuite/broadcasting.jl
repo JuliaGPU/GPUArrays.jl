@@ -54,9 +54,9 @@ function broadcasting(AT)
             @testset "Adjoint and Transpose" begin
                 A = AT(rand(ET, N))
                 A' .= ET(2)
-                @test all(isequal(ET(2)'), A)
+                @test all(isequal(ET(2)'), Array(A))
                 transpose(A) .= ET(1)
-                @test all(isequal(ET(1)), A)
+                @test all(isequal(ET(1)), Array(A))
             end
 
             ############
