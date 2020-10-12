@@ -7,7 +7,7 @@
             B = copy(A)
             rand!(A)
             rand!(B)
-            @test A != B
+            @test Array(A) != Array(B)
 
             rng = if AT <: AbstractGPUArray
                 GPUArrays.default_rng(AT)
@@ -19,7 +19,7 @@
             rand!(rng, A)
             Random.seed!(rng, 1)
             rand!(rng, B)
-            @test all(A .== B)
+            @test all(Array(A) .== Array(B))
         end
 
         A = AT{Bool}(undef, 5)
@@ -34,7 +34,7 @@
             B = copy(A)
             randn!(A)
             randn!(B)
-            @test !any(A .== B)
+            @test !any(Array(A) .== Array(B))
 
             rng = if AT <: AbstractGPUArray
                 GPUArrays.default_rng(AT)
@@ -46,7 +46,7 @@
             randn!(rng, A)
             Random.seed!(rng, 1)
             randn!(rng, B)
-            @test all(A .== B)
+            @test all(Array(A) .== Array(B))
         end
     end
 end

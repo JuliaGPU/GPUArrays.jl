@@ -55,7 +55,7 @@ macro testsuite(name, ex)
     safe_name = lowercase(replace(name, " "=>"_"))
     fn = Symbol("test_$(safe_name)")
     quote
-        $fn(AT) = $(esc(ex))(AT)
+        $(esc(fn))(AT) = $(esc(ex))(AT)
 
         @assert !haskey(tests, $name)
         tests[$name] = $fn

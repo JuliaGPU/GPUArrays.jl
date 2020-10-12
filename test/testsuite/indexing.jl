@@ -85,18 +85,16 @@ end
 @testsuite "indexing multidimensional" AT->begin
     @testset "sliced setindex" for T in supported_eltypes()
         x = AT(zeros(T, (10, 10, 10, 10)))
-        y = similar(x, (5, 5, 10, 10))
-        rand!(y)
+        y = AT(rand(T, (5, 5, 10, 10)))
         x[2:6, 2:6, :, :] = y
         @test Array(x[2:6, 2:6, :, :]) == Array(y)
     end
 
     @testset "sliced setindex, CPU source" for T in supported_eltypes()
         x = AT(zeros(T, (2,3,4)))
-        y = similar(x, (2,3))
-        rand!(y)
+        y = AT(rand(T, (2,3)))
         x[:, :, 2] = y
-        @test x[:, :, 2] == y
+        @test Array(x[:, :, 2]) == Array(y)
     end
 
     @allowscalar @testset "empty array" begin
