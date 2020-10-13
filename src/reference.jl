@@ -329,30 +329,6 @@ Base.copyto!(dest::DenseJLArray{T}, source::DenseJLArray{T}) where {T} =
     copyto!(dest, 1, source, 1, length(source))
 
 
-## fft
-
-using AbstractFFTs
-
-# defining our own plan type is the easiest way to pass around the plans in FFTW interface
-# without ambiguities
-
-struct FFTPlan{T}
-    p::T
-end
-
-AbstractFFTs.plan_fft(A::JLArray; kw_args...) = FFTPlan(plan_fft(A.data; kw_args...))
-AbstractFFTs.plan_fft!(A::JLArray; kw_args...) = FFTPlan(plan_fft!(A.data; kw_args...))
-AbstractFFTs.plan_bfft!(A::JLArray; kw_args...) = FFTPlan(plan_bfft!(A.data; kw_args...))
-AbstractFFTs.plan_bfft(A::JLArray; kw_args...) = FFTPlan(plan_bfft(A.data; kw_args...))
-AbstractFFTs.plan_ifft!(A::JLArray; kw_args...) = FFTPlan(plan_ifft!(A.data; kw_args...))
-AbstractFFTs.plan_ifft(A::JLArray; kw_args...) = FFTPlan(plan_ifft(A.data; kw_args...))
-
-function Base.:(*)(plan::FFTPlan, A::JLArray)
-    x = plan.p * A.data
-    JLArray(x)
-end
-
-
 ## Random
 
 using Random
@@ -387,16 +363,6 @@ function GPUArrays.default_rng(::Type{<:JLArray})
         GLOBAL_RNG[] = rng
     end
     GLOBAL_RNG[]
-end
-
-
-## LinearAlgebra
-
-using LinearAlgebra
-
-for TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
-    @eval LinearAlgebra.ldiv!(x::$TR{T,<:JLArray{T,2}}, y::JLArray{T,2}) where T<:Union{Complex{Float32}, Complex{Float64}, Float32, Float64} = JLArray(LinearAlgebra.ldiv!($TR(parent(x).data),y.data))
-    @eval LinearAlgebra.rdiv!(x::JLArray{T,2}, y::$TR{T,<:JLArray{T,2}}) where T<:Union{Complex{Float32}, Complex{Float64}, Float32, Float64} = JLArray(LinearAlgebra.rdiv!(x.data,$TR(parent(y).data)))
 end
 
 end

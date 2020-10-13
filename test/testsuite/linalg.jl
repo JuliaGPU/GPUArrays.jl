@@ -30,12 +30,8 @@
 
             rand!(gpu_a)
             gpu_c = copyto!(gpu_b, TR(gpu_a))
-            @test all(gpu_b .== TR(gpu_a))
+            @test all(Array(gpu_b) .== TR(Array(gpu_a)))
             @test gpu_c isa AT
-        end
-
-        @testset "inv for triangular" for TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
-            @test compare(x -> inv(TR(x)), AT, rand(Float32, 32, 32))
         end
 
         for TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
@@ -43,8 +39,8 @@
             gpu_b = AT{Float32}(undef, 128, 128) |> TR
 
             gpu_c = copyto!(gpu_b, gpu_a)
-            @test all(gpu_b .== gpu_a)
-            @test all(gpu_c .== gpu_a)
+            @test all(Array(gpu_b) .== Array(gpu_a))
+            @test all(Array(gpu_c) .== Array(gpu_a))
             @test gpu_c isa TR
         end
     end

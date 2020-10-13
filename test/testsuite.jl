@@ -12,7 +12,6 @@ using LinearAlgebra
 using Random
 using Test
 
-using FFTW
 using Adapt
 using FillArrays
 
@@ -72,7 +71,6 @@ include("testsuite/mapreduce.jl")
 include("testsuite/broadcasting.jl")
 include("testsuite/linalg.jl")
 include("testsuite/math.jl")
-include("testsuite/fft.jl")
 include("testsuite/random.jl")
 include("testsuite/uniformscaling.jl")
 

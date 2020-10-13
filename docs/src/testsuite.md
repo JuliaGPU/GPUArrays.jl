@@ -44,7 +44,6 @@ TestSuite.test_base(T) # basic functionality like launching a kernel on the GPU 
 TestSuite.test_blas(T) # tests the blas interface
 TestSuite.test_broadcasting(T) # tests the broadcasting implementation
 TestSuite.test_construction(T) # tests all kinds of different ways of constructing the array
-TestSuite.test_fft(T) # fft tests
 TestSuite.test_linalg(T) # linalg function tests
 TestSuite.test_mapreduce(T) # mapreduce sum, etc
 TestSuite.test_indexing(T) # indexing tests
