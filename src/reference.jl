@@ -329,30 +329,6 @@ Base.copyto!(dest::DenseJLArray{T}, source::DenseJLArray{T}) where {T} =
     copyto!(dest, 1, source, 1, length(source))
 
 
-## fft
-
-using AbstractFFTs
-
-# defining our own plan type is the easiest way to pass around the plans in FFTW interface
-# without ambiguities
-
-struct FFTPlan{T}
-    p::T
-end
-
-AbstractFFTs.plan_fft(A::JLArray; kw_args...) = FFTPlan(plan_fft(A.data; kw_args...))
-AbstractFFTs.plan_fft!(A::JLArray; kw_args...) = FFTPlan(plan_fft!(A.data; kw_args...))
-AbstractFFTs.plan_bfft!(A::JLArray; kw_args...) = FFTPlan(plan_bfft!(A.data; kw_args...))
-AbstractFFTs.plan_bfft(A::JLArray; kw_args...) = FFTPlan(plan_bfft(A.data; kw_args...))
-AbstractFFTs.plan_ifft!(A::JLArray; kw_args...) = FFTPlan(plan_ifft!(A.data; kw_args...))
-AbstractFFTs.plan_ifft(A::JLArray; kw_args...) = FFTPlan(plan_ifft(A.data; kw_args...))
-
-function Base.:(*)(plan::FFTPlan, A::JLArray)
-    x = plan.p * A.data
-    JLArray(x)
-end
-
-
 ## Random
 
 using Random
