@@ -389,14 +389,4 @@ function GPUArrays.default_rng(::Type{<:JLArray})
     GLOBAL_RNG[]
 end
 
-
-## LinearAlgebra
-
-using LinearAlgebra
-
-for TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
-    @eval LinearAlgebra.ldiv!(x::$TR{T,<:JLArray{T,2}}, y::JLArray{T,2}) where T<:Union{Complex{Float32}, Complex{Float64}, Float32, Float64} = JLArray(LinearAlgebra.ldiv!($TR(parent(x).data),y.data))
-    @eval LinearAlgebra.rdiv!(x::JLArray{T,2}, y::$TR{T,<:JLArray{T,2}}) where T<:Union{Complex{Float32}, Complex{Float64}, Float32, Float64} = JLArray(LinearAlgebra.rdiv!(x.data,$TR(parent(y).data)))
-end
-
 end

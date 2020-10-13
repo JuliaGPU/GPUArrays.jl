@@ -34,10 +34,6 @@
             @test gpu_c isa AT
         end
 
-        @testset "inv for triangular" for TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
-            @test compare(x -> inv(TR(x)), AT, rand(Float32, 32, 32))
-        end
-
         for TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
             gpu_a = AT{Float32}(undef, 128, 128) |> rand! |> TR
             gpu_b = AT{Float32}(undef, 128, 128) |> TR

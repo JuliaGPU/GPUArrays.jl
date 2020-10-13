@@ -211,12 +211,3 @@ function LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArra
     end
     return dest
 end
-
-
-## inv for Triangular
-for TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
-    @eval function Base.inv(x::$TR{<:Any,<:AbstractGPUArray})
-      out = typeof(parent(x))(I(size(x,1)))
-      $TR(LinearAlgebra.ldiv!(x,out))
-    end
-end
