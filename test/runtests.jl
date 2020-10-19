@@ -3,7 +3,8 @@ using GPUArrays, Test
 include("testsuite.jl")
 
 @testset "JLArray" begin
-    using GPUArrays.JLArrays
+    include("jlarray.jl")
+    using .JLArrays
 
     jl([1])
 
