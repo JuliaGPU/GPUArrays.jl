@@ -70,7 +70,6 @@ end
                 @test compare(A->maximum(A; dims=dims), AT, rand(range, sz))
             end
         end
-        OT = isbitstype(widen(ET)) ? widen(ET) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
                          (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1)]
             if !(ET <: Complex)
@@ -78,11 +77,14 @@ end
                 @test compare((A,R)->maximum!(R, A), AT, rand(range, sz), fill(typemin(ET), red))
             end
         end
-        # smaller-scale test to avoid very large values and roundoff issues
-        for (sz,red) in [(2,)=>(1,), (2,2)=>(1,1), (2,2,2)=>(1,1,1), (2,2,2)=>(2,2,2),
-                         (2,2,2)=>(1,2,2), (2,2,2)=>(2,1,2), (2,2,2)=>(2,2,1)]
-            @test compare((A,R)->sum!(R, A), AT, rand(range, sz), rand(OT, red))
-            @test compare((A,R)->prod!(R, A), AT, rand(range, sz), rand(OT, red))
+        OT = isbitstype(widen(ET)) ? widen(ET) : ET
+        if OT in supported_eltypes()
+            # smaller-scale test to avoid very large values and roundoff issues
+            for (sz,red) in [(2,)=>(1,), (2,2)=>(1,1), (2,2,2)=>(1,1,1), (2,2,2)=>(2,2,2),
+                            (2,2,2)=>(1,2,2), (2,2,2)=>(2,1,2), (2,2,2)=>(2,2,1)]
+                @test compare((A,R)->sum!(R, A), AT, rand(range, sz), rand(OT, red))
+                @test compare((A,R)->prod!(R, A), AT, rand(range, sz), rand(OT, red))
+            end
         end
     end
 
