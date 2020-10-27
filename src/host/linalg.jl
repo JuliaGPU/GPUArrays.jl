@@ -110,16 +110,11 @@ function generic_matmatmul!(C::AnyGPUArray{R}, A::AnyGPUArray{T}, B::AnyGPUArray
         return fill!(C, zero(R))
     end
 
-    # reshape vectors to matrices
-    A′ = reshape(A, (size(A,1), size(A,2)))
-    B′ = reshape(B, (size(B,1), size(B,2)))
-    C′= reshape(C, (size(C,1), size(C,2)))
-
-    gpu_call(C′, A′, B′; name="matmatmul!") do ctx, C, A, B
+    gpu_call(C, A, B; name="matmatmul!") do ctx, C, A, B
         idx = @linearidx C
-        i, j = Tuple(CartesianIndices(C)[idx])
+        i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
 
-        if i <= size(A,1) && j <= size(B,2)
+        @inbounds if i <= size(A,1) && j <= size(B,2)
             z2 = zero(A[i, 1]*B[1, j] + A[i, 1]*B[1, j])
             Ctmp = convert(promote_type(R, typeof(z2)), z2)
             for k in 1:size(A,2)
