@@ -225,9 +225,8 @@ end
     quote
         l -= 1
         @nexprs $(N-1) i->begin
-            s_i = l % size[i] + 1
-            l = l ÷ size[i]
+            @inbounds l, s_i = divrem(l, size[i])
         end
-        $(Expr(:tuple, [Symbol(:s_, i) for i=1:N-1]..., :(l+1)))
+        $(Expr(:tuple, [:($(Symbol(:s_, i))+1) for i=1:N-1]..., :(l+1)))
     end
 end
