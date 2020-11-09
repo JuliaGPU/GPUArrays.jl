@@ -193,16 +193,41 @@ LinearAlgebra.lmul!(a::Number, B::AbstractGPUArray) = generic_lmul!(a, B)
 
 ## permutedims
 
-function genperm(I::CartesianIndex{N}, perm::NTuple{N}) where N
-    CartesianIndex(ntuple(d-> (@inbounds return I[perm[d]]), Val(N)))
+function genperm(I::NTuple{N}, perm::NTuple{N}) where N
+    ntuple(d-> (@inbounds return I[perm[d]]), Val(N))
 end
 
 function LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) where N
     perm isa Tuple || (perm = Tuple(perm))
     gpu_call(dest, src, perm; name="permutedims!") do ctx, dest, src, perm
-        I = @cartesianidx src
-        @inbounds dest[genperm(I, perm)] = src[I]
+        i = @linearidx src
+        I = l2c(size(src), i)
+        @inbounds dest[c2l(size(dest), genperm(I, perm))] = src[i]
         return
     end
     return dest
+end
+
+using Base.Cartesian
+@generated function c2l(size::NTuple{N, Int}, c::NTuple{N,Int}) where N
+    quote
+        res = c[1]
+        stride = size[1]
+        @nexprs $(N-1) i->begin
+            res += (c[i+1]-1) * stride
+            stride *= size[i+1]
+        end
+        return res
+    end
+end
+
+@generated function l2c(size::NTuple{N, Int}, l::Int) where N
+    quote
+        l -= 1
+        @nexprs $(N-1) i->begin
+            s_i = l % size[i] + 1
+            l = l ÷ size[i]
+        end
+        $(Expr(:tuple, [Symbol(:s_, i) for i=1:N-1]..., :(l+1)))
+    end
 end

@@ -52,6 +52,27 @@
         @test compare(x -> permutedims(x, [2,1,4,3]), AT, randn(ComplexF64,3,4,5,1))
     end
 
+    @testset "c2l" begin
+        for i=1:100
+            shape = (4,rand(1:5),rand(1:7),5,19)
+            target = ([rand(1:s) for s in shape]...,)
+            @test c2l(shape, target) == LinearIndices(shape)[target...]
+        end
+        for i=1:100
+            shape = (4,rand(1:5),rand(1:12),15,19)
+            ci = CartesianIndices(shape)
+            i = rand(1:prod(shape))
+            @test l2c(shape, i) == ci[i].I
+        end
+    end
+
+    @testset "permutedims" begin
+        a = randn(rand(1:3, 18)...)
+        A = CuArray(a)
+        p = randperm(18)
+        @test Array(permutedims(A, p)) ≈ permutedims(a, p)
+    end
+
     @testset "issymmetric/ishermitian" begin
         n = 128
         areal = randn(n,n)/2
