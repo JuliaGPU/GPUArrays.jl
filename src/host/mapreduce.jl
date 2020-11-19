@@ -74,8 +74,8 @@ Base.all(A::AnyGPUArray{Bool}) = mapreduce(identity, &, A)
 Base.any(f::Function, A::AnyGPUArray) = mapreduce(f, |, A)
 Base.all(f::Function, A::AnyGPUArray) = mapreduce(f, &, A)
 
-Base.count(pred::Function, A::AnyGPUArray; dims=:) =
-    mapreduce(pred, Base.add_sum, A; init=0, dims=dims)
+Base.count(pred::Function, A::AnyGPUArray; dims=:, init=0) =
+    mapreduce(pred, Base.add_sum, A; init=init, dims=dims)
 
 Base.:(==)(A::AnyGPUArray, B::AnyGPUArray) = Bool(mapreduce(==, &, A, B))
 
