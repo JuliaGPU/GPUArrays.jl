@@ -184,6 +184,9 @@ end
         @test compare(a-> repeat(a, 5),     AT, rand(Float32, 10))
         @test compare(a-> repeat(a, 5),     AT, rand(Float32, 5, 4))
         @test compare(a-> repeat(a, 4, 3),  AT, rand(Float32, 10, 15))
+        @test compare(a-> repeat(a, 0),     AT, rand(Float32, 10))
+        @test compare(a-> repeat(a, 0),     AT, rand(Float32, 5, 4))
+        @test compare(a-> repeat(a, 4, 0),  AT, rand(Float32, 10, 15))
     end
 
     @testset "permutedims" begin
