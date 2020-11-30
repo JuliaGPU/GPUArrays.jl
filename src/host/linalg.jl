@@ -193,16 +193,21 @@ LinearAlgebra.lmul!(a::Number, B::AbstractGPUArray) = generic_lmul!(a, B)
 
 ## permutedims
 
-function genperm(I::CartesianIndex{N}, perm::NTuple{N}) where N
-    CartesianIndex(ntuple(d-> (@inbounds return I[perm[d]]), Val(N)))
-end
-
-function LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) where N
-    perm isa Tuple || (perm = Tuple(perm))
-    gpu_call(dest, src, perm; name="permutedims!") do ctx, dest, src, perm
+function LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray,
+                                    perm::NTuple)
+    Base.checkdims_perm(dest, src, perm)
+    function permutedims_kernel(ctx, dest, src, ::Val{perm}) where {perm}
         I = @cartesianidx src
-        @inbounds dest[genperm(I, perm)] = src[I]
+        @inbounds begin
+            J = CartesianIndex(map(i->I[i], perm))
+            dest[J] = src[I]
+        end
         return
     end
+    gpu_call(permutedims_kernel, dest, src, Val(perm))
     return dest
 end
+
+# TODO: implementation without the memory copy
+LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) =
+    permutedims!(dest, src, Tuple(perm))
