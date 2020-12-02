@@ -27,4 +27,4 @@
 This package is the counterpart of Julia's `AbstractArray` interface, but for GPU array
 types: It provides functionality and tooling to speed-up development of new GPU array types.
 **This package is not intended for end users!** Instead, you should use one of the packages
-that builds on GPUArrays.jl, such as [CuArrays](https://github.com/JuliaGPU/CuArrays.jl).
+that builds on GPUArrays.jl, such as [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl), [oneAPI.jl](https://github.com/JuliaGPU/oneAPI.jl) or [AMDGPU.jl](https://github.com/JuliaGPU/AMDGPU.jl).
