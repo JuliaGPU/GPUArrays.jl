@@ -1,8 +1,8 @@
 steps:
   - label: "CUDA.jl"
     plugins:
-      - JuliaCI/julia#v0.4:
-          version: nightly
+      - JuliaCI/julia#v0.6:
+          version: 1.6-nightly
       - JuliaCI/julia-coverage#v0.2:
           codecov: true
     command: |
@@ -18,12 +18,13 @@ steps:
     agents:
       queue: "juliagpu"
       cuda: "*"
+    if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
 
   - label: "oneAPI.jl"
     plugins:
-      - JuliaCI/julia#v0.4:
-          version: nightly
+      - JuliaCI/julia#v0.6:
+          version: 1.6-nightly
       - JuliaCI/julia-coverage#v0.2:
           codecov: true
     command: |
@@ -39,6 +40,7 @@ steps:
     agents:
       queue: "juliagpu"
       intel: "*"
+    if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
 
 env:
