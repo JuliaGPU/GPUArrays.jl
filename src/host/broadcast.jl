@@ -19,8 +19,8 @@ abstract type AbstractGPUArrayStyle{N} <: AbstractArrayStyle{N} end
 
 # Wrapper types otherwise forget that they are GPU compatible
 # NOTE: don't directly use GPUArrayStyle here not to lose downstream customizations.
-BroadcastStyle(W::Type{<:WrappedGPUArray})= BroadcastStyle(parent(W){eltype(W), ndims(W)})
-backend(W::Type{<:WrappedGPUArray}) = backend(parent(W){eltype(W), ndims(W)})
+BroadcastStyle(W::Type{<:WrappedGPUArray})= BroadcastStyle(Adapt.parent(W){Adapt.eltype(W), Adapt.ndims(W)})
+backend(W::Type{<:WrappedGPUArray}) = backend(Adapt.parent(W){Adapt.eltype(W), Adapt.ndims(W)})
 
 # Ref is special: it's not a real wrapper, so not part of Adapt,
 # but it is commonly used to bypass broadcasting of an argument
