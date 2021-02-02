@@ -36,20 +36,17 @@ function Broadcast.copy(bc::Broadcasted{<:AbstractGPUArrayStyle{0}})
     return @allowscalar dest[CartesianIndex()]  # 0D broadcast needs to unwrap results
 end
 
-# We purposefully only specialize `copyto!`, dependent packages need to make sure that they
-# can handle:
-# - `bc::Broadcast.Broadcasted{Style}`
-# - `ex::Broadcast.Extruded`
-# - `LinearAlgebra.Transpose{,<:AbstractGPUArray}` and `LinearAlgebra.Adjoint{,<:AbstractGPUArray}`, etc
-#    as arguments to a kernel and that they do the right conversion.
-#
-# This Broadcast can be further customize by:
-# - `Broadcast.preprocess(dest::AbstractGPUArray, bc::Broadcasted{Nothing})` which allows for a
-#   complete transformation based on the output type just at the end of the pipeline.
-# - `Broadcast.broadcasted(::Style, f)` selection of an implementation of `f` compatible
-#   with `Style`
-#
-# For more information see the Base documentation.
+# we need to override the outer copy method to make sure we never fall back to scalar
+# iteration (see, e.g., CUDA.jl#145)
+@inline function Broadcast.copy(bc::Broadcasted{<:AbstractGPUArrayStyle})
+    ElType = Broadcast.combine_eltypes(bc.f, bc.args)
+    if !Base.isconcretetype(ElType)
+        error("""GPU broadcast resulted in non-concrete element type $ElType.
+                 This probably means that the function you are broadcasting contains an error or type instability.""")
+    end
+    copyto!(similar(bc, ElType), bc)
+end
+
 @inline function Base.copyto!(dest::BroadcastGPUArray, bc::Broadcasted{Nothing})
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     isempty(dest) && return dest
