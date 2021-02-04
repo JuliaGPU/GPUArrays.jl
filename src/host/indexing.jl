@@ -5,29 +5,43 @@ export allowscalar, @allowscalar, @disallowscalar, assertscalar
 
 # mechanism to disallow scalar operations
 
-@enum ScalarIndexing ScalarAllowed ScalarWarned ScalarDisallowed
-
-const scalar_allowed = Ref(ScalarWarned)
-const scalar_warned = Ref(false)
+@enum ScalarIndexing ScalarAllowed ScalarWarn ScalarWarned ScalarDisallowed
 
 """
     allowscalar(allow=true, warn=true)
+    allowscalar(allow=true, warn=true) do end
 
 Configure whether scalar indexing is allowed depending on the value of `allow`.
 
 If allowed, `warn` can be set to throw a single warning instead. Calling this function will
 reset the state of the warning, and throw a new warning on subsequent scalar iteration.
+
+For temporary changes, use the do-block version, or [`@allowscalar`](@ref).
 """
 function allowscalar(allow::Bool=true, warn::Bool=true)
-    scalar_warned[] = false
-    scalar_allowed[] = if allow && !warn
+    val = if allow && !warn
         ScalarAllowed
     elseif allow
-        ScalarWarned
+        ScalarWarn
     else
         ScalarDisallowed
     end
+
+    task_local_storage(:ScalarIndexing, val)
     return
+end
+
+@doc (@doc allowscalar) ->
+function allowscalar(f::Base.Callable, allow::Bool=true, warn::Bool=false)
+    val = if allow && !warn
+        ScalarAllowed
+    elseif allow
+        ScalarWarn
+    else
+        ScalarDisallowed
+    end
+
+    task_local_storage(f, :ScalarIndexing, val)
 end
 
 """
@@ -37,11 +51,12 @@ Assert that a certain operation `op` performs scalar indexing. If this is not al
 error will be thrown ([`allowscalar`](@ref)).
 """
 function assertscalar(op = "operation")
-    if scalar_allowed[] == ScalarDisallowed
+    val = get(task_local_storage(), :ScalarIndexing, ScalarWarn)
+    if val == ScalarDisallowed
         error("$op is disallowed")
-    elseif scalar_allowed[] == ScalarWarned && !scalar_warned[]
+    elseif val == ScalarWarn
         @warn "Performing scalar operations on GPU arrays: This is very slow, consider disallowing these operations with `allowscalar(false)`"
-        scalar_warned[] = true
+        task_local_storage(:ScalarIndexing, ScalarWarned)
     end
     return
 end
@@ -59,32 +74,19 @@ fine-grained expressions.
 """
 macro allowscalar(ex)
     quote
-        local prev = scalar_allowed[]
-        scalar_allowed[] = ScalarAllowed
-        local ret = $(esc(ex))
-        scalar_allowed[] = prev
-        ret
+        task_local_storage(:ScalarIndexing, ScalarAllowed) do
+            $(esc(ex))
+        end
     end
 end
 
 @doc (@doc @allowscalar) ->
 macro disallowscalar(ex)
     quote
-        local prev = scalar_allowed[]
-        scalar_allowed[] = ScalarDisallowed
-        local ret = $(esc(ex))
-        scalar_allowed[] = prev
-        ret
+        task_local_storage(:ScalarIndexing, ScalarDisallowed) do
+            $(esc(ex))
+        end
     end
-end
-
-@doc (@doc @allowscalar) ->
-function allowscalar(f::Base.Callable, allow::Bool=true, warn::Bool=false)
-    prev = scalar_allowed[]
-    allowscalar(allow, warn)
-    ret = f()
-    scalar_allowed[] = prev
-    ret
 end
 
 
