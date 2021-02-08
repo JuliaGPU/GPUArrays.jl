@@ -1,6 +1,12 @@
-using GPUArrays, XUnit
+using GPUArrays
 
-@testset "GPUArrays" runner=ParallelTestRunner() begin
+try
+    using XUnit
+catch
+    using Test
+end
+
+@testset "GPUArrays" begin
 
 include("testsuite.jl")
 
