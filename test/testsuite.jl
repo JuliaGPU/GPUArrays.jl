@@ -8,9 +8,10 @@ export supported_eltypes
 
 using GPUArrays
 
+using XUnit
+
 using LinearAlgebra
 using Random
-using Test
 
 using Adapt
 using FillArrays

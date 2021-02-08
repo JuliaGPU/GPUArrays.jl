@@ -2,7 +2,8 @@
     eltypes = (ComplexF32, Float32)
     wrappers = (identity, UnitLowerTriangular, UnitUpperTriangular, LowerTriangular, UpperTriangular, Hermitian, Symmetric)
 
-    @testset "UniformScaling $f $T1 $T2" for T1 in eltypes, T2 in eltypes, f in wrappers
+    for T1 in eltypes, T2 in eltypes, f in wrappers
+    @testcase "UniformScaling $f $T1 $T2" begin
         x = ones(T1, 5, 5)
         y = AT(x)
 
@@ -16,5 +17,6 @@
 
         # Missing methods in Base it seems... -(x - I) can be removed when Base supports (I - x)
         @test @allowscalar collect(-(xw - J)) ≈ collect(J - yw)
+    end
     end
 end

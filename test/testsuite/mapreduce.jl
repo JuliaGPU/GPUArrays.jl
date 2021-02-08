@@ -1,5 +1,6 @@
 @testsuite "mapreduce essentials" AT->begin
-    @testset "mapreducedim! $ET" for ET in supported_eltypes()
+    for ET in supported_eltypes()
+    @testcase "mapreducedim! $ET" begin
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
@@ -14,7 +15,7 @@
         @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,3)), zeros(ET, (2,)))
     end
 
-    @testset "reducedim! $ET" for ET in supported_eltypes()
+    @testcase "reducedim! $ET" begin
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
@@ -24,7 +25,7 @@
         end
     end
 
-    @testset "mapreduce $ET" for ET in supported_eltypes()
+    @testcase "mapreduce $ET" begin
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
@@ -36,7 +37,7 @@
         end
     end
 
-    @testset "reduce $ET" for ET in supported_eltypes()
+    @testcase "reduce $ET" begin
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
@@ -46,10 +47,12 @@
             @test compare(A->reduce(*, A; dims=dims, init=one(ET)), AT, rand(range, sz))
         end
     end
+    end
 end
 
 @testsuite "mapreduce derivatives" AT->begin
-    @testset "sum prod minimum maximum $ET" for ET in supported_eltypes()
+    for ET in supported_eltypes()
+    @testcase "sum prod minimum maximum $ET" begin
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
@@ -87,8 +90,9 @@ end
             end
         end
     end
+    end
 
-    @testset "any all count ==" begin
+    @testcase "any all count ==" begin
         for Ac in ([false, false], [false, true], [true, true],
                    [false false; false false], [false true; false false],
                    [true true; false false], [true true; true true])

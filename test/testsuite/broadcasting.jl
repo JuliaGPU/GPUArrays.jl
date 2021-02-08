@@ -2,7 +2,7 @@
     broadcasting(AT)
     vec3(AT)
 
-    @testset "type instabilities" begin
+    @testcase "type instabilities" begin
         f(x) = x ? 1.0 : 0
         try
             f.(AT(rand(Bool, 1)))
@@ -40,8 +40,8 @@ end
 function broadcasting(AT)
     for ET in supported_eltypes()
         N = 10
-        @testset "broadcast $ET" begin
-            @testset "RefValue" begin
+        @testcase "broadcast $ET" begin
+            @testcase "RefValue" begin
                 cidx = rand(1:Int(N), 2*N)
                 gidx = AT(cidx)
                 cy = rand(ET, 2*N)
@@ -53,7 +53,7 @@ function broadcasting(AT)
                 @test Array(gres) == cres
             end
 
-            @testset "Tuple" begin
+            @testcase "Tuple" begin
                 @test compare(AT, rand(ET, 3, N), rand(ET, 3, N), rand(ET, N), rand(ET, N), rand(ET, N)) do out, arr, a, b, c
                     broadcast!(out, arr, (a, b, c)) do xx, yy
                         xx + first(yy)
@@ -61,7 +61,7 @@ function broadcasting(AT)
                 end
             end
 
-            @testset "Adjoint and Transpose" begin
+            @testcase "Adjoint and Transpose" begin
                 A = AT(rand(ET, N))
                 A' .= ET(2)
                 @test all(isequal(ET(2)'), Array(A))
@@ -126,7 +126,7 @@ function broadcasting(AT)
             @test compare((A, B) -> A .* B .+ ET(10), AT, rand(ET, 40, 40), rand(ET, 40, 40))
         end
 
-        @testset "map! $ET" begin
+        @testcase "map! $ET" begin
             @test compare(AT, rand(2,2), rand(2,2)) do x,y
                 map!(+, x, y)
             end
@@ -138,7 +138,7 @@ function broadcasting(AT)
             end
         end
 
-        @testset "map $ET" begin
+        @testcase "map $ET" begin
             @test compare(AT, rand(2,2), rand(2,2)) do x,y
                 map(+, x, y)
             end
@@ -151,7 +151,7 @@ function broadcasting(AT)
         end
     end
 
-    @testset "0D" begin
+    @testcase "0D" begin
         x = AT{Float64}(undef)
         x .= 1
         @test collect(x)[] == 1
@@ -159,7 +159,7 @@ function broadcasting(AT)
         @test collect(x)[] == 0.5
     end
 
-    @testset "Ref" begin
+    @testcase "Ref" begin
         # as first arg, 0d broadcast
         @test compare(x->getindex.(Ref(x),1), AT, [0])
 
@@ -174,13 +174,13 @@ function broadcasting(AT)
         @test Array(a) == Array(b)
     end
 
-    @testset "stackoverflow in copy(::Broadcast)" begin
+    @testcase "stackoverflow in copy(::Broadcast)" begin
         copy(Base.broadcasted(identity, AT(Int[])))
     end
 end
 
 function vec3(AT)
-    @testset "vec 3" begin
+    @testcase "vec 3" begin
         N = 20
 
         xc = map(x-> ntuple(i-> rand(Float32), Val(3)), 1:N)

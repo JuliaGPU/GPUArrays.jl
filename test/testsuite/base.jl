@@ -26,7 +26,7 @@ function ntuple_closure(ctx, result, ::Val{N}, testval) where N
 end
 
 @testsuite "base" AT->begin
-    @testset "copyto!" begin
+    @testcase "copyto!" begin
         x = fill(0f0, (10, 10))
         y = rand(Float32, (20, 10))
         a = AT(x)
@@ -115,7 +115,7 @@ end
         end
     end
 
-    @testset "vcat + hcat" begin
+    @testcase "vcat + hcat" begin
         @test compare(vcat, AT, fill(0f0, (10, 10)), rand(Float32, 20, 10))
         @test compare(hcat, AT, fill(0f0, (10, 10)), rand(Float32, 10, 10))
 
@@ -124,7 +124,7 @@ end
         @test compare((a,b) -> cat(a, b; dims=4), AT, rand(Float32, 3, 4), rand(Float32, 3, 4))
     end
 
-    @testset "reshape" begin
+    @testcase "reshape" begin
         @test compare(reshape, AT, rand(10), Ref((10,)))
         @test compare(reshape, AT, rand(10), Ref((10,1)))
         @test compare(reshape, AT, rand(10), Ref((1,10)))
@@ -132,7 +132,7 @@ end
         @test_throws Exception reshape(AT(rand(10)), (10,2))
     end
 
-    @testset "reinterpret" begin
+    @testcase "reinterpret" begin
         a = rand(ComplexF32, 22)
         A = AT(a)
         af0 = reinterpret(Float32, a)
@@ -148,7 +148,7 @@ end
         @test Array(Af0) == af0
     end
 
-    AT <: AbstractGPUArray && @testset "ntuple test" begin
+    AT <: AbstractGPUArray && @testcase "ntuple test" begin
         result = AT(Vector{NTuple{3, Float32}}(undef, 1))
         gpu_call(ntuple_test, result, Val(3))
         @test Array(result)[1] == (77, 2*77, 3*77)
@@ -157,7 +157,7 @@ end
         @test Array(result)[1] == (x, 2*x, 3*x)
     end
 
-    AT <: AbstractGPUArray && @testset "cartesian iteration" begin
+    AT <: AbstractGPUArray && @testcase "cartesian iteration" begin
         Ac = rand(Float32, 32, 32)
         A = AT(Ac)
         result = fill!(copy(A), 0.0)
@@ -165,7 +165,7 @@ end
         Array(result) == Ac
     end
 
-    AT <: AbstractGPUArray && @testset "Custom kernel from Julia function" begin
+    AT <: AbstractGPUArray && @testcase "Custom kernel from Julia function" begin
         x = AT(rand(Float32, 100))
         y = AT(rand(Float32, 100))
         gpu_call(clmap!, -, x, y; target=x)
@@ -173,13 +173,13 @@ end
         @test map!(-, jy, jy) ≈ Array(x)
     end
 
-    @testset "map" begin
+    @testcase "map" begin
         @test compare((a, b)-> map(+, a, b),    AT, rand(Float32, 10), rand(Float32, 10))
         @test compare((a, b)-> map!(-, a, b),   AT, rand(Float32, 10), rand(Float32, 10))
         @test compare((a, b, c, d)-> map!(*, a, b, c, d), AT, rand(Float32, 10), rand(Float32, 10), rand(Float32, 10), rand(Float32, 10))
     end
 
-    @testset "repeat" begin
+    @testcase "repeat" begin
         @test compare(a-> repeat(a, 5, 6),  AT, rand(Float32, 10))
         @test compare(a-> repeat(a, 5),     AT, rand(Float32, 10))
         @test compare(a-> repeat(a, 5),     AT, rand(Float32, 5, 4))
@@ -189,18 +189,18 @@ end
         @test compare(a-> repeat(a, 4, 0),  AT, rand(Float32, 10, 15))
     end
 
-    @testset "permutedims" begin
+    @testcase "permutedims" begin
         @test compare(x->permutedims(x, [1, 2]), AT, rand(4, 4))
 
         inds = rand(1:100, 150, 150)
         @test compare(x->permutedims(view(x, inds, :), (3, 2, 1)), AT, rand(100, 100))
     end
 
-    @testset "circshift" begin
+    @testcase "circshift" begin
         @test compare(x->circshift(x, (0,1)), AT, reshape(Vector(1:16), (4,4)))
     end
 
-    @testset "copy" begin
+    @testcase "copy" begin
         a = AT([1])
         b = copy(a)
         fill!(b, 0)
