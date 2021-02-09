@@ -1,4 +1,11 @@
-using GPUArrays, Test
+using GPUArrays
+
+using Pkg
+Pkg.add(url="https://github.com/maleadt/XUnit.jl", rev="tb/for_loop")
+
+using XUnit
+
+@testset "GPUArrays" begin
 
 include("testsuite.jl")
 
@@ -14,4 +21,6 @@ end
 
 @testset "Array" begin
     TestSuite.test(Array)
+end
+
 end

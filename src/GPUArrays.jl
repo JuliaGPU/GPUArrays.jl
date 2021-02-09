@@ -8,8 +8,6 @@ using Printf
 using LinearAlgebra.BLAS
 using Base.Cartesian
 
-using AbstractFFTs
-
 using Adapt
 
 # device functionality

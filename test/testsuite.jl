@@ -8,9 +8,15 @@ export supported_eltypes
 
 using GPUArrays
 
+try
+    using XUnit
+catch
+    using Test
+    @eval $(Symbol("@testcase")) = $(getfield(Test, Symbol("@testset")))
+end
+
 using LinearAlgebra
 using Random
-using Test
 
 using Adapt
 using FillArrays

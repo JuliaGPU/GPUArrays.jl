@@ -2,7 +2,7 @@
     eltypes = (ComplexF32, Float32)
     wrappers = (identity, UnitLowerTriangular, UnitUpperTriangular, LowerTriangular, UpperTriangular, Hermitian, Symmetric)
 
-    @testset "UniformScaling $f $T1 $T2" for T1 in eltypes, T2 in eltypes, f in wrappers
+    @testcase "UniformScaling $f $T1 $T2" for T1 in eltypes, T2 in eltypes, f in wrappers
         x = ones(T1, 5, 5)
         y = AT(x)
 

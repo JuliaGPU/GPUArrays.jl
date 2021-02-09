@@ -1,5 +1,5 @@
 @testsuite "mapreduce essentials" AT->begin
-    @testset "mapreducedim! $ET" for ET in supported_eltypes()
+    @testcase "mapreducedim! $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
@@ -14,7 +14,7 @@
         @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,3)), zeros(ET, (2,)))
     end
 
-    @testset "reducedim! $ET" for ET in supported_eltypes()
+    @testcase "reducedim! $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
@@ -24,7 +24,7 @@
         end
     end
 
-    @testset "mapreduce $ET" for ET in supported_eltypes()
+    @testcase "mapreduce $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
@@ -36,7 +36,7 @@
         end
     end
 
-    @testset "reduce $ET" for ET in supported_eltypes()
+    @testcase "reduce $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
@@ -49,7 +49,7 @@
 end
 
 @testsuite "mapreduce derivatives" AT->begin
-    @testset "sum prod minimum maximum $ET" for ET in supported_eltypes()
+    @testcase "sum prod minimum maximum $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
@@ -88,7 +88,7 @@ end
         end
     end
 
-    @testset "any all count ==" begin
+    @testcase "any all count ==" begin
         for Ac in ([false, false], [false, true], [true, true],
                    [false false; false false], [false true; false false],
                    [true true; false false], [true true; true true])
