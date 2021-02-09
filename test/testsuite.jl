@@ -88,7 +88,7 @@ function test(AT::Type)
         code = quote
             $fun($AT)
         end
-        @eval @testcase $name $code
+        @eval @testset $name $code
     end
 end
 

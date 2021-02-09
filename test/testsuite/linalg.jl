@@ -77,15 +77,16 @@
         @test collect(B) ≈ collect(A) + collect(D)
     end
 
-    for (f, f!) in ((triu, triu!), (tril, tril!)), d in -2:2
-    @testcase "$f! with diagonal $d" begin
+    @testcase "$f! with diagonal $d" for
+            (f, f!) in ((triu, triu!), (tril, tril!)),
+            d in -2:2
         A = randn(10, 10)
         @test f(A, d) == Array(f!(AT(A), d))
     end
-    end
 
-    for f in (identity, transpose, adjoint), T in supported_eltypes()
-    @testcase "$T gemv y := $f(A) * x * a + y * b" begin
+    @testcase "$T gemv y := $f(A) * x * a + y * b" for
+            f in (identity, transpose, adjoint),
+            T in supported_eltypes()
         y, A, x = rand(T, 4), rand(T, 4, 4), rand(T, 4)
 
         # workaround for https://github.com/JuliaLang/julia/issues/35163#issue-584248084
@@ -100,10 +101,11 @@
             @test compare(mul!, AT, rand(T, 2,2), rand(T, 2,1), f(rand(T, 2)))
         end
     end
-    end
 
-    for f in (identity, transpose, adjoint), g in (identity, transpose, adjoint), T in supported_eltypes()
-    @testcase "$T gemm C := $f(A) * $g(B) * a + C * b" begin
+    @testcase "$T gemm C := $f(A) * $g(B) * a + C * b" for
+            f in (identity, transpose, adjoint),
+            g in (identity, transpose, adjoint),
+            T in supported_eltypes()
         A, B, C = rand(T, 4, 4), rand(T, 4, 4), rand(T, 4, 4)
 
         # workaround for https://github.com/JuliaLang/julia/issues/35163#issue-584248084
@@ -114,12 +116,11 @@
         @test compare(mul!, AT, C, f(A), g(B), Ref(T(4)), Ref(T(5)))
         @test typeof(AT(rand(3, 3)) * AT(rand(3, 3))) <: AbstractMatrix
     end
-    end
 
-    for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in supported_eltypes()
-    @testcase "lmul! and rmul! $a x $b with $T" begin
+    @testcase "lmul! and rmul! $a x $b with $T" for
+            (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))],
+            T in supported_eltypes()
         @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))
         @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
-    end
     end
 end

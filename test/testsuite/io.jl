@@ -1,5 +1,4 @@
 @testsuite "input output" AT->begin
-
     # compact=false to avoid type aliases
     replstr(x, kv::Pair...) = sprint((io,x) -> show(IOContext(io, :compact => false, :limit => true, :displaysize => (24, 80), kv...), MIME("text/plain"), x), x)
     showstr(x, kv::Pair...) = sprint((io,x) -> show(IOContext(io, :limit => true, :displaysize => (24, 80), kv...), x), x)

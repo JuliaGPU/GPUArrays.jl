@@ -44,8 +44,7 @@
     end
     end
 
-    for T in supported_eltypes()
-    @testcase "getindex with $T" begin
+    @testcase "getindex with $T" for T in supported_eltypes()
     @allowscalar begin
         x = rand(T, 32)
         src = AT(x)
@@ -56,10 +55,8 @@
         @test Array(src[3:end]) == x[3:end]
     end
     end
-    end
 
-    for T in supported_eltypes()
-    @testcase "setindex! with $T" begin
+    @testcase "setindex! with $T" for T in supported_eltypes()
     @allowscalar begin
         x = fill(zero(T), 7)
         src = AT(x)
@@ -72,17 +69,14 @@
         src[1] = T(0)
     end
     end
-    end
 
-    for T in supported_eltypes()
-    @testcase "issue #42 with $T" begin
+    @testcase "issue #42 with $T" for T in supported_eltypes()
     @allowscalar begin
         Ac = rand(Float32, 2, 2)
         A = AT(Ac)
         @test A[1] == Ac[1]
         @test A[end] == Ac[end]
         @test A[1, 1] == Ac[1, 1]
-    end
     end
     end
 
@@ -99,22 +93,18 @@
 end
 
 @testsuite "indexing multidimensional" AT->begin
-    for T in supported_eltypes()
-    @testcase "sliced setindex with $T" begin
+    @testcase "sliced setindex with $T" for T in supported_eltypes()
         x = AT(zeros(T, (10, 10, 10, 10)))
         y = AT(rand(T, (5, 5, 10, 10)))
         x[2:6, 2:6, :, :] = y
         @test Array(x[2:6, 2:6, :, :]) == Array(y)
     end
-    end
 
-    for T in supported_eltypes()
-    @testcase "sliced setindex, CPU source with $T" begin
+    @testcase "sliced setindex, CPU source with $T" for T in supported_eltypes()
         x = AT(zeros(T, (2,3,4)))
         y = AT(rand(T, (2,3)))
         x[:, :, 2] = y
         @test Array(x[:, :, 2]) == Array(y)
-    end
     end
 
     @testcase "empty array" begin
@@ -126,8 +116,7 @@ end
             @test size(A[[]]) == size(Ac[[]])
         end
 
-        for other in (Colon(), 1:5, 5)
-        @testcase "2D with other index $other" begin
+        @testcase "2D with other index $other" for other in (Colon(), 1:5, 5)
             Ac = zeros(Float32, 10, 10)
             A = AT(Ac)
 
@@ -136,7 +125,6 @@ end
 
             @test typeof(A[other, []]) == typeof(AT(Ac[other, []]))
             @test size(A[other, []]) == size(Ac[other, []])
-        end
         end
 
         @test compare(AT, rand(Float32, 2,2)) do a
