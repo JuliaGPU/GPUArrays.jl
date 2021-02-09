@@ -1,10 +1,9 @@
 using GPUArrays
 
-try
-    using XUnit
-catch
-    using Test
-end
+using Pkg
+Pkg.add(url="https://github.com/maleadt/XUnit.jl", rev="tb/for_loop")
+
+using XUnit
 
 @testset "GPUArrays" begin
 

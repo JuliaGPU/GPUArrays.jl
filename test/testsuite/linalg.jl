@@ -10,10 +10,10 @@
         @test compare(transpose!, AT, Array{Float32}(undef, 128, 32), rand(Float32, 32, 128))
     end
 
-    for uplo in ('U', 'L')
-    @testcase "copytri! $uplo" begin
-        @test compare(x -> LinearAlgebra.copytri!(x, uplo), AT, rand(Float32, 128, 128))
-    end
+    @testset "copytri!" begin
+        @testcase for uplo in ('U', 'L')
+            @test compare(x -> LinearAlgebra.copytri!(x, uplo), AT, rand(Float32, 128, 128))
+        end
     end
 
     @testcase "copyto! for triangular" begin
@@ -57,14 +57,12 @@
         areal = randn(n,n)/2
         aimg  = randn(n,n)/2
 
-        for eltya in (Float32, Float64, ComplexF32, ComplexF64)
-        @testcase "$eltya" begin
+        @testcase for eltya in (Float32, Float64, ComplexF32, ComplexF64)
             a = convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
             asym = transpose(a) + a        # symmetric indefinite
             aherm = a' + a                 # Hermitian indefinite
             @test issymmetric(asym)
             @test ishermitian(aherm)
-        end
         end
     end
 

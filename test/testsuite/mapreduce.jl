@@ -1,6 +1,5 @@
 @testsuite "mapreduce essentials" AT->begin
-    for ET in supported_eltypes()
-    @testcase "mapreducedim! $ET" begin
+    @testcase "mapreducedim! $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
@@ -15,7 +14,7 @@
         @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,3)), zeros(ET, (2,)))
     end
 
-    @testcase "reducedim! $ET" begin
+    @testcase "reducedim! $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
@@ -25,7 +24,7 @@
         end
     end
 
-    @testcase "mapreduce $ET" begin
+    @testcase "mapreduce $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
@@ -37,7 +36,7 @@
         end
     end
 
-    @testcase "reduce $ET" begin
+    @testcase "reduce $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
@@ -47,12 +46,10 @@
             @test compare(A->reduce(*, A; dims=dims, init=one(ET)), AT, rand(range, sz))
         end
     end
-    end
 end
 
 @testsuite "mapreduce derivatives" AT->begin
-    for ET in supported_eltypes()
-    @testcase "sum prod minimum maximum $ET" begin
+    @testcase "sum prod minimum maximum $ET" for ET in supported_eltypes()
         T = AT{ET}
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
@@ -89,7 +86,6 @@ end
                 @test compare((A,R)->prod!(R, A), AT, rand(range, sz), rand(OT, red))
             end
         end
-    end
     end
 
     @testcase "any all count ==" begin
