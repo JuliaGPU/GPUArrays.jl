@@ -41,8 +41,10 @@ end
 
 ## convert to CPU (keeping wrapper type)
 
-Adapt.adapt_storage(::Type{<:Array}, xs::AbstractArray) = convert(Array, xs)
-convert_to_cpu(xs) = adapt(Array, xs)
+struct ToArray end
+
+Adapt.adapt_storage(::ToArray, xs::AbstractArray) = convert(Array, xs)
+convert_to_cpu(xs) = adapt(ToArray(), xs)
 
 ## showing
 
