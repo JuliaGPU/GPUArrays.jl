@@ -87,7 +87,7 @@ function launch_configuration(backend::AbstractGPUBackend, heuristic,
 
     # FIXME: use grid-stride loop when we can't launch the number of blocks we need
 
-    if false && elements_per_thread > 1 && blocks > config.blocks
+    if false && elements_per_thread > 1 && blocks > heuristic.blocks
         # we want to launch more blocks than required, so prefer a grid-stride loop instead
         # NOTE: this does not seem to improve performance
         nelem = clamp(cld(blocks, heuristic.blocks), 1, elements_per_thread)
