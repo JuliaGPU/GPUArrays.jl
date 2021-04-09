@@ -39,30 +39,26 @@ function Serialization.deserialize(s::AbstractSerializer, ::Type{T}) where T <: 
     T(A)
 end
 
-## convert to CPU (keeping wrapper type)
+## showing
 
 struct ToArray end
-
-Adapt.adapt_storage(::ToArray, xs::AbstractArray) = convert(Array, xs)
-convert_to_cpu(xs) = adapt(ToArray(), xs)
-
-## showing
+Adapt.adapt_storage(::ToArray, xs::AbstractGPUArray) = convert(Array, xs)
 
 # display
 Base.print_array(io::IO, X::AnyGPUArray) =
-    Base.print_array(io, convert_to_cpu(X))
+    Base.print_array(io, adapt(ToArray(), X))
 
 # show
 Base._show_nonempty(io::IO, X::AnyGPUArray, prefix::String) =
-    Base._show_nonempty(io, convert_to_cpu(X), prefix)
+    Base._show_nonempty(io, adapt(ToArray(), X), prefix)
 Base._show_empty(io::IO, X::AnyGPUArray) =
-    Base._show_empty(io, convert_to_cpu(X))
+    Base._show_empty(io, adapt(ToArray(), X))
 Base.show_vector(io::IO, v::AnyGPUArray, args...) =
-    Base.show_vector(io, convert_to_cpu(v), args...)
+    Base.show_vector(io, adapt(ToArray(), v), args...)
 
 ## collect to CPU (discarding wrapper type)
 
-collect_to_cpu(xs::AbstractArray) = collect(convert_to_cpu(xs))
+collect_to_cpu(xs::AbstractArray) = collect(adapt(ToArray(), xs))
 Base.collect(X::AnyGPUArray) = collect_to_cpu(X)
 
 
