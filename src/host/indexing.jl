@@ -51,7 +51,13 @@ Assert that a certain operation `op` performs scalar indexing. If this is not al
 error will be thrown ([`allowscalar`](@ref)).
 """
 function assertscalar(op = "operation")
-    val = get(task_local_storage(), :ScalarIndexing, ScalarWarn)
+    val = get!(task_local_storage(), :ScalarIndexing) do
+        if haskey(ENV, "JULIA_GPU_ALLOWSCALAR")
+            parse(Bool, ENV["JULIA_GPU_ALLOWSCALAR"]) ? ScalarAllowed : ScalarDisallowed
+        else
+            ScalarWarn
+        end
+    end
     if val == ScalarDisallowed
         error("$op is disallowed")
     elseif val == ScalarWarn
