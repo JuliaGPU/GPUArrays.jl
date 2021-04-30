@@ -99,7 +99,7 @@ end
 
 ## matrix multiplication
 
-function generic_matmatmul!(C::AnyGPUArray{R}, A::AnyGPUArray{T}, B::AnyGPUArray{S}, a::Number, b::Number) where {T,S,R}
+function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::AbstractArray{S}, a::Number, b::Number) where {T,S,R}
     if size(A,2) != size(B,1)
         throw(DimensionMismatch("matrix A has dimensions $(size(A)), matrix B has dimensions $(size(B))"))
     end
@@ -168,7 +168,7 @@ LinearAlgebra.mul!(C::AbstractGPUVecOrMat, A::LinearAlgebra.Transpose{<:Any, <:A
 end
 
 
-function generic_rmul!(X::AbstractGPUArray, s::Number)
+function generic_rmul!(X::AbstractArray, s::Number)
     gpu_call(X, s; name="rmul!") do ctx, X, s
         i = @linearidx X
         @inbounds X[i] *= s
@@ -179,7 +179,7 @@ end
 
 LinearAlgebra.rmul!(A::AbstractGPUArray, b::Number) = generic_rmul!(A, b)
 
-function generic_lmul!(s::Number, X::AbstractGPUArray)
+function generic_lmul!(s::Number, X::AbstractArray)
     gpu_call(X, s; name="lmul!") do ctx, X, s
         i = @linearidx X
         @inbounds X[i] = s*X[i]
