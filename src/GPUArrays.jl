@@ -33,6 +33,7 @@ include("host/math.jl")
 include("host/random.jl")
 include("host/quirks.jl")
 include("host/uniformscaling.jl")
+include("host/statistics.jl")
 
 include("deprecated.jl")
 
