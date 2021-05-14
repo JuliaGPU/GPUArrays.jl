@@ -99,7 +99,7 @@ end
 
 ## matrix multiplication
 
-function generic_matmatmul!(C::AnyGPUArray{R}, A::AnyGPUArray{T}, B::AnyGPUArray{S}, a::Number, b::Number) where {T,S,R}
+function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::AbstractArray{S}, a::Number, b::Number) where {T,S,R}
     if size(A,2) != size(B,1)
         throw(DimensionMismatch("matrix A has dimensions $(size(A)), matrix B has dimensions $(size(B))"))
     end
@@ -150,25 +150,8 @@ LinearAlgebra.mul!(C::AbstractGPUVecOrMat, A::LinearAlgebra.Adjoint{<:Any, <:Abs
 LinearAlgebra.mul!(C::AbstractGPUVecOrMat, A::LinearAlgebra.Adjoint{<:Any, <:AbstractGPUVecOrMat}, B::LinearAlgebra.Adjoint{<:Any, <:AbstractGPUVecOrMat}, a::Real, b::Real) = generic_matmatmul!(C, A, B, a, b)
 LinearAlgebra.mul!(C::AbstractGPUVecOrMat, A::LinearAlgebra.Transpose{<:Any, <:AbstractGPUVecOrMat}, B::LinearAlgebra.Transpose{<:Any, <:AbstractGPUVecOrMat}, a::Real, b::Real) = generic_matmatmul!(C, A, B, a, b)
 
-@static if v"1.3.0" <= VERSION <= v"1.3.1"
-    LinearAlgebra.mul!(C::AbstractGPUVecOrMat{T}, A::AbstractGPUVecOrMat{T}, B::AbstractGPUVecOrMat{T}, a::Union{Bool,T}, b::Union{Bool,T}) where {T<:LinearAlgebra.BLAS.BlasFloat} = generic_matmatmul!(C, A, B, a, b)
-    LinearAlgebra.mul!(C::AbstractGPUVecOrMat{T}, A::AbstractGPUVecOrMat{T}, B::LinearAlgebra.Adjoint{<:Any, <:AbstractGPUVecOrMat{T}}, a::Union{Bool,T}, b::Union{Bool,T}) where {T<:LinearAlgebra.BLAS.BlasReal} = generic_matmatmul!(C, A, B, a, b)
-    LinearAlgebra.mul!(C::AbstractGPUVecOrMat{T}, A::AbstractGPUVecOrMat{T}, B::LinearAlgebra.Adjoint{<:Any, <:AbstractGPUVecOrMat{T}}, a::Union{Bool,T}, b::Union{Bool,T}) where {T<:LinearAlgebra.BLAS.BlasComplex} = generic_matmatmul!(C, A, B, a, b)
-    LinearAlgebra.mul!(C::AbstractGPUVecOrMat{T}, A::AbstractGPUVecOrMat{T}, B::LinearAlgebra.Transpose{<:Any, <:AbstractGPUVecOrMat{T}}, a::Union{Bool,T}, b::Union{Bool,T}) where {T<:LinearAlgebra.BLAS.BlasFloat} = generic_matmatmul!(C, A, B, a, b)
-    LinearAlgebra.mul!(C::AbstractGPUVecOrMat{T}, A::LinearAlgebra.Adjoint{<:Any, <:AbstractGPUVecOrMat{T}}, B::AbstractGPUVecOrMat{T}, a::Union{Bool,T}, b::Union{Bool,T}) where {T<:LinearAlgebra.BLAS.BlasReal} = generic_matmatmul!(C, A, B, a, b)
-    LinearAlgebra.mul!(C::AbstractGPUVecOrMat{T}, A::LinearAlgebra.Adjoint{<:Any, <:AbstractGPUVecOrMat{T}}, B::AbstractGPUVecOrMat{T}, a::Union{Bool,T}, b::Union{Bool,T}) where {T<:LinearAlgebra.BLAS.BlasComplex} = generic_matmatmul!(C, A, B, a, b)
-    LinearAlgebra.mul!(C::AbstractGPUVecOrMat{T}, A::LinearAlgebra.Transpose{<:Any, <:AbstractGPUVecOrMat{T}}, B::AbstractGPUVecOrMat{T}, a::Union{Bool,T}, b::Union{Bool,T}) where {T<:LinearAlgebra.BLAS.BlasFloat} = generic_matmatmul!(C, A, B, a, b)
-    LinearAlgebra.mul!(C::AbstractGPUVecOrMat{T}, A::LinearAlgebra.Transpose{<:Any, <:AbstractGPUVecOrMat{T}}, B::LinearAlgebra.Adjoint{<:Any, <:AbstractGPUVecOrMat{T}}, a::Union{Bool,T}, b::Union{Bool,T}) where {T<:LinearAlgebra.BLAS.BlasReal} = generic_matmatmul!(C, A, B, a, b)
-    LinearAlgebra.mul!(C::AbstractGPUVecOrMat{T}, A::LinearAlgebra.Transpose{<:Any, <:AbstractGPUVecOrMat{T}}, B::LinearAlgebra.Adjoint{<:Any, <:AbstractGPUVecOrMat{T}}, a::Union{Bool,T}, b::Union{Bool,T}) where {T<:LinearAlgebra.BLAS.BlasComplex} = generic_matmatmul!(C, A, B, a, b)
-    LinearAlgebra.mul!(C::AbstractGPUVecOrMat{T}, A::LinearAlgebra.Adjoint{<:Any, <:AbstractGPUVecOrMat{T}}, B::LinearAlgebra.Transpose{<:Any, <:AbstractGPUVecOrMat{T}}, a::Union{Bool,T}, b::Union{Bool,T}) where {T<:LinearAlgebra.BLAS.BlasReal} = generic_matmatmul!(C, A, B, a, b)
-    LinearAlgebra.mul!(C::AbstractGPUVecOrMat{T}, A::LinearAlgebra.Adjoint{<:Any, <:AbstractGPUVecOrMat{T}}, B::LinearAlgebra.Transpose{<:Any, <:AbstractGPUVecOrMat{T}}, a::Union{Bool,T}, b::Union{Bool,T}) where {T<:LinearAlgebra.BLAS.BlasComplex} = generic_matmatmul!(C, A, B, a, b)
-    LinearAlgebra.mul!(C::AbstractGPUVecOrMat{T}, A::LinearAlgebra.Adjoint{<:Any, <:AbstractGPUVecOrMat{T}}, B::LinearAlgebra.Adjoint{<:Any, <:AbstractGPUVecOrMat{T}}, a::Union{Bool,T}, b::Union{Bool,T}) where {T<:LinearAlgebra.BLAS.BlasReal} = generic_matmatmul!(C, A, B, a, b)
-    LinearAlgebra.mul!(C::AbstractGPUVecOrMat{T}, A::LinearAlgebra.Adjoint{<:Any, <:AbstractGPUVecOrMat{T}}, B::LinearAlgebra.Adjoint{<:Any, <:AbstractGPUVecOrMat{T}}, a::Union{Bool,T}, b::Union{Bool,T}) where {T<:LinearAlgebra.BLAS.BlasComplex} = generic_matmatmul!(C, A, B, a, b)
-    LinearAlgebra.mul!(C::AbstractGPUVecOrMat{T}, A::LinearAlgebra.Transpose{<:Any, <:AbstractGPUVecOrMat{T}}, B::LinearAlgebra.Transpose{<:Any, <:AbstractGPUVecOrMat{T}}, a::Union{Bool,T}, b::Union{Bool,T}) where {T<:LinearAlgebra.BLAS.BlasFloat} = generic_matmatmul!(C, A, B, a, b)
-end
 
-
-function generic_rmul!(X::AbstractGPUArray, s::Number)
+function generic_rmul!(X::AbstractArray, s::Number)
     gpu_call(X, s; name="rmul!") do ctx, X, s
         i = @linearidx X
         @inbounds X[i] *= s
@@ -179,7 +162,7 @@ end
 
 LinearAlgebra.rmul!(A::AbstractGPUArray, b::Number) = generic_rmul!(A, b)
 
-function generic_lmul!(s::Number, X::AbstractGPUArray)
+function generic_lmul!(s::Number, X::AbstractArray)
     gpu_call(X, s; name="lmul!") do ctx, X, s
         i = @linearidx X
         @inbounds X[i] = s*X[i]
