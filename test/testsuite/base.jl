@@ -187,6 +187,34 @@ end
         @test compare(a-> repeat(a, 0),     AT, rand(Float32, 10))
         @test compare(a-> repeat(a, 0),     AT, rand(Float32, 5, 4))
         @test compare(a-> repeat(a, 4, 0),  AT, rand(Float32, 10, 15))
+
+        if VERSION ≥ v"1.6"
+            # Test inputs.
+            x = rand(Float32, 10)
+            xmat = rand(Float32, 2, 10)
+            arr = rand(Float32, 3, 2, 10)
+
+            # Inner.
+            @test compare(a -> repeat(a, inner=(2, )), AT, x)
+            @test compare(a -> repeat(a, inner=(2, 3)), AT, xmat)
+            @test compare(a -> repeat(a, inner=(2, 3, 4)), AT, xarr)
+            # Outer.
+            @test compare(a -> repeat(a, outer=(2, )), AT, x)
+            @test compare(a -> repeat(a, outer=(2, 3)), AT, xmat)
+            @test compare(a -> repeat(a, outer=(2, 3, 4)), AT, xarr)
+            # Both.
+            @test compare(a -> repeat(a, inner=(2, ), outer=(2, )), AT, x)
+            @test compare(a -> repeat(a, inner=(2, 3), outer=(2, 3)), AT, xmat)
+            @test compare(a -> repeat(a, inner=(2, 3, 4), outer=(2, 1, 4)), AT, xarr)
+            # Repeat which expands dimensionality.
+            @test compare(a -> repeat(a, inner=(2, 1, 3)), AT, x)
+            @test compare(a -> repeat(a, outer=(2, 1, 3)), AT, x)
+            @test compare(a -> repeat(a, inner=(2, 1, 3), outer=(2, 2, 3)), AT, x)
+
+            @test compare(a -> repeat(a, inner=(2, 1, 3)), AT, xmat)
+            @test compare(a -> repeat(a, outer=(2, 1, 3)), AT, xmat)
+            @test compare(a -> repeat(a, inner=(2, 1, 3), outer=(2, 2, 3)), AT, xmat)
+        end
     end
 
     @testset "permutedims" begin
