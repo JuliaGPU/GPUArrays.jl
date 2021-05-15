@@ -216,7 +216,7 @@ end
             # Test inputs.
             x = rand(Float32, 10)
             xmat = rand(Float32, 2, 10)
-            arr = rand(Float32, 3, 2, 10)
+            xarr = rand(Float32, 3, 2, 10)
 
             # Inner.
             @test compare(a -> repeat(a, inner=(2, )), AT, x)
