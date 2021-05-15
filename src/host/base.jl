@@ -20,8 +20,8 @@ if VERSION ≥ v"1.6"
         return nothing
     end
 
-    function repeat_inner(xs::TV, inner) where {TV<:AbstractGPUArray}
-        out = TV(undef, inner .* size(xs))
+    function repeat_inner(xs::AnyGPUArray, inner)
+        out = similar(xs, eltype(xs), inner .* size(xs))
         gpu_call(repeat_inner_kernel!, xs, inner, out; total_threads=prod(size(out)))
         return out
     end
@@ -42,8 +42,8 @@ if VERSION ≥ v"1.6"
         return nothing
     end
 
-    function repeat_outer(xs::TV, outer) where {TV<:AbstractGPUArray}
-        out = TV(undef, outer .* size(xs))
+    function repeat_outer(xs::AnyGPUArray, outer)
+        out = similar(xs, eltype(xs), outer .* size(xs))
         gpu_call(repeat_outer_kernel!, xs, size(xs), outer, out; total_threads=prod(size(out)))
         return out
     end
@@ -51,19 +51,19 @@ if VERSION ≥ v"1.6"
     # Overload methods used by `Base.repeat`.
     # No need to implement `repeat_inner_outer` since this is implemented in `Base` as
     # `repeat_outer(repeat_inner(arr, inner), outer)`.
-    function _RepeatInnerOuter.repeat_inner(xs::AbstractGPUArray{<:Any, N}, dims::NTuple{N}) where {N}
+    function _RepeatInnerOuter.repeat_inner(xs::AnyGPUArray{<:Any, N}, dims::NTuple{N}) where {N}
         return repeat_inner(xs, dims)
     end
 
-    function _RepeatInnerOuter.repeat_outer(xs::AbstractGPUArray{<:Any, N}, dims::NTuple{N}) where {N}
+    function _RepeatInnerOuter.repeat_outer(xs::AnyGPUArray{<:Any, N}, dims::NTuple{N}) where {N}
         return repeat_outer(xs, dims)
     end
 
-    function _RepeatInnerOuter.repeat_outer(xs::AbstractGPUVector, dims::Tuple{Any})
+    function _RepeatInnerOuter.repeat_outer(xs::AnyGPUArray{<:Any, 1}, dims::Tuple{Any})
         return repeat_outer(xs, dims)
     end
 
-    function _RepeatInnerOuter.repeat_outer(xs::AbstractGPUMatrix, dims::NTuple{2, Any})
+    function _RepeatInnerOuter.repeat_outer(xs::AnyGPUArray{<:Any, 2}, dims::NTuple{2, Any})
         return repeat_outer(xs, dims)
     end
 else
