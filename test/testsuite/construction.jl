@@ -1,101 +1,115 @@
-@testsuite "constructors" AT->begin
-    @testset "constructors + similar" begin
-        for T in supported_eltypes()
-            B = AT{T}(undef, 10)
-            @test B isa AT{T,1}
-            @test size(B) == (10,)
-            @test eltype(B) == T
+@testsuite "construct/direct" AT->begin
+    for T in supported_eltypes()
+        B = AT{T}(undef, 10)
+        @test B isa AT{T,1}
+        @test size(B) == (10,)
+        @test eltype(B) == T
 
-            B = AT{T}(undef, 10, 10)
-            @test B isa AT{T,2}
-            @test size(B) == (10, 10)
-            @test eltype(B) == T
+        B = AT{T}(undef, 10, 10)
+        @test B isa AT{T,2}
+        @test size(B) == (10, 10)
+        @test eltype(B) == T
 
-            B = AT{T}(undef, (10, 10))
-            @test B isa AT{T,2}
-            @test size(B) == (10, 10)
-            @test eltype(B) == T
-
-            B = similar(B, Int32, 11, 15)
-            @test B isa AT{Int32,2}
-            @test size(B) == (11, 15)
-            @test eltype(B) == Int32
-
-            B = similar(B, T)
-            @test B isa AT{T,2}
-            @test size(B) == (11, 15)
-            @test eltype(B) == T
-
-            B = similar(B, (5,))
-            @test B isa AT{T,1}
-            @test size(B) == (5,)
-            @test eltype(B) == T
-
-            B = similar(B, 7)
-            @test B isa AT{T,1}
-            @test size(B) == (7,)
-            @test eltype(B) == T
-
-            B = similar(AT{Int32}, (11, 15))
-            @test B isa AT{Int32,2}
-            @test size(B) == (11, 15)
-            @test eltype(B) == Int32
-
-            B = similar(AT{T}, (5,))
-            @test B isa AT{T,1}
-            @test size(B) == (5,)
-            @test eltype(B) == T
-
-            B = similar(AT{T}, 7)
-            @test B isa AT{T,1}
-            @test size(B) == (7,)
-            @test eltype(B) == T
-
-            B = similar(Broadcast.Broadcasted(*, (B, B)), T)
-            @test B isa AT{T,1}
-            @test size(B) == (7,)
-            @test eltype(B) == T
-
-            if VERSION >= v"1.5"
-                B = similar(Broadcast.Broadcasted(*, (B, B)), Int32, (11, 15))
-                @test B isa AT{Int32,2}
-                @test size(B) == (11, 15)
-                @test eltype(B) == Int32
-            end
-        end
+        B = AT{T}(undef, (10, 10))
+        @test B isa AT{T,2}
+        @test size(B) == (10, 10)
+        @test eltype(B) == T
     end
 
-    @testset "comparison against Array" begin
-        for typs in [(), (Int,), (Int,1), (Int,2), (Float32,), (Float32,1), (Float32,2)],
-            args in [(), (1,), (1,2), ((1,),), ((1,2),),
-                     (undef,), (undef, 1,), (undef, 1,2), (undef, (1,),), (undef, (1,2),),
-                     (Int,), (Int, 1,), (Int, 1,2), (Int, (1,),), (Int, (1,2),),
-                     ([1,2],), ([1 2],)]
-            cpu = try
-                Array{typs...}(args...)
-            catch ex
-                isa(ex, MethodError) || rethrow()
-                nothing
-            end
+    # compare against Array
+    for typs in [(), (Int,), (Int,1), (Int,2), (Float32,), (Float32,1), (Float32,2)],
+        args in [(), (1,), (1,2), ((1,),), ((1,2),),
+                 (undef,), (undef, 1,), (undef, 1,2), (undef, (1,),), (undef, (1,2),),
+                 (Int,), (Int, 1,), (Int, 1,2), (Int, (1,),), (Int, (1,2),),
+                 ([1,2],), ([1 2],)]
+        cpu = try
+            Array{typs...}(args...)
+        catch ex
+            isa(ex, MethodError) || rethrow()
+            nothing
+        end
 
-            gpu = try
-                AT{typs...}(args...)
-            catch ex
-                isa(ex, MethodError) || rethrow()
-                cpu == nothing || rethrow()
-                nothing
-            end
+        gpu = try
+            AT{typs...}(args...)
+        catch ex
+            isa(ex, MethodError) || rethrow()
+            cpu == nothing || rethrow()
+            nothing
+        end
 
-            if cpu == nothing
-                @test gpu == nothing
-            else
-                @test typeof(cpu) == typeof(convert(Array, gpu))
-            end
+        if cpu == nothing
+            @test gpu == nothing
+        else
+            @test typeof(cpu) == typeof(convert(Array, gpu))
         end
     end
 end
 
-@testsuite "conversions" AT->begin
+@testsuite "construct/similar" AT->begin
+    for T in supported_eltypes()
+        B = AT{T}(undef, 10)
+
+        B = similar(B, Int32, 11, 15)
+        @test B isa AT{Int32,2}
+        @test size(B) == (11, 15)
+        @test eltype(B) == Int32
+
+        B = similar(B, T)
+        @test B isa AT{T,2}
+        @test size(B) == (11, 15)
+        @test eltype(B) == T
+
+        B = similar(B, (5,))
+        @test B isa AT{T,1}
+        @test size(B) == (5,)
+        @test eltype(B) == T
+
+        B = similar(B, 7)
+        @test B isa AT{T,1}
+        @test size(B) == (7,)
+        @test eltype(B) == T
+
+        B = similar(AT{Int32}, (11, 15))
+        @test B isa AT{Int32,2}
+        @test size(B) == (11, 15)
+        @test eltype(B) == Int32
+
+        B = similar(AT{T}, (5,))
+        @test B isa AT{T,1}
+        @test size(B) == (5,)
+        @test eltype(B) == T
+
+        B = similar(AT{T}, 7)
+        @test B isa AT{T,1}
+        @test size(B) == (7,)
+        @test eltype(B) == T
+
+        B = similar(Broadcast.Broadcasted(*, (B, B)), T)
+        @test B isa AT{T,1}
+        @test size(B) == (7,)
+        @test eltype(B) == T
+
+        if VERSION >= v"1.5"
+            B = similar(Broadcast.Broadcasted(*, (B, B)), Int32, (11, 15))
+            @test B isa AT{Int32,2}
+            @test size(B) == (11, 15)
+            @test eltype(B) == Int32
+        end
+    end
+end
+
+@testsuite "construct/convenience" AT->begin
+    for T in supported_eltypes()
+        @test compare((a,b)->fill!(a, b), AT, rand(T, 3), rand(T))
+
+        @test compare(a->zero(a), AT, rand(T, 2))
+        @test compare(a->zero(a), AT, rand(T, 2, 2))
+        @test compare(a->zero(a), AT, rand(T, 2, 2, 2))
+        @test compare(a->one(a), AT, rand(T, 2, 2))
+    end
+end
+
+@testsuite "construct/conversions" AT->begin
     for T in supported_eltypes()
         Bc = round.(rand(10, 10) .* 10.0)
         B = AT{T}(Bc)
@@ -123,9 +137,8 @@ end
     end
 end
 
-@testsuite "value constructors" AT->begin
+@testsuite "construct/uniformscaling" AT->begin
     for T in supported_eltypes()
-        @test compare((a,b)->fill!(a, b), AT, rand(T, 3), rand(T))
 
         x = Matrix{T}(I, 4, 2)
 
@@ -144,7 +157,7 @@ end
     end
 end
 
-@testsuite "iterator constructors" AT->begin
+@testsuite "construct/iterator" AT->begin
     for T in supported_eltypes()
         @test Array(AT(Fill(T(0), (10,)))) == Array(fill!(similar(AT{T}, (10,)), T(0)))
         @test Array(AT(Fill(T(0), (10, 10)))) == Array(fill!(similar(AT{T}, (10, 10)), T(0)))

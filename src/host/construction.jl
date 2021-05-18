@@ -1,4 +1,4 @@
-# constructors and conversions
+# convenience and indirect construction
 
 function Base.fill!(A::AnyGPUArray{T}, x) where T
     length(A) == 0 && return A
@@ -9,6 +9,9 @@ function Base.fill!(A::AnyGPUArray{T}, x) where T
     end
     A
 end
+
+
+## uniform scaling
 
 function uniformscaling_kernel(ctx::AbstractKernelContext, res::AbstractArray{T}, stride, s::UniformScaling) where T
     i = linear_index(ctx)
@@ -34,6 +37,15 @@ function Base.copyto!(A::AbstractGPUMatrix{T}, s::UniformScaling) where T
     gpu_call(uniformscaling_kernel, A, size(A, 1), s; total_threads=minimum(size(A)))
     A
 end
+
+function Base.one(x::AbstractGPUMatrix)
+    size(x,1)==size(x,2) ||
+        throw(DimensionMismatch("multiplicative identity defined only for square matrices"))
+    typeof(x)(I, size(x))
+end
+
+
+## collect & convert
 
 function indexstyle(x::T) where T
     style = try
