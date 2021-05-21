@@ -1,45 +1,22 @@
 @testsuite "indexing scalar" AT->begin
-    AT <: AbstractGPUArray && @allowscalar @testset "errors and warnings" begin
+    AT <: AbstractGPUArray && @testset "errors and warnings" begin
         x = AT([0])
 
-        allowscalar(true, false)
-        x[1] = 1
-        @test x[1] == 1
-
-        @disallowscalar begin
-            @test_throws ErrorException x[1]
-            @test_throws ErrorException x[1] = 1
-        end
-
-        x[1] = 2
-        @test x[1] == 2
-
-        allowscalar(false)
-        @test_throws ErrorException x[1]
-        @test_throws ErrorException x[1] = 1
+        @test_throws ErrorException x[]
 
         @allowscalar begin
-            x[1] = 3
-            @test x[1] == 3
+            x[] = 1
+            @test x[] == 1
         end
+
+        @test_throws ErrorException x[]
 
         allowscalar() do
-            x[1] = 4
-            @test x[1] == 4
+            x[] = 2
+            @test x[] == 2
         end
 
-        @test_throws ErrorException x[1]
-        @test_throws ErrorException x[1] = 1
-
-        allowscalar(true, false)
-        x[1]
-
-        allowscalar(true, true)
-        @test_logs (:warn, r"Performing scalar operations on GPU arrays: .*") x[1]
-        @test_logs x[1]
-
-        # NOTE: this inner testset _needs_ to be wrapped with allowscalar
-        #       to make sure its original value is restored.
+        @test_throws ErrorException x[]
     end
 
     @allowscalar @testset "getindex with $T" for T in supported_eltypes()

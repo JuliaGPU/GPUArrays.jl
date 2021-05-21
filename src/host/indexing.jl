@@ -1,47 +1,32 @@
 # host-level indexing
 
-export allowscalar, @allowscalar, @disallowscalar, assertscalar
+export allowscalar, @allowscalar, assertscalar
 
 
 # mechanism to disallow scalar operations
 
-@enum ScalarIndexing ScalarAllowed ScalarWarn ScalarWarned ScalarDisallowed
-
 """
-    allowscalar(allow=true, warn=true)
-    allowscalar(allow=true, warn=true) do end
-
-Configure whether scalar indexing is allowed depending on the value of `allow`.
-
-If allowed, `warn` can be set to throw a single warning instead. Calling this function will
-reset the state of the warning, and throw a new warning on subsequent scalar iteration.
-
-For temporary changes, use the do-block version, or [`@allowscalar`](@ref).
-"""
-function allowscalar(allow::Bool=true, warn::Bool=true)
-    val = if allow && !warn
-        ScalarAllowed
-    elseif allow
-        ScalarWarn
-    else
-        ScalarDisallowed
+    allowscalar() do
+        # code that can use scalar indexing
     end
 
-    task_local_storage(:ScalarIndexing, val)
-    return
+Denote which operations can use scalar indexing.
+
+See also: [`@allowscalar`](@ref).
+"""
+function allowscalar(f::Base.Callable)
+    task_local_storage(f, :ScalarIndexingAllowed, true)
 end
 
-@doc (@doc allowscalar) ->
-function allowscalar(f::Base.Callable, allow::Bool=true, warn::Bool=false)
-    val = if allow && !warn
-        ScalarAllowed
-    elseif allow
-        ScalarWarn
+# deprecated
+function allowscalar(allow::Bool=true)
+    if allow
+        Base.depwarn("allowscalar([true]) is deprecated, use `allowscalar() do end` or `@allowscalar` to denote exactly which operations can use scalar operations.", :allowscalar)
     else
-        ScalarDisallowed
+        Base.depwarn("allowscalar(false) is deprecated; scalar indexing is now disabled by default.", :allowscalar)
     end
-
-    task_local_storage(f, :ScalarIndexing, val)
+    task_local_storage(:ScalarIndexingAllowed, allow)
+    return
 end
 
 """
@@ -51,45 +36,29 @@ Assert that a certain operation `op` performs scalar indexing. If this is not al
 error will be thrown ([`allowscalar`](@ref)).
 """
 function assertscalar(op = "operation")
-    val = get!(task_local_storage(), :ScalarIndexing) do
-        if haskey(ENV, "JULIA_GPU_ALLOWSCALAR")
-            parse(Bool, ENV["JULIA_GPU_ALLOWSCALAR"]) ? ScalarAllowed : ScalarDisallowed
-        else
-            ScalarWarn
-        end
-    end
-    if val == ScalarDisallowed
-        error("$op is disallowed")
-    elseif val == ScalarWarn
-        @warn "Performing scalar operations on GPU arrays: This is very slow, consider disallowing these operations with `allowscalar(false)`"
-        task_local_storage(:ScalarIndexing, ScalarWarned)
+    allowed = get!(task_local_storage(), :ScalarIndexingAllowed, false)
+    if !allowed
+        error("""Scalar indexing is disallowed.
+                 Invocation of $op resulted in scalar indexing. This probably means that
+                 an iterating implementation of a method is being called. Such implementations
+                 do not execute on the GPU, but very slowly on the CPU, and therefore are disallowed.
+                 If you did mean to perform scalar indexing, annotate the caller with @allowscalar.""")
     end
     return
 end
 
 """
-    @allowscalar ex...
-    @disallowscalar ex...
-    allowscalar(::Function, ...)
+    @allowscalar() begin
+        # code that can use scalar indexing
+    end
 
-Temporarily allow or disallow scalar iteration.
+Denote which operations can use scalar indexing.
 
-Note that this functionality is intended for functionality that is known and allowed to use
-scalar iteration (or not), i.e., there is no option to throw a warning. Only use this on
-fine-grained expressions.
+See also: [`allowscalar`](@ref).
 """
 macro allowscalar(ex)
     quote
-        task_local_storage(:ScalarIndexing, ScalarAllowed) do
-            $(esc(ex))
-        end
-    end
-end
-
-@doc (@doc @allowscalar) ->
-macro disallowscalar(ex)
-    quote
-        task_local_storage(:ScalarIndexing, ScalarDisallowed) do
+        task_local_storage(:ScalarIndexingAllowed, true) do
             $(esc(ex))
         end
     end
@@ -101,7 +70,7 @@ end
 Base.IndexStyle(::Type{<:AbstractGPUArray}) = Base.IndexLinear()
 
 function Base.getindex(xs::AbstractGPUArray{T}, I::Integer...) where T
-    assertscalar("scalar getindex")
+    assertscalar("getindex")
     i = Base._to_linear_index(xs, I...)
     x = Array{T}(undef, 1)
     copyto!(x, 1, xs, i, 1)
@@ -109,7 +78,7 @@ function Base.getindex(xs::AbstractGPUArray{T}, I::Integer...) where T
 end
 
 function Base.setindex!(xs::AbstractGPUArray{T}, v::T, I::Integer...) where T
-    assertscalar("scalar setindex!")
+    assertscalar("setindex!")
     i = Base._to_linear_index(xs, I...)
     x = T[v]
     copyto!(xs, i, x, 1, 1)
