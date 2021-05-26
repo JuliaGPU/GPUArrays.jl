@@ -100,12 +100,27 @@ end
 
 @testsuite "construct/convenience" AT->begin
     for T in supported_eltypes()
-        @test compare((a,b)->fill!(a, b), AT, rand(T, 3), rand(T))
+        A = AT(rand(T, 3))
+        b = rand(T)
+        fill!(A, b)
+        @test A isa AT{T,1}
+        @test Array(A) == fill(b, 3)
 
-        @test compare(a->zero(a), AT, rand(T, 2))
-        @test compare(a->zero(a), AT, rand(T, 2, 2))
-        @test compare(a->zero(a), AT, rand(T, 2, 2, 2))
-        @test compare(a->one(a), AT, rand(T, 2, 2))
+        A = zero(AT(rand(T, 2)))
+        @test A isa AT{T,1}
+        @test Array(A) == zero(rand(T, 2))
+
+        A = zero(AT(rand(T, 2, 2)))
+        @test A isa AT{T,2}
+        @test Array(A) == zero(rand(T, 2, 2))
+
+        A = zero(AT(rand(T, 2, 2, 2)))
+        @test A isa AT{T,3}
+        @test Array(A) == zero(rand(T, 2, 2, 2))
+
+        A = one(AT(rand(T, 2, 2)))
+        @test A isa AT{T,2}
+        @test Array(A) == one(rand(T, 2, 2))
     end
 end
 
