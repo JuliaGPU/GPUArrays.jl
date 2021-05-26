@@ -11,20 +11,20 @@ function Base.fill!(A::AnyGPUArray{T}, x) where T
 end
 
 
-## uniform scaling
+## identity matrices
 
-function uniformscaling_kernel(ctx::AbstractKernelContext, res::AbstractArray{T}, stride, s::UniformScaling) where T
+function identity_kernel(ctx::AbstractKernelContext, res::AbstractArray{T}, stride, val) where T
     i = linear_index(ctx)
     i > stride && return
     ilin = (stride * (i - 1)) + i
-    @inbounds res[ilin] = s.λ
+    @inbounds res[ilin] = val
     return
 end
 
 function (T::Type{<: AnyGPUArray{U}})(s::UniformScaling, dims::Dims{2}) where {U}
     res = similar(T, dims)
     fill!(res, zero(U))
-    gpu_call(uniformscaling_kernel, res, size(res, 1), s; total_threads=minimum(dims))
+    gpu_call(identity_kernel, res, size(res, 1), s.λ; total_threads=minimum(dims))
     res
 end
 
@@ -34,15 +34,21 @@ end
 
 function Base.copyto!(A::AbstractGPUMatrix{T}, s::UniformScaling) where T
     fill!(A, zero(T))
-    gpu_call(uniformscaling_kernel, A, size(A, 1), s; total_threads=minimum(size(A)))
+    gpu_call(identity_kernel, A, size(A, 1), s.λ; total_threads=minimum(size(A)))
     A
 end
 
-function Base.one(x::AbstractGPUMatrix)
-    size(x,1)==size(x,2) ||
-        throw(DimensionMismatch("multiplicative identity defined only for square matrices"))
-    typeof(x)(I, size(x))
+function _one(unit::T, x::AbstractGPUMatrix) where {T}
+    m,n = size(x)
+    m==n || throw(DimensionMismatch("multiplicative identity defined only for square matrices"))
+    I = similar(x, T)
+    fill!(I, zero(T))
+    gpu_call(identity_kernel, I, m, unit; total_threads=m)
+    I
 end
+
+Base.one(x::AbstractGPUMatrix{T}) where {T} = _one(one(T), x)
+Base.oneunit(x::AbstractGPUMatrix{T}) where {T} = _one(oneunit(T), x)
 
 
 ## collect & convert

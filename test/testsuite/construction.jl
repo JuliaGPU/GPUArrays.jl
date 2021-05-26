@@ -121,6 +121,10 @@ end
         A = one(AT(rand(T, 2, 2)))
         @test A isa AT{T,2}
         @test Array(A) == one(rand(T, 2, 2))
+
+        A = oneunit(AT(rand(T, 2, 2)))
+        @test A isa AT{T,2}
+        @test Array(A) == oneunit(rand(T, 2, 2))
     end
 end
 
@@ -154,7 +158,6 @@ end
 
 @testsuite "construct/uniformscaling" AT->begin
     for T in supported_eltypes()
-
         x = Matrix{T}(I, 4, 2)
 
         x1 = AT{T, 2}(I, 4, 2)
