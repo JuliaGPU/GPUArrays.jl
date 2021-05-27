@@ -5,6 +5,8 @@ export allowscalar, @allowscalar, assertscalar
 
 # mechanism to disallow scalar operations
 
+@enum ScalarIndexing ScalarAllowed ScalarWarn ScalarWarned ScalarDisallowed
+
 """
     allowscalar() do
         # code that can use scalar indexing
@@ -15,7 +17,7 @@ Denote which operations can use scalar indexing.
 See also: [`@allowscalar`](@ref).
 """
 function allowscalar(f::Base.Callable)
-    task_local_storage(f, :ScalarIndexingAllowed, true)
+    task_local_storage(f, :ScalarIndexing, ScalarAllowed)
 end
 
 # deprecated
@@ -25,7 +27,7 @@ function allowscalar(allow::Bool=true)
     else
         Base.depwarn("allowscalar(false) is deprecated; scalar indexing is now disabled by default.", :allowscalar)
     end
-    task_local_storage(:ScalarIndexingAllowed, allow)
+    task_local_storage(:ScalarIndexing, allow ? ScalarAllowed : ScalarDisallowed)
     return
 end
 
@@ -36,13 +38,25 @@ Assert that a certain operation `op` performs scalar indexing. If this is not al
 error will be thrown ([`allowscalar`](@ref)).
 """
 function assertscalar(op = "operation")
-    allowed = get!(task_local_storage(), :ScalarIndexingAllowed, false)
-    if !allowed
+    val = get!(task_local_storage(), :ScalarIndexing) do
+        if isinteractive()
+            ScalarWarn
+        else
+            ScalarDisallowed
+        end
+    end
+    desc = """Invocation of $op resulted in scalar indexing of a GPU array.
+              This is typically caused by calling an iterating implementation of a method.
+              Such implementations *do not* execute on the GPU, but very slowly on the CPU,
+              and therefore are only permitted from the REPL for prototyping purposes.
+              If you did intend to index this array, annotate the caller with @allowscalar."""
+    if val == ScalarDisallowed
         error("""Scalar indexing is disallowed.
-                 Invocation of $op resulted in scalar indexing. This probably means that
-                 an iterating implementation of a method is being called. Such implementations
-                 do not execute on the GPU, but very slowly on the CPU, and therefore are disallowed.
-                 If you did mean to perform scalar indexing, annotate the caller with @allowscalar.""")
+                 $desc""")
+    elseif val == ScalarWarn
+        @warn("""Performing scalar indexing.
+                 $desc""")
+        task_local_storage(:ScalarIndexing, ScalarWarned)
     end
     return
 end
@@ -58,7 +72,7 @@ See also: [`allowscalar`](@ref).
 """
 macro allowscalar(ex)
     quote
-        task_local_storage(:ScalarIndexingAllowed, true) do
+        task_local_storage(:ScalarIndexing, true) do
             $(esc(ex))
         end
     end
