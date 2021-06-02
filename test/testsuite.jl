@@ -13,7 +13,6 @@ using Random
 using Test
 
 using Adapt
-using FillArrays
 
 struct ArrayAdaptor{AT} end
 Adapt.adapt_storage(::ArrayAdaptor{AT}, xs::AbstractArray) where {AT} = AT(xs)
