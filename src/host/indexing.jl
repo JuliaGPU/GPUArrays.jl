@@ -145,7 +145,7 @@ function _getindex(src::AbstractGPUArray, Is...)
 end
 
 @generated function getindex_kernel(ctx::AbstractKernelContext, dest, src, idims,
-                                    Is::Vararg{<:Any,N}) where {N}
+                                    Is::Vararg{Any,N}) where {N}
     quote
         i = @linearidx dest
         is = @inbounds CartesianIndices(idims)[i]
@@ -172,7 +172,7 @@ function _setindex!(dest::AbstractGPUArray, src, Is...)
 end
 
 @generated function setindex_kernel(ctx::AbstractKernelContext, dest, src, idims, len,
-                                    Is::Vararg{<:Any,N}) where {N}
+                                    Is::Vararg{Any,N}) where {N}
     quote
         i = linear_index(ctx)
         i > len && return
