@@ -174,17 +174,3 @@ end
         @test Array(x1) ≈ x
     end
 end
-
-@testsuite "construct/iterator" AT->begin
-    for T in supported_eltypes()
-        @test Array(AT(Fill(T(0), (10,)))) == Array(fill!(similar(AT{T}, (10,)), T(0)))
-        @test Array(AT(Fill(T(0), (10, 10)))) == Array(fill!(similar(AT{T}, (10, 10)), T(0)))
-        if T <: Real
-            x = AT{Float32}(Fill(T(0), (10, 10)))
-            @test eltype(x) == Float32
-            @test Array(AT(Eye{T}((10)))) == Array(AT{T}(I, 10, 10))
-            x = AT{Float32}(Eye{T}(10))
-            @test eltype(x) == Float32
-        end
-    end
-end

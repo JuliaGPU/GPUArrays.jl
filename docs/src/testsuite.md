@@ -12,21 +12,6 @@ gpuarrays_root = dirname(dirname(gpuarrays))
 include(joinpath(gpuarrays_root, "test", "testsuite.jl"))
 ```
 
-This however implies that the test system will not know about extra dependencies that are
-required by the test suite. To remedy this, you should add the following dependencies to
-your `Project.toml`:
-
-```
-[extras]
-FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
-FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
-ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-...
-
-[targets]
-test = [..., "FFTW", "ForwardDiff", "FillArrays"]
-```
-
 With this set-up, you can run the test suite like this:
 
 ```julia

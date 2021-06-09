@@ -17,8 +17,7 @@ Adapt = "2.0, 3.0"
 julia = "1.5"
 
 [extras]
-FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "FillArrays"]
+test = ["Test"]
