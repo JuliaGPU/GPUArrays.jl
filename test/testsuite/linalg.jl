@@ -1,5 +1,5 @@
 @testsuite "linalg" AT->begin
-    @testset "adjoint and transpose" begin
+    @testset "adjoint and trspose" begin
         @test compare(adjoint, AT, rand(Float32, 32, 32))
         @test compare(adjoint!, AT, rand(Float32, 32, 32), rand(Float32, 32, 32))
         @test compare(transpose, AT, rand(Float32, 32, 32))
@@ -120,5 +120,12 @@ end
     @testset "lmul! and rmul!" for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in supported_eltypes()
         @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))
         @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
+    end
+
+    @testset "$p-norm($sz x $T)" for sz in [(2,), (2,2), (2,2,2)],
+                                     p in Any[1, 2, 3, Inf, -Inf],
+                                     T in supported_eltypes()
+        range = T <: Integer ? (T(1):T(10)) : T # prevent integer overflow
+        @test compare(norm, AT, rand(range, sz), Ref(p))
     end
 end

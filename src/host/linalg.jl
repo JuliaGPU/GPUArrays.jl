@@ -194,3 +194,16 @@ end
 # TODO: implementation without the memory copy
 LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) =
     permutedims!(dest, src, Tuple(perm))
+
+
+## norm
+
+function LinearAlgebra.norm(v::AbstractGPUArray{T}, p::Real=2) where {T}
+    if p == Inf
+        maximum(abs.(v))
+    elseif p == -Inf
+        minimum(abs.(v))
+    else
+        mapreduce(x->abs(x)^p, +, v; init=zero(T))^(1/p)
+    end
+end
