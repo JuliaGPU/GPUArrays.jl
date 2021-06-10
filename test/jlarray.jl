@@ -65,7 +65,7 @@ function GPUArrays.gpu_call(::JLBackend, f, args, threads::Int, blocks::Int;
     ctx = JLKernelContext(threads, blocks)
     device_args = jlconvert.(args)
     tasks = Array{Task}(undef, threads)
-    @disallowscalar for blockidx in 1:blocks
+    for blockidx in 1:blocks
         ctx.blockidx = blockidx
         for threadidx in 1:threads
             thread_ctx = JLKernelContext(ctx, threadidx)

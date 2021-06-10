@@ -8,7 +8,6 @@ include("testsuite.jl")
 
     jl([1])
 
-    JLArrays.allowscalar(false)
     TestSuite.test(JLArray)
 end
 
