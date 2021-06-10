@@ -20,12 +20,9 @@ function allowscalar(f::Base.Callable)
     task_local_storage(f, :ScalarIndexing, ScalarAllowed)
 end
 
-# deprecated
 function allowscalar(allow::Bool=true)
     if allow
         Base.depwarn("allowscalar([true]) is deprecated, use `allowscalar() do end` or `@allowscalar` to denote exactly which operations can use scalar operations.", :allowscalar)
-    else
-        Base.depwarn("allowscalar(false) is deprecated; scalar indexing is now disabled by default.", :allowscalar)
     end
     task_local_storage(:ScalarIndexing, allow ? ScalarAllowed : ScalarDisallowed)
     return
