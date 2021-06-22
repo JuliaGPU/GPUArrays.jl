@@ -149,7 +149,7 @@ end
         @test compare(A->sum(abs, A), AT, reshape(rand(range, 1)))
         # other functions, defined together
         @test compare(A->prod(A), AT, reshape(rand(range, 1)))
-        @test compare(A->max(A), AT, reshape(rand(range, 1)))
+        @test compare(A->maximum(A), AT, reshape(rand(range, 1)))
         @test compare(A->any(_->true, A), AT, reshape(rand(range, 1)))
         @test compare(A->all(_->false, A), AT, reshape(rand(range, 1)))
         # zero-dimensional view
