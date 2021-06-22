@@ -147,6 +147,7 @@ end
         # sum
         @test compare(A->sum(A), AT, reshape(rand(range, 1)))
         @test compare(A->sum(abs, A), AT, reshape(rand(range, 1)))
+        @test compare(A->sum(A, init=ET(13)), AT, reshape(rand(range, 1)))
         # other functions, defined together
         @test compare(A->prod(A), AT, reshape(rand(range, 1)))
         @test compare(A->maximum(A), AT, reshape(rand(range, 1)))
