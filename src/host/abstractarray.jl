@@ -55,7 +55,7 @@ Base._show_empty(io::IO, X::AnyGPUArray) =
     Base._show_empty(io, adapt(ToArray(), X))
 Base.show_vector(io::IO, v::AnyGPUArray, args...) =
     Base.show_vector(io, adapt(ToArray(), v), args...)
-Base.show_zero_dim(io::IO, X::AnyGPUArray{T, 0}) where T
+Base.show_zero_dim(io::IO, X::AnyGPUArray{T, 0}) where T =
     Base.show_zero_dim(io, adapt(ToArray(), X))
 
 ## collect to CPU (discarding wrapper type)
