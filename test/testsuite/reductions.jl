@@ -140,3 +140,20 @@ end
         @test A != B
     end
 end
+
+@testsuite "reductions/zero-arrays" AT->begin
+    @testset "$ET" for ET in supported_eltypes()
+        range = ET <: Real ? (ET(1):ET(10)) : ET
+        # sum
+        @test compare(A->sum(A), AT, reshape(rand(range, 1)))
+        @test compare(A->sum(abs, A), AT, reshape(rand(range, 1)))
+        # other functions, defined together
+        @test compare(A->prod(A), AT, reshape(rand(range, 1)))
+        @test compare(A->max(A), AT, reshape(rand(range, 1)))
+        @test compare(A->any(_->true, A), AT, reshape(rand(range, 1)))
+        @test compare(A->all(_->false, A), AT, reshape(rand(range, 1)))
+        # zero-dimensional view
+        @test compare(A->sum(A), AT, view(rand(range, 3),2))
+        @test compare(A->prod(sqrt, A), AT, view(rand(range, 3),2))
+    end
+end
