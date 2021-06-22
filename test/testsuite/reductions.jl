@@ -147,10 +147,11 @@ end
         # sum
         @test compare(A->sum(A), AT, reshape(rand(range, 1)))
         @test compare(A->sum(abs, A), AT, reshape(rand(range, 1)))
-        @test compare(A->sum(A, init=ET(13)), AT, reshape(rand(range, 1)))
+        if VERSION >= v"1.6"
+            @test compare(A->sum(A, init=ET(13)), AT, reshape(rand(range, 1)))
+        end
         # other functions, defined together
         @test compare(A->prod(A), AT, reshape(rand(range, 1)))
-        @test compare(A->maximum(A), AT, reshape(rand(range, 1)))
         @test compare(A->any(_->true, A), AT, reshape(rand(range, 1)))
         @test compare(A->all(_->false, A), AT, reshape(rand(range, 1)))
         # zero-dimensional view
