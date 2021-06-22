@@ -33,7 +33,7 @@
 
         C = AT(fill(1))
         msg = showstr(A)
-        if VERSION >= v"1.6"
+        if VERSION >= v"1.7-"
             @test msg == "fill(1)"
         else
             @test msg == "[1]"
