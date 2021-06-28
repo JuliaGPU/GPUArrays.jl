@@ -129,3 +129,12 @@ end
         @test compare(norm, AT, rand(range, sz), Ref(p))
     end
 end
+
+@testsuite "linalg/symmetrix" AT->begin
+    @testset "Hermitian" begin
+        A    = rand(Float32,2,2)
+        A    = A*A'+I #posdef
+        d_A  = AT(A)
+        similar(Hermitian(d_A, :L), Float32)
+    end
+end
