@@ -207,3 +207,13 @@ function LinearAlgebra.norm(v::AbstractGPUArray{T}, p::Real=2) where {T}
         mapreduce(x->abs(x)^p, +, v; init=zero(T))^(1/p)
     end
 end
+
+
+## symmetric
+
+# prevent scalar indexing (upstream? this version is slower than a simple loop)
+function Base.similar(A::Hermitian{<:Any,<:AbstractGPUArray}, ::Type{T}) where T
+    B = similar(parent(A), T)
+    fill!(view(B, diagind(B)), 0)
+    return Hermitian(B, ifelse(A.uplo == 'U', :U, :L))
+end
