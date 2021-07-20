@@ -89,12 +89,10 @@ end
         @test size(B) == (7,)
         @test eltype(B) == T
 
-        if VERSION >= v"1.5"
-            B = similar(Broadcast.Broadcasted(*, (B, B)), Int32, (11, 15))
-            @test B isa AT{Int32,2}
-            @test size(B) == (11, 15)
-            @test eltype(B) == Int32
-        end
+        B = similar(Broadcast.Broadcasted(*, (B, B)), Int32, (11, 15))
+        @test B isa AT{Int32,2}
+        @test size(B) == (11, 15)
+        @test eltype(B) == Int32
     end
 end
 
