@@ -96,11 +96,9 @@ end
         # bug in copyto!
         ## needless N type parameter
         @test compare((x,y)->copyto!(y, selectdim(x, 2, 1)), AT, ones(2,2,2), zeros(2,2))
-        if VERSION >= v"1.5-"
-            ## inability to copyto! smaller destination
-            ## (this was broken on Julia <1.5)
-            @test compare((x,y)->copyto!(y, selectdim(x, 2, 1)), AT, ones(2,2,2), zeros(3,3))
-        end
+        ## inability to copyto! smaller destination
+        ## (this was broken on Julia <1.5)
+        @test compare((x,y)->copyto!(y, selectdim(x, 2, 1)), AT, ones(2,2,2), zeros(3,3))
 
         # mismatched types
         let src = rand(Float32, 4)
