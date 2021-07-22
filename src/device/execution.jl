@@ -99,7 +99,7 @@ function launch_configuration(backend::AbstractGPUBackend, heuristic;
 
     if elements_per_thread > 1 && blocks > heuristic.blocks
         # we want to launch more blocks than required, so prefer a grid-stride loop instead
-        nelem = clamp(cld(blocks, heuristic.blocks), 1, elements_per_thread)
+        nelem = clamp(fld(blocks, heuristic.blocks), 1, elements_per_thread)
         blocks = cld(blocks, nelem)
         (threads=threads, blocks=blocks, elements_per_thread=nelem)
     else
