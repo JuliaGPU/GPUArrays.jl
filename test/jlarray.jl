@@ -271,13 +271,6 @@ Base.similar(bc::Broadcasted{JLArrayStyle{N}}, ::Type{T}, dims) where {N,T} =
     JLArray{T}(undef, dims)
 
 
-## math
-
-for f in (:cos, :sin, :sqrt, :log)
-    @eval GPUArrays.$f(ctx::JLKernelContext, x) = $f(x)
-end
-
-
 ## memory operations
 
 function Base.copyto!(dest::Array{T}, d_offset::Integer,
