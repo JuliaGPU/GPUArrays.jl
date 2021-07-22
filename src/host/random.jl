@@ -98,8 +98,8 @@ function Random.randn!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
         idx = 2*(linear_index(ctx) - 1) + 1
         U1 = gpu_rand(T, ctx, randstates)
         U2 = gpu_rand(T, ctx, randstates)
-        Z0 = sqrt(ctx, T(-2.0)*log(ctx, U1))*cos(ctx, T(2pi)*U2)
-        Z1 = sqrt(ctx, T(-2.0)*log(ctx, U1))*sin(ctx, T(2pi)*U2)
+        Z0 = sqrt(T(-2.0)*log(U1))*cos(T(2pi)*U2)
+        Z1 = sqrt(T(-2.0)*log(U1))*sin(T(2pi)*U2)
         @inbounds a[idx] = Z0
         idx + 1 > length(a) && return
         @inbounds a[idx + 1] = Z1
