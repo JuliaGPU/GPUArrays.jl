@@ -60,8 +60,12 @@ end
         end
         return
     end
-    heuristic = launch_heuristic(backend(dest), broadcast_kernel, dest, bc′, 1)
-    config = launch_configuration(backend(dest), heuristic, length(dest), typemax(Int))
+    elements = length(dest)
+    elements_per_thread = typemax(Int)
+    heuristic = launch_heuristic(backend(dest), broadcast_kernel, dest, bc′, 1;
+                                 elements, elements_per_thread)
+    config = launch_configuration(backend(dest), heuristic;
+                                  elements, elements_per_thread)
     gpu_call(broadcast_kernel, dest, bc′, config.elements_per_thread;
              threads=config.threads, blocks=config.blocks)
 
@@ -121,8 +125,12 @@ function Base.map!(f, dest::BroadcastGPUArray, xs::AbstractArray...)
         end
         return
     end
-    heuristic = launch_heuristic(backend(dest), map_kernel, dest, bc, 1)
-    config = launch_configuration(backend(dest), heuristic, common_length, typemax(Int))
+    elements = common_length
+    elements_per_thread = typemax(Int)
+    heuristic = launch_heuristic(backend(dest), map_kernel, dest, bc, 1;
+                                 elements, elements_per_thread)
+    config = launch_configuration(backend(dest), heuristic;
+                                  elements, elements_per_thread)
     gpu_call(map_kernel, dest, bc, config.elements_per_thread;
              threads=config.threads, blocks=config.blocks)
 

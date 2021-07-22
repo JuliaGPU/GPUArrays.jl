@@ -10,7 +10,7 @@
     end
     @test all(x-> x == 2, Array(x))
 
-    gpu_call(x; total_threads=N) do ctx, x
+    gpu_call(x; elements=N) do ctx, x
         x[linear_index(ctx)] = 2
         return
     end

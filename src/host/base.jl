@@ -6,7 +6,7 @@ function Base.repeat(a::AbstractGPUVecOrMat, m::Int, n::Int = 1)
     if length(b) == 0
         return b
     end
-    gpu_call(b, a, o, p, m, n; total_threads=n) do ctx, b, a, o, p, m, n
+    gpu_call(b, a, o, p, m, n; elements=n) do ctx, b, a, o, p, m, n
         j = linear_index(ctx)
         j > n && return
         d = (j - 1) * p + 1
@@ -29,7 +29,7 @@ function Base.repeat(a::AbstractGPUVector, m::Int)
     if length(b) == 0
         return b
     end
-    gpu_call(b, a, o, m; total_threads=m) do ctx, b, a, o, m
+    gpu_call(b, a, o, m; elements=m) do ctx, b, a, o, m
         i = linear_index(ctx)
         i > m && return
         c = (i - 1)*o + 1

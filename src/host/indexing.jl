@@ -149,7 +149,7 @@ function _setindex!(dest::AbstractGPUArray, src, Is...)
     AT = typeof(dest).name.wrapper
     # NOTE: we are pretty liberal here supporting non-GPU sources and indices...
     gpu_call(setindex_kernel, dest, adapt(AT, src), idims, len, adapt(AT, Is)...;
-             total_threads=len)
+             elements=len)
     return dest
 end
 

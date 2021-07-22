@@ -116,7 +116,7 @@ function Base.copyto!(dest::AnyGPUArray, dstart::Integer,
 
     gpu_call(linear_copy_kernel!,
              dest, dstart, src, sstart, n;
-             total_threads=n)
+             elements=n)
     return dest
 end
 
@@ -188,7 +188,7 @@ function Base.copyto!(dest::AnyGPUArray{<:Any, N}, destcrange::CartesianIndices{
     src_offsets = first(srccrange) - oneunit(CartesianIndex{N})
     gpu_call(cartesian_copy_kernel!,
              dest, dest_offsets, src, src_offsets, shape, len;
-             total_threads=len)
+             elements=len)
     dest
 end
 

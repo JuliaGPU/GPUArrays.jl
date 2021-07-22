@@ -24,7 +24,7 @@ end
 function (T::Type{<: AnyGPUArray{U}})(s::UniformScaling, dims::Dims{2}) where {U}
     res = similar(T, dims)
     fill!(res, zero(U))
-    gpu_call(identity_kernel, res, size(res, 1), s.λ; total_threads=minimum(dims))
+    gpu_call(identity_kernel, res, size(res, 1), s.λ; elements=minimum(dims))
     res
 end
 
@@ -34,7 +34,7 @@ end
 
 function Base.copyto!(A::AbstractGPUMatrix{T}, s::UniformScaling) where T
     fill!(A, zero(T))
-    gpu_call(identity_kernel, A, size(A, 1), s.λ; total_threads=minimum(size(A)))
+    gpu_call(identity_kernel, A, size(A, 1), s.λ; elements=minimum(size(A)))
     A
 end
 
@@ -43,7 +43,7 @@ function _one(unit::T, x::AbstractGPUMatrix) where {T}
     m==n || throw(DimensionMismatch("multiplicative identity defined only for square matrices"))
     I = similar(x, T)
     fill!(I, zero(T))
-    gpu_call(identity_kernel, I, m, unit; total_threads=m)
+    gpu_call(identity_kernel, I, m, unit; elements=m)
     I
 end
 
