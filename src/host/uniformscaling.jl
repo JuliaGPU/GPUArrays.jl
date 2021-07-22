@@ -34,7 +34,7 @@ for (t1, t2) in unittriangularwrappers
             B = similar(parent(A), typeof(oneunit(T) + J))
             copyto!(B, parent(A))
             min_size = minimum(size(B))
-            gpu_call(kernel_unittriangular, B, J, one(eltype(B)), min_size; total_threads=min_size)
+            gpu_call(kernel_unittriangular, B, J, one(eltype(B)), min_size; elements=min_size)
             return $t2(B)
         end
 
@@ -42,7 +42,7 @@ for (t1, t2) in unittriangularwrappers
             B = similar(parent(A), typeof(J - oneunit(T)))
             B .= .- parent(A)
             min_size = minimum(size(B))
-            gpu_call(kernel_unittriangular, B, J, -one(eltype(B)), min_size; total_threads=min_size)
+            gpu_call(kernel_unittriangular, B, J, -one(eltype(B)), min_size; elements=min_size)
             return $t2(B)
         end
     end
@@ -54,7 +54,7 @@ for t in genericwrappers
             B = similar(parent(A), typeof(oneunit(T) + J))
             copyto!(B, parent(A))
             min_size = minimum(size(B))
-            gpu_call(kernel_generic, B, J, min_size; total_threads=min_size)
+            gpu_call(kernel_generic, B, J, min_size; elements=min_size)
             return $t(B)
         end
 
@@ -62,7 +62,7 @@ for t in genericwrappers
             B = similar(parent(A), typeof(J - oneunit(T)))
             B .= .- parent(A)
             min_size = minimum(size(B))
-            gpu_call(kernel_generic, B, J, min_size; total_threads=min_size)
+            gpu_call(kernel_generic, B, J, min_size; elements=min_size)
             return $t(B)
         end
     end
@@ -73,7 +73,7 @@ function (+)(A::Hermitian{T,<:AbstractGPUMatrix}, J::UniformScaling{<:Complex}) 
     B = similar(parent(A), typeof(oneunit(T) + J))
     copyto!(B, parent(A))
     min_size = minimum(size(B))
-    gpu_call(kernel_generic, B, J, min_size; total_threads=min_size)
+    gpu_call(kernel_generic, B, J, min_size; elements=min_size)
     return B
 end
 
@@ -81,7 +81,7 @@ function (-)(J::UniformScaling{<:Complex}, A::Hermitian{T,<:AbstractGPUMatrix}) 
     B = similar(parent(A), typeof(J - oneunit(T)))
     B .= .-parent(A)
     min_size = minimum(size(B))
-    gpu_call(kernel_generic, B, J, min_size; total_threads=min_size)
+    gpu_call(kernel_generic, B, J, min_size; elements=min_size)
     return B
 end
 
@@ -90,7 +90,7 @@ function (+)(A::AbstractGPUMatrix{T}, J::UniformScaling) where T
     B = similar(A, typeof(oneunit(T) + J))
     copyto!(B, A)
     min_size = minimum(size(B))
-    gpu_call(kernel_generic, B, J, min_size; total_threads=min_size)
+    gpu_call(kernel_generic, B, J, min_size; elements=min_size)
     return B
 end
 
@@ -98,6 +98,6 @@ function (-)(J::UniformScaling, A::AbstractGPUMatrix{T}) where T
     B = similar(A, typeof(J - oneunit(T)))
     B .= .-A
     min_size = minimum(size(B))
-    gpu_call(kernel_generic, B, J, min_size; total_threads=min_size)
+    gpu_call(kernel_generic, B, J, min_size; elements=min_size)
     return B
 end

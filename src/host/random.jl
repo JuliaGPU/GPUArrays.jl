@@ -94,7 +94,7 @@ end
 function Random.randn!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
     threads = (length(A) - 1) ÷ 2 + 1
     length(A) == 0 && return
-    gpu_call(A, rng.state; total_threads = threads) do ctx, a, randstates
+    gpu_call(A, rng.state; elements = threads) do ctx, a, randstates
         idx = 2*(linear_index(ctx) - 1) + 1
         U1 = gpu_rand(T, ctx, randstates)
         U2 = gpu_rand(T, ctx, randstates)
