@@ -30,5 +30,13 @@
         @test occursin(Regex("^1×1 Adjoint{Int64,\\s?$AT{Int64,\\s?1}}:\n 1\$"), msg) ||
             occursin(Regex("^1×1 LinearAlgebra.Adjoint{Int64,\\s?$AT{Int64,\\s?1}}:\n 1\$"), msg) ||
             occursin(Regex("^1×1 adjoint\\(::$AT{Int64,\\s?1}\\) with eltype Int64:\n 1\$"), msg)
+
+        C = AT(fill(1))
+        msg = showstr(A)
+        if VERSION >= v"1.7-"
+            @test msg == "fill(1)"
+        else
+            @test msg == "[1]"
+        end
     end
 end

@@ -90,4 +90,7 @@ for (fname, op) in [(:sum, :(Base.add_sum)), (:prod, :(Base.mul_prod)),
     end
 end
 
+Base._mapreduce_dim(f, op, init, A::AnyGPUArray{<:Any,0}, ::Colon) = op(f(@allowscalar A[]), init)
+Base._mapreduce_dim(f, op, ::Base._InitialValue, A::AnyGPUArray{<:Any,0}, ::Colon) = f(@allowscalar A[])
+
 LinearAlgebra.ishermitian(A::AbstractGPUMatrix) = mapreduce(==, &, A, adjoint(A))
