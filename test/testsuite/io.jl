@@ -11,7 +11,7 @@
         B = AT(Int64[1 2;3 4])
 
         msg = replstr(A)
-        @test occursin(Regex("^1-element $AT{Int64,\\s?1}:\n 1\$"), msg)
+        @test occursin(Regex("^1-element $AT{Int64,\\s?1.*}:\n 1\$"), msg)
 
         # # result of e.g. `print` differs on 32bit and 64bit machines
         # due to different definition of `Int` type
@@ -27,8 +27,8 @@
 
         # the printing of Adjoint depends on global state
         msg = replstr(A')
-        @test occursin(Regex("^1×1 Adjoint{Int64,\\s?$AT{Int64,\\s?1}}:\n 1\$"), msg) ||
-            occursin(Regex("^1×1 LinearAlgebra.Adjoint{Int64,\\s?$AT{Int64,\\s?1}}:\n 1\$"), msg) ||
-            occursin(Regex("^1×1 adjoint\\(::$AT{Int64,\\s?1}\\) with eltype Int64:\n 1\$"), msg)
+        @test occursin(Regex("^1×1 Adjoint{Int64,\\s?$AT{Int64,\\s?1.*}}:\n 1\$"), msg) ||
+              occursin(Regex("^1×1 LinearAlgebra.Adjoint{Int64,\\s?$AT{Int64,\\s?1.*}}:\n 1\$"), msg) ||
+              occursin(Regex("^1×1 adjoint\\(::$AT{Int64,\\s?1.*}\\) with eltype Int64:\n 1\$"), msg)
     end
 end
