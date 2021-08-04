@@ -16,6 +16,7 @@ LCGStep(z::Unsigned, A::Unsigned, C::Unsigned) = A * z + C
 
 make_rand_num(::Type{Float64}, tmp) = 2.3283064365387e-10 * Float64(tmp)
 make_rand_num(::Type{Float32}, tmp) = 2.3283064f-10 * Float32(tmp)
+make_rand_num(::Type{Float16}, tmp) = Float16(2.3283064365387e-10 * tmp)
 
 function next_rand(state::NTuple{4, T}) where {T <: Unsigned}
     state = (
