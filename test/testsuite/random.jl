@@ -22,9 +22,12 @@
             @test all(Array(A) .== Array(B))
         end
 
-        A = AT{Bool}(undef, 5)
+        A = AT{Bool}(undef, 1024)
+        fill!(A, false)
         rand!(A)
         @test true in Array(A)
+        fill!(A, true)
+        rand!(A)
         @test false in Array(A)
     end
 
