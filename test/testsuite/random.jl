@@ -1,19 +1,21 @@
 @testsuite "random" AT->begin
+    rng = if AT <: AbstractGPUArray
+        GPUArrays.default_rng(AT)
+    else
+        Random.default_rng()
+    end
+
     @testset "rand" begin  # uniform
-        for T in (Int8, Float32, Float64, Int64, Int32,
-                  Complex{Float32}, Complex{Float64},
-                  Complex{Int64}, Complex{Int32}), d in (10, (10,10))
+        for T in (Int16, Int32, Int64,
+                  Float16, Float32, Float64,
+                  Complex{Float16}, Complex{Float32}, Complex{Float64},
+                  Complex{Int32}, Complex{Int64}), d in (10, (10,10))
             A = AT{T}(undef, d)
             B = copy(A)
-            rand!(A)
-            rand!(B)
+            rand!(rng, A)
+            rand!(rng, B)
             @test Array(A) != Array(B)
 
-            rng = if AT <: AbstractGPUArray
-                GPUArrays.default_rng(AT)
-            else
-                Random.default_rng()
-            end
             Random.seed!(rng)
             Random.seed!(rng, 1)
             rand!(rng, A)
@@ -24,26 +26,21 @@
 
         A = AT{Bool}(undef, 1024)
         fill!(A, false)
-        rand!(A)
+        rand!(rng, A)
         @test true in Array(A)
         fill!(A, true)
-        rand!(A)
+        rand!(rng, A)
         @test false in Array(A)
     end
 
-    @testset "randn" begin  # uniform
-        for T in (Float32, Float64), d in (2, (2,2))
+    @testset "randn" begin  # normally-distributed
+        for T in (Float16, Float32, Float64), d in (2, (2,2))
             A = AT{T}(undef, d)
             B = copy(A)
-            randn!(A)
-            randn!(B)
+            randn!(rng, A)
+            randn!(rng, B)
             @test !any(Array(A) .== Array(B))
 
-            rng = if AT <: AbstractGPUArray
-                GPUArrays.default_rng(AT)
-            else
-                Random.default_rng()
-            end
             Random.seed!(rng)
             Random.seed!(rng, 1)
             randn!(rng, A)
