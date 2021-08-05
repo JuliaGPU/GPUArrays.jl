@@ -47,18 +47,18 @@ end
             gpu_a = AT{Float32}(undef, 128, 128)
             gpu_b = AT{Float32}(undef, 128, 128)
 
-            rand!(gpu_a)
+            copyto!(gpu_a, rand(Float32, (128,128)))
             copyto!(cpu_a, TR(gpu_a))
             @test cpu_a == Array(collect(TR(gpu_a)))
 
-            rand!(gpu_a)
+            copyto!(gpu_a, rand(Float32, (128,128)))
             gpu_c = copyto!(gpu_b, TR(gpu_a))
             @test all(Array(gpu_b) .== TR(Array(gpu_a)))
             @test gpu_c isa AT
         end
 
         for TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
-            gpu_a = AT{Float32}(undef, 128, 128) |> rand! |> TR
+            gpu_a = AT(rand(Float32, (128,128))) |> TR
             gpu_b = AT{Float32}(undef, 128, 128) |> TR
 
             gpu_c = copyto!(gpu_b, gpu_a)
@@ -72,10 +72,8 @@ end
 @testsuite "linalg/diagonal" AT->begin
     @testset "Array + Diagonal" begin
         n = 128
-        A = AT{Float32}(undef, n, n)
-        d = AT{Float32}(undef, n)
-        rand!(A)
-        rand!(d)
+        A = AT(rand(Float32, (n,n)))
+        d = AT(rand(Float32, n))
         D = Diagonal(d)
         B = A + D
         @test collect(B) ≈ collect(A) + collect(D)

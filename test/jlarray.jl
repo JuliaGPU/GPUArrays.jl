@@ -322,13 +322,21 @@ Base.copyto!(dest::DenseJLArray{T}, source::DenseJLArray{T}) where {T} =
     copyto!(dest, 1, source, 1, length(source))
 
 
-## Random
+## random number generation
 
 using Random
 
-# JLArray only supports generating random numbers with the GPUArrays RNG
-Random.rand!(A::AnyJLArray) = Random.rand!(GPUArrays.default_rng(JLArray), A)
-Random.randn!(A::AnyJLArray) = Random.randn!(GPUArrays.default_rng(JLArray), A)
+const GLOBAL_RNG = Ref{Union{Nothing,GPUArrays.RNG}}(nothing)
+function GPUArrays.default_rng(::Type{<:JLArray})
+    if GLOBAL_RNG[] === nothing
+        N = MAXTHREADS
+        state = JLArray{NTuple{4, UInt32}}(undef, N)
+        rng = GPUArrays.RNG(state)
+        Random.seed!(rng)
+        GLOBAL_RNG[] = rng
+    end
+    GLOBAL_RNG[]
+end
 
 
 ## GPUArrays interfaces
@@ -344,18 +352,6 @@ function GPUArrays.mapreducedim!(f, op, R::AnyJLArray, A::Union{AbstractArray,Br
         fill!(R, init)
     end
     @allowscalar Base.reducedim!(op, R.data, map(f, A))
-end
-
-const GLOBAL_RNG = Ref{Union{Nothing,GPUArrays.RNG}}(nothing)
-function GPUArrays.default_rng(::Type{<:JLArray})
-    if GLOBAL_RNG[] === nothing
-        N = MAXTHREADS
-        state = JLArray{NTuple{4, UInt32}}(undef, N)
-        rng = GPUArrays.RNG(state)
-        Random.seed!(rng)
-        GLOBAL_RNG[] = rng
-    end
-    GLOBAL_RNG[]
 end
 
 end
