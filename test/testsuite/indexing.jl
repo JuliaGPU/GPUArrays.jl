@@ -1,4 +1,4 @@
-@testsuite "indexing scalar" AT->begin
+@testsuite "indexing scalar" (AT, eltypes)->begin
     AT <: AbstractGPUArray && @testset "errors and warnings" begin
         x = AT([0])
 
@@ -19,7 +19,7 @@
         @test_throws ErrorException x[]
     end
 
-    @allowscalar @testset "getindex with $T" for T in supported_eltypes()
+    @allowscalar @testset "getindex with $T" for T in eltypes
         x = rand(T, 32)
         src = AT(x)
         for (i, xi) in enumerate(x)
@@ -29,7 +29,7 @@
         @test Array(src[3:end]) == x[3:end]
     end
 
-    @allowscalar @testset "setindex! with $T" for T in supported_eltypes()
+    @allowscalar @testset "setindex! with $T" for T in eltypes
         x = fill(zero(T), 7)
         src = AT(x)
         for i = 1:7
@@ -41,7 +41,7 @@
         src[1] = T(0)
     end
 
-    @allowscalar @testset "issue #42 with $T" for T in supported_eltypes()
+    @allowscalar @testset "issue #42 with $T" for T in eltypes
         Ac = rand(Float32, 2, 2)
         A = AT(Ac)
         @test A[1] == Ac[1]
@@ -59,15 +59,15 @@
     end
 end
 
-@testsuite "indexing multidimensional" AT->begin
-    @testset "sliced setindex" for T in supported_eltypes()
+@testsuite "indexing multidimensional" (AT, eltypes)->begin
+    @testset "sliced setindex" for T in eltypes
         x = AT(zeros(T, (10, 10, 10, 10)))
         y = AT(rand(T, (5, 5, 10, 10)))
         x[2:6, 2:6, :, :] = y
         @test Array(x[2:6, 2:6, :, :]) == Array(y)
     end
 
-    @testset "sliced setindex, CPU source" for T in supported_eltypes()
+    @testset "sliced setindex, CPU source" for T in eltypes
         x = AT(zeros(T, (2,3,4)))
         y = AT(rand(T, (2,3)))
         x[:, :, 2] = y
@@ -99,7 +99,7 @@ end
     end
 
     @testset "GPU source" begin
-        a = rand(3)
+        a = rand(Float32, 3)
         i = rand(1:3, 2)
         @test compare(getindex, AT, a, i)
         @test compare(getindex, AT, a, i')
@@ -108,7 +108,7 @@ end
 
     @testset "CPU source" begin
         # JuliaGPU/CUDA.jl#345
-        a = rand(3,4)
+        a = rand(Float32, 3, 4)
         i = rand(1:3,2,2)
         @test compare(a->a[i,:], AT, a)
         @test compare(a->a[i',:], AT, a)
@@ -116,6 +116,6 @@ end
     end
 
     @testset "JuliaGPU/CUDA.jl#461: sliced setindex" begin
-        @test compare((X,Y)->(X[1,:] = Y), AT, zeros(2,2), ones(2))
+        @test compare((X,Y)->(X[1,:] = Y), AT, zeros(Float32, 2,2), ones(Float32, 2))
     end
 end

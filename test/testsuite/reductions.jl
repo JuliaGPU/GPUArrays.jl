@@ -1,5 +1,5 @@
-@testsuite "reductions/mapreducedim!" AT->begin
-    @testset "$ET" for ET in supported_eltypes()
+@testsuite "reductions/mapreducedim!" (AT, eltypes)->begin
+    @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
                          (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1)]
@@ -14,8 +14,8 @@
     end
 end
 
-@testsuite "reductions/reducedim!" AT->begin
-    @testset "$ET" for ET in supported_eltypes()
+@testsuite "reductions/reducedim!" (AT, eltypes)->begin
+    @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
                          (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1)]
@@ -25,8 +25,8 @@ end
     end
 end
 
-@testsuite "reductions/mapreduce" AT->begin
-    @testset "$ET" for ET in supported_eltypes()
+@testsuite "reductions/mapreduce" (AT, eltypes)->begin
+    @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
                           (10,)=>:, (10,10)=>:, (10,10,10)=>:,
@@ -38,8 +38,8 @@ end
     end
 end
 
-@testsuite "reductions/reduce" AT->begin
-    @testset "$ET" for ET in supported_eltypes()
+@testsuite "reductions/reduce" (AT, eltypes)->begin
+    @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
                           (10,)=>:, (10,10)=>:, (10,10,10)=>:,
@@ -50,8 +50,8 @@ end
     end
 end
 
-@testsuite "reductions/sum prod" AT->begin
-    @testset "$ET" for ET in supported_eltypes()
+@testsuite "reductions/sum prod" (AT, eltypes)->begin
+    @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
                           (10,)=>:, (10,10)=>:, (10,10,10)=>:,
@@ -65,7 +65,7 @@ end
         end
 
         OT = isbitstype(widen(ET)) ? widen(ET) : ET
-        if OT in supported_eltypes()
+        if OT in eltypes
             # smaller-scale test to avoid very large values and roundoff issues
             for (sz,red) in [(2,)=>(1,), (2,2)=>(1,1), (2,2,2)=>(1,1,1), (2,2,2)=>(2,2,2),
                             (2,2,2)=>(1,2,2), (2,2,2)=>(2,1,2), (2,2,2)=>(2,2,1)]
@@ -76,8 +76,8 @@ end
     end
 end
 
-@testsuite "reductions/minimum maximum" AT->begin
-    @testset "$ET" for ET in supported_eltypes()
+@testsuite "reductions/minimum maximum" (AT, eltypes)->begin
+    @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
                           (10,)=>:, (10,10)=>:, (10,10,10)=>:,
@@ -102,7 +102,7 @@ end
     end
 end
 
-@testsuite "reductions/any all count" AT->begin
+@testsuite "reductions/any all count" (AT, eltypes)->begin
     for Ac in ([false, false], [false, true], [true, true],
                 [false false; false false], [false true; false false],
                 [true true; false false], [true true; true true])

@@ -1,6 +1,6 @@
-@testsuite "broadcasting" AT->begin
-    broadcasting(AT)
-    vec3(AT)
+@testsuite "broadcasting" (AT, eltypes)->begin
+    broadcasting(AT, eltypes)
+    vec3(AT, eltypes)
 
     @testset "type instabilities" begin
         f(x) = x ? 1.0 : 0
@@ -37,8 +37,8 @@ function test_kernel(a::T, b) where T
     return c
 end
 
-function broadcasting(AT)
-    for ET in supported_eltypes()
+function broadcasting(AT, eltypes)
+    for ET in eltypes
         N = 10
         @testset "broadcast $ET" begin
             @testset "RefValue" begin
@@ -91,7 +91,8 @@ function broadcasting(AT)
                 # since GPUArrays adds some arguments to the function, it becomes longer longer, hitting the 12
                 # so this wont fix for now
                 @test compare(AT, rand(ET, dim), rand(ET, dim), rand(ET, dim), rand(ET, dim), rand(ET, dim), rand(ET, dim)) do a1, a2, a3, a4, a5, a6
-                    @. a1 = a2 + (1.2) *((1.3)*a3 + (1.4)*a4 + (1.5)*a5 + (1.6)*a6)
+                    c1, c2, c3, c4, c5 = ET(1.2), ET(1.3), ET(1.4), ET(1.5), ET(1.6)
+                    @. a1 = a2 + c1 * (c2 * a3 + c3 * a4 + c4 * a5 + c5 * a6)
                 end
 
                 @test compare(AT, rand(ET, dim), rand(ET, dim), rand(ET, dim), rand(ET, dim)) do u, uprev, duprev, ku
@@ -110,6 +111,14 @@ function broadcasting(AT)
                     dt = ET(1)
                     @. utilde = dt*(btilde1*k1 + btilde2*k2 + btilde3*k3 + btilde4*k4)
                 end
+
+                @testset "0D" begin
+                    x = AT{ET}(undef)
+                    x .= ET(1)
+                    @test collect(x)[] == ET(1)
+                    x /= ET(2)
+                    @test collect(x)[] == ET(0.5)
+                end
             end
 
             @test compare((x) -> fill!(x, 1), AT, rand(ET, 3,3))
@@ -127,51 +136,43 @@ function broadcasting(AT)
         end
 
         @testset "map! $ET" begin
-            @test compare(AT, rand(2,2), rand(2,2)) do x,y
+            @test compare(AT, rand(ET, 2,2), rand(ET, 2,2)) do x,y
                 map!(+, x, y)
             end
-            @test compare(AT, rand(2), rand(2,2)) do x,y
+            @test compare(AT, rand(ET, 2), rand(ET, 2,2)) do x,y
                 map!(+, x, y)
             end
-            @test compare(AT, rand(2,2), rand(2)) do x,y
+            @test compare(AT, rand(ET, 2,2), rand(ET, 2)) do x,y
                 map!(+, x, y)
             end
         end
 
         @testset "map $ET" begin
-            @test compare(AT, rand(2,2), rand(2,2)) do x,y
+            @test compare(AT, rand(ET, 2,2), rand(ET, 2,2)) do x,y
                 map(+, x, y)
             end
-            @test compare(AT, rand(2), rand(2,2)) do x,y
+            @test compare(AT, rand(ET, 2), rand(ET, 2,2)) do x,y
                 map(+, x, y)
             end
-            @test compare(AT, rand(2,2), rand(2)) do x,y
+            @test compare(AT, rand(ET, 2,2), rand(ET, 2)) do x,y
                 map(+, x, y)
             end
         end
-    end
 
-    @testset "0D" begin
-        x = AT{Float64}(undef)
-        x .= 1
-        @test collect(x)[] == 1
-        x /= 2
-        @test collect(x)[] == 0.5
-    end
+        @testset "Ref" begin
+            # as first arg, 0d broadcast
+            @test compare(x->getindex.(Ref(x), 1), AT, ET[0])
 
-    @testset "Ref" begin
-        # as first arg, 0d broadcast
-        @test compare(x->getindex.(Ref(x),1), AT, [0])
+            void_setindex!(args...) = (setindex!(args...); return)
+            @test compare(x->(void_setindex!.(Ref(x), ET(1)); x), AT, ET[0])
 
-        void_setindex!(args...) = (setindex!(args...); return)
-        @test compare(x->(void_setindex!.(Ref(x),1); x), AT, [0])
-
-        # regular broadcast
-        a = AT(rand(10))
-        b = AT(rand(10))
-        cpy(i,a,b) = (a[i] = b[i]; return)
-        cpy.(1:10, Ref(a), Ref(b))
-        @test Array(a) == Array(b)
+            # regular broadcast
+            a = AT(rand(ET, 10))
+            b = AT(rand(ET, 10))
+            cpy(i,a,b) = (a[i] = b[i]; return)
+            cpy.(1:10, Ref(a), Ref(b))
+            @test Array(a) == Array(b)
+        end
     end
 
     @testset "stackoverflow in copy(::Broadcast)" begin
@@ -179,7 +180,7 @@ function broadcasting(AT)
     end
 end
 
-function vec3(AT)
+function vec3(AT, eltypes)
     @testset "vec 3" begin
         N = 20
 

@@ -53,7 +53,7 @@ macro testsuite(name, ex)
     safe_name = lowercase(replace(name, " "=>"_"))
     fn = Symbol("test_$(safe_name)")
     quote
-        $(esc(fn))(AT) = $(esc(ex))(AT)
+        $(esc(fn))(AT; eltypes=supported_eltypes()) = $(esc(ex))(AT, eltypes)
 
         @assert !haskey(tests, $name)
         tests[$name] = $fn

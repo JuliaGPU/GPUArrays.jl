@@ -25,7 +25,7 @@ function ntuple_closure(ctx, result, ::Val{N}, testval) where N
     return
 end
 
-@testsuite "base" AT->begin
+@testsuite "base" (AT, eltypes)->begin
     @testset "copyto!" begin
         x = fill(0f0, (10, 10))
         y = rand(Float32, (20, 10))
@@ -70,15 +70,15 @@ end
         copyto!(a, r1, b, r2)
         @test x == Array(a)
 
-        x = fill(0., (10,))
-        y = fill(1, (10,))
+        x = fill(0f0, (10,))
+        y = fill(1f0, (10,))
         a = AT(x)
         b = AT(y)
         copyto!(a, b)
-        @test Float64.(y) == Array(a)
+        @test Float32.(y) == Array(a)
 
         # wrapped gpu array to wrapped gpu array
-        x = rand(4, 4)
+        x = rand(Float32, 4, 4)
         a = AT(x)
         b = view(a, 2:3, 2:3)
         c = AT{eltype(b)}(undef, size(b))
@@ -95,21 +95,23 @@ end
 
         # bug in copyto!
         ## needless N type parameter
-        @test compare((x,y)->copyto!(y, selectdim(x, 2, 1)), AT, ones(2,2,2), zeros(2,2))
+        @test compare((x,y)->copyto!(y, selectdim(x, 2, 1)), AT, ones(Float32, 2, 2, 2), zeros(Float32, 2, 2))
         ## inability to copyto! smaller destination
         ## (this was broken on Julia <1.5)
-        @test compare((x,y)->copyto!(y, selectdim(x, 2, 1)), AT, ones(2,2,2), zeros(3,3))
+        @test compare((x,y)->copyto!(y, selectdim(x, 2, 1)), AT, ones(Float32, 2, 2, 2), zeros(Float32, 3, 3))
 
-        # mismatched types
-        let src = rand(Float32, 4)
-            dst = AT{Float64}(undef, size(src))
-            copyto!(dst, src)
-            @test Array(dst) == src
-        end
-        let dst = Array{Float64}(undef, 4)
-            src = AT(rand(Float32, size(dst)))
-            copyto!(dst, src)
-            @test Array(src) == dst
+        if (Float32 in eltypes && Float64 in eltypes)
+            # mismatched types
+            let src = rand(Float32, 4)
+                dst = AT{Float64}(undef, size(src))
+                copyto!(dst, src)
+                @test Array(dst) == src
+            end
+            let dst = Array{Float64}(undef, 4)
+                src = AT(rand(Float32, size(dst)))
+                copyto!(dst, src)
+                @test Array(src) == dst
+            end
         end
     end
 
@@ -123,11 +125,11 @@ end
     end
 
     @testset "reshape" begin
-        @test compare(reshape, AT, rand(10), Ref((10,)))
-        @test compare(reshape, AT, rand(10), Ref((10,1)))
-        @test compare(reshape, AT, rand(10), Ref((1,10)))
+        @test compare(reshape, AT, rand(Float32, 10), Ref((10,)))
+        @test compare(reshape, AT, rand(Float32, 10), Ref((10,1)))
+        @test compare(reshape, AT, rand(Float32, 10), Ref((1,10)))
 
-        @test_throws Exception reshape(AT(rand(10)), (10,2))
+        @test_throws Exception reshape(AT(rand(Float32, 10)), (10,2))
     end
 
     @testset "reinterpret" begin
@@ -158,7 +160,7 @@ end
     AT <: AbstractGPUArray && @testset "cartesian iteration" begin
         Ac = rand(Float32, 32, 32)
         A = AT(Ac)
-        result = fill!(copy(A), 0.0)
+        result = fill!(copy(A), 0.0f0)
         gpu_call(cartesian_iter, result, A, size(A))
         Array(result) == Ac
     end
@@ -188,10 +190,10 @@ end
     end
 
     @testset "permutedims" begin
-        @test compare(x->permutedims(x, [1, 2]), AT, rand(4, 4))
+        @test compare(x->permutedims(x, [1, 2]), AT, rand(Float32, 4, 4))
 
         inds = rand(1:100, 150, 150)
-        @test compare(x->permutedims(view(x, inds, :), (3, 2, 1)), AT, rand(100, 100))
+        @test compare(x->permutedims(view(x, inds, :), (3, 2, 1)), AT, rand(Float32, 100, 100))
     end
 
     @testset "circshift" begin

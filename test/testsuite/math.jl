@@ -1,5 +1,5 @@
-@testsuite "math/intrinsics" AT->begin
-    for ET in supported_eltypes()
+@testsuite "math/intrinsics" (AT, eltypes)->begin
+    for ET in eltypes
         # Skip complex numbers
         ET in (Complex, ComplexF32, ComplexF64) && continue
 
@@ -17,8 +17,8 @@
     end
 end
 
-@testsuite "math/power" AT->begin
-    for ET in supported_eltypes()
+@testsuite "math/power" (AT, eltypes)->begin
+    for ET in eltypes
         for p in 0:5
             compare(x->x^p, AT, rand(ET, 2,2))
         end

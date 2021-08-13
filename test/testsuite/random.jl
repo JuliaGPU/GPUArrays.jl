@@ -1,4 +1,4 @@
-@testsuite "random" AT->begin
+@testsuite "random" (AT, eltypes)->begin
     rng = if AT <: AbstractGPUArray
         GPUArrays.default_rng(AT)
     else
@@ -6,10 +6,7 @@
     end
 
     @testset "rand" begin  # uniform
-        for T in (Int16, Int32, Int64,
-                  Float16, Float32, Float64,
-                  Complex{Float16}, Complex{Float32}, Complex{Float64},
-                  Complex{Int32}, Complex{Int64}), d in (10, (10,10))
+        for T in eltypes, d in (10, (10,10))
             A = AT{T}(undef, d)
             B = copy(A)
             rand!(rng, A)
@@ -35,6 +32,9 @@
 
     @testset "randn" begin  # normally-distributed
         for T in (Float16, Float32, Float64), d in (2, (2,2))
+            if !(T in eltypes)
+                continue
+            end
             A = AT{T}(undef, d)
             B = copy(A)
             randn!(rng, A)

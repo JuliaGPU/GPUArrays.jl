@@ -1,5 +1,5 @@
-@testsuite "construct/direct" AT->begin
-    for T in supported_eltypes()
+@testsuite "construct/direct" (AT, eltypes)->begin
+    for T in eltypes
         B = AT{T}(undef, 10)
         @test B isa AT{T,1}
         @test size(B) == (10,)
@@ -45,8 +45,8 @@
     end
 end
 
-@testsuite "construct/similar" AT->begin
-    for T in supported_eltypes()
+@testsuite "construct/similar" (AT, eltypes)->begin
+    for T in eltypes
         B = AT{T}(undef, 10)
 
         B = similar(B, Int32, 11, 15)
@@ -96,8 +96,8 @@ end
     end
 end
 
-@testsuite "construct/convenience" AT->begin
-    for T in supported_eltypes()
+@testsuite "construct/convenience" (AT, eltypes)->begin
+    for T in eltypes
         A = AT(rand(T, 3))
         b = rand(T)
         fill!(A, b)
@@ -126,8 +126,8 @@ end
     end
 end
 
-@testsuite "construct/conversions" AT->begin
-    for T in supported_eltypes()
+@testsuite "construct/conversions" (AT, eltypes)->begin
+    for T in eltypes
         Bc = round.(rand(10, 10) .* 10.0)
         B = AT{T}(Bc)
         @test size(B) == (10, 10)
@@ -154,8 +154,8 @@ end
     end
 end
 
-@testsuite "construct/uniformscaling" AT->begin
-    for T in supported_eltypes()
+@testsuite "construct/uniformscaling" (AT, eltypes)->begin
+    for T in eltypes
         x = Matrix{T}(I, 4, 2)
 
         x1 = AT{T, 2}(I, 4, 2)

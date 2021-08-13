@@ -1,4 +1,4 @@
-@testsuite "vectors" AT->begin
+@testsuite "vectors" (AT, eltypes)->begin
     a = Float32[]
     x = AT(a)
     @test length(x) == 0
