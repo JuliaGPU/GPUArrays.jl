@@ -97,6 +97,11 @@ function LinearAlgebra.triu!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
 end
 
 
+## diagonal
+
+Base.copy(D::Diagonal{T, <:AbstractGPUMatrix{T, N}}) where {T, N} = Diagonal(copy(D.diag))
+
+
 ## matrix multiplication
 
 function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::AbstractArray{S}, a::Number, b::Number) where {T,S,R}

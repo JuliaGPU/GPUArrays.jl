@@ -79,6 +79,14 @@ end
         @test collect(B) ≈ collect(A) + collect(D)
     end
 
+    @testset "copy diagonal" begin
+        a = AT(rand(Float32, 10))
+        D = Diagonal(a)
+        C = copy(D)
+        @test C isa Diagonal
+        @test collect(D) = collect(C)
+    end
+
     @testset "$f! with diagonal $d" for (f, f!) in ((triu, triu!), (tril, tril!)),
                                         d in -2:2
         A = randn(10, 10)
