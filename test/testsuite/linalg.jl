@@ -84,7 +84,8 @@ end
         D = Diagonal(a)
         C = copy(D)
         @test C isa Diagonal
-        @test collect(D) = collect(C)
+        @test C.diag isa AT
+        @test collect(D) == collect(C)
     end
 
     @testset "$f! with diagonal $d" for (f, f!) in ((triu, triu!), (tril, tril!)),

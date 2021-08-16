@@ -99,7 +99,7 @@ end
 
 ## diagonal
 
-Base.copy(D::Diagonal{T, <:AbstractGPUMatrix{T, N}}) where {T, N} = Diagonal(copy(D.diag))
+Base.copy(D::Diagonal{T, <:AbstractGPUArray{T, N}}) where {T, N} = Diagonal(copy(D.diag))
 
 
 ## matrix multiplication
