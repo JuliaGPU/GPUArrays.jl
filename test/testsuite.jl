@@ -44,7 +44,7 @@ function compare(f, AT::Type{<:Array}, xs...; kwargs...)
 end
 
 function supported_eltypes()
-    (Float32, Float64, Int32, Int64, ComplexF32, ComplexF64)
+    (Float16, Float32, Float64, Int16, Int32, Int64, ComplexF16, ComplexF32, ComplexF64)
 end
 
 # list of tests

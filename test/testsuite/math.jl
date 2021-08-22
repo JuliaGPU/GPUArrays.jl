@@ -1,7 +1,7 @@
 @testsuite "math/intrinsics" (AT, eltypes)->begin
     for ET in eltypes
         # Skip complex numbers
-        ET in (Complex, ComplexF32, ComplexF64) && continue
+        (ET <: Complex) && continue
 
         T = AT{ET}
         @testset "$ET" begin

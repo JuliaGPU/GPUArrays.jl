@@ -7,6 +7,9 @@
 
     @testset "rand" begin  # uniform
         for T in eltypes, d in (10, (10,10))
+            if !(T <: AbstractFloat || T <: Integer)
+                continue
+            end
             A = AT{T}(undef, d)
             B = copy(A)
             rand!(rng, A)
@@ -31,7 +34,9 @@
     end
 
     @testset "randn" begin  # normally-distributed
-        for T in (Float16, Float32, Float64), d in (2, (2,2))
+        for T in (Float16, Float32, Float64),
+            d in (2, (2,2))
+            
             if !(T in eltypes)
                 continue
             end
