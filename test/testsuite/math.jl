@@ -1,8 +1,5 @@
 @testsuite "math/intrinsics" (AT, eltypes)->begin
-    for ET in eltypes
-        # Skip complex numbers
-        (ET <: Complex) && continue
-
+    for ET in filter(!iscomplextype, eltypes)
         T = AT{ET}
         @testset "$ET" begin
             range = ET <: Integer ? (ET(-2):ET(2)) : ET

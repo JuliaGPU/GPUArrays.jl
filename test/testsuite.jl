@@ -43,17 +43,28 @@ function compare(f, AT::Type{<:Array}, xs...; kwargs...)
     return true
 end
 
-function supported_eltypes()
-    (Float32, Float64, Int16, Int32, Int64, ComplexF32, ComplexF64)
-end
+# element types that are supported by the array type
+supported_eltypes(AT, test) = supported_eltypes(AT)
+supported_eltypes(AT) = supported_eltypes()
+supported_eltypes() = (Int16, Int32, Int64,
+                       Float16, Float32, Float64,
+                       ComplexF16, ComplexF32, ComplexF64,
+                       Complex{Int16}, Complex{Int32}, Complex{Int64})
+
+# some convenience predicates for filtering test eltypes
+isrealtype(T) = T <: Real
+iscomplextype(T) = T <: Complex
+isfloattype(T) = T <: AbstractFloat || T <: Complex{<:AbstractFloat}
 
 # list of tests
 const tests = Dict()
 macro testsuite(name, ex)
-    safe_name = lowercase(replace(name, " "=>"_"))
+    safe_name = lowercase(replace(replace(name, " "=>"_"), "/"=>"_"))
     fn = Symbol("test_$(safe_name)")
     quote
-        $(esc(fn))(AT; eltypes=supported_eltypes()) = $(esc(ex))(AT, eltypes)
+        # the supported element types can be overrided by passing in a different set,
+        # or by specializing the `supported_eltypes` function on the array type and test.
+        $(esc(fn))(AT; eltypes=supported_eltypes(AT, $(esc(fn)))) = $(esc(ex))(AT, eltypes)
 
         @assert !haskey(tests, $name)
         tests[$name] = $fn
