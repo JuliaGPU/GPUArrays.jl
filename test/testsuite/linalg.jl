@@ -143,7 +143,7 @@ end
     end
 end
 
-@testsuite "linalg/symmetrix" (AT, eltypes)->begin
+@testsuite "linalg/symmetric" (AT, eltypes)->begin
     @testset "Hermitian" begin
         A    = rand(Float32,2,2)
         A    = A*A'+I #posdef
