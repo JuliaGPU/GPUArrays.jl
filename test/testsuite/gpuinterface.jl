@@ -1,4 +1,4 @@
-@testsuite "interface" AT->begin
+@testsuite "interface" (AT, eltypes)->begin
     AT <: AbstractGPUArray || return
 
     N = 10

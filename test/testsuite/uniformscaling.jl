@@ -1,4 +1,4 @@
-@testsuite "uniformscaling" AT->begin
+@testsuite "uniformscaling" (AT, eltypes)->begin
     eltypes = (ComplexF32, Float32)
     wrappers = (identity, UnitLowerTriangular, UnitUpperTriangular, LowerTriangular, UpperTriangular, Hermitian, Symmetric)
 
