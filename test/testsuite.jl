@@ -74,7 +74,6 @@ end
 include("testsuite/construction.jl")
 include("testsuite/gpuinterface.jl")
 include("testsuite/indexing.jl")
-include("testsuite/io.jl")
 include("testsuite/base.jl")
 #include("testsuite/vector.jl")
 include("testsuite/reductions.jl")
