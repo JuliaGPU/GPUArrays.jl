@@ -31,7 +31,9 @@
     end
 
     @testset "randn" begin  # normally-distributed
-        for T in filter(isfloattype, eltypes), d in (2, (2,2))
+        # XXX: randn calls sqrt, and Base's sqrt(::Complex) performs
+        #      checked type conversions that throw boxed numbers.
+        for T in filter(isrealfloattype, eltypes), d in (2, (2,2))
             A = AT{T}(undef, d)
             B = copy(A)
             randn!(rng, A)
