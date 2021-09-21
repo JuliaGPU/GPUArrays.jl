@@ -54,6 +54,7 @@ supported_eltypes() = (Int16, Int32, Int64,
 # some convenience predicates for filtering test eltypes
 isrealtype(T) = T <: Real
 iscomplextype(T) = T <: Complex
+isrealfloattype(T) = T <: AbstractFloat
 isfloattype(T) = T <: AbstractFloat || T <: Complex{<:AbstractFloat}
 
 # list of tests
