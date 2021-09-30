@@ -4,6 +4,7 @@
     else
         Random.default_rng()
     end
+    cpu_rng = Random.default_rng()
 
     @testset "rand" begin  # uniform
         for T in eltypes, d in (10, (10,10))
@@ -19,6 +20,10 @@
             Random.seed!(rng, 1)
             rand!(rng, B)
             @test all(Array(A) .== Array(B))
+
+            if rng != cpu_rng
+                rand!(cpu_rng, A)
+            end
         end
 
         A = AT{Bool}(undef, 1024)
@@ -46,6 +51,10 @@
             Random.seed!(rng, 1)
             randn!(rng, B)
             @test all(Array(A) .== Array(B))
+
+            if rng != cpu_rng
+                randn!(cpu_rng, A)
+            end
         end
     end
 end
