@@ -115,13 +115,24 @@ end
         end
     end
 
-    @testset "vcat + hcat" begin
-        @test compare(vcat, AT, fill(0f0, (10, 10)), rand(Float32, 20, 10))
-        @test compare(hcat, AT, fill(0f0, (10, 10)), rand(Float32, 10, 10))
+    @testset "cat" begin
+        @test compare(hcat, AT, rand(3), rand(3))
+        @test compare(hcat, AT, rand(), rand(1, 3))
+        @test compare(hcat, AT, rand(1, 3), rand())
+        @test compare(hcat, AT, rand(3), rand(3, 3))
+        @test compare(hcat, AT, rand(3, 3), rand(3))
+        @test compare(hcat, AT, rand(3, 3), rand(3, 3))
+        #@test compare(hcat, AT, rand(), rand(3, 3))
+        #@test compare(hcat, AT, rand(3, 3), rand())
 
-        @test compare(hcat, AT, rand(Float32, 3, 3), rand(Float32, 3, 3))
-        @test compare(vcat, AT, rand(Float32, 3, 3), rand(Float32, 3, 3))
-        @test compare((a,b) -> cat(a, b; dims=4), AT, rand(Float32, 3, 4), rand(Float32, 3, 4))
+        @test compare(vcat, AT, rand(3), rand(3))
+        @test compare(vcat, AT, rand(3, 3), rand(3, 3))
+        @test compare(vcat, AT, rand(), rand(3))
+        @test compare(vcat, AT, rand(3), rand())
+        @test compare(vcat, AT, rand(), rand(3, 3))
+        #@test compare(vcat, AT, rand(3, 3), rand())
+
+        @test compare((a,b) -> cat(a, b; dims=4), AT, rand(3, 4), rand(3, 4))
     end
 
     @testset "reshape" begin
