@@ -50,3 +50,13 @@ function PermutedDimsArrays._copy!(dest::PermutedDimsArray{T,N,<:Any,<:Any,<:Abs
     dest .= src
     dest
 end
+
+## concatenation
+
+# hacky overloads to make simple vcat and hcat with numbers work as expected.
+# we can't really make this work in general without Base providing
+# a dispatch mechanism for output container type.
+@inline Base.vcat(a::Number, b::AbstractGPUArray) =
+    vcat(fill!(similar(b, typeof(a), (1,size(b)[2:end]...)), a), b)
+@inline Base.hcat(a::Number, b::AbstractGPUArray) =
+    hcat(fill!(similar(b, typeof(a), (size(b)[1:end-1]...,1)), a), b)
