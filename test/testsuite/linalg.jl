@@ -148,10 +148,11 @@ end
     @testset "$p-norm($sz x $T)" for sz in [(2,), (2,2), (2,2,2)],
                                      p in Any[1, 2, 3, Inf, -Inf],
                                      T in eltypes
-        if T <: Complex || T == Int8
+        if T == Int8
             continue
         end
-        range = T <: Integer ? (T(1):T(10)) : T # prevent integer overflow
+        range = real(T) <: Integer ? (T.(1:10)) : T # prevent integer overflow
         @test compare(norm, AT, rand(range, sz), Ref(p))
+        @test typeof(norm(rand(range, sz))) <: Real
     end
 end

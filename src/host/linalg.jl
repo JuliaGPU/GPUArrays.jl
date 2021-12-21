@@ -204,13 +204,14 @@ LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) 
 ## norm
 
 function LinearAlgebra.norm(v::AbstractGPUArray{T}, p::Real=2) where {T}
-    if p == Inf
+    norm_x = if p == Inf
         maximum(abs.(v))
     elseif p == -Inf
         minimum(abs.(v))
     else
-        mapreduce(x->abs(x)^p, +, v; init=zero(T))^(1/p)
+        mapreduce(x->abs(x)^p, +, v; init=float(zero(T)))^(1/p)
     end
+    return real(norm_x)
 end
 
 
