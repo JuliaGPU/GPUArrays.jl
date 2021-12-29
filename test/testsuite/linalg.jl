@@ -99,6 +99,15 @@
             @test collect(D) == collect(C)
         end
 
+        @testset "cholesky + Diagonal" begin
+            n = 128
+            d = AT(rand(Float32, n))
+            D = Diagonal(d)
+            F = collect(D)
+            @test collect(cholesky(D).U) ≈ collect(cholesky(F).U)
+            @test collect(cholesky(D).L) ≈ collect(cholesky(F).L)
+        end
+
         @testset "$f! with diagonal $d" for (f, f!) in ((triu, triu!), (tril, tril!)),
                                             d in -2:2
             A = randn(Float32, 10, 10)
