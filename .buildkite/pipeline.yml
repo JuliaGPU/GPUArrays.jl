@@ -2,7 +2,7 @@ steps:
   - label: "CUDA.jl"
     plugins:
       - JuliaCI/julia#v1:
-          version: 1.6
+          version: 1.7
       - JuliaCI/julia-coverage#v1:
           codecov: true
     command: |
@@ -24,7 +24,7 @@ steps:
   - label: "oneAPI.jl"
     plugins:
       - JuliaCI/julia#v1:
-          version: 1.6
+          version: 1.7
       - JuliaCI/julia-coverage#v1:
           codecov: true
     command: |
