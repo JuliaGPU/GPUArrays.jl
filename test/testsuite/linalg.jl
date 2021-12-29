@@ -103,7 +103,7 @@
             n = 128
             d = AT(rand(Float32, n))
             D = Diagonal(d)
-            F = collect(D)
+            F = AT(collect(D))
             @test collect(cholesky(D).U) ≈ collect(cholesky(F).U)
             @test collect(cholesky(D).L) ≈ collect(cholesky(F).L)
         end
