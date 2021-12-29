@@ -108,8 +108,9 @@ function LinearAlgebra.cholesky!(D::Diagonal{T, <:AbstractGPUArray{T, N}},
     info = 0
     if mapreduce(x -> isreal(x) && isposdef(x), &, D.diag)
         D.diag .= sqrt.(D.diag)
-    elseif check
-        throw(PosDefException(0))
+    else
+        info = findfirst(x -> !isreal(x) || !isposdef(x), collect(D.diag))
+        check && throw(PosDefException(info))
     end
     Cholesky(D, 'U', convert(LinearAlgebra.BlasInt, info))
 end
