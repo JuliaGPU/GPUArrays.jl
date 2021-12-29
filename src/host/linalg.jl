@@ -106,7 +106,7 @@ function LinearAlgebra.cholesky!(D::Diagonal{T, <:AbstractGPUArray{T, N}},
     ::Val{false} = Val(false); check::Bool = true
 ) where {T, N}
     info = 0
-    if all(isreal.(D.diag)) && all(D.diag .> 0)
+    if mapreduce(x -> isreal(x) && isposdef(x), &, D.diag)
         D.diag .= sqrt.(D.diag)
     elseif check
         throw(PosDefException(0))
