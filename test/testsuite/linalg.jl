@@ -19,7 +19,7 @@
 
     @testset "cholesky" begin
         n = 128
-        a = AT(rand(Float32, n))
+        a = AT(rand(Float32, n, n))
         S = a' * a 
         F = collect(S)
         @test collect(cholesky(S).U) ≈ collect(cholesky(F).U)
