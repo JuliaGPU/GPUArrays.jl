@@ -17,18 +17,6 @@
         @test compare(x -> permutedims(x, [2,1,4,3]), AT, randn(ComplexF32,3,4,5,1))
     end
 
-    @testset "cholesky" begin
-        n = 128
-        a = AT(rand(Float32, n, n))
-        S = a' * a 
-        F = collect(S)
-        @test collect(cholesky(S).U) ≈ collect(cholesky(F).U)
-        @test collect(cholesky(S).L) ≈ collect(cholesky(F).L)
-
-        # dispatch info for debugging purposes
-        d = Hermitian(LinearAlgebra.cholcopy(S)).data
-        @show which(LAPACK.potrf!, Tuple{Char, typeof(d)})
-    end
 
     @testset "symmetric" begin
         @testset "Hermitian" begin
@@ -116,7 +104,7 @@
             n = 128
             d = AT(rand(Float32, n))
             D = Diagonal(d)
-            F = AT(collect(D))
+            F = collect(D)
             @test collect(cholesky(D).U) ≈ collect(cholesky(F).U)
             @test collect(cholesky(D).L) ≈ collect(cholesky(F).L)
         end
