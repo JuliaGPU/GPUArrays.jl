@@ -17,6 +17,15 @@
         @test compare(x -> permutedims(x, [2,1,4,3]), AT, randn(ComplexF32,3,4,5,1))
     end
 
+    @testset "cholesky" begin
+        n = 128
+        a = AT(rand(Float32, n))
+        S = a' * a 
+        F = collect(S)
+        @test collect(cholesky(S).U) ≈ collect(cholesky(F).U)
+        @test collect(cholesky(S).L) ≈ collect(cholesky(F).L)
+    end
+
     @testset "symmetric" begin
         @testset "Hermitian" begin
             A    = rand(Float32,2,2)
@@ -105,6 +114,7 @@
             D = Diagonal(d)
             F = AT(collect(D))
             @show which(cholesky, Tuple{typeof(D)})
+            @show which(cholesky, Tuple{typeof(F)})
             @test collect(cholesky(D).U) ≈ collect(cholesky(F).U)
             @test collect(cholesky(D).L) ≈ collect(cholesky(F).L)
         end
