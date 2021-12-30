@@ -24,6 +24,10 @@
         F = collect(S)
         @test collect(cholesky(S).U) ≈ collect(cholesky(F).U)
         @test collect(cholesky(S).L) ≈ collect(cholesky(F).L)
+
+        # dispatch info for debugging purposes
+        d = Hermitian(LinearAlgebra.cholcopy(S)).data
+        @show which(LAPACK.potrf!, Tuple{Char, typeof(d)})
     end
 
     @testset "symmetric" begin
@@ -113,8 +117,6 @@
             d = AT(rand(Float32, n))
             D = Diagonal(d)
             F = AT(collect(D))
-            @show which(cholesky, Tuple{typeof(D)})
-            @show which(cholesky, Tuple{typeof(F)})
             @test collect(cholesky(D).U) ≈ collect(cholesky(F).U)
             @test collect(cholesky(D).L) ≈ collect(cholesky(F).L)
         end
