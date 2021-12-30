@@ -107,9 +107,7 @@
             F = collect(D)
             @test collect(cholesky(D).U) ≈ collect(cholesky(F).U)
             @test collect(cholesky(D).L) ≈ collect(cholesky(F).L)
-        end
 
-        @testset "cholesky + Diagonal" begin
             d = AT([1f0, 2f0, -1f0, 0f0])
             D = Diagonal(d)
             @test cholesky(D, check = false).info == 3
