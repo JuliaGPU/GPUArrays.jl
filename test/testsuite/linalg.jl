@@ -21,6 +21,7 @@
         end
     end
 
+
     @testset "symmetric" begin
         @testset "Hermitian" begin
             A    = rand(Float32,2,2)
@@ -101,6 +102,19 @@
             @test C isa Diagonal
             @test C.diag isa AT
             @test collect(D) == collect(C)
+        end
+
+        @testset "cholesky + Diagonal" begin
+            n = 128
+            d = AT(rand(Float32, n))
+            D = Diagonal(d)
+            F = collect(D)
+            @test collect(cholesky(D).U) ≈ collect(cholesky(F).U)
+            @test collect(cholesky(D).L) ≈ collect(cholesky(F).L)
+
+            d = AT([1f0, 2f0, -1f0, 0f0])
+            D = Diagonal(d)
+            @test cholesky(D, check = false).info == 3
         end
 
         @testset "$f! with diagonal $d" for (f, f!) in ((triu, triu!), (tril, tril!)),

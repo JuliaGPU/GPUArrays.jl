@@ -101,6 +101,20 @@ end
 
 Base.copy(D::Diagonal{T, <:AbstractGPUArray{T, N}}) where {T, N} = Diagonal(copy(D.diag))
 
+# prevent scalar indexing
+function LinearAlgebra.cholesky!(D::Diagonal{T, <:AbstractGPUArray{T, N}}, 
+    ::Val{false} = Val(false); check::Bool = true
+) where {T, N}
+    info = 0
+    if mapreduce(x -> isreal(x) && isposdef(x), &, D.diag)
+        D.diag .= sqrt.(D.diag)
+    else
+        info = findfirst(x -> !isreal(x) || !isposdef(x), collect(D.diag))
+        check && throw(PosDefException(info))
+    end
+    Cholesky(D, 'U', convert(LinearAlgebra.BlasInt, info))
+end
+
 
 ## matrix multiplication
 
