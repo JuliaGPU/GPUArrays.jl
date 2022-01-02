@@ -204,10 +204,12 @@ function LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArra
     # get the new strides of destination tensor
     dest_strides = ntuple(k->k==1 ? 1 : prod(i->size(dest, i), 1:k-1), N)
     dest_strides_perm = ntuple(i->dest_strides[findfirst(==(i), perm)], N)
+    LEN = length(src)
 
     function permutedims_kernel(ctx, dest, src, dest_strides_perm)
         # find the cartesian index in source tensor
-        LI = @linearidx src
+        LI = linear_index(ctx, 1)
+        LI > LEN && return
         I = @inbounds CartesianIndices(src)[LI]
 
         # the corresponding linear index in the destination tensor
