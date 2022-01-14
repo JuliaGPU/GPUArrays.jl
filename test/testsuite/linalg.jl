@@ -15,9 +15,22 @@
         @test compare(x -> permutedims(x, (2, 1, 3)), AT, rand(Float32, 4, 5, 6))
         @test compare(x -> permutedims(x, (3, 1, 2)), AT, rand(Float32, 4, 5, 6))
         @test compare(x -> permutedims(x, [2,1,4,3]), AT, randn(ComplexF32,3,4,5,1))
+        # test UInt64 version to make sure it works properly when array length is larger than typemax of UInt32.
+        AT <: GPUArrays.AbstractGPUArray && @test let
+            x = randn(ComplexF32,3,4,5,1)
+            y = permutedims(x, (2,1,4,3))
+            Array(GPUArrays._permutedims!(UInt64, AT(zero(y)), AT(x), (2,1,4,3))) ≈ y
+        end
         # high dimensional tensor
         @static if VERSION >= v"1.7"
             @test compare(x -> permutedims(x, 18:-1:1), AT, rand(Float32, 4, [2 for _ = 2:18]...))
+            # test the Uint64 type version for large array permutedims
+            AT <: GPUArrays.AbstractGPUArray && @test let
+                x = rand(Float32, 4, [2 for _ = 2:18]...)
+                pm = (18:-1:1...,)
+                y = permutedims(x, pm)
+                Array(GPUArrays._permutedims!(UInt64, AT(zero(y)), AT(x), pm)) ≈ y
+            end
         end
     end
 

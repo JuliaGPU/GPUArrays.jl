@@ -197,31 +197,40 @@ LinearAlgebra.lmul!(a::Number, B::AbstractGPUArray) = generic_lmul!(a, B)
 LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) =
     permutedims!(dest, src, Tuple(perm))
 
+@inline @generated function permute_linearindex(size::NTuple{N,T}, l::T, strides::NTuple{N,T}) where {N,T}
+    quote
+        l -= one(T)
+        res = one(T)
+        Base.Cartesian.@nexprs $(N-1) i->begin
+            assume(size[i] > 0)
+            @inbounds l, s = divrem(l, size[i])
+            @inbounds res += s * strides[i]
+        end
+        return @inbounds res + strides[N] * l
+    end
+end
 function LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray,
                                     perm::NTuple{N}) where N
+    length(dest) <= typemax(UInt32) ? _permutedims!(UInt32, dest, src, perm) : _permutedims!(UInt64, dest, src, perm)
+end
+
+function _permutedims!(::Type{IT}, dest::AbstractGPUArray, src::AbstractGPUArray,
+                                    perm::NTuple{N}) where {IT,N}
+    @assert length(src) <= typemax(IT)
     Base.checkdims_perm(dest, src, perm)
-
-    # get the new strides of destination tensor
     dest_strides = ntuple(k->k==1 ? 1 : prod(i->size(dest, i), 1:k-1), N)
-    dest_strides_perm = ntuple(i->dest_strides[findfirst(==(i), perm)], N)
-
-    function permutedims_kernel(ctx, dest, src, dest_strides_perm)
-        # find the cartesian index in source tensor
-        LI = @linearidx src
-        I = @inbounds CartesianIndices(src)[LI]
-
-        # the corresponding linear index in the destination tensor
-        dest_index = map_index(I.I, dest_strides_perm)
+    dest_strides_perm = ntuple(i->IT(dest_strides[findfirst(==(i), perm)]), N)
+    size_src = IT.(size(src))
+    function permutedims_kernel(ctx, dest, src, size_src, dest_strides_perm)
+        SLI = @linearidx dest
+        assume(0 < SLI <= typemax(IT))
+        LI = IT(SLI)
+        dest_index = permute_linearindex(size_src, LI, dest_strides_perm)
         @inbounds dest[dest_index] = src[LI]
         return
     end
-    gpu_call(permutedims_kernel, dest, src, dest_strides_perm)
+    gpu_call(permutedims_kernel, vec(dest), vec(src), size_src, dest_strides_perm)
     return dest
-end
-
-# get linear index from cartesian indices and strides.
-@inline @generated function map_index(I::NTuple{N}, dest_strides::NTuple{N,T}) where {N,T}
-    Expr(:call, :+, one(T), [:(@inbounds (I[$i]-1) * dest_strides[$i]) for i in 1:N]...)
 end
 
 ## norm
