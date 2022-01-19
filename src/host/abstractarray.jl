@@ -125,7 +125,7 @@ end
 function Base.copyto!(dest::Array, dstart::Integer,
                       src::WrappedGPUArray, sstart::Integer, n::Integer)
     n == 0 && return dest
-    temp = similar(src, n)
+    temp = similar(parent(src), n)
     copyto!(temp, 1, src, sstart, n)
     copyto!(dest, dstart, temp, 1, n)
     return dest
@@ -134,7 +134,7 @@ end
 function Base.copyto!(dest::WrappedGPUArray, dstart::Integer,
                       src::Array, sstart::Integer, n::Integer)
     n == 0 && return dest
-    temp = similar(dest, n)
+    temp = similar(parent(dest), n)
     copyto!(temp, 1, src, sstart, n)
     copyto!(dest, dstart, temp, 1, n)
     return dest
