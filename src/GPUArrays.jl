@@ -9,6 +9,7 @@ using LinearAlgebra.BLAS
 using Base.Cartesian
 
 using Adapt
+using LLVM.Interop
 
 # device functionality
 include("device/execution.jl")
