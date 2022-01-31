@@ -81,7 +81,10 @@
                 @test cpu_a == Array(collect(TR(gpu_a)))
 
                 copyto!(gpu_a, rand(Float32, (128,128)))
-                gpu_c = copyto!(gpu_b, TR(gpu_a))collect(D)
+                gpu_c = copyto!(gpu_b, TR(gpu_a))
+                @test all(Array(gpu_b) .== TR(Array(gpu_a)))
+                @test gpu_c isa AT
+            end
 
             for TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
                 gpu_a = AT(rand(Float32, (128,128))) |> TR
