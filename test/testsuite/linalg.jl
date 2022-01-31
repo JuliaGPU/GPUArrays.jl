@@ -81,10 +81,7 @@
                 @test cpu_a == Array(collect(TR(gpu_a)))
 
                 copyto!(gpu_a, rand(Float32, (128,128)))
-                gpu_c = copyto!(gpu_b, TR(gpu_a))
-                @test all(Array(gpu_b) .== TR(Array(gpu_a)))
-                @test gpu_c isa AT
-            end
+                gpu_c = copyto!(gpu_b, TR(gpu_a))collect(D)
 
             for TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
                 gpu_a = AT(rand(Float32, (128,128))) |> TR
@@ -128,6 +125,18 @@
             d = AT([1f0, 2f0, -1f0, 0f0])
             D = Diagonal(d)
             @test cholesky(D, check = false).info == 3
+        end
+
+        @testset "ldiv! + Diagonal" begin
+            n = 128
+            d = AT(rand(Float32, n))
+            D = Diagonal(d)
+            B = AT(rand(Float32, n, n))
+            res = D \ B
+            @test collect(res) ≈ collect(D) \ collect(B)
+            @test collect(res) ≈ D \ collect(B)
+            D = Diagonal(collect(d))
+            @test collect(D \ B) ≈ collect(res)
         end
 
         @testset "$f! with diagonal $d" for (f, f!) in ((triu, triu!), (tril, tril!)),
