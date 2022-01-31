@@ -137,9 +137,7 @@
             B = AT(rand(Float32, n, n))
             res = D \ B
             @test collect(res) ≈ collect(D) \ collect(B)
-            @test collect(res) ≈ D \ collect(B)
-            D = Diagonal(collect(d))
-            @test collect(D \ B) ≈ collect(res)
+            @test collect(res) ≈ collect(D \ collect(B))
         end
 
         @testset "$f! with diagonal $d" for (f, f!) in ((triu, triu!), (tril, tril!)),
