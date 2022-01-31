@@ -129,7 +129,7 @@ end
 
 Base.:\(D::Diagonal, b::AbstractGPUArray{<:Any, 1}) = cu(D.diag) .\ b
 
-function LinearAlgebra.ldiv!(D::Diagonal{<:Any, <:AbstractGPUArray}, B::AbstractGPUVecOrMat)
+function LinearAlgebra.ldiv!(D::Diagonal{<:Any, <:AbstractGPUArray}, B::StridedVecOrMat)
     m, n = size(B, 1), size(B, 2)
     if m != length(D.diag)
         throw(DimensionMismatch("diagonal matrix is $(length(D.diag)) by $(length(D.diag)) but right hand side has $m rows"))
@@ -144,8 +144,6 @@ function LinearAlgebra.ldiv!(D::Diagonal{<:Any, <:AbstractGPUArray}, B::Abstract
     end
     return B
 end
-
-LinearAlgebra.ldiv!(D::Diagonal{<:Any, <:Any}, B::AbstractGPUArray) = LinearAlgebra.ldiv!(cu(D), B)
 
 function _ldiv_inner!(D, B::AbstractGPUArray)
     B .= D.diag .\ B
