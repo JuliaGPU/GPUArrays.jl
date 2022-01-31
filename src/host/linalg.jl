@@ -127,7 +127,8 @@ else
     end
 end
 
-Base.:\(D::Diagonal, b::AbstractGPUArray{<:Any, 1}) = cu(D.diag) .\ b
+Base.:\(D::Diagonal, b::AbstractGPUVector) = typeof(b)(D.diag) .\ b
+Base.:\(D::Diagonal, B::AbstractGPUMatrix) = typeof(B)(hcat(D.diag))[:, 1] .\ B
 
 function LinearAlgebra.ldiv!(D::Diagonal{<:Any, <:AbstractGPUArray}, B::StridedVecOrMat)
     m, n = size(B, 1), size(B, 2)

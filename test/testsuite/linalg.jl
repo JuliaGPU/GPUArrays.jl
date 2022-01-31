@@ -138,6 +138,7 @@
             res = D \ B
             @test collect(res) ≈ collect(D) \ collect(B)
             @test collect(res) ≈ collect(D \ collect(B))
+            @test collect(res) ≈ collect(Diagonal(collect(d)) \ B)
         end
 
         @testset "$f! with diagonal $d" for (f, f!) in ((triu, triu!), (tril, tril!)),
