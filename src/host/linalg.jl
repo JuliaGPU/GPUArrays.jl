@@ -127,6 +127,33 @@ else
     end
 end
 
+function Base.:\(D::Diagonal{<:Any, <:AbstractGPUArray}, B::AbstractGPUVecOrMat)
+    z = D.diag .== 0
+    if any(z)
+        i = findfirst(collect(z))
+        throw(SingularException(i))
+    else
+        return D.diag .\ B
+    end
+end
+
+function LinearAlgebra.ldiv!(D::Diagonal{<:Any, <:AbstractGPUArray}, B::StridedVecOrMat) 
+    m, n = size(B, 1), size(B, 2)
+    if m != length(D.diag)
+        throw(DimensionMismatch("diagonal matrix is $(length(D.diag)) by $(length(D.diag)) but right hand side has $m rows"))
+    end
+    (m == 0 || n == 0) && return B
+    z = D.diag .== 0
+    if any(z)
+        i = findfirst(collect(z))
+        throw(SingularException(i))
+    else
+        B .= D.diag .\ B
+    end
+    return B
+end
+
+
 ## matrix multiplication
 
 function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::AbstractArray{S}, a::Number, b::Number) where {T,S,R}
