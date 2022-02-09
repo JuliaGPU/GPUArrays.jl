@@ -152,8 +152,8 @@
             D = Diagonal(d)
             b = AT(rand(Float32, n))
             B = AT(rand(Float32, n, n))
-            X = AT(zeros(n, n))
-            Y = zeros(n, n)
+            X = AT(zeros(Float32, n, n))
+            Y = zeros(Float32, n, n)
             ldiv!(X, D, B)
             ldiv!(Y, Diagonal(collect(d)), collect(B))
             @test collect(X) ≈ Y
