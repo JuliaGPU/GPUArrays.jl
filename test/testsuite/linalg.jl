@@ -130,15 +130,49 @@
             @test cholesky(D, check = false).info == 3
         end
 
+        @testset "\\ + Diagonal" begin
+            n = 128
+            d = AT(rand(Float32, n))
+            D = Diagonal(d)
+            b = AT(rand(Float32, n))
+            B = AT(rand(Float32, n, n))
+            @test collect(D \ b) ≈ Diagonal(collect(d)) \ collect(b)
+            @test collect(D \ B) ≈ Diagonal(collect(d)) \ collect(B)
+
+            d = ones(Float32, n)
+            d[rand(1:n)] = 0
+            d = AT(d)
+            D = Diagonal(d)
+            @test_throws SingularException D \ B
+        end
+
         @testset "ldiv! + Diagonal" begin
             n = 128
             d = AT(rand(Float32, n))
             D = Diagonal(d)
+            b = AT(rand(Float32, n))
             B = AT(rand(Float32, n, n))
-            res = D \ B
-            @test collect(res) ≈ collect(D) \ collect(B)
-            @test collect(res) ≈ collect(D \ collect(B))
-            @test collect(res) ≈ collect(Diagonal(collect(d)) \ B)
+            X = AT(zeros(n, n))
+            Y = zeros(n, n)
+            ldiv!(X, D, B)
+            ldiv!(Y, Diagonal(collect(d)), collect(B))
+            @test collect(X) ≈ Y
+            ldiv!(D, B)
+            @test collect(B) ≈ collect(X)
+
+            d = ones(Float32, n)
+            d[rand(1:n)] = 0
+            d = AT(d)
+            D = Diagonal(d)
+            B = AT(rand(Float32, n, n))
+
+            # three-argument version does not throw SingularException
+            ldiv!(X, D, B)
+            ldiv!(Y, Diagonal(collect(d)), collect(B))
+            @test collect(X) ≈ Y
+
+            # two-argument version throws SingularException
+            @test_throws SingularException ldiv!(D, B)
         end
 
         @testset "$f! with diagonal $d" for (f, f!) in ((triu, triu!), (tril, tril!)),

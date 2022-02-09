@@ -127,10 +127,17 @@ else
     end
 end
 
-Base.:\(D::Diagonal, b::AbstractGPUVector) = typeof(b)(D.diag) .\ b
-Base.:\(D::Diagonal, B::AbstractGPUMatrix) = typeof(B)(hcat(D.diag))[:, 1] .\ B
+function Base.:\(D::Diagonal{<:Any, <:AbstractGPUArray}, B::AbstractGPUVecOrMat)
+    z = D.diag .== 0
+    if any(z)
+        i = findfirst(collect(z))
+        throw(SingularException(i))
+    else
+        return D.diag .\ B
+    end
+end
 
-function LinearAlgebra.ldiv!(D::Diagonal{<:Any, <:AbstractGPUArray}, B::StridedVecOrMat)
+function LinearAlgebra.ldiv!(D::Diagonal{<:Any, <:AbstractGPUArray}, B::StridedVecOrMat) 
     m, n = size(B, 1), size(B, 2)
     if m != length(D.diag)
         throw(DimensionMismatch("diagonal matrix is $(length(D.diag)) by $(length(D.diag)) but right hand side has $m rows"))
@@ -138,23 +145,14 @@ function LinearAlgebra.ldiv!(D::Diagonal{<:Any, <:AbstractGPUArray}, B::StridedV
     (m == 0 || n == 0) && return B
     z = D.diag .== 0
     if any(z)
-        i = findfirst(z)
+        i = findfirst(collect(z))
         throw(SingularException(i))
     else
-        _ldiv_inner!(D, B)
+        B .= D.diag .\ B
     end
     return B
 end
 
-function _ldiv_inner!(D, B::AbstractGPUArray)
-    B .= D.diag .\ B
-    return B
-end
-
-function _ldiv_inner!(D, B)
-    B .= collect(D.diag) .\ B
-    return B
-end
 
 ## matrix multiplication
 
