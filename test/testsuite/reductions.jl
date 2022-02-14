@@ -77,7 +77,7 @@ end
     end
 end
 
-@testsuite "reductions/minimum maximum" (AT, eltypes)->begin
+@testsuite "reductions/minimum maximum extrema" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
@@ -90,6 +90,11 @@ end
                 @test compare(A->maximum(A), AT, rand(range, sz))
                 @test compare(A->maximum(x->x*x, A), AT, rand(range, sz))
                 @test compare(A->maximum(A; dims=dims), AT, rand(range, sz))
+                if isdefined(Base, :_extrema_rf)
+                    @test compare(A->extrema(A), AT, rand(range, sz))
+                    @test compare(A->extrema(x->x*x, A), AT, rand(range, sz))
+                    @test compare(A->extrema(A; dims=dims), AT, rand(range, sz))
+                end
             end
         end
 
@@ -98,6 +103,9 @@ end
             if !(ET <: Complex)
                 @test compare((A,R)->minimum!(R, A), AT, rand(range, sz), fill(typemax(ET), red))
                 @test compare((A,R)->maximum!(R, A), AT, rand(range, sz), fill(typemin(ET), red))
+                if isdefined(Base, :_extrema_rf)
+                    @test compare((A,R)->extrema!(R, A), AT, rand(range, sz), fill((typemax(ET),typemin(ET)), red))
+                end
             end
         end
     end

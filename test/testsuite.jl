@@ -17,6 +17,12 @@ using Adapt
 struct ArrayAdaptor{AT} end
 Adapt.adapt_storage(::ArrayAdaptor{AT}, xs::AbstractArray) where {AT} = AT(xs)
 
+≈(a, b) = Base.isapprox(a, b)
+function ≈(a::T, b::T) where {T<:AbstractArray{<:NTuple{2,Number}}}
+    ET = eltype(eltype(T))
+    Base.isapprox(reinterpret(ET, a), reinterpret(ET, b))
+end
+
 function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
     # copy on the CPU, adapt on the GPU, but keep Ref's
     cpu_in = map(x -> isa(x, Base.RefValue) ? x[] : deepcopy(x), xs)
