@@ -17,10 +17,18 @@ using Adapt
 struct ArrayAdaptor{AT} end
 Adapt.adapt_storage(::ArrayAdaptor{AT}, xs::AbstractArray) where {AT} = AT(xs)
 
-≈(a, b) = Base.isapprox(a, b)
-function ≈(a::T, b::T) where {T<:AbstractArray{<:NTuple{2,Number}}}
-    ET = eltype(eltype(T))
-    Base.isapprox(reinterpret(ET, a), reinterpret(ET, b))
+test_result(a::Number, b::Number) = a ≈ b
+function test_result(a::AbstractArray{T}, b::AbstractArray{T}) where {T<:Number}
+    collect(a) ≈ collect(b)
+end
+function test_result(a::AbstractArray{T}, b::AbstractArray{T}) where {T<:NTuple{N,<:Number} where {N}}
+    ET = eltype(T)
+    reinterpret(ET, collect(a)) ≈ reinterpret(ET, collect(b))
+end
+function test_result(as::NTuple{N,Any}, bs::NTuple{N,Any}) where {N}
+    all(zip(as, bs)) do (a, b)
+        test_result(a, b)
+    end
 end
 
 function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
@@ -31,13 +39,7 @@ function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
     cpu_out = f(cpu_in...; kwargs...)
     gpu_out = f(gpu_in...; kwargs...)
 
-    if cpu_out isa Tuple && gpu_out isa Tuple
-        all(zip(cpu_out,gpu_out)) do (cpu, gpu)
-            collect(cpu) ≈ collect(gpu)
-        end
-    else
-        collect(cpu_out) ≈ collect(gpu_out)
-    end
+    test_result(cpu_out, gpu_out)
 end
 
 function compare(f, AT::Type{<:Array}, xs...; kwargs...)

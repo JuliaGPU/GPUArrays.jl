@@ -90,7 +90,7 @@ end
                 @test compare(A->maximum(A), AT, rand(range, sz))
                 @test compare(A->maximum(x->x*x, A), AT, rand(range, sz))
                 @test compare(A->maximum(A; dims=dims), AT, rand(range, sz))
-                if isdefined(Base, :_extrema_rf)
+                if VERSION >= v"1.8.0-DEV.1465"
                     @test compare(A->extrema(A), AT, rand(range, sz))
                     @test compare(A->extrema(x->x*x, A), AT, rand(range, sz))
                     @test compare(A->extrema(A; dims=dims), AT, rand(range, sz))
@@ -103,7 +103,7 @@ end
             if !(ET <: Complex)
                 @test compare((A,R)->minimum!(R, A), AT, rand(range, sz), fill(typemax(ET), red))
                 @test compare((A,R)->maximum!(R, A), AT, rand(range, sz), fill(typemin(ET), red))
-                if isdefined(Base, :_extrema_rf)
+                if VERSION >= v"1.8.0-DEV.1465"
                     @test compare((A,R)->extrema!(R, A), AT, rand(range, sz), fill((typemax(ET),typemin(ET)), red))
                 end
             end
