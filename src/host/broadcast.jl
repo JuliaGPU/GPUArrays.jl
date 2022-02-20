@@ -47,7 +47,15 @@ end
     copyto!(similar(bc, ElType), bc)
 end
 
-@inline function Base.copyto!(dest::BroadcastGPUArray, bc::Broadcasted{Nothing})
+@inline function materialize!(::Style, dest, bc::Broadcasted) where {Style<:AbstractGPUArrayStyle}
+    return _copyto!(dest, instantiate(Broadcasted{Style}(bc.f, bc.args, axes(dest))))
+end
+
+@inline Base.copyto!(dest::BroadcastGPUArray, bc::Broadcasted{Nothing}) = _copyto!(dest, bc) # Keep it for ArrayConflict
+
+@inline Base.copyto!(dest::AbstractArray, bc::Broadcasted{<:AbstractGPUArrayStyle}) = _copyto!(dest, bc)
+
+@inline function _copyto!(dest::AbstractArray, bc::Broadcasted)
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     isempty(dest) && return dest
     bc′ = Broadcast.preprocess(dest, bc)
@@ -71,12 +79,6 @@ end
 
     return dest
 end
-
-# Base defines this method as a performance optimization, but we don't know how to do
-# `fill!` in general for all `BroadcastGPUArray` so we just go straight to the fallback
-@inline Base.copyto!(dest::BroadcastGPUArray, bc::Broadcasted{<:Broadcast.AbstractArrayStyle{0}}) =
-    copyto!(dest, convert(Broadcasted{Nothing}, bc))
-
 
 ## map
 
