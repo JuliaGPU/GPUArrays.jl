@@ -4,7 +4,7 @@ export AbstractGPUArrayStyle
 
 using Base.Broadcast
 
-import Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle
+import Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle, instantiate
 
 const BroadcastGPUArray{T} = Union{AnyGPUArray{T},
                                    Base.RefValue{<:AbstractGPUArray{T}}}
@@ -47,7 +47,7 @@ end
     copyto!(similar(bc, ElType), bc)
 end
 
-@inline function materialize!(::Style, dest, bc::Broadcasted) where {Style<:AbstractGPUArrayStyle}
+@inline function Base.materialize!(::Style, dest, bc::Broadcasted) where {Style<:AbstractGPUArrayStyle}
     return _copyto!(dest, instantiate(Broadcasted{Style}(bc.f, bc.args, axes(dest))))
 end
 

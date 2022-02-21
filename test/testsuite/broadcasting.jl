@@ -1,6 +1,7 @@
 @testsuite "broadcasting" (AT, eltypes)->begin
     broadcasting(AT, eltypes)
     vec3(AT, eltypes)
+    unknown_wrapper(AT, eltypes)
 
     @testset "type instabilities" begin
         f(x) = x ? 1.0 : 0
@@ -203,5 +204,24 @@ function vec3(AT, eltypes)
         res2 .= testv3_2.(x, y)
         res2c .= testv3_2.(xc, yc)
         @test all(map((a,b)-> all((1,2,3) .≈ (1,2,3)), Array(res2), res2c))
+    end
+end
+
+struct WrapArray{T,N,P<:AbstractArray{T,N}} <: AbstractArray{T,N}
+    data::P
+end
+Base.@propagate_inbounds Base.getindex(A::WrapArray, i::Integer...) = A.data[i...]
+Base.@propagate_inbounds Base.setindex!(A::WrapArray, v::Any, i::Integer...) = setindex!(A.data, v, i...)
+Base.size(A::WrapArray) = size(A.data)
+Broadcast.BroadcastStyle(::Type{WrapArray{T,N,P}}) where {T,N,P} = Broadcast.BroadcastStyle(P)
+function unknown_wrapper(AT, eltypes)
+    @views for ET in eltypes
+        A = AT(randn(ET, 10, 10))
+        WA = WrapArray(A)
+        @test Array(WA .+ WA) == Array(WA .+ A) == Array(A .+ A)
+        @test Array(WA .+ A[:,1]) == Array(A .+ A[:,1])
+        @test Array(WA .+ A[1,:]) == Array(A .+ A[1,:])
+        WA .= ET(1) # test for dispatch with dest's BroadcastStyle.
+        @test all(isequal(ET(1)), Array(A))
     end
 end
