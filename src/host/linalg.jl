@@ -293,3 +293,11 @@ function Base.similar(A::Hermitian{<:Any,<:AbstractGPUArray}, ::Type{T}) where T
     fill!(view(B, diagind(B)), 0)
     return Hermitian(B, ifelse(A.uplo == 'U', :U, :L))
 end
+
+
+## axp{b}y
+
+LinearAlgebra.axpby!(alpha::Number, x::AbstractGPUArray,
+                     beta::Number,  y::AbstractGPUArray) = y .= x.*alpha .+ y.*beta
+
+LinearAlgebra.axpy!(alpha::Number, x::AbstractGPUArray, y::AbstractGPUArray) = y .+= x.*alpha

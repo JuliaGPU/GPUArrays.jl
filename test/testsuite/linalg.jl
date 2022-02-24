@@ -186,6 +186,14 @@
         @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))
         @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
     end
+
+    @testset "axp{b}y" for T in eltypes
+        alpha, beta = 0.5, 2.0
+        x = T.([2,4,6])
+        y = T.([3,4,5])
+        @test axpby!(alpha,x,beta,y) ≈ T.([7,10,13])
+        @test axpy!(alpha,x,y) ≈ T.([8,12,16])
+    end
 end
 
 @testsuite "linalg/mul!/vector-matrix" (AT, eltypes)->begin
