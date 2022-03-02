@@ -58,11 +58,14 @@ end
                               (10,)=>:, (10,10)=>:, (10,10,10)=>:,
                               (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3]]
                 @test compare(A->sum(A), AT, rand(range, sz))
-                @test compare(A->sum(abs, A), AT, rand(range, sz))
                 @test compare(A->sum(A; dims=dims), AT, rand(range, sz))
                 @test compare(A->prod(A), AT, rand(range, sz))
-                @test compare(A->prod(abs, A), AT, rand(range, sz))
                 @test compare(A->prod(A; dims=dims), AT, rand(range, sz))
+                if typeof(abs(rand(range))) in eltypes
+                    # abs(::Complex{Int}) promotes to Float64
+                    @test compare(A->sum(abs, A), AT, rand(range, sz))
+                    @test compare(A->prod(abs, A), AT, rand(range, sz))
+                end
             end
 
             if ET in (Float32, Float64, Int64, ComplexF32, ComplexF64)
