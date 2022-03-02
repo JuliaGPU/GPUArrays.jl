@@ -235,6 +235,10 @@ end
         if T == Int8
             continue
         end
+        if !in(typeof(float(zero(T))), eltypes)
+            # norm promotes to float, so make sure that type is supported
+            continue
+        end
         range = real(T) <: Integer ? (T.(1:10)) : T # prevent integer overflow
         @test compare(norm, AT, rand(range, sz), Ref(p))
         @test typeof(norm(rand(range, sz))) <: Real

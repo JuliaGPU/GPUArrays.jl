@@ -116,23 +116,23 @@ end
     end
 
     @testset "cat" begin
-        @test compare(hcat, AT, rand(3), rand(3))
-        @test compare(hcat, AT, rand(), rand(1, 3))
-        @test compare(hcat, AT, rand(1, 3), rand())
-        @test compare(hcat, AT, rand(3), rand(3, 3))
-        @test compare(hcat, AT, rand(3, 3), rand(3))
-        @test compare(hcat, AT, rand(3, 3), rand(3, 3))
-        #@test compare(hcat, AT, rand(), rand(3, 3))
-        #@test compare(hcat, AT, rand(3, 3), rand())
+        @test compare(hcat, AT, rand(Float32, 3), rand(Float32, 3))
+        @test compare(hcat, AT, rand(Float32, ), rand(Float32, 1, 3))
+        @test compare(hcat, AT, rand(Float32, 1, 3), rand(Float32))
+        @test compare(hcat, AT, rand(Float32, 3), rand(Float32, 3, 3))
+        @test compare(hcat, AT, rand(Float32, 3, 3), rand(Float32, 3))
+        @test compare(hcat, AT, rand(Float32, 3, 3), rand(Float32, 3, 3))
+        #@test compare(hcat, AT, rand(Float32, ), rand(Float32, 3, 3))
+        #@test compare(hcat, AT, rand(Float32, 3, 3), rand(Float32))
 
-        @test compare(vcat, AT, rand(3), rand(3))
-        @test compare(vcat, AT, rand(3, 3), rand(3, 3))
-        @test compare(vcat, AT, rand(), rand(3))
-        @test compare(vcat, AT, rand(3), rand())
-        @test compare(vcat, AT, rand(), rand(3, 3))
-        #@test compare(vcat, AT, rand(3, 3), rand())
+        @test compare(vcat, AT, rand(Float32, 3), rand(Float32, 3))
+        @test compare(vcat, AT, rand(Float32, 3, 3), rand(Float32, 3, 3))
+        @test compare(vcat, AT, rand(Float32, ), rand(Float32, 3))
+        @test compare(vcat, AT, rand(Float32, 3), rand(Float32))
+        @test compare(vcat, AT, rand(Float32, ), rand(Float32, 3, 3))
+        #@test compare(vcat, AT, rand(Float32, 3, 3), rand(Float32))
 
-        @test compare((a,b) -> cat(a, b; dims=4), AT, rand(3, 4), rand(3, 4))
+        @test compare((a,b) -> cat(a, b; dims=4), AT, rand(Float32, 3, 4), rand(Float32, 3, 4))
     end
 
     @testset "reshape" begin
