@@ -166,10 +166,14 @@
             D = Diagonal(d)
             B = AT(rand(Float32, n, n))
 
-            # three-argument version does not throw SingularException
-            ldiv!(X, D, B)
-            ldiv!(Y, Diagonal(collect(d)), collect(B))
-            @test collect(X) ≈ Y
+            # three-argument version does not throw SingularException on 1.7
+            if VERSION < v"1.8-"
+                ldiv!(X, D, B)
+                ldiv!(Y, Diagonal(collect(d)), collect(B))
+                @test collect(X) ≈ Y
+            else
+                @test_throws SingularException ldiv!(X, D, B)
+            end
 
             # two-argument version throws SingularException
             @test_throws SingularException ldiv!(D, B)
