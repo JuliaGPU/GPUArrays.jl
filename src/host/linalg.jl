@@ -137,20 +137,42 @@ function Base.:\(D::Diagonal{<:Any, <:AbstractGPUArray}, B::AbstractGPUVecOrMat)
     end
 end
 
-function LinearAlgebra.ldiv!(D::Diagonal{<:Any, <:AbstractGPUArray}, B::StridedVecOrMat) 
-    m, n = size(B, 1), size(B, 2)
-    if m != length(D.diag)
-        throw(DimensionMismatch("diagonal matrix is $(length(D.diag)) by $(length(D.diag)) but right hand side has $m rows"))
+if VERSION < v"1.8-"
+    function LinearAlgebra.ldiv!(D::Diagonal{<:Any, <:AbstractGPUArray},
+                                 B::StridedVecOrMat)
+        m, n = size(B, 1), size(B, 2)
+        if m != length(D.diag)
+            throw(DimensionMismatch("diagonal matrix is $(length(D.diag)) by $(length(D.diag)) but right hand side has $m rows"))
+        end
+        (m == 0 || n == 0) && return B
+        z = D.diag .== 0
+        if any(z)
+            i = findfirst(collect(z))
+            throw(SingularException(i))
+        else
+            B .= D.diag .\ B
+        end
+        return B
     end
-    (m == 0 || n == 0) && return B
-    z = D.diag .== 0
-    if any(z)
-        i = findfirst(collect(z))
-        throw(SingularException(i))
-    else
-        B .= D.diag .\ B
+else
+    function LinearAlgebra.ldiv!(B::AbstractGPUVecOrMat,
+                                 D::Diagonal{<:Any, <:AbstractGPUArray},
+                                 A::AbstractGPUVecOrMat)
+        dd = D.diag
+        d = length(dd)
+        m, n = size(A, 1), size(A, 2)
+        m′, n′ = size(B, 1), size(B, 2)
+        m == d || throw(DimensionMismatch("right hand side has $m rows but D is $d by $d"))
+        (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
+        z = dd .== 0
+        if any(z)
+            i = findfirst(collect(z))
+            throw(SingularException(i))
+        else
+            B .= dd .\ A
+        end
+        B
     end
-    return B
 end
 
 
