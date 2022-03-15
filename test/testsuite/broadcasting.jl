@@ -1,6 +1,7 @@
 @testsuite "broadcasting" (AT, eltypes)->begin
     broadcasting(AT, eltypes)
     vec3(AT, eltypes)
+    unknown_wrapper(AT, eltypes)
 
     @testset "type instabilities" begin
         f(x) = x ? 1.0 : 0
@@ -203,5 +204,36 @@ function vec3(AT, eltypes)
         res2 .= testv3_2.(x, y)
         res2c .= testv3_2.(xc, yc)
         @test all(map((a,b)-> all((1,2,3) .≈ (1,2,3)), Array(res2), res2c))
+    end
+end
+
+# A help struct to test style-based broadcast dispatch with unknown array wrapper.
+# `WrapArray(A)` behaves like `A` during broadcast. But its not a `BroadcastGPUArray`.
+struct WrapArray{T,N,P<:AbstractArray{T,N}} <: AbstractArray{T,N}
+    data::P
+end
+Base.@propagate_inbounds Base.getindex(A::WrapArray, i::Integer...) = A.data[i...]
+Base.@propagate_inbounds Base.setindex!(A::WrapArray, v::Any, i::Integer...) = setindex!(A.data, v, i...)
+Base.size(A::WrapArray) = size(A.data)
+# For kernal support
+Adapt.adapt_structure(to, s::WrapArray) = WrapArray(Adapt.adapt(to, s.data))
+# For broadcast support
+GPUArrays.backend(::Type{WrapArray{T,N,P}}) where {T,N,P} = GPUArrays.backend(P)
+Broadcast.BroadcastStyle(::Type{WrapArray{T,N,P}}) where {T,N,P} = Broadcast.BroadcastStyle(P)
+
+function unknown_wrapper(AT, eltypes)
+    for ET in eltypes
+        @views @testset "unknown wrapper $ET" begin
+            A = AT(rand(ET, 10, 10))
+            WA = WrapArray(A)
+            # test for dispatch with src's BroadcastStyle.
+            @test Array(WA .+ ET(1)) == Array(A .+ ET(1))
+            @test Array(WA .+ WA) == Array(WA .+ A) == Array(A .+ A)
+            @test Array(WA .+ A[:,1]) == Array(A .+ A[:,1])
+            @test Array(WA .+ A[1,:]) == Array(A .+ A[1,:])
+            # test for dispatch with dest's BroadcastStyle.
+            WA .= ET(1)
+            @test all(isequal(ET(1)), Array(A))
+        end
     end
 end
