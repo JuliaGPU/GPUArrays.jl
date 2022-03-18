@@ -23,7 +23,7 @@ function repeat_inner(xs::AnyGPUArray, inner)
     out = similar(xs, eltype(xs), inner .* size(xs))
     any(==(0), size(out)) && return out # consistent with `Base.repeat`
 
-    gpu_call(repeat_inner_kernel!, xs, inner, out; total_threads=prod(size(out)))
+    gpu_call(repeat_inner_kernel!, xs, inner, out; elements=prod(size(out)))
     return out
 end
 
@@ -47,7 +47,7 @@ function repeat_outer(xs::AnyGPUArray, outer)
     out = similar(xs, eltype(xs), outer .* size(xs))
     any(==(0), size(out)) && return out # consistent with `Base.repeat`
 
-    gpu_call(repeat_outer_kernel!, xs, size(xs), outer, out; total_threads=prod(size(out)))
+    gpu_call(repeat_outer_kernel!, xs, size(xs), outer, out; elements=prod(size(out)))
     return out
 end
 
