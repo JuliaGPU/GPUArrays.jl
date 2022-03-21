@@ -62,7 +62,12 @@ function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,
     sz = size(bc)
     red = ntuple(i->(dims==Colon() || i in dims) ? 1 : sz[i], length(sz))
     R = similar(bc, ET, red)
-    mapreducedim!(identity, op, R, bc; init=init)
+
+    if prod(sz) == 0
+        R .= init
+    else
+        mapreducedim!(identity, op, R, bc; init=init)
+    end
 
     if dims === Colon()
         @allowscalar R[]
