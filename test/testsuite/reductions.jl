@@ -2,7 +2,8 @@
     @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
-                         (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1)]
+                         (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1),
+                         (0,)=>(1,)]
             @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, sz), zeros(ET, red))
             @test compare((A,R)->Base.mapreducedim!(identity, *, R, A), AT, rand(range, sz), ones(ET, red))
             @test compare((A,R)->Base.mapreducedim!(x->x+x, +, R, A), AT, rand(range, sz), zeros(ET, red))
@@ -18,7 +19,8 @@ end
     @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
-                         (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1)]
+                         (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1),
+                         (0,)=>(1,)]
             @test compare((A,R)->Base.reducedim!(+, R, A), AT, rand(range, sz), zeros(ET, red))
             @test compare((A,R)->Base.reducedim!(*, R, A), AT, rand(range, sz), ones(ET, red))
         end
@@ -30,7 +32,8 @@ end
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
                           (10,)=>:, (10,10)=>:, (10,10,10)=>:,
-                          (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3]]
+                          (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
+                          (0,)=>[1]]
             @test compare(A->mapreduce(identity, +, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
             @test compare(A->mapreduce(identity, *, A; dims=dims, init=one(ET)), AT, rand(range, sz))
             @test compare(A->mapreduce(x->x+x, +, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
@@ -43,7 +46,8 @@ end
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
                           (10,)=>:, (10,10)=>:, (10,10,10)=>:,
-                          (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3]]
+                          (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
+                          (0,)=>[1]]
             @test compare(A->reduce(+, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
             @test compare(A->reduce(*, A; dims=dims, init=one(ET)), AT, rand(range, sz))
         end
@@ -51,30 +55,29 @@ end
 end
 
 @testsuite "reductions/sum prod" (AT, eltypes)->begin
-    for ET in eltypes
-        @testset "$ET" begin
-            range = ET <: Real ? (ET(1):ET(10)) : ET
-            for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
-                              (10,)=>:, (10,10)=>:, (10,10,10)=>:,
-                              (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3]]
-                @test compare(A->sum(A), AT, rand(range, sz))
-                @test compare(A->sum(A; dims=dims), AT, rand(range, sz))
-                @test compare(A->prod(A), AT, rand(range, sz))
-                @test compare(A->prod(A; dims=dims), AT, rand(range, sz))
-                if typeof(abs(rand(range))) in eltypes
-                    # abs(::Complex{Int}) promotes to Float64
-                    @test compare(A->sum(abs, A), AT, rand(range, sz))
-                    @test compare(A->prod(abs, A), AT, rand(range, sz))
-                end
+    @testset "$ET" for ET in eltypes
+        range = ET <: Real ? (ET(1):ET(10)) : ET
+        for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
+                            (10,)=>:, (10,10)=>:, (10,10,10)=>:,
+                            (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
+                            (0,)=>[1]]
+            @test compare(A->sum(A), AT, rand(range, sz))
+            @test compare(A->sum(A; dims=dims), AT, rand(range, sz))
+            @test compare(A->prod(A), AT, rand(range, sz))
+            @test compare(A->prod(A; dims=dims), AT, rand(range, sz))
+            if typeof(abs(rand(range))) in eltypes
+                # abs(::Complex{Int}) promotes to Float64
+                @test compare(A->sum(abs, A), AT, rand(range, sz))
+                @test compare(A->prod(abs, A), AT, rand(range, sz))
             end
+        end
 
-            if ET in (Float32, Float64, Int64, ComplexF32, ComplexF64)
-                # smaller-scale test to avoid very large values and roundoff issues
-                for (sz,red) in [(2,)=>(1,), (2,2)=>(1,1), (2,2,2)=>(1,1,1), (2,2,2)=>(2,2,2),
-                                 (2,2,2)=>(1,2,2), (2,2,2)=>(2,1,2), (2,2,2)=>(2,2,1)]
-                    @test compare((A,R)->sum!(R, A), AT, rand(range, sz), rand(ET, red))
-                    @test compare((A,R)->prod!(R, A), AT, rand(range, sz), rand(ET, red))
-                end
+        if ET in (Float32, Float64, Int64, ComplexF32, ComplexF64)
+            # smaller-scale test to avoid very large values and roundoff issues
+            for (sz,red) in [(2,)=>(1,), (2,2)=>(1,1), (2,2,2)=>(1,1,1), (2,2,2)=>(2,2,2),
+                                (2,2,2)=>(1,2,2), (2,2,2)=>(2,1,2), (2,2,2)=>(2,2,1)]
+                @test compare((A,R)->sum!(R, A), AT, rand(range, sz), rand(ET, red))
+                @test compare((A,R)->prod!(R, A), AT, rand(range, sz), rand(ET, red))
             end
         end
     end
