@@ -9,7 +9,7 @@ function repeat_inner_kernel!(
 ) where {N}
     # Get single element from src
     idx = @cartesianidx xs
-    val = xs[idx]
+    @inbounds val = xs[idx]
 
     # Loop over "repeat" indices of inner
     for rdx in CartesianIndices(inner)
@@ -39,7 +39,7 @@ function repeat_outer_kernel!(
 ) where {N}
     # Get index to input element
     idx = @cartesianidx xs
-    val = xs[idx]
+    @inbounds val = xs[idx]
 
     # Loop over repeat indices, copying val to out
     for rdx in CartesianIndices(outer)
