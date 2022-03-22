@@ -233,18 +233,26 @@ end
 end
 
 @testsuite "linalg/norm" (AT, eltypes)->begin
-    @testset "$p-norm($sz x $T)" for sz in [(2,), (2,2), (2,2,2)],
-                                     p in Any[1, 2, 3, Inf, -Inf],
+    @testset "$p-norm($sz x $T)" for sz in [(2,), (2,0), (2,2,2)],
+                                     p in Any[0, 0.5, 1, 1.5, 2, Inf, -Inf],
                                      T in eltypes
         if T == Int8
             continue
         end
-        if !in(typeof(float(zero(T))), eltypes)
+        if !in(float(real(T)), eltypes)
             # norm promotes to float, so make sure that type is supported
             continue
         end
         range = real(T) <: Integer ? (T.(1:10)) : T # prevent integer overflow
-        @test compare(norm, AT, rand(range, sz), Ref(p))
-        @test typeof(norm(rand(range, sz))) <: Real
+        arr = rand(range, sz)
+        @test compare(norm, AT, arr, Ref(p))
+        @test isrealfloattype(typeof(norm(AT(arr), p)))
+        if !isempty(arr) && real(T) <: AbstractFloat && !iszero(p) && !isinf(p)
+            # Hit anti-under/overflow rescaling
+            @allowscalar arr[1] = floatmax(real(T)) / 2
+            @test compare(norm, AT, arr, Ref(p))
+            arr .= floatmin(real(T)) * 2
+            @test compare(norm, AT, arr, Ref(p))
+        end
     end
 end

@@ -296,14 +296,44 @@ end
 ## norm
 
 function LinearAlgebra.norm(v::AbstractGPUArray{T}, p::Real=2) where {T}
-    norm_x = if p == Inf
-        maximum(abs.(v))
-    elseif p == -Inf
-        minimum(abs.(v))
-    else
-        mapreduce(x->abs(x)^p, +, v; init=float(zero(T)))^(1/p)
+    zero_ = float(norm(zero(T)))
+    if isempty(v)
+        return zero_
     end
-    return real(norm_x)
+    # Accumulate in at least Float32, like nrm2 in CUBLAS
+    result_type = typeof(zero_)
+    acc_type = promote_type(Float32, result_type)
+    init = zero(acc_type)  # Sets the accumulation type of sum/count
+    spp = convert(acc_type, p)
+    # If acc_type is wider than T we must widen elements before applying any other function
+    # avoid under-/overflow
+    widen(x) = convert(promote_type(T, acc_type), x)
+    # Rescaling heuristic similar to Base, see LinearAlgebra/src/generic.jl
+    result = if p > 1 || p < -1  # May need rescaling
+        infnorm = convert(acc_type, p > 1 ? maximum(norm, v) : minimum(norm, v))
+        if isinf(p) || iszero(infnorm) || isinf(infnorm)  # Nothing more to do
+            infnorm
+        elseif p == 2
+            if isfinite(length(v) * infnorm^2) && !iszero(infnorm^2)  # Don't need rescaling
+                sqrt(sum(x -> LinearAlgebra.norm_sqr(widen(x)), v; init=init))
+            else  # Need rescaling
+                infnorm * sqrt(sum(x -> (norm(widen(x)) / infnorm)^2, v; init=init))
+            end
+        else
+            if isfinite(length(v) * infnorm^spp) && !iszero(infnorm^spp)  # No rescaling
+                sum(x -> norm(widen(x))^spp, v; init=init)^inv(spp)
+            else  # Rescaling
+                infnorm * (sum(x -> (norm(widen(x)) / infnorm)^spp, v; init=init)^inv(spp))
+            end
+        end
+    elseif p == 1
+        sum(x -> norm(widen(x)), v; init=init)
+    elseif p == 0
+        count(!iszero, v; init=init)
+    else
+        sum(x -> norm(widen(x))^spp, v; init=init)^inv(spp)
+    end
+    return convert(result_type, result)
 end
 
 
