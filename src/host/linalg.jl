@@ -303,9 +303,10 @@ function LinearAlgebra.norm(v::AbstractGPUArray{T}, p::Real=2) where {T}
     acc_type = promote_type(Float32, result_type)
     spp = convert(acc_type, p)
     init = zero(acc_type)  # To set the accumulation type in `sum`
-    # If acc_type is wider than T we must widen elements before applying any other function
-    # avoid under-/overflow
-    widen(x) = convert(promote_type(T, acc_type), x)
+    # If acc_type is wider than T, widen before applying other functions. To work in GPU
+    # kernels this operation must close around a value, not a type, hence the prototype
+    prototype = zero(promote_type(T, acc_type))
+    widen(x) = convert(typeof(prototype), x)
     # Rescaling heuristic similar to Base, see LinearAlgebra/src/generic.jl
     result = if p > 1 || p < -1  # May need rescaling
         infnorm = p > 1 ? maximum(norm, v) : minimum(norm, v)
