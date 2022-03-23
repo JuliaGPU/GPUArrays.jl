@@ -296,40 +296,38 @@ end
 ## norm
 
 function LinearAlgebra.norm(v::AbstractGPUArray{T}, p::Real=2) where {T}
-    zero_ = float(norm(zero(T)))
-    if isempty(v)
-        return zero_
-    end
+    result_type = typeof(float(norm(zero(T))))
+    isempty(v) && return zero(result_type)
+    p == 0 && return convert(result_type, count(!iszero, v))
     # Accumulate in at least Float32, like nrm2 in CUBLAS
-    result_type = typeof(zero_)
     acc_type = promote_type(Float32, result_type)
-    init = zero(acc_type)  # Sets the accumulation type of sum/count
     spp = convert(acc_type, p)
+    init = zero(acc_type)  # To set the accumulation type in `sum`
     # If acc_type is wider than T we must widen elements before applying any other function
     # avoid under-/overflow
     widen(x) = convert(promote_type(T, acc_type), x)
     # Rescaling heuristic similar to Base, see LinearAlgebra/src/generic.jl
     result = if p > 1 || p < -1  # May need rescaling
-        infnorm = convert(acc_type, p > 1 ? maximum(norm, v) : minimum(norm, v))
-        if isinf(p) || iszero(infnorm) || isinf(infnorm)  # Nothing more to do
-            infnorm
-        elseif p == 2
-            if isfinite(length(v) * infnorm^2) && !iszero(infnorm^2)  # Don't need rescaling
+        infnorm = p > 1 ? maximum(norm, v) : minimum(norm, v)
+        if isinf(p) || iszero(infnorm) || isinf(infnorm)
+            return convert(result_type, infnorm)  # Return early to skip conversions
+        end
+        factor = convert(acc_type, infnorm)
+        if p == 2
+            if isfinite(length(v) * factor^2) && !iszero(factor^2)  # No rescaling
                 sqrt(sum(x -> LinearAlgebra.norm_sqr(widen(x)), v; init=init))
-            else  # Need rescaling
-                infnorm * sqrt(sum(x -> (norm(widen(x)) / infnorm)^2, v; init=init))
+            else  # Rescaling
+                factor * sqrt(sum(x -> (norm(widen(x)) / factor)^2, v; init=init))
             end
         else
-            if isfinite(length(v) * infnorm^spp) && !iszero(infnorm^spp)  # No rescaling
+            if isfinite(length(v) * factor^spp) && !iszero(factor^spp)  # No rescaling
                 sum(x -> norm(widen(x))^spp, v; init=init)^inv(spp)
             else  # Rescaling
-                infnorm * (sum(x -> (norm(widen(x)) / infnorm)^spp, v; init=init)^inv(spp))
+                factor * (sum(x -> (norm(widen(x)) / factor)^spp, v; init=init)^inv(spp))
             end
         end
     elseif p == 1
         sum(x -> norm(widen(x)), v; init=init)
-    elseif p == 0
-        count(!iszero, v; init=init)
     else
         sum(x -> norm(widen(x))^spp, v; init=init)^inv(spp)
     end
