@@ -340,6 +340,19 @@ function _normtypes(::Type{T}) where {T}
     return result_type, sum_type, promote_
 end
 
+## opnorm
+
+function LinearAlgebra.opnorm1(A::AnyGPUArray{T,2}) where {T}
+    result_type, sum_type, promote_ = _normtypes(T)
+    result = maximum(sum(x -> norm(promote_(x)), A; dims=1); init=zero(sum_type))
+    return convert(result_type, result)
+end
+
+function LinearAlgebra.opnormInf(A::AnyGPUArray{T,2}) where {T}
+    result_type, sum_type, promote_ = _normtypes(T)
+    result = maximum(sum(x -> norm(promote_(x)), A; dims=2); init=zero(sum_type))
+    return convert(result_type, result)
+end
 
 ## symmetric
 
