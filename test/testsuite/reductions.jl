@@ -155,3 +155,29 @@ end
         @test A != B
     end
 end
+
+@testsuite "reductions/== isequal" (AT, eltypes)->begin
+    @testset "$ET" for ET in eltypes
+        range = ET <: Real ? (ET(1):ET(10)) : ET
+        for sz in [(10,), (10,10), (10,10,10), (0,)]
+            @test compare((A, B) -> A == B, AT, rand(range, sz), rand(range, sz))
+            @test compare((A, B) -> isequal(A, B), AT, rand(range, sz), rand(range, sz))
+            Ac = rand(range, sz)
+            @test compare((A, B) -> A == B, AT, Ac, Ac)
+            @test compare((A, B) -> isequal(A, B), AT, Ac, Ac)
+            if isfloattype(ET) && length(Ac) > 0
+                # Test cases where == and isequal behave differently
+                Bc = copy(Ac)
+                # 0.0 == -0.0 but !isequal(0.0, -0.0)
+                Ac[1] = zero(ET)
+                Bc[1] = -zero(ET)
+                @test compare((A, B) -> A == B, AT, Ac, Bc)
+                @test compare((A, B) -> isequal(A, B), AT, Ac, Bc)
+                # NaN != NaN but isequal(NaN, NaN)
+                Ac[1] = Bc[1] = ET(NaN)
+                @test compare((A, B) -> A == B, AT, Ac, Bc)
+                @test compare((A, B) -> isequal(A, B), AT, Ac, Bc)
+            end
+        end
+    end
+end

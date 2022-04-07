@@ -86,6 +86,7 @@ Base.count(pred::Function, A::AnyGPUArray; dims=:, init=0) =
     mapreduce(pred, Base.add_sum, A; init=init, dims=dims)
 
 Base.:(==)(A::AnyGPUArray, B::AnyGPUArray) = Bool(mapreduce(==, &, A, B))
+Base.isequal(A::AnyGPUArray, B::AnyGPUArray) = mapreduce(isequal, &, A, B)
 
 # avoid calling into `initarray!`
 for (fname, op) in [(:sum, :(Base.add_sum)), (:prod, :(Base.mul_prod)),
