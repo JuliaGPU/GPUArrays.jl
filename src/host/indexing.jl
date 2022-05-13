@@ -71,7 +71,7 @@ See also: [`allowscalar`](@ref).
 """
 macro allowscalar(ex)
     quote
-        task_local_storage(:ScalarIndexing, true) do
+        task_local_storage(:ScalarIndexing, ScalarAllowed) do
             $(esc(ex))
         end
     end
