@@ -43,14 +43,14 @@
             B = copy(A)
             randn!(rng, A)
             randn!(rng, B)
-            @test !any(Array(A) .== Array(B))
+            @test Array(A) != Array(B)
 
             Random.seed!(rng)
             Random.seed!(rng, 1)
             randn!(rng, A)
             Random.seed!(rng, 1)
             randn!(rng, B)
-            @test all(Array(A) .== Array(B))
+            @test Array(A) == Array(B)
 
             if rng != cpu_rng
                 randn!(cpu_rng, A)
