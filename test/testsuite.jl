@@ -17,17 +17,18 @@ using Adapt
 struct ArrayAdaptor{AT} end
 Adapt.adapt_storage(::ArrayAdaptor{AT}, xs::AbstractArray) where {AT} = AT(xs)
 
-test_result(a::Number, b::Number) = a ≈ b
-function test_result(a::AbstractArray{T}, b::AbstractArray{T}) where {T<:Number}
-    collect(a) ≈ collect(b)
+test_result(a::Number, b::Number; kwargs...) = ≈(a, b; kwargs...)
+function test_result(a::AbstractArray{T}, b::AbstractArray{T}; kwargs...) where {T<:Number}
+    ≈(collect(a), collect(b); kwargs...)
 end
-function test_result(a::AbstractArray{T}, b::AbstractArray{T}) where {T<:NTuple{N,<:Number} where {N}}
+function test_result(a::AbstractArray{T}, b::AbstractArray{T};
+                     kwargs...) where {T<:NTuple{N,<:Number} where {N}}
     ET = eltype(T)
-    reinterpret(ET, collect(a)) ≈ reinterpret(ET, collect(b))
+    ≈(reinterpret(ET, collect(a)), reinterpret(ET, collect(b)); kwargs...)
 end
-function test_result(as::NTuple{N,Any}, bs::NTuple{N,Any}) where {N}
+function test_result(as::NTuple{N,Any}, bs::NTuple{N,Any}; kwargs...) where {N}
     all(zip(as, bs)) do (a, b)
-        test_result(a, b)
+        test_result(a, b; kwargs...)
     end
 end
 
@@ -36,10 +37,10 @@ function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
     cpu_in = map(x -> isa(x, Base.RefValue) ? x[] : deepcopy(x), xs)
     gpu_in = map(x -> isa(x, Base.RefValue) ? x[] : adapt(ArrayAdaptor{AT}(), x), xs)
 
-    cpu_out = f(cpu_in...; kwargs...)
-    gpu_out = f(gpu_in...; kwargs...)
+    cpu_out = f(cpu_in...)
+    gpu_out = f(gpu_in...)
 
-    test_result(cpu_out, gpu_out)
+    test_result(cpu_out, gpu_out; kwargs...)
 end
 
 function compare(f, AT::Type{<:Array}, xs...; kwargs...)
