@@ -50,11 +50,11 @@ using Statistics
 
         @testset "cor" begin
             s = 100
-            @test compare(cor, AT, rand(ET, s))
-            @test compare(cor, AT, rand(ET, s, 2))
-            @test compare(A->cor(A; dims=2), AT, rand(ET, s, 2))
+            @test compare(cor, AT, rand(ET, s)) nans=true
+            @test compare(cor, AT, rand(ET, s, 2)) nans=true
+            @test compare(A->cor(A; dims=2), AT, rand(ET, s, 2)) nans=true
             if ET <: Real
-                @test compare(cor, AT, rand(ET(1):ET(100), s))
+                @test compare(cor, AT, rand(ET(1):ET(100), s)) nans=true
             end
         end
     end
