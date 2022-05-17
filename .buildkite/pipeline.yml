@@ -19,7 +19,7 @@ steps:
       queue: "juliagpu"
       cuda: "*"
     if: build.message !~ /\[skip tests\]/
-    timeout_in_minutes: 60
+    timeout_in_minutes: 120
 
   - label: "oneAPI.jl"
     plugins:
