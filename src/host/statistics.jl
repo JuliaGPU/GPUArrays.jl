@@ -1,7 +1,15 @@
 using Statistics
 
-Statistics.varm(A::AbstractGPUArray{<:Real},m::AbstractArray{<:Real}; dims, corrected::Bool=true) =
-    sum((A .- m).^2, dims=dims)/(prod(size(A)[[dims...]])::Int-corrected)
+function Statistics.varm(A::AbstractGPUArray{<:Real}, M::AbstractArray{<:Real};
+                         dims, corrected::Bool=true)
+    #B = (A .- M).^2
+    # NOTE: the above broadcast promotes to Float64 and uses power_by_squaring...
+    B = broadcast(A, M) do a, m
+        x = (a - m)
+        x*x
+    end
+    sum(B, dims=dims)/(prod(size(A)[[dims...]])::Int-corrected)
+end
 
 Statistics.stdm(A::AbstractGPUArray{<:Real},m::AbstractArray{<:Real}, dim::Int; corrected::Bool=true) =
     sqrt.(varm(A,m;dims=dim,corrected=corrected))
