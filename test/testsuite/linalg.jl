@@ -255,4 +255,19 @@ end
             @test compare(norm, AT, arr, Ref(p))
         end
     end
+    @testset "$p-opnorm($sz x $T)" for sz in [(2, 0), (2, 3)],
+                                     p in Any[1, Inf],
+                                     T in eltypes
+        if T == Int8
+            continue
+        end
+        if !in(float(real(T)), eltypes)
+            # norm promotes to float, so make sure that type is supported
+            continue
+        end
+        range = real(T) <: Integer ? (T.(1:10)) : T # prevent integer overflow
+        mat = rand(range, sz)
+        @test compare(opnorm, AT, mat, Ref(p))
+        @test isrealfloattype(typeof(opnorm(AT(mat), p)))
+    end
 end
