@@ -85,11 +85,10 @@ Base.all(f::Function, A::AnyGPUArray) = mapreduce(f, &, A)
 Base.count(pred::Function, A::AnyGPUArray; dims=:, init=0) =
     mapreduce(pred, Base.add_sum, A; init=init, dims=dims)
 
-# specialize to arrays of Numbers to avoid dealing with "missing" (PR#410)
 _equal(A, B) = (A === B) || (axes(A) == axes(B) && mapreduce(==, &, A, B))
-Base.:(==)(A::AnyGPUArray{<:Number}, B::AnyGPUArray{<:Number}) = _equal(A, B)
-Base.isequal(A::AnyGPUArray{<:Number}, B::AnyGPUArray{<:Number}) =  _equal(A, B)
-Base.:(==)(A::AnyGPUArray{<:Ptr{Nothing}}, B::AnyGPUArray{<:Ptr{Nothing}}) = _equal(A, B)
+Base.:(==)(A::AnyGPUArray, B::AnyGPUArray) = _equal(A, B)
+# specialize to arrays of Numbers to avoid dealing with "missing" (PR#410)
+Base.isequal(A::AnyGPUArray{<:Number}, B::AnyGPUArray{<:Number}) = _equal(A, B)
 
 # avoid calling into `initarray!`
 for (fname, op) in [(:sum, :(Base.add_sum)), (:prod, :(Base.mul_prod)),
