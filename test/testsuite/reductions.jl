@@ -159,6 +159,12 @@ end
 @testsuite "reductions/== isequal" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
+
+        # different sizes should trip up both (CUDA.jl#1524)
+        @test compare((A, B) -> A == B, AT, rand(range, (2,3)), rand(range, 6))
+        @test compare((A, B) -> isequal(A, B), AT, rand(range, (2,3)), rand(range, 6))
+
+        # equal sizes depend on values
         for sz in [(10,), (10,10), (10,10,10), (0,)]
             @test compare((A, B) -> A == B, AT, rand(range, sz), rand(range, sz))
             @test compare((A, B) -> isequal(A, B), AT, rand(range, sz), rand(range, sz))
@@ -179,5 +185,9 @@ end
                 @test compare((A, B) -> isequal(A, B), AT, Ac, Bc)
             end
         end
+
+        # missing values should only trip up ==
+        @test compare((A, B) -> A == B, AT, [missing], [missing])
+        @test compare((A, B) -> isequal(A, B), AT, [missing], [missing])
     end
 end
