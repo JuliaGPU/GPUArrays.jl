@@ -12,8 +12,8 @@ Base.mapreducedim!(f, op, R::AnyGPUArray, A::Broadcast.Broadcasted) = mapreduced
 
 neutral_element(op, T) =
     error("""GPUArrays.jl needs to know the neutral element for your operator `$op`.
-             Please pass it as an explicit argument to `GPUArrays.mapreducedim!` (if possible),
-             or register it globally your operator by defining `GPUArrays.neutral_element(::typeof($op), T)`.""")
+             Please pass it as an explicit argument to `GPUArrays.mapreducedim!`,
+             or register it globally by defining `GPUArrays.neutral_element(::typeof($op), T)`.""")
 neutral_element(::typeof(Base.:(|)), T) = zero(T)
 neutral_element(::typeof(Base.:(+)), T) = zero(T)
 neutral_element(::typeof(Base.add_sum), T) = zero(T)
@@ -110,7 +110,7 @@ function Base.isequal(A::AnyGPUArray, B::AnyGPUArray)
     mapreduce(isequal, &, A, B; init=true)
 end
 
-# fails when missing values are involved
+# returns `missing` when missing values are involved
 function Base.:(==)(A::AnyGPUArray, B::AnyGPUArray)
     if axes(A) != axes(B)
         return false
