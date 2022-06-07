@@ -18,6 +18,9 @@ struct ArrayAdaptor{AT} end
 Adapt.adapt_storage(::ArrayAdaptor{AT}, xs::AbstractArray) where {AT} = AT(xs)
 
 test_result(a::Number, b::Number; kwargs...) = ≈(a, b; kwargs...)
+test_result(a::Missing, b::Missing; kwargs...) = true
+test_result(a::Number, b::Missing; kwargs...) = false
+test_result(a::Missing, b::Number; kwargs...) = false
 function test_result(a::AbstractArray{T}, b::AbstractArray{T}; kwargs...) where {T<:Number}
     ≈(collect(a), collect(b); kwargs...)
 end

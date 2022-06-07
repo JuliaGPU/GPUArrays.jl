@@ -12,8 +12,8 @@ Base.mapreducedim!(f, op, R::AnyGPUArray, A::Broadcast.Broadcasted) = mapreduced
 
 neutral_element(op, T) =
     error("""GPUArrays.jl needs to know the neutral element for your operator `$op`.
-             Please pass it as an explicit argument to (if possible), or register it
-             globally your operator by defining `GPUArrays.neutral_element(::typeof($op), T)`.""")
+             Please pass it as an explicit argument to `GPUArrays.mapreducedim!`,
+             or register it globally by defining `GPUArrays.neutral_element(::typeof($op), T)`.""")
 neutral_element(::typeof(Base.:(|)), T) = zero(T)
 neutral_element(::typeof(Base.:(+)), T) = zero(T)
 neutral_element(::typeof(Base.add_sum), T) = zero(T)
@@ -64,7 +64,7 @@ function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,
     R = similar(bc, ET, red)
 
     if prod(sz) == 0
-        R .= init
+        fill!(R, init)
     else
         mapreducedim!(identity, op, R, bc; init=init)
     end
@@ -85,9 +85,6 @@ Base.all(f::Function, A::AnyGPUArray) = mapreduce(f, &, A)
 Base.count(pred::Function, A::AnyGPUArray; dims=:, init=0) =
     mapreduce(pred, Base.add_sum, A; init=init, dims=dims)
 
-Base.:(==)(A::AnyGPUArray, B::AnyGPUArray) = Bool(mapreduce(==, &, A, B))
-Base.isequal(A::AnyGPUArray, B::AnyGPUArray) = mapreduce(isequal, &, A, B)
-
 # avoid calling into `initarray!`
 for (fname, op) in [(:sum, :(Base.add_sum)), (:prod, :(Base.mul_prod)),
                     (:maximum, :(Base.max)), (:minimum, :(Base.min)),
@@ -100,3 +97,40 @@ for (fname, op) in [(:sum, :(Base.add_sum)), (:prod, :(Base.mul_prod)),
 end
 
 LinearAlgebra.ishermitian(A::AbstractGPUMatrix) = mapreduce(==, &, A, adjoint(A))
+
+
+# comparisons
+
+# ignores missing
+function Base.isequal(A::AnyGPUArray, B::AnyGPUArray)
+    if A === B return true end
+    if axes(A) != axes(B)
+        return false
+    end
+    mapreduce(isequal, &, A, B; init=true)
+end
+
+# returns `missing` when missing values are involved
+function Base.:(==)(A::AnyGPUArray, B::AnyGPUArray)
+    if axes(A) != axes(B)
+        return false
+    end
+
+    function mapper(a, b)
+        eq = (a == b)
+        if ismissing(eq)
+            (; is_missing=true, is_equal=#=don't care=#false)
+        else
+            (; is_missing=false, is_equal=eq)
+        end
+    end
+    function reducer(a, b)
+        if a.is_missing || b.is_missing
+            (; is_missing=true, is_equal=#=don't care=#false)
+        else
+            (; is_missing=false, is_equal=a.is_equal & b.is_equal)
+        end
+    end
+    res = mapreduce(mapper, reducer, A, B; init=(; is_missing=false, is_equal=true))
+    res.is_missing ? missing : res.is_equal
+end
