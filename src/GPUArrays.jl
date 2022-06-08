@@ -11,6 +11,9 @@ using Base.Cartesian
 using Adapt
 using LLVM.Interop
 
+using Reexport
+@reexport using GPUArraysCore
+
 # device functionality
 include("device/execution.jl")
 ## executed on-device
