@@ -32,9 +32,18 @@ end
 
 ## copy upper triangle to lower and vice versa
 
-function LinearAlgebra.copytri!(A::AbstractGPUMatrix{T}, uplo::AbstractChar) where T
+function LinearAlgebra.copytri!(A::AbstractGPUMatrix{T}, uplo::AbstractChar, conjugate::Bool=false) where T
   n = LinearAlgebra.checksquare(A)
-  if uplo == 'U'
+  if uplo == 'U' && conjugate
+      gpu_call(A) do ctx, _A
+        I = @cartesianidx _A
+        i, j = Tuple(I)
+        if j > i
+          _A[j,i] = conj(_A[i,j])
+        end
+        return
+      end
+  elseif uplo == 'U' && !conjugate
       gpu_call(A) do ctx, _A
         I = @cartesianidx _A
         i, j = Tuple(I)
@@ -43,7 +52,16 @@ function LinearAlgebra.copytri!(A::AbstractGPUMatrix{T}, uplo::AbstractChar) whe
         end
         return
       end
-  elseif uplo == 'L'
+  elseif uplo == 'L' && conjugate
+      gpu_call(A) do ctx, _A
+        I = @cartesianidx _A
+        i, j = Tuple(I)
+        if j > i
+          _A[i,j] = conj(_A[j,i])
+        end
+        return
+      end
+  elseif uplo == 'L' && !conjugate
       gpu_call(A) do ctx, _A
         I = @cartesianidx _A
         i, j = Tuple(I)

@@ -63,8 +63,15 @@
 
     @testset "triangular" begin
         @testset "copytri!" begin
-            @testset for uplo in ('U', 'L')
-                @test compare(x -> LinearAlgebra.copytri!(x, uplo), AT, rand(Float32, 128, 128))
+            @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64), uplo in ('U', 'L'), conjugate in (true, false)
+                n = 128
+                areal = randn(n,n)/2
+                aimg  = randn(n,n)/2
+                if !(eltya in eltypes)
+                    continue
+                end
+                a = convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
+                @test compare(x -> LinearAlgebra.copytri!(x, uplo, conjugate), AT, a)
             end
         end
 
