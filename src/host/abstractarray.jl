@@ -44,7 +44,7 @@ Base.collect(X::AnyGPUArray) = collect_to_cpu(X)
 
 function Base.copy!(dst::AbstractGPUVector, src::AbstractGPUVector)
     axes(dst) == axes(src) || throw(ArgumentError(
-    "arrays must have the same axes for `copy!`. consider using `copyto!` instead"))
+    "arrays must have the same axes for copy! (consider using `copyto!`)"))
     copyto!(dst, src)
 end
 
