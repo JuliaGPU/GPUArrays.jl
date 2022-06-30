@@ -26,6 +26,19 @@ function ntuple_closure(ctx, result, ::Val{N}, testval) where N
 end
 
 @testsuite "base" (AT, eltypes)->begin
+    @testset "copy!" begin
+        for (dst, src,) in (
+                            (rand(Float32, (10,)),   rand(Float32, (10,))),   # vectors
+                            (rand(Float32, (10,20)), rand(Float32, (10,20))), # multidim
+                            )
+            dst = AT(dst)
+            src = AT(src)
+            
+            copy!(dst, src)
+            @test dst == src
+        end
+    end
+
     @testset "copyto!" begin
         x = fill(0f0, (10, 10))
         y = rand(Float32, (20, 10))
