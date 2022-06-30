@@ -1,3 +1,8 @@
 *.jl.cov
 *.jl.*.cov
 *.jl.mem
+
+# editor generated files
+.*.swp
+.*.swo
+*~
