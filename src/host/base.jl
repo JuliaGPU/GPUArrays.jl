@@ -1,7 +1,27 @@
 # common Base functionality
 import Base: _RepeatInnerOuter
 
-function repeat_inner_kernel!(
+# Handle `out = repeat(x; inner)` by parallelizing over `out` array
+function repeat_inner_dst_kernel!(
+    ctx::AbstractKernelContext,
+    xs::AbstractArray{<:Any, N},
+    inner::NTuple{N, Int},
+    out::AbstractArray{<:Any, N}
+) where {N}
+    # Get the "stride" index in each dimension, where the size
+    # of the stride is given by `inner`. The stride-index (sdx) then
+    # corresponds to the index of the repeated value in `xs`.
+    odx = @cartesianidx out
+    dest_inds = odx.I
+    sdx = ntuple(N) do i
+        @inbounds (dest_inds[i] - 1) ÷ inner[i] + 1
+    end
+    @inbounds out[odx] = xs[CartesianIndex(sdx)]
+    return nothing
+end
+
+# Handle `out = repeat(x; inner)` by parallelizing over the `xs` array
+function repeat_inner_src_kernel!(
     ctx::AbstractKernelContext,
     xs::AbstractArray{<:Any, N},
     inner::NTuple{N, Int},
@@ -19,14 +39,19 @@ function repeat_inner_kernel!(
         end
         @inbounds out[CartesianIndex(odx)] = val
     end
-
     return nothing
 end
 
 function repeat_inner(xs::AnyGPUArray, inner)
     out = similar(xs, eltype(xs), inner .* size(xs))
     any(==(0), size(out)) && return out # consistent with `Base.repeat`
-    gpu_call(repeat_inner_kernel!, xs, inner, out; elements=length(xs))
+    if argmax(inner) == firstindex(inner)
+        # Parallelize over the destination array
+        gpu_call(repeat_inner_dst_kernel!, xs, inner, out; elements=prod(size(out)))
+    else
+        # Parallelize over the source array
+        gpu_call(repeat_inner_src_kernel!, xs, inner, out; elements=prod(size(xs)))
+    end
     return out
 end
 
