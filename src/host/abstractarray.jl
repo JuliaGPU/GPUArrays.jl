@@ -42,6 +42,12 @@ Base.collect(X::AnyGPUArray) = collect_to_cpu(X)
 
 # memory copying
 
+function Base.copy!(dst::AbstractGPUVector, src::AbstractGPUVector)
+    axes(dst) == axes(src) || throw(ArgumentError(
+    "arrays must have the same axes for `copy!`. consider using `copyto!` instead"))
+    copyto!(dst, src)
+end
+
 ## basic linear copies of identically-typed memory
 
 # expects the GPU array type to have linear `copyto!` methods (i.e. accepting an integer
