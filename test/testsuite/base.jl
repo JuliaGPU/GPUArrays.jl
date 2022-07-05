@@ -33,7 +33,7 @@ end
                             )
             dst = AT(dst)
             src = AT(src)
-            
+
             copy!(dst, src)
             @test dst == src
         end
@@ -217,10 +217,15 @@ end
         xmat = rand(Float32, 2, 10)
         xarr = rand(Float32, 3, 2, 10)
 
+        # Note: When testing repeat(x; inner) need to hit both `repeat_inner_src_kernel!`
+        # and `repeat_inner_dst_kernel!` to get full coverage.
+
         # Inner.
         @test compare(a -> repeat(a, inner=(2, )), AT, x)
         @test compare(a -> repeat(a, inner=(2, 3)), AT, xmat)
+        @test compare(a -> repeat(a, inner=(3, 2)), AT, xmat)
         @test compare(a -> repeat(a, inner=(2, 3, 4)), AT, xarr)
+        @test compare(a -> repeat(a, inner=(4, 3, 2)), AT, xarr)
         # Outer.
         @test compare(a -> repeat(a, outer=(2, )), AT, x)
         @test compare(a -> repeat(a, outer=(2, 3)), AT, xmat)
@@ -231,10 +236,12 @@ end
         @test compare(a -> repeat(a, inner=(2, 3, 4), outer=(2, 1, 4)), AT, xarr)
         # Repeat which expands dimensionality.
         @test compare(a -> repeat(a, inner=(2, 1, 3)), AT, x)
+        @test compare(a -> repeat(a, inner=(3, 1, 2)), AT, x)
         @test compare(a -> repeat(a, outer=(2, 1, 3)), AT, x)
         @test compare(a -> repeat(a, inner=(2, 1, 3), outer=(2, 2, 3)), AT, x)
 
         @test compare(a -> repeat(a, inner=(2, 1, 3)), AT, xmat)
+        @test compare(a -> repeat(a, inner=(3, 1, 2)), AT, xmat)
         @test compare(a -> repeat(a, outer=(2, 1, 3)), AT, xmat)
         @test compare(a -> repeat(a, inner=(2, 1, 3), outer=(2, 2, 3)), AT, xmat)
     end

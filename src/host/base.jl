@@ -1,7 +1,9 @@
 # common Base functionality
 import Base: _RepeatInnerOuter
 
-# Handle `out = repeat(x; inner)` by parallelizing over `out` array
+# Handle `out = repeat(x; inner)` by parallelizing over `out` array This can benchmark
+# faster if repeating elements along the first axis (i.e. `inner=(n, ones...)`), as data
+# access can be contiguous on write.
 function repeat_inner_dst_kernel!(
     ctx::AbstractKernelContext,
     xs::AbstractArray{<:Any, N},
@@ -20,7 +22,10 @@ function repeat_inner_dst_kernel!(
     return nothing
 end
 
-# Handle `out = repeat(x; inner)` by parallelizing over the `xs` array
+# Handle `out = repeat(x; inner)` by parallelizing over the `xs` array This tends to
+# benchmark faster by having fewer read operations and avoiding the costly division
+# operation. Additionally, when repeating over the trailing dimension. `inner=(ones..., n)`,
+# data access can be contiguous during both the read and write operations.
 function repeat_inner_src_kernel!(
     ctx::AbstractKernelContext,
     xs::AbstractArray{<:Any, N},
@@ -45,6 +50,18 @@ end
 function repeat_inner(xs::AnyGPUArray, inner)
     out = similar(xs, eltype(xs), inner .* size(xs))
     any(==(0), size(out)) && return out # consistent with `Base.repeat`
+
+    # Pick which kernel to launch based on `inner`, using the heuristic that if the largest
+    # entry in `inner` is `inner[1]`, then we should parallelize over `out`. Otherwise, we
+    # should parallelize over `xs`. This choice is purely for performance. Better heuristics
+    # may exist, but hopefully, this is good enough.
+    #
+    # Using `repeat_inner_src_kernel!`, requires fewer read ops (`prod(size(xs))` vs.
+    # `prod(size(out))`) and generally benchmarks faster than `repeat_inner_dst_kernel!`.
+    # However, for `inner = (n, 1, 1)`, `repeat_inner_dst_kernel!` benchmarked faster as it
+    # avoids strided memory access over `out`.
+    # See https://github.com/JuliaGPU/GPUArrays.jl/pull/400#issuecomment-1172641982 for the
+    # relevant benchmarks.
     if argmax(inner) == firstindex(inner)
         # Parallelize over the destination array
         gpu_call(repeat_inner_dst_kernel!, xs, inner, out; elements=prod(size(out)))
