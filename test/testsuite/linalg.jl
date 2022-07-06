@@ -153,6 +153,23 @@
             @test_throws SingularException D \ B
         end
 
+        @testset "mul! + Diagonal" begin
+            n = 128
+            d = AT(rand(Float32, n))
+            D = Diagonal(d)
+            B = AT(rand(Float32, n, n))
+            X = AT(zeros(Float32, n, n))
+            Y = zeros(Float32, n, n)
+            α = rand(Float32)
+            β = rand(Float32)
+            mul!(X, D, B)
+            mul!(Y, Diagonal(collect(d)), collect(B))
+            @test collect(X) ≈ Y
+            mul!(X, D, B, α, β)
+            mul!(Y, Diagonal(collect(d)), collect(B), α, β)
+            @test collect(X) ≈ Y
+        end
+
         @testset "ldiv! + Diagonal" begin
             n = 128
             d = AT(rand(Float32, n))
