@@ -1,21 +1,11 @@
 # broadcasting operations
 
-export AbstractGPUArrayStyle
-
 using Base.Broadcast
 
 import Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle, instantiate
 
 const BroadcastGPUArray{T} = Union{AnyGPUArray{T},
                                    Base.RefValue{<:AbstractGPUArray{T}}}
-
-"""
-Abstract supertype for GPU array styles. The `N` parameter is the dimensionality.
-
-Downstream implementations should provide a concrete array style type that inherits from
-this supertype.
-"""
-abstract type AbstractGPUArrayStyle{N} <: AbstractArrayStyle{N} end
 
 # Wrapper types otherwise forget that they are GPU compatible
 # NOTE: don't directly use GPUArrayStyle here not to lose downstream customizations.
