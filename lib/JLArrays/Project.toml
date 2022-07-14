@@ -1,0 +1,14 @@
+name = "JLArrays"
+uuid = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
+authors = ["Tim Besard <tim.besard@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+
+[compat]
+Adapt = "2.0, 3.0"
+GPUArrays = "8.4.1"
+julia = "1.6"
