@@ -37,8 +37,6 @@ jobs:
       - run: |
           git config --global user.name Tester
           git config --global user.email te@st.er
-      - name: dev sub-package JLArrays
-        run: julia -e 'using Pkg; Pkg.develop(path="lib/JLArrays")'
       - uses: julia-actions/julia-runtest@latest
         continue-on-error: ${{ matrix.version == 'nightly' }}
       - uses: julia-actions/julia-processcoverage@v1
