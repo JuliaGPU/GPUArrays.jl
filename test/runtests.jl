@@ -3,7 +3,8 @@ using GPUArrays, Test
 include("testsuite.jl")
 
 @testset "JLArray" begin
-    using JLArrays
+    include("../lib/JLArrays/src/JLArrays.jl")  # get the latest file directly, ignore the registry
+    using .JLArrays
 
     jl([1])
 
