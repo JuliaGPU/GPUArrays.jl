@@ -7,6 +7,11 @@ import Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle, instanti
 const BroadcastGPUArray{T} = Union{AnyGPUArray{T},
                                    Base.RefValue{<:AbstractGPUArray{T}}}
 
+# These duplicate definitions in GPUArraysCore right now, to simulate on CI the clash of having
+# both the old GPUArrays and the new GPUArraysCore.
+export AbstractGPUArrayStyle
+abstract type AbstractGPUArrayStyle{N} <: Base.Broadcast.AbstractArrayStyle{N} end
+
 # Wrapper types otherwise forget that they are GPU compatible
 # NOTE: don't directly use GPUArrayStyle here not to lose downstream customizations.
 BroadcastStyle(W::Type{<:WrappedGPUArray})= BroadcastStyle(Adapt.parent(W){Adapt.eltype(W), Adapt.ndims(W)})
