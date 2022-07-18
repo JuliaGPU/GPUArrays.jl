@@ -58,3 +58,6 @@ end
 
 Base.one(x::AbstractGPUMatrix{T}) where {T} = _one(one(T), x)
 Base.oneunit(x::AbstractGPUMatrix{T}) where {T} = _one(oneunit(T), x)
+
+Base.iszero(x::AbstractGPUMatrix{T}) where {T} = all(iszero, x)
+Base.isone(x::AbstractGPUMatrix{T}) where {T} = iszero(x-I)
