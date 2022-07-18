@@ -1,14 +1,20 @@
-using GPUArrays, Test
+using GPUArrays, Test, Pkg
 
 include("testsuite.jl")
 
 @testset "JLArray" begin
-    include("jlarray.jl")
-    using .JLArrays
+    # install the JLArrays subpackage in a temporary environment
+    old_project = Base.active_project()
+    Pkg.activate(; temp=true)
+    Pkg.develop(path=joinpath(dirname(@__DIR__), "lib", "JLArrays"))
+
+    using JLArrays
 
     jl([1])
 
     TestSuite.test(JLArray)
+
+    Pkg.activate(old_project)
 end
 
 @testset "Array" begin
