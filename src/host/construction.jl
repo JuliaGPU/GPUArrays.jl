@@ -60,4 +60,8 @@ Base.one(x::AbstractGPUMatrix{T}) where {T} = _one(one(T), x)
 Base.oneunit(x::AbstractGPUMatrix{T}) where {T} = _one(oneunit(T), x)
 
 Base.iszero(x::AbstractGPUMatrix{T}) where {T} = all(iszero, x)
-Base.isone(x::AbstractGPUMatrix{T}) where {T} = iszero(x-I)
+function Base.isone(x::AbstractGPUMatrix{T}) where {T}
+    n,m = size(x)
+    m != n && return false
+    all(iszero, x-I)
+end
