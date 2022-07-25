@@ -6,7 +6,7 @@ using Adapt
 ## essential types
 
 export AbstractGPUArray, AbstractGPUVector, AbstractGPUMatrix, AbstractGPUVecOrMat,
-       WrappedGPUArray, AnyGPUArray
+       WrappedGPUArray, AnyGPUArray, AbstractGPUArrayStyle
 
 """
     AbstractGPUArray{T, N} <: DenseArray{T, N}
@@ -25,6 +25,15 @@ const AbstractGPUVecOrMat{T} = Union{AbstractGPUArray{T, 1}, AbstractGPUArray{T,
 const WrappedGPUArray{T,N} = WrappedArray{T,N,AbstractGPUArray,AbstractGPUArray{T,N}}
 const AnyGPUArray{T,N} = Union{AbstractGPUArray{T,N}, WrappedGPUArray{T,N}}
 
+## broadcasting
+
+"""
+Abstract supertype for GPU array styles. The `N` parameter is the dimensionality.
+
+Downstream implementations should provide a concrete array style type that inherits from
+this supertype.
+"""
+abstract type AbstractGPUArrayStyle{N} <: Base.Broadcast.AbstractArrayStyle{N} end
 
 ## scalar iteration
 
