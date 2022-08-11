@@ -63,5 +63,14 @@ Base.iszero(x::AbstractGPUMatrix{T}) where {T} = all(iszero, x)
 function Base.isone(x::AbstractGPUMatrix{T}) where {T}
     n,m = size(x)
     m != n && return false
-    all(iszero, x-I)
+
+    # lazily perform `x-I`
+    bc = Broadcast.broadcasted(x, CartesianIndices(x)) do _x, inds
+        _x - (inds[1] == inds[2] ? one(_x) : zero(_x))
+    end
+    # call `GPUArrays.mapreducedim!` directly, which supports Broadcasted inputs
+    y = similar(x, Bool, 1)
+    GPUArrays.mapreducedim!(iszero, &, y, Broadcast.instantiate(bc); init=true)
+
+    Array(y)[]
 end
