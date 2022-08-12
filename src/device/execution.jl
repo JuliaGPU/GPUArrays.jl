@@ -6,8 +6,6 @@ abstract type AbstractGPUBackend end
 
 abstract type AbstractKernelContext end
 
-import GPUArraysCore: backend
-
 """
     gpu_call(kernel::Function, arg0, args...; kwargs...)
 
