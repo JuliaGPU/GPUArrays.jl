@@ -124,14 +124,6 @@
             A = oneunit(AT(rand(T, 2, 2)))
             @test A isa AT{T,2}
             @test Array(A) == oneunit(rand(T, 2, 2))
-
-            A = one(AT(rand(T, 2, 2)))
-            @test isone(A)
-            @test iszero(A) == false
-
-            A = zero(AT(rand(T, 2, 2)))
-            @test iszero(A)
-            @test isone(A) == false
         end
     end
 
