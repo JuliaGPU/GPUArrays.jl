@@ -222,6 +222,16 @@
         @test axpby!(alpha,x,beta,y) ≈ T.([7,10,13])
         @test axpy!(alpha,x,y) ≈ T.([8,12,16])
     end
+
+    @testset "iszero and isone" for T in eltypes
+        A = one(AT(rand(T, 2, 2)))
+        @test isone(A)
+        @test iszero(A) == false
+
+        A = zero(AT(rand(T, 2, 2)))
+        @test iszero(A)
+        @test isone(A) == false
+    end
 end
 
 @testsuite "linalg/mul!/vector-matrix" (AT, eltypes)->begin
