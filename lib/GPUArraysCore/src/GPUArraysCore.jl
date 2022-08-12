@@ -111,10 +111,6 @@ macro allowscalar(ex)
     end
 end
 
-## backend
-
-export backend
-
 """
     backend(T::Type)
     backend(x)
