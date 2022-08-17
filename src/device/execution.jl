@@ -6,14 +6,7 @@ abstract type AbstractGPUBackend end
 
 abstract type AbstractKernelContext end
 
-"""
-    backend(T::Type)
-    backend(x)
-
-Gets the GPUArrays back-end responsible for managing arrays of type `T`.
-"""
-backend(::Type) = error("This object is not a GPU array") # COV_EXCL_LINE
-backend(x) = backend(typeof(x))
+import GPUArraysCore: backend
 
 """
     gpu_call(kernel::Function, arg0, args...; kwargs...)
