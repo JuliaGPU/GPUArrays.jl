@@ -168,6 +168,12 @@
             mul!(X, D, B, α, β)
             mul!(Y, Diagonal(collect(d)), collect(B), α, β)
             @test collect(X) ≈ Y
+            mul!(X, B, D)
+            mul!(Y, collect(B), Diagonal(collect(d)))
+            @test collect(X) ≈ Y
+            mul!(X, B, D, α, β)
+            mul!(Y, collect(B), Diagonal(collect(d)), α, β)
+            @test collect(X) ≈ Y
         end
 
         @testset "ldiv! + Diagonal" begin
