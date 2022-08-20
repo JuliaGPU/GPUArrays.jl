@@ -198,7 +198,37 @@ else
         m′, n′ = size(B, 1), size(B, 2)
         m == d || throw(DimensionMismatch("right hand side has $m rows but D is $d by $d"))
         (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
-        @. B = α * dd* A + β * B
+        @. B = α * dd * A + β * B
+
+        B
+    end
+
+    function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
+                                A::AbstractGPUVecOrMat,
+                                D::Diagonal{<:Any, <:AbstractGPUArray})
+        dd = D.diag
+        d = length(dd)
+        m, n = size(A, 1), size(A, 2)
+        m′, n′ = size(B, 1), size(B, 2)
+        n == d || throw(DimensionMismatch("left hand side has $n columns but D is $d by $d"))
+        (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
+        @. B' = dd * A'
+
+        B
+    end
+
+    function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
+                                A::AbstractGPUVecOrMat,
+                                D::Diagonal{<:Any, <:AbstractGPUArray},
+                                α::Number,
+                                β::Number)
+        dd = D.diag
+        d = length(dd)
+        m, n = size(A, 1), size(A, 2)
+        m′, n′ = size(B, 1), size(B, 2)
+        n == d || throw(DimensionMismatch("left hand side has $n columns but D is $d by $d"))
+        (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
+        @. B' = α * dd * A' + β * B'
 
         B
     end
