@@ -225,8 +225,14 @@
         alpha, beta = 0.5, 2.0
         x = T.([2,4,6])
         y = T.([3,4,5])
-        @test axpby!(alpha,x,beta,y) ≈ T.([7,10,13])
-        @test axpy!(alpha,x,y) ≈ T.([8,12,16])
+        @test axpby!(alpha,AT(x),beta,AT(y)) ≈ T.([7,10,13])
+        @test axpy!(alpha,AT(x),AT(y)) ≈ T.([8,12,16])
+    end
+
+    @testset "dot" for T in eltypes
+        x = rand(T, 5)
+        y = rand(T, 5)
+        @test dot(AT(x), AT(y)) ≈ dot(x, y)
     end
 
     @testset "iszero and isone" for T in eltypes

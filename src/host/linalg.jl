@@ -441,6 +441,9 @@ function Base.similar(A::Hermitian{<:Any,<:AbstractGPUArray}, ::Type{T}) where T
     return Hermitian(B, ifelse(A.uplo == 'U', :U, :L))
 end
 
+## dot
+
+LinearAlgebra.dot(x::AbstractGPUArray, y::AbstractGPUArray) = mapreduce(dot, +, x, y)
 
 ## axp{b}y
 
