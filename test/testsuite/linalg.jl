@@ -221,12 +221,12 @@
         @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
     end
 
-    @testset "axp{b}y" for T in eltypes
+    @testset "axp{b}y" for T in (Float32, ComplexF32)
         @test compare(axpby!, AT, Ref(rand(T)), rand(T,5), Ref(rand(T)), rand(T,5))
         @test compare(axpy!, AT, Ref(rand(T)), rand(T,5), rand(T,5))
     end
 
-    @testset "dot" for T in eltypes
+    @testset "dot" for T in (Float32, ComplexF32)
         @test compare(dot, AT, rand(T,5), rand(T, 5))
     end
 
