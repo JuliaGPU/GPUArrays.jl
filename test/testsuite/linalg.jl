@@ -222,11 +222,12 @@
     end
 
     @testset "axp{b}y" for T in eltypes
-        alpha, beta = 0.5, 2.0
-        x = T.([2,4,6])
-        y = T.([3,4,5])
-        @test axpby!(alpha,x,beta,y) ≈ T.([7,10,13])
-        @test axpy!(alpha,x,y) ≈ T.([8,12,16])
+        @test compare(axpby!, AT, Ref(rand(T)), rand(T,5), Ref(rand(T)), rand(T,5))
+        @test compare(axpy!, AT, Ref(rand(T)), rand(T,5), rand(T,5))
+    end
+
+    @testset "dot" for T in eltypes
+        @test compare(dot, AT, rand(T,5), rand(T, 5))
     end
 
     @testset "iszero and isone" for T in eltypes
