@@ -120,4 +120,6 @@ Gets the GPUArrays back-end responsible for managing arrays of type `T`.
 backend(::Type) = error("This object is not a GPU array") # COV_EXCL_LINE
 backend(x) = backend(typeof(x))
 
+backend(::Type{WA}) where WA<:WrappedArray = backend(parent(WA)) # WrappedArray from Adapt for Base wrappers.
+
 end # module GPUArraysCore
