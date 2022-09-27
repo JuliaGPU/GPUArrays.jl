@@ -441,6 +441,34 @@ function Base.similar(A::Hermitian{<:Any,<:AbstractGPUArray}, ::Type{T}) where T
     return Hermitian(B, ifelse(A.uplo == 'U', :U, :L))
 end
 
+## rotate
+
+function LinearAlgebra.rotate!(x::AbstractGPUArray, y::AbstractGPUArray, c::Number, s::Number)
+    gpu_call(x, y, c, s; name="rotate!") do ctx, x, y, c, s
+        i = @linearidx x
+        @inbounds xi = x[i]
+        @inbounds yi = y[i]
+        @inbounds x[i] =       c  * xi + s * yi
+        @inbounds y[i] = -conj(s) * xi + c * yi
+        return
+    end
+    return x, y
+end
+
+## reflect
+
+function LinearAlgebra.reflect!(x::AbstractGPUArray, y::AbstractGPUArray, c::Number, s::Number)
+    gpu_call(x, y, c, s; name="reflect!") do ctx, x, y, c, s
+        i = @linearidx x
+        @inbounds xi = x[i]
+        @inbounds yi = y[i]
+        @inbounds x[i] =      c  * xi + s * yi
+        @inbounds y[i] = conj(s) * xi - c * yi
+        return
+    end
+    return x, y
+end
+
 ## dot
 
 LinearAlgebra.dot(x::AbstractGPUArray, y::AbstractGPUArray) = mapreduce(dot, +, x, y)

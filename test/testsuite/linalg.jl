@@ -230,6 +230,14 @@
         @test compare(dot, AT, rand(T,5), rand(T, 5))
     end
 
+    @testset "rotate!" for T in eltypes
+        @test compare(rotate!, AT, rand(T,5), rand(T,5), Ref(rand(real(T))), Ref(rand(T)))
+    end
+
+    @testset "reflect!" for T in eltypes
+        @test compare(reflect!, AT, rand(T,5), rand(T,5), Ref(rand(real(T))), Ref(rand(T)))
+    end
+
     @testset "iszero and isone" for T in eltypes
         A = one(AT(rand(T, 2, 2)))
         @test isone(A)
