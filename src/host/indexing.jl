@@ -87,3 +87,66 @@ end
         return
     end
 end
+
+
+## find*
+
+function Base.findfirst(f::Function, xs::AnyGPUArray)
+    indx = ndims(xs) == 1 ? (eachindex(xs), 1) :
+    (CartesianIndices(xs), CartesianIndex{ndims(xs)}())
+    function g(t1, t2)
+        (x, i), (y, j) = t1, t2
+        if i > j
+            t1, t2 = t2, t1
+            (x, i), (y, j) = t1, t2
+        end
+        x && return t1
+        y && return t2
+        return (false, indx[2])
+    end
+
+    res = mapreduce((x, y)->(f(x), y), g, xs, indx[1]; init = (false, indx[2]))
+    res[1] === true && return res[2]
+    return nothing
+end
+
+Base.findfirst(xs::AnyGPUArray{Bool}) = findfirst(identity, xs)
+
+function findminmax(minmax, binop, a::AnyGPUArray; init, dims)
+    function f(t1::Tuple{<:AbstractFloat,<:Any}, t2::Tuple{<:AbstractFloat,<:Any})
+        (x, i), (y, j) = t1, t2
+        if i > j
+            t1, t2 = t2, t1
+            (x, i), (y, j) = t1, t2
+        end
+
+        # Check for NaN first because NaN == NaN is false
+        isnan(x) && return t1
+        isnan(y) && return t2
+        minmax(x, y) == x && return t1
+        return t2
+    end
+
+    function f(t1, t2)
+        (x, i), (y, j) = t1, t2
+
+        binop(x, y) && return t1
+        x == y && return (x, min(i, j))
+        return t2
+    end
+
+    indx = ndims(a) == 1 ? (eachindex(a), 1) :
+                           (CartesianIndices(a), CartesianIndex{ndims(a)}())
+    if dims == Colon()
+        mapreduce(tuple, f, a, indx[1]; init = (init, indx[2]))
+    else
+        res = mapreduce(tuple, f, a, indx[1];
+                        init = (init, indx[2]), dims=dims)
+        vals = map(x->x[1], res)
+        inds = map(x->x[2], res)
+        return (vals, inds)
+    end
+end
+
+Base.findmax(a::AnyGPUArray; dims=:) = findminmax(max, >, a; init=typemin(eltype(a)), dims)
+Base.findmin(a::AnyGPUArray; dims=:) = findminmax(min, <, a; init=typemax(eltype(a)), dims)

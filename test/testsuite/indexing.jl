@@ -119,3 +119,94 @@ end
         @test compare((X,Y)->(X[1,:] = Y), AT, zeros(Float32, 2,2), ones(Float32, 2))
     end
 end
+
+@testsuite "indexing find" (AT, eltypes)->begin
+    @testset "findfirst" begin
+        # 1D
+        @test compare(findfirst, AT, rand(Bool, 100))
+        @test compare(x->findfirst(>(0.5f0), x), AT, rand(Float32, 100))
+        let x = fill(false, 10)
+            @test findfirst(x) == findfirst(AT(x))
+        end
+
+        # ND
+        let x = rand(Bool, 10, 10)
+            @test findfirst(x) == findfirst(AT(x))
+        end
+        let x = rand(Float32, 10, 10)
+            @test findfirst(>(0.5f0), x) == findfirst(>(0.5f0), AT(x))
+        end
+    end
+
+    @testset "findmax & findmin" begin
+        let x = rand(Float32, 100)
+            @test findmax(x) == findmax(AT(x))
+            @test findmax(x; dims=1) == Array.(findmax(AT(x); dims=1))
+
+            x[32] = x[33] = x[55] = x[66] = NaN32
+            @test isequal(findmax(x), findmax(AT(x)))
+            @test isequal(findmax(x; dims=1), Array.(findmax(AT(x); dims=1)))
+        end
+        let x = rand(Float32, 10, 10)
+            @test findmax(x) == findmax(AT(x))
+            @test findmax(x; dims=1) == Array.(findmax(AT(x); dims=1))
+            @test findmax(x; dims=2) == Array.(findmax(AT(x); dims=2))
+
+            x[rand(CartesianIndices((10, 10)), 10)] .= NaN
+            @test isequal(findmax(x), findmax(AT(x)))
+            @test isequal(findmax(x; dims=1), Array.(findmax(AT(x); dims=1)))
+        end
+        let x = rand(Float32, 10, 10, 10)
+            @test findmax(x) == findmax(AT(x))
+            @test findmax(x; dims=1) == Array.(findmax(AT(x); dims=1))
+            @test findmax(x; dims=2) == Array.(findmax(AT(x); dims=2))
+            @test findmax(x; dims=3) == Array.(findmax(AT(x); dims=3))
+
+            x[rand(CartesianIndices((10, 10, 10)), 20)] .= NaN
+            @test isequal(findmax(x), findmax(AT(x)))
+            @test isequal(findmax(x; dims=1), Array.(findmax(AT(x); dims=1)))
+            @test isequal(findmax(x; dims=2), Array.(findmax(AT(x); dims=2)))
+            @test isequal(findmax(x; dims=3), Array.(findmax(AT(x); dims=3)))
+        end
+
+        let x = rand(Float32, 100)
+            @test findmin(x) == findmin(AT(x))
+            @test findmin(x; dims=1) == Array.(findmin(AT(x); dims=1))
+
+            x[32] = x[33] = x[55] = x[66] = NaN32
+            @test isequal(findmin(x), findmin(AT(x)))
+            @test isequal(findmin(x; dims=1), Array.(findmin(AT(x); dims=1)))
+        end
+        let x = rand(Float32, 10, 10)
+            @test findmin(x) == findmin(AT(x))
+            @test findmin(x; dims=1) == Array.(findmin(AT(x); dims=1))
+            @test findmin(x; dims=2) == Array.(findmin(AT(x); dims=2))
+
+            x[rand(CartesianIndices((10, 10)), 10)] .= NaN
+            @test isequal(findmin(x), findmin(AT(x)))
+            @test isequal(findmin(x; dims=1), Array.(findmin(AT(x); dims=1)))
+            @test isequal(findmin(x; dims=2), Array.(findmin(AT(x); dims=2)))
+            @test isequal(findmin(x; dims=3), Array.(findmin(AT(x); dims=3)))
+        end
+        let x = rand(Float32, 10, 10, 10)
+            @test findmin(x) == findmin(AT(x))
+            @test findmin(x; dims=1) == Array.(findmin(AT(x); dims=1))
+            @test findmin(x; dims=2) == Array.(findmin(AT(x); dims=2))
+            @test findmin(x; dims=3) == Array.(findmin(AT(x); dims=3))
+
+            x[rand(CartesianIndices((10, 10, 10)), 20)] .= NaN
+            @test isequal(findmin(x), findmin(AT(x)))
+            @test isequal(findmin(x; dims=1), Array.(findmin(AT(x); dims=1)))
+            @test isequal(findmin(x; dims=2), Array.(findmin(AT(x); dims=2)))
+            @test isequal(findmin(x; dims=3), Array.(findmin(AT(x); dims=3)))
+        end
+    end
+
+    @testset "argmax & argmin" begin
+        @test compare(argmax, AT, rand(Int, 10))
+        @test compare(argmax, AT, -rand(Int, 10))
+
+        @test compare(argmin, AT, rand(Int, 10))
+        @test compare(argmin, AT, -rand(Int, 10))
+    end
+end
