@@ -2,19 +2,18 @@ steps:
   - label: "CUDA.jl"
     plugins:
       - JuliaCI/julia#v1:
-          version: 1.7
+          version: 1.8
       - JuliaCI/julia-coverage#v1:
           codecov: true
     command: |
-      julia -e 'using Pkg;
+      julia -e 'using Pkg
 
-                println("--- :julia: Instantiating project");
-                Pkg.develop(PackageSpec(path=pwd()));
-                Pkg.add(PackageSpec(name="CUDA", rev="master"));
-                Pkg.instantiate();
+                println("--- :julia: Instantiating project")
+                Pkg.develop(; path=pwd())
+                Pkg.develop(; name="CUDA")
 
-                println("+++ :julia: Running tests");
-                Pkg.test("CUDA"; coverage=true);'
+                println("+++ :julia: Running tests")
+                Pkg.test("CUDA"; coverage=true)'
     agents:
       queue: "juliagpu"
       cuda: "*"
@@ -24,22 +23,50 @@ steps:
   - label: "oneAPI.jl"
     plugins:
       - JuliaCI/julia#v1:
-          version: 1.7
+          version: 1.8
       - JuliaCI/julia-coverage#v1:
           codecov: true
     command: |
       julia -e 'using Pkg;
 
-                println("--- :julia: Instantiating project");
-                Pkg.develop(PackageSpec(path=pwd()));
-                Pkg.add(PackageSpec(name="oneAPI", rev="master"));
-                Pkg.instantiate();
+                println("--- :julia: Instantiating project")
+                Pkg.develop(; path=pwd())
+                Pkg.develop(; name="oneAPI")
 
-                println("+++ :julia: Running tests");
-                Pkg.test("oneAPI"; coverage=true);'
+                println("+++ :julia: Building support library")
+                include(joinpath(Pkg.devdir(), "oneAPI", "deps", "build_ci.jl"))
+
+                println("+++ :julia: Running tests")
+                Pkg.activate()
+                Pkg.test("oneAPI"; coverage=true)'
     agents:
       queue: "juliagpu"
       intel: "*"
+    if: build.message !~ /\[skip tests\]/
+    timeout_in_minutes: 60
+
+  - label: "Metal.jl"
+    plugins:
+      - JuliaCI/julia#v1:
+          version: 1.8
+      - JuliaCI/julia-coverage#v1:
+          codecov: true
+    command: |
+      julia -e 'using Pkg;
+
+                println("--- :julia: Instantiating project")
+                Pkg.develop(; path=pwd())
+                Pkg.develop(; name="Metal")
+
+                println("+++ :julia: Building support library")
+                include(joinpath(Pkg.devdir(), "Metal", "deps", "build_ci.jl"))
+
+                println("+++ :julia: Running tests")
+                Pkg.activate()
+                Pkg.test("Metal"; coverage=true)'
+    agents:
+      queue: "juliagpu"
+      metal: "*"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
 
