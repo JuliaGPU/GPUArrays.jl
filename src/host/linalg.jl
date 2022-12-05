@@ -127,6 +127,7 @@ if VERSION <= v"1.8-"
         info = findfirst(!_isrealandpositive, D.diag)
         if isnothing(info)
             D.diag .= sqrt.(D.diag)
+            info = 0
         elseif check
             throw(PosDefException(info))
         else
@@ -140,6 +141,7 @@ else
         info = findfirst(!_isrealandpositive, D.diag)
         if isnothing(info)
             D.diag .= sqrt.(D.diag)
+            info = 0
         elseif check
             throw(PosDefException(info))
         else
