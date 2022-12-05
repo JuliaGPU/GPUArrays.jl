@@ -58,6 +58,19 @@ function allowscalar(f::Base.Callable)
     task_local_storage(f, :ScalarIndexing, ScalarAllowed)
 end
 
+"""
+    allowscalar(::Bool)
+
+Calling this with `false` replaces the default warning about scalar indexing
+(show once per session) with an error.
+
+Instead of calling this with `true`, the preferred style is to allow this locally.
+This can be done with the `allowscalar(::Function)` method (with a `do` block)
+or with the [`@allowscalar`](@ref) macro.
+
+Writes to `task_local_storage` for `:ScalarIndexing`. The default is `:ScalarWarn`,
+and this function sets `:ScalarAllowed` or `:ScalarDisallowed`.
+"""
 function allowscalar(allow::Bool=true)
     if allow
         Base.depwarn("allowscalar([true]) is deprecated, use `allowscalar() do end` or `@allowscalar` to denote exactly which operations can use scalar operations.", :allowscalar)
