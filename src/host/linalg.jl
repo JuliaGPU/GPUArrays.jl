@@ -131,7 +131,7 @@ if VERSION <= v"1.8-"
         elseif check
             throw(PosDefException(info))
         else
-            D.diag[begin:info] .= sqrt.(D.diag[begin:info])
+            D.diag[begin:info-1] .= sqrt.(D.diag[begin:info-1])
         end
         return Cholesky(D, 'U', convert(LinearAlgebra.BlasInt, info))
     end
@@ -145,7 +145,7 @@ else
         elseif check
             throw(PosDefException(info))
         else
-            D.diag[begin:info] .= sqrt.(D.diag[begin:info])
+            D.diag[begin:info-1] .= sqrt.(D.diag[begin:info-1])
         end
         return Cholesky(D, 'U', convert(LinearAlgebra.BlasInt, info))
     end
