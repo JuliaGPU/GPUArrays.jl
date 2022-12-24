@@ -24,8 +24,8 @@ end
 
 function identity_kernel(ctx::AbstractKernelContext, res::AbstractArray{T}, stride, val) where T
     i = linear_index(ctx)
-    i > stride && return
     ilin = (stride * (i - 1)) + i
+    ilin > length(res) && return
     @inbounds res[ilin] = val
     return
 end

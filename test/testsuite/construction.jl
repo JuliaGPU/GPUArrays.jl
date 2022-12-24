@@ -178,5 +178,11 @@
             @test eltype(x1) == T
             @test Array(x1) ≈ x
         end
+
+        @testset "JuliaGPU/GPUArrays.jl#439" begin
+            x = AT{Float32}(I, 500, 300)
+            y = Array{Float32}(I, 500, 300)
+            @test Array(x) == y
+        end
     end
 end
