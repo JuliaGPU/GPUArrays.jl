@@ -25,8 +25,17 @@ Statistics._std(A::AbstractGPUArray, corrected::Bool, mean, ::Colon) =
 # Revert https://github.com/JuliaLang/Statistics.jl/pull/25
 Statistics._mean(A::AbstractGPUArray, ::Colon)    = sum(A) / length(A)
 Statistics._mean(f, A::AbstractGPUArray, ::Colon) = sum(f, A) / length(A)
-Statistics._mean(A::AbstractGPUArray, dims)    = mean!(Base.reducedim_init(t -> t/2, +, A, dims), A)
-Statistics._mean(f, A::AbstractGPUArray, dims) = sum(f, A, dims=dims) / mapreduce(i -> size(A, i), *, unique(dims); init=1)
+
+function Statistics._mean(A::AbstractGPUArray, dims)
+    T = float(eltype(A))
+    λ = convert(T, inv(_mean_denom(A, dims)))
+    sum(Base.Fix1(*,λ), A; dims)
+end
+function Statistics._mean(f, A::AbstractGPUArray, dims)
+    T = float(eltype(A))
+    λ = convert(T, inv(_mean_denom(A, dims)))
+    sum(Base.Fix1(*,λ) ∘ f, A; dims)
+end
 
 function Statistics.covzm(x::AbstractGPUMatrix, vardim::Int=1; corrected::Bool=true)
     C = Statistics.unscaled_covzm(x, vardim)
