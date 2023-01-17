@@ -218,7 +218,7 @@ else
         m′, n′ = size(B, 1), size(B, 2)
         n == d || throw(DimensionMismatch("left hand side has $n columns but D is $d by $d"))
         (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
-        @. B' = dd * A'
+        B .= A .* transpose(dd)
 
         B
     end
@@ -234,7 +234,7 @@ else
         m′, n′ = size(B, 1), size(B, 2)
         n == d || throw(DimensionMismatch("left hand side has $n columns but D is $d by $d"))
         (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
-        @. B' = α * dd * A' + β * B'
+        B .= α * A .* transpose(dd) + β * B
 
         B
     end

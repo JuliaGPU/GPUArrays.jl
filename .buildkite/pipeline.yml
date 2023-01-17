@@ -35,9 +35,9 @@ steps:
 
                 println("+++ :julia: Building support library")
                 include(joinpath(Pkg.devdir(), "oneAPI", "deps", "build_ci.jl"))
+                Pkg.activate()
 
                 println("+++ :julia: Running tests")
-                Pkg.activate()
                 Pkg.test("oneAPI"; coverage=true)'
     agents:
       queue: "juliagpu"
@@ -60,13 +60,14 @@ steps:
 
                 println("+++ :julia: Building support library")
                 include(joinpath(Pkg.devdir(), "Metal", "deps", "build_ci.jl"))
+                Pkg.activate()
 
                 println("+++ :julia: Running tests")
-                Pkg.activate()
                 Pkg.test("Metal"; coverage=true)'
     agents:
-      queue: "juliagpu"
-      metal: "*"
+      queue: "juliaecosystem"
+      os: "macos"
+      arch: "aarch64"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
 
