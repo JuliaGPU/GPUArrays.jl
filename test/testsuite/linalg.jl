@@ -126,7 +126,8 @@
 
         @testset "cholesky + Diagonal" begin
             n = 128
-            d = AT(rand(Float32, n))
+            # Add one in order prevent failures due to random numbers being zero
+            d = AT(zeros(Float32, n) .+ one(Float32))
             D = Diagonal(d)
             F = collect(D)
             @test collect(cholesky(D).U) ≈ collect(cholesky(F).U)
