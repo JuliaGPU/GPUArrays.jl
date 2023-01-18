@@ -87,3 +87,96 @@ end
         return
     end
 end
+
+
+## find*
+
+# simple array type that returns the index used to access an element, while
+# retaining the dimensionality of the original array. this can be used to
+# broadcast or reduce an array together with its indices, whereas normally
+# combining e.g. a 2x2 array with its 4-element eachindex array would result
+# in a 4x4 broadcast or reduction.
+struct EachIndex{T,N,IS} <: AbstractArray{T,N}
+    dims::NTuple{N,Int}
+    indices::IS
+end
+EachIndex(xs::AbstractArray) =
+    EachIndex{typeof(firstindex(xs)), ndims(xs), typeof(eachindex(xs))}(
+              size(xs), eachindex(xs))
+Base.size(ei::EachIndex) = ei.dims
+Base.getindex(ei::EachIndex, i::Int) = ei.indices[i]
+Base.IndexStyle(::Type{<:EachIndex}) = Base.IndexLinear()
+
+function Base.findfirst(f::Function, xs::AnyGPUArray)
+    indices = EachIndex(xs)
+    dummy_index = first(indices)
+
+    # given two pairs of (istrue, index), return the one with the smallest index
+    function reduction(t1, t2)
+        (x, i), (y, j) = t1, t2
+        if i > j
+            t1, t2 = t2, t1
+            (x, i), (y, j) = t1, t2
+        end
+        x && return t1
+        y && return t2
+        return (false, dummy_index)
+    end
+
+    res = mapreduce((x, y)->(f(x), y), reduction, xs, indices;
+                    init = (false, dummy_index))
+    if res[1]
+        # out of consistency with Base.findarray, return a CartesianIndex
+        # when the input is a multidimensional array
+        ndims(xs) == 1 && return res[2]
+        return CartesianIndices(xs)[res[2]]
+    else
+        return nothing
+    end
+end
+
+Base.findfirst(xs::AnyGPUArray{Bool}) = findfirst(identity, xs)
+
+function findminmax(binop, xs::AnyGPUArray; init, dims)
+    indices = EachIndex(xs)
+    dummy_index = firstindex(xs)
+
+    function reduction(t1, t2)
+        (x, i), (y, j) = t1, t2
+
+        binop(x, y) && return t2
+        x == y && return (x, min(i, j))
+        return t1
+    end
+
+    @static if VERSION < v"1.7.0-DEV.119"
+    # before JuliaLang/julia#35316, isless/isgreated did not order NaNs last
+    function reduction(t1, t2)
+        (x, i), (y, j) = t1, t2
+
+        isnan(x) && return t1
+        isnan(y) && return t2
+
+        binop(x, y) && return t2
+        x == y && return (x, min(i, j))
+        return t1
+    end
+    end
+
+    if dims == Colon()
+        res = mapreduce(tuple, reduction, xs, indices; init = (init, dummy_index))
+
+        # out of consistency with Base.findarray, return a CartesianIndex
+        # when the input is a multidimensional array
+        return (res[1], ndims(xs) == 1 ? res[2] : CartesianIndices(xs)[res[2]])
+    else
+        res = mapreduce(tuple, reduction, xs, indices;
+                        init = (init, dummy_index), dims=dims)
+        vals = map(x->x[1], res)
+        inds = map(x->ndims(xs) == 1 ? x[2] : CartesianIndices(xs)[x[2]], res)
+        return (vals, inds)
+    end
+end
+
+Base.findmax(a::AnyGPUArray; dims=:) = findminmax(Base.isless, a; init=typemin(eltype(a)), dims)
+Base.findmin(a::AnyGPUArray; dims=:) = findminmax(Base.isgreater, a; init=typemax(eltype(a)), dims)
