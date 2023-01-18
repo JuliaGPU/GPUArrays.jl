@@ -119,29 +119,35 @@ end
 
 Base.copy(D::Diagonal{T, <:AbstractGPUArray{T, N}}) where {T, N} = Diagonal(copy(D.diag))
 
+_isrealandpositive(x) = isreal(x) && real(x) > 0
+
 if VERSION <= v"1.8-"
     function LinearAlgebra.cholesky!(D::Diagonal{<:Any, <:AbstractGPUArray},
                                      ::Val{false} = Val(false); check::Bool = true)
-        info = 0
-        if mapreduce(x -> isreal(x) && isposdef(x), &, D.diag)
+        info = findfirst(!_isrealandpositive, D.diag)
+        if isnothing(info)
             D.diag .= sqrt.(D.diag)
+            info = 0
+        elseif check
+            throw(PosDefException(info))
         else
-            info = findfirst(x -> !isreal(x) || !isposdef(x), collect(D.diag))
-            check && throw(PosDefException(info))
+            D.diag[begin:info-1] .= sqrt.(D.diag[begin:info-1])
         end
-        Cholesky(D, 'U', convert(LinearAlgebra.BlasInt, info))
+        return Cholesky(D, 'U', convert(LinearAlgebra.BlasInt, info))
     end
 else
     function LinearAlgebra.cholesky!(D::Diagonal{<:Any, <:AbstractGPUArray},
                                     ::NoPivot = NoPivot(); check::Bool = true)
-        info = 0
-        if mapreduce(x -> isreal(x) && isposdef(x), &, D.diag)
+        info = findfirst(!_isrealandpositive, D.diag)
+        if isnothing(info)
             D.diag .= sqrt.(D.diag)
+            info = 0
+        elseif check
+            throw(PosDefException(info))
         else
-            info = findfirst(x -> !isreal(x) || !isposdef(x), collect(D.diag))
-            check && throw(PosDefException(info))
+            D.diag[begin:info-1] .= sqrt.(D.diag[begin:info-1])
         end
-        Cholesky(D, 'U', convert(LinearAlgebra.BlasInt, info))
+        return Cholesky(D, 'U', convert(LinearAlgebra.BlasInt, info))
     end
 end
 
