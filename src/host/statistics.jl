@@ -2,13 +2,15 @@ using Statistics
 
 function Statistics.varm(A::AbstractGPUArray{<:Real}, M::AbstractArray{<:Real};
                          dims, corrected::Bool=true)
+    T = float(eltype(A))
+    λ = convert(T, inv(_mean_denom(A, dims) - corrected))
     #B = (A .- M).^2
     # NOTE: the above broadcast promotes to Float64 and uses power_by_squaring...
-    B = broadcast(A, M) do a, m
+    B = Broadcast.broadcasted(A, M) do a, m
         x = (a - m)
-        x*x
+        λ * x * x
     end
-    sum(B, dims=dims)/(prod(size(A)[[dims...]])::Int-corrected)
+    sum(Broadcast.instantiate(B); dims)
 end
 
 Statistics.stdm(A::AbstractGPUArray{<:Real},m::AbstractArray{<:Real}, dim::Int; corrected::Bool=true) =
@@ -23,8 +25,17 @@ Statistics._std(A::AbstractGPUArray, corrected::Bool, mean, ::Colon) =
 # Revert https://github.com/JuliaLang/Statistics.jl/pull/25
 Statistics._mean(A::AbstractGPUArray, ::Colon)    = sum(A) / length(A)
 Statistics._mean(f, A::AbstractGPUArray, ::Colon) = sum(f, A) / length(A)
-Statistics._mean(A::AbstractGPUArray, dims)    = mean!(Base.reducedim_init(t -> t/2, +, A, dims), A)
-Statistics._mean(f, A::AbstractGPUArray, dims) = sum(f, A, dims=dims) / mapreduce(i -> size(A, i), *, unique(dims); init=1)
+
+function Statistics._mean(A::AbstractGPUArray, dims)
+    T = float(eltype(A))
+    λ = convert(T, inv(_mean_denom(A, dims)))
+    sum(Base.Fix1(*,λ), A; dims)
+end
+function Statistics._mean(f, A::AbstractGPUArray, dims)
+    T = float(eltype(A))
+    λ = convert(T, inv(_mean_denom(A, dims)))
+    sum(Base.Fix1(*,λ) ∘ f, A; dims)
+end
 
 function Statistics.covzm(x::AbstractGPUMatrix, vardim::Int=1; corrected::Bool=true)
     C = Statistics.unscaled_covzm(x, vardim)
@@ -49,3 +60,7 @@ function Statistics.corzm(x::AbstractGPUMatrix, vardim::Int=1)
     c = Statistics.unscaled_covzm(x, vardim)
     return Statistics.cov2cor!(c, sqrt.(diag(c)))
 end
+
+_mean_denom(x::AbstractArray, dims::Integer) = size(x, dims)
+_mean_denom(x::AbstractArray, dims::Colon) = length(x)
+_mean_denom(x::AbstractArray, dims) = prod(size(x,d) for d in unique(dims); init=1)
