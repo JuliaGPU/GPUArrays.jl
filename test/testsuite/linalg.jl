@@ -2,8 +2,12 @@
     @testset "adjoint and transpose" begin
         @test compare(adjoint, AT, rand(Float32, 32, 32))
         @test compare(adjoint!, AT, rand(Float32, 32, 32), rand(Float32, 32, 32))
+        @test compare(adjoint!, AT, rand(Float32, 1, 32), rand(Float32, 32))
+        @test compare(adjoint!, AT, rand(Float32, 32), rand(Float32, 1, 32))
         @test compare(transpose, AT, rand(Float32, 32, 32))
         @test compare(transpose!, AT, rand(Float32, 32, 32), rand(Float32, 32, 32))
+        @test compare(transpose!, AT, rand(Float32, 1, 32), rand(Float32, 32))
+        @test compare(transpose!, AT, rand(Float32, 32), rand(Float32, 1, 32))
         @test compare((x,y)->copyto!(x, adjoint(y)), AT, rand(Float32, 32, 32), rand(Float32, 32, 32))
         @test compare((x,y)->copyto!(x, transpose(y)), AT, rand(Float32, 32, 32), rand(Float32, 32, 32))
         @test compare(transpose!, AT, Array{Float32}(undef, 32, 32), rand(Float32, 32, 32))

@@ -2,17 +2,44 @@
 
 ## transpose and adjoint
 
-function transpose_f!(f, At::AbstractGPUArray{T, 2}, A::AbstractGPUArray{T, 2}) where T
-    gpu_call(At, A) do ctx, At, A
-        idx = @cartesianidx A
-        @inbounds At[idx[2], idx[1]] = f(A[idx[1], idx[2]])
+function LinearAlgebra.transpose!(B::AbstractGPUVector, A::AbstractGPUMatrix)
+    axes(B,1) == axes(A,2) && axes(A,1) == 1:1 || throw(DimensionMismatch("transpose"))
+    copyto!(B, A)
+end
+function LinearAlgebra.transpose!(B::AbstractGPUMatrix, A::AbstractGPUVector)
+    axes(B,2) == axes(A,1) && axes(B,1) == 1:1 || throw(DimensionMismatch("transpose"))
+    copyto!(B, A)
+end
+function LinearAlgebra.adjoint!(B::AbstractGPUVector, A::AbstractGPUMatrix)
+    axes(B,1) == axes(A,2) && axes(A,1) == 1:1 || throw(DimensionMismatch("adjoint"))
+    gpu_call(B, A) do ctx, B, A
+        idx = @linearidx B
+        @inbounds B[idx] = adjoint(A[1, idx])
         return
     end
-    At
+    B
+end
+function LinearAlgebra.adjoint!(B::AbstractGPUMatrix, A::AbstractGPUVector)
+    axes(B,2) == axes(A,1) && axes(B,1) == 1:1 || throw(DimensionMismatch("adjoint"))
+    gpu_call(B, A) do ctx, B, A
+        idx = @linearidx A
+        @inbounds B[1, idx] = adjoint(A[idx])
+        return
+    end
+    B
 end
 
-LinearAlgebra.transpose!(At::AbstractGPUArray, A::AbstractGPUArray) = transpose_f!(transpose, At, A)
-LinearAlgebra.adjoint!(At::AbstractGPUArray, A::AbstractGPUArray) = transpose_f!(adjoint, At, A)
+LinearAlgebra.transpose!(B::AbstractGPUArray, A::AbstractGPUArray) = transpose_f!(transpose, B, A)
+LinearAlgebra.adjoint!(B::AbstractGPUArray, A::AbstractGPUArray) = transpose_f!(adjoint, B, A)
+function transpose_f!(f, B::AbstractGPUMatrix{T}, A::AbstractGPUMatrix{T}) where T
+    axes(B,1) == axes(A,2) && axes(B,2) == axes(A,1) || throw(DimensionMismatch(string(f)))
+    gpu_call(B, A) do ctx, B, A
+        idx = @cartesianidx A
+        @inbounds B[idx[2], idx[1]] = f(A[idx[1], idx[2]])
+        return
+    end
+    B
+end
 
 function Base.copyto!(A::AbstractGPUArray{T,N}, B::Adjoint{T, <: AbstractGPUArray{T,N}}) where {T,N}
     adjoint!(A, B.parent)
