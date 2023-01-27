@@ -52,7 +52,9 @@ end
 
     # grid-stride kernel
     function broadcast_kernel(ctx, dest, bc′, nelem)
-        for i in 1:nelem
+        i = 0
+        while i < nelem
+            i += 1
             I = @cartesianidx(dest, i)
             @inbounds dest[I] = bc′[I]
         end
