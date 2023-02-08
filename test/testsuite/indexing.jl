@@ -55,7 +55,7 @@
         @test compare(x->setindex!(x,1,1), AT, zeros(Int, 2))
 
         # issue #319
-        @test compare(x->setindex!(x,1,1,1), AT, zeros(Float64, 2, 2))
+        @test compare(x->setindex!(x,1,1,1), AT, zeros(Float32, 2, 2))
     end
 end
 
