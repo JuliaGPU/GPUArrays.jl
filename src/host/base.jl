@@ -4,8 +4,7 @@ import Base: _RepeatInnerOuter
 # Handle `out = repeat(x; inner)` by parallelizing over `out` array This can benchmark
 # faster if repeating elements along the first axis (i.e. `inner=(n, ones...)`), as data
 # access can be contiguous on write.
-function repeat_inner_dst_kernel!(
-    ctx::AbstractKernelContext,
+@kernel function repeat_inner_dst_kernel!(
     xs::AbstractArray{<:Any, N},
     inner::NTuple{N, Int},
     out::AbstractArray{<:Any, N}
@@ -13,27 +12,25 @@ function repeat_inner_dst_kernel!(
     # Get the "stride" index in each dimension, where the size
     # of the stride is given by `inner`. The stride-index (sdx) then
     # corresponds to the index of the repeated value in `xs`.
-    odx = @cartesianidx out
+    odx = @index(Global, Cartesian)
     dest_inds = odx.I
     sdx = ntuple(N) do i
         @inbounds (dest_inds[i] - 1) ÷ inner[i] + 1
     end
     @inbounds out[odx] = xs[CartesianIndex(sdx)]
-    return nothing
 end
 
 # Handle `out = repeat(x; inner)` by parallelizing over the `xs` array This tends to
 # benchmark faster by having fewer read operations and avoiding the costly division
 # operation. Additionally, when repeating over the trailing dimension. `inner=(ones..., n)`,
 # data access can be contiguous during both the read and write operations.
-function repeat_inner_src_kernel!(
-    ctx::AbstractKernelContext,
+@kernel function repeat_inner_src_kernel!(
     xs::AbstractArray{<:Any, N},
     inner::NTuple{N, Int},
     out::AbstractArray{<:Any, N}
 ) where {N}
     # Get single element from src
-    idx = @cartesianidx xs
+    idx = @index(Global, Cartesian)
     @inbounds val = xs[idx]
 
     # Loop over "repeat" indices of inner
@@ -44,7 +41,6 @@ function repeat_inner_src_kernel!(
         end
         @inbounds out[CartesianIndex(odx)] = val
     end
-    return nothing
 end
 
 function repeat_inner(xs::AnyGPUArray, inner)
@@ -64,23 +60,24 @@ function repeat_inner(xs::AnyGPUArray, inner)
     # relevant benchmarks.
     if argmax(inner) == firstindex(inner)
         # Parallelize over the destination array
-        gpu_call(repeat_inner_dst_kernel!, xs, inner, out; elements=prod(size(out)))
+        kernel = repeat_inner_dst_kernel!(get_backend(out))
+        kernel(xs, inner, out; ndrange=size(out))
     else
         # Parallelize over the source array
-        gpu_call(repeat_inner_src_kernel!, xs, inner, out; elements=prod(size(xs)))
+        kernel = repeat_inner_src_kernel!(get_backend(xs))
+        kernel(xs, inner, out; ndrange=size(xs))
     end
     return out
 end
 
-function repeat_outer_kernel!(
-    ctx::AbstractKernelContext,
+@kernel function repeat_outer_kernel!(
     xs::AbstractArray{<:Any, N},
     xssize::NTuple{N},
     outer::NTuple{N},
     out::AbstractArray{<:Any, N}
 ) where {N}
     # Get index to input element
-    idx = @cartesianidx xs
+    idx = @index(Global, Cartesian)
     @inbounds val = xs[idx]
 
     # Loop over repeat indices, copying val to out
@@ -91,14 +88,13 @@ function repeat_outer_kernel!(
         end
         @inbounds out[CartesianIndex(odx)] = val
     end
-
-    return nothing
 end
 
 function repeat_outer(xs::AnyGPUArray, outer)
     out = similar(xs, eltype(xs), outer .* size(xs))
     any(==(0), size(out)) && return out # consistent with `Base.repeat`
-    gpu_call(repeat_outer_kernel!, xs, size(xs), outer, out; elements=length(xs))
+    kernel = repeat_outer_kernel!(get_backend(xs))
+    kernel(xs, size(xs), outer, out; ndrange=size(xs))
     return out
 end
 
