@@ -11,29 +11,30 @@ Base.convert(::Type{T}, a::AbstractArray) where {T<:AbstractGPUArray} = a isa T 
 
 function Base.fill!(A::AnyGPUArray{T}, x) where T
     length(A) == 0 && return A
-    gpu_call(A, convert(T, x)) do ctx, a, val
-        idx = @linearidx(a)
+    @kernel fill!(a, val)
+        idx = @index(Linear, Global)
         @inbounds a[idx] = val
-        return
     end
+    kernel = fill!(backend(A))
+    kernel(A, x)
     A
 end
 
 
 ## identity matrices
 
-function identity_kernel(ctx::AbstractKernelContext, res::AbstractArray{T}, stride, val) where T
-    i = linear_index(ctx)
+@kernel function identity_kernel(ctx::AbstractKernelContext, res::AbstractArray{T}, stride, val) where T
+    i = @index(Global, Linear)
     ilin = (stride * (i - 1)) + i
     ilin > length(res) && return
     @inbounds res[ilin] = val
-    return
 end
 
 function (T::Type{<: AnyGPUArray{U}})(s::UniformScaling, dims::Dims{2}) where {U}
     res = similar(T, dims)
     fill!(res, zero(U))
-    gpu_call(identity_kernel, res, size(res, 1), s.λ; elements=minimum(dims))
+    kernel = identity_kernel(backend(res))
+    kernel(res, size(res, 1), s.λ; ndrange=minimum(dims))
     res
 end
 
@@ -43,7 +44,8 @@ end
 
 function Base.copyto!(A::AbstractGPUMatrix{T}, s::UniformScaling) where T
     fill!(A, zero(T))
-    gpu_call(identity_kernel, A, size(A, 1), s.λ; elements=minimum(size(A)))
+    kernel = identity_kernel(backend(A))
+    kernel(A, size(A, 1), s.λ; ndrange=minimum(size(A)))
     A
 end
 
@@ -52,7 +54,8 @@ function _one(unit::T, x::AbstractGPUMatrix) where {T}
     m==n || throw(DimensionMismatch("multiplicative identity defined only for square matrices"))
     I = similar(x, T)
     fill!(I, zero(T))
-    gpu_call(identity_kernel, I, m, unit; elements=m)
+    kernel = identity_kernel(backend(I))
+    kernel(I, m, unit; ndrange=m)
     I
 end
 
