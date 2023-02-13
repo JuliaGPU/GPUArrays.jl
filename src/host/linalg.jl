@@ -29,9 +29,9 @@ function LinearAlgebra.adjoint!(B::AbstractGPUMatrix, A::AbstractGPUVector)
     B
 end
 
-LinearAlgebra.transpose!(B::AbstractGPUArray, A::AbstractGPUArray) = transpose_f!(transpose, B, A)
-LinearAlgebra.adjoint!(B::AbstractGPUArray, A::AbstractGPUArray) = transpose_f!(adjoint, B, A)
-function transpose_f!(f, B::AbstractGPUMatrix{T}, A::AbstractGPUMatrix{T}) where T
+LinearAlgebra.transpose!(B::AnyGPUArray, A::AnyGPUArray) = transpose_f!(transpose, B, A)
+LinearAlgebra.adjoint!(B::AnyGPUArray, A::AnyGPUArray) = transpose_f!(adjoint, B, A)
+function transpose_f!(f, B::AnyGPUMatrix{T}, A::AnyGPUMatrix{T}) where T
     axes(B,1) == axes(A,2) && axes(B,2) == axes(A,1) || throw(DimensionMismatch(string(f)))
     gpu_call(B, A) do ctx, B, A
         idx = @cartesianidx A
