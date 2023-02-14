@@ -55,7 +55,14 @@ end
         i = 0
         while i < nelem
             i += 1
-            I = @cartesianidx(dest, i)
+            # HACK: cartesian iteration is slow, so avoid it if possible
+            # TODO: generalize this, much like how `eachindex` picks an appropriate iterator
+            #       (::AnyGPUArray methods shouldn't be hardcoded to use linear indexing)
+            I = if isa(IndexStyle(dest), IndexLinear) && isa(IndexStyle(bc′), IndexLinear)
+                @linearidx(dest, i)
+            else
+                @cartesianidx(dest, i)
+            end
             @inbounds dest[I] = bc′[I]
         end
         return
