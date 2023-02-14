@@ -6,7 +6,8 @@ using Adapt
 ## essential types
 
 export AbstractGPUArray, AbstractGPUVector, AbstractGPUMatrix, AbstractGPUVecOrMat,
-       WrappedGPUArray, AnyGPUArray, AbstractGPUArrayStyle, AnyGPUArray, AnyGPUMatrix
+       WrappedGPUArray, AnyGPUArray, AbstractGPUArrayStyle,
+       AnyGPUArray, AnyGPUVector, AnyGPUMatrix
 
 """
     AbstractGPUArray{T, N} <: DenseArray{T, N}
