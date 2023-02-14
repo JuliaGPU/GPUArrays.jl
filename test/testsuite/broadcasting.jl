@@ -62,6 +62,13 @@ function broadcasting(AT, eltypes)
                 end
             end
 
+            @testset "Number" begin
+                A = AT(rand(ET, N))
+                x = rand(ET)
+                A .= x
+                @test all(isequal(x), Array(A))
+            end
+
             @testset "Adjoint and Transpose" begin
                 A = AT(rand(ET, N))
                 A' .= ET(2)
