@@ -69,8 +69,11 @@ end
                 # also see maleadt/StaticCartesian.jl, which implements this in Julia,
                 # but does not result in an additional speed-up on tested back-ends.
                 #
-                # XXX: why is this *faster* on Metal.jl when not using @inbounds?
-                I = #=@inbounds=# Is[i]
+                # in addition, we use @inbounds to avoid bounds checks, but we also need to
+                # inform the compiler about the bounds that we are assuming. this is done
+                # using the assume intrinsic, and in case of Metal yields a 8x speed-up.
+                assume(1 <= i <= length(Is))
+                I = @inbounds Is[i]
             end
 
             val = if isa(IndexStyle(bc′), IndexCartesian)
