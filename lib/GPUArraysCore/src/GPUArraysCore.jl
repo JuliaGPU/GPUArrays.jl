@@ -6,8 +6,8 @@ using Adapt
 ## essential types
 
 export AbstractGPUArray, AbstractGPUVector, AbstractGPUMatrix, AbstractGPUVecOrMat,
-       WrappedGPUArray, AnyGPUArray, AbstractGPUArrayStyle,
-       AnyGPUArray, AnyGPUVector, AnyGPUMatrix
+       WrappedGPUArray, AnyGPUArray, AbstractGPUArrayStyle, 
+       AnyArray, AnyGPUArray, AnyGPUVector, AnyGPUMatrix, AnyGPUVecOrMat
 
 """
     AbstractGPUArray{T, N} <: DenseArray{T, N}
@@ -25,8 +25,10 @@ const AbstractGPUVecOrMat{T} = Union{AbstractGPUArray{T, 1}, AbstractGPUArray{T,
 # convenience aliases for working with wrapped arrays
 const WrappedGPUArray{T,N} = WrappedArray{T,N,AbstractGPUArray,AbstractGPUArray{T,N}}
 const AnyGPUArray{T,N} = Union{AbstractGPUArray{T,N}, WrappedGPUArray{T,N}}
+const AnyArray{T,N} = Union{AbstractArray{T,N}, WrappedArray{T,N, AbstractArray,AbstractArray{T,N}}}
 const AnyGPUVector{T} = AnyGPUArray{T, 1}
 const AnyGPUMatrix{T} = AnyGPUArray{T, 2}
+const AnyGPUVecOrMat{T} = Union{AnyGPUArray{T, 1}, AnyGPUArray{T, 2}}
 
 ## broadcasting
 
