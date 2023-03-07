@@ -206,9 +206,9 @@ if VERSION < v"1.8-"
         return B
     end
 else
-    function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
-                                D::Diagonal{<:Any, <:AbstractGPUArray},
-                                A::AbstractGPUVecOrMat)
+    function LinearAlgebra.mul!(B::AnyGPUVecOrMat,
+                                D::Diagonal{<:Any, <:AnyGPUArray},
+                                A::AnyGPUVecOrMat)
         dd = D.diag
         d = length(dd)
         m, n = size(A, 1), size(A, 2)
@@ -220,9 +220,9 @@ else
         B
     end
 
-    function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
-                                D::Diagonal{<:Any, <:AbstractGPUArray},
-                                A::AbstractGPUVecOrMat,
+    function LinearAlgebra.mul!(B::AnyGPUVecOrMat,
+                                D::Diagonal{<:Any, <:AnyGPUArray},
+                                A::AnyGPUVecOrMat,
                                 α::Number,
                                 β::Number)
         dd = D.diag
@@ -236,9 +236,9 @@ else
         B
     end
 
-    function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
-                                A::AbstractGPUVecOrMat,
-                                D::Diagonal{<:Any, <:AbstractGPUArray})
+    function LinearAlgebra.mul!(B::AnyGPUVecOrMat,
+                                A::AnyGPUVecOrMat,
+                                D::Diagonal{<:Any, <:AnyGPUArray})
         dd = D.diag
         d = length(dd)
         m, n = size(A, 1), size(A, 2)
@@ -250,9 +250,9 @@ else
         B
     end
 
-    function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
-                                A::AbstractGPUVecOrMat,
-                                D::Diagonal{<:Any, <:AbstractGPUArray},
+    function LinearAlgebra.mul!(B::AnyGPUVecOrMat,
+                                A::AnyGPUVecOrMat,
+                                D::Diagonal{<:Any, <:AnyGPUArray},
                                 α::Number,
                                 β::Number)
         dd = D.diag
@@ -266,9 +266,9 @@ else
         B
     end
 
-    function LinearAlgebra.ldiv!(B::AbstractGPUVecOrMat,
-                                 D::Diagonal{<:Any, <:AbstractGPUArray},
-                                 A::AbstractGPUVecOrMat)
+    function LinearAlgebra.ldiv!(B::AnyGPUVecOrMat,
+                                 D::Diagonal{<:Any, <:AnyGPUArray},
+                                 A::AnyGPUVecOrMat)
         dd = D.diag
         d = length(dd)
         m, n = size(A, 1), size(A, 2)
