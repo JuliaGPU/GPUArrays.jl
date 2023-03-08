@@ -178,7 +178,7 @@ else
     end
 end
 
-function Base.:\(D::Diagonal{<:Any, <:AnyGPUArray}, B::AnyGPUVecOrMat)
+function Base.:\(D::Diagonal{<:Any, <:AbstractGPUArray}, B::AbstractGPUVecOrMat)
     z = D.diag .== 0
     if any(z)
         i = findfirst(collect(z))
@@ -189,7 +189,7 @@ function Base.:\(D::Diagonal{<:Any, <:AnyGPUArray}, B::AnyGPUVecOrMat)
 end
 
 if VERSION < v"1.8-"
-    function LinearAlgebra.ldiv!(D::Diagonal{<:Any, <:AnyGPUArray},
+    function LinearAlgebra.ldiv!(D::Diagonal{<:Any, <:AbstractGPUArray},
                                  B::StridedVecOrMat)
         m, n = size(B, 1), size(B, 2)
         if m != length(D.diag)
@@ -322,7 +322,7 @@ end
 LinearAlgebra.mul!(C::AnyGPUVecOrMat, A::AnyGPUVecOrMat, B::AnyGPUVecOrMat, a::Number, b::Number) = generic_matmatmul!(C, A, B, a, b)
 
 
-function generic_rmul!(X::AnyArray, s::Number)
+function generic_rmul!(X::AbstractArray, s::Number)
     gpu_call(X, s; name="rmul!") do ctx, X, s
         i = @linearidx X
         @inbounds X[i] *= s
@@ -331,9 +331,9 @@ function generic_rmul!(X::AnyArray, s::Number)
     return X
 end
 
-LinearAlgebra.rmul!(A::AnyGPUArray, b::Number) = generic_rmul!(A, b)
+LinearAlgebra.rmul!(A::AbstractGPUArray, b::Number) = generic_rmul!(A, b)
 
-function generic_lmul!(s::Number, X::AnyArray)
+function generic_lmul!(s::Number, X::AbstractArray)
     gpu_call(X, s; name="lmul!") do ctx, X, s
         i = @linearidx X
         @inbounds X[i] = s*X[i]
@@ -342,7 +342,7 @@ function generic_lmul!(s::Number, X::AnyArray)
     return X
 end
 
-LinearAlgebra.lmul!(a::Number, B::AnyGPUArray) = generic_lmul!(a, B)
+LinearAlgebra.lmul!(a::Number, B::AbstractGPUArray) = generic_lmul!(a, B)
 
 
 ## permutedims
