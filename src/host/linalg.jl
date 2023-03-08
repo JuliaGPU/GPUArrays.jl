@@ -511,3 +511,5 @@ function Base.isone(x::AbstractGPUMatrix{T}) where {T}
 
     Array(y)[]
 end
+
+
