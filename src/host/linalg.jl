@@ -534,7 +534,7 @@ end
 #getproperty for QR
 import LinearAlgebra:QRPackedQ
 
-function LinearAlgebra.getproperty(F::QR{T,<:AnyGPUMatrix{T},<:AnyGPUVector{T}}, d::Symbol) where {T}
+function LinearAlgebra.getproperty(F::QR{T,<:AnyGPUMatrix{T}}, d::Symbol) where {T}
     m, n = size(F)
     if d === :R
         return triu!(view(getfield(F, :factors),1:min(m,n), 1:n))
