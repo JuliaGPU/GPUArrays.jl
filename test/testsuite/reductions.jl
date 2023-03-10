@@ -24,8 +24,8 @@ end
 
         range = ET <: Real ? (ET(1):ET(10)) : ET
         # Reduce larger array sizes to test multiple-element reading in certain implementations
-        for (sz,red) in [(5000,)=>(1,), (5000,500)=>(1,1), (500,5000)=>(1,1),
-                         (5000,5000)=>(5000,1), (5000,5000)=>(1,5000)]
+        for (sz,red) in [(1000000,)=>(1,), (5000,500)=>(1,1), (500,5000)=>(1,1),
+                         (500,5000)=>(500,1), (5000,500)=>(1,500)]
             @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, sz), zeros(ET, red))
         end
     end
