@@ -17,7 +17,7 @@ end
 @testsuite "math/power" (AT, eltypes)->begin
     for ET in eltypes
         for p in 0:5
-            compare(x->x^p, AT, rand(ET, 2,2))
+            @test compare(x->x^p, AT, rand(ET, 2,2))
         end
     end
 end
