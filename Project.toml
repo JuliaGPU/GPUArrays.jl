@@ -16,6 +16,6 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 [compat]
 Adapt = "2.0, 3.0"
 GPUArraysCore = "= 0.1.4"
-LLVM = "3.9, 4"
+LLVM = "3.9, 4, 5"
 Reexport = "1"
 julia = "1.6"
