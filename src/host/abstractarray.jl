@@ -1,6 +1,94 @@
 # core definition of the AbstractGPUArray type
 
 
+# storage handling
+
+export DataRef
+
+# DataRef provides a helper class to manage the storage of an array.
+#
+# There's multiple reasons we don't just put the data directly in a GPUArray struct:
+# - to share data between multiple arrays, e.g., to create views;
+# - to be able to early-free data and release GC pressure.
+#
+# To support this, wrap the data in a DataRef instead, and use it with the following methods:
+# - `ref[]`: get the data;
+# - `copy(ref)`: create a new reference, increasing the reference count;
+# - `unsafe_free!(ref)`: decrease the reference count, and free the data if it reaches 0.
+# Do not use the contained directly.
+
+# structure shared across objects that reference the same data
+mutable struct RefCounted{D}
+  obj::D
+  finalizer
+  count::Threads.Atomic{Int}
+end
+
+function retain(rc::RefCounted)
+    if rc.count[] == 0
+        throw(ArgumentError("Attempt to retain freed data."))
+    end
+    Threads.atomic_add!(rc.count, 1)
+    return
+end
+
+function release(rc::RefCounted)
+    if rc.count[] == 0
+        throw(ArgumentError("Attempt to release freed data."))
+    end
+    refcount = Threads.atomic_add!(rc.count, -1)
+    if refcount == 1 && rc.finalizer !== nothing
+        rc.finalizer(rc.obj)
+    end
+    return
+end
+
+function Base.getindex(rc::RefCounted)
+    if rc.count[] == 0
+        throw(ArgumentError("Attempt to use freed data."))
+    end
+    rc.obj
+end
+
+# per-object structure; `freed` here indicates whether the *object* has been freed.
+# this is separate from the contained refcount, which protects the underlying data.
+mutable struct DataRef{D}
+    data::RefCounted{D}
+    freed::Bool
+end
+
+function DataRef(finalizer, data::D) where {D}
+    rc = RefCounted{D}(data, finalizer, Threads.Atomic{Int}(1))
+    DataRef{D}(rc, false)
+end
+DataRef(data; kwargs...) = DataRef(nothing, data; kwargs...)
+
+function Base.getindex(ref::DataRef)
+    if ref.freed
+        throw(ArgumentError("Attempt to use a freed reference."))
+    end
+    ref.data[]
+end
+
+function Base.copy(ref::DataRef{D}) where {D}
+    if ref.freed
+        throw(ArgumentError("Attempt to copy a freed reference."))
+    end
+    retain(ref.data)
+    return DataRef{D}(ref.data, false)
+end
+
+function unsafe_free!(ref::DataRef, args...)
+    if ref.freed
+        # multiple frees are allowed
+        return
+    end
+    release(ref.data, args...)
+    ref.freed = true
+    return
+end
+
+
 # input/output
 
 ## serialization

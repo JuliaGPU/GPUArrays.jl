@@ -5,7 +5,7 @@
 
 module JLArrays
 
-export JLArray, jl
+export JLArray, JLVector, JLMatrix, jl
 
 using GPUArrays
 
@@ -86,18 +86,27 @@ end
 # array type
 
 struct JLDeviceArray{T, N} <: AbstractDeviceArray{T, N}
-    data::Array{T, N}
+    data::Vector{UInt8}
+    offset::Int
     dims::Dims{N}
-
-    function JLDeviceArray{T,N}(data::Array{T, N}, dims::Dims{N}) where {T,N}
-        new(data, dims)
-    end
 end
 
-Base.size(x::JLDeviceArray) = x.dims
+Base.elsize(::Type{<:JLDeviceArray{T}}) where {T} = sizeof(T)
 
-@inline Base.getindex(A::JLDeviceArray, index::Integer) = getindex(A.data, index)
-@inline Base.setindex!(A::JLDeviceArray, x, index::Integer) = setindex!(A.data, x, index)
+Base.size(x::JLDeviceArray) = x.dims
+Base.sizeof(x::JLDeviceArray) = Base.elsize(x) * length(x)
+
+Base.unsafe_convert(::Type{Ptr{T}}, x::JLDeviceArray{T}) where {T} =
+    Base.unsafe_convert(Ptr{T}, x.data) + x.offset*Base.elsize(x)
+
+# conversion of untyped data to a typed Array
+function typed_data(x::JLDeviceArray{T}) where {T}
+    unsafe_wrap(Array, pointer(x), x.dims)
+end
+
+@inline Base.getindex(A::JLDeviceArray, index::Integer) = getindex(typed_data(A), index)
+@inline Base.setindex!(A::JLDeviceArray, x, index::Integer) = setindex!(typed_data(A), x, index)
+
 
 # indexing
 
@@ -139,23 +148,60 @@ end
 # Host abstractions
 #
 
-struct JLArray{T, N} <: AbstractGPUArray{T, N}
-    data::Array{T, N}
+function check_eltype(T)
+  if !Base.allocatedinline(T)
+    explanation = explain_allocatedinline(T)
+    error("""
+      JLArray only supports element types that are allocated inline.
+      $explanation""")
+  end
+end
+
+mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
+    data::DataRef{Vector{UInt8}}
+
+    offset::Int        # offset of the data in the buffer, in number of elements
+
     dims::Dims{N}
 
-    function JLArray{T,N}(data::Array{T, N}, dims::Dims{N}) where {T,N}
-        isbitstype(T) || error("JLArray only supports bits types")
-        # when supporting isbits-union types, use `Base.allocatedinline` here.
-        new(data, dims)
+    # allocating constructor
+    function JLArray{T,N}(::UndefInitializer, dims::Dims{N}) where {T,N}
+        check_eltype(T)
+        maxsize = prod(dims) * sizeof(T)
+        data = Vector{UInt8}(undef, maxsize)
+        ref = DataRef(data)
+        obj = new{T,N}(ref, 0, dims)
+        finalizer(unsafe_free!, obj)
+    end
+
+    # low-level constructor for wrapping existing data
+    function JLArray{T,N}(ref::DataRef{Vector{UInt8}}, dims::Dims{N};
+                          offset::Int=0) where {T,N}
+        check_eltype(T)
+        obj = new{T,N}(ref, offset, dims)
+        finalizer(unsafe_free!, obj)
     end
 end
 
+unsafe_free!(a::JLArray) = GPUArrays.unsafe_free!(a.data)
 
-## constructors
+# conversion of untyped data to a typed Array
+function typed_data(x::JLArray{T}) where {T}
+    unsafe_wrap(Array, pointer(x), x.dims)
+end
 
-# type and dimensionality specified, accepting dims as tuples of Ints
-JLArray{T,N}(::UndefInitializer, dims::Dims{N}) where {T,N} =
-  JLArray{T,N}(Array{T, N}(undef, dims), dims)
+function GPUArrays.derive(::Type{T}, N::Int, a::JLArray, dims::Dims, offset::Int) where {T}
+    ref = copy(a.data)
+    offset = (a.offset * Base.elsize(a)) ÷ sizeof(T) + offset
+    JLArray{T,N}(ref, dims; offset)
+end
+
+
+## convenience constructors
+
+const JLVector{T} = JLArray{T,1}
+const JLMatrix{T} = JLArray{T,2}
+const JLVecOrMat{T} = Union{JLVector{T},JLMatrix{T}}
 
 # type and dimensionality specified, accepting dims as series of Ints
 JLArray{T,N}(::UndefInitializer, dims::Integer...) where {T,N} = JLArray{T,N}(undef, dims)
@@ -172,7 +218,10 @@ Base.similar(a::JLArray{T,N}) where {T,N} = JLArray{T,N}(undef, size(a))
 Base.similar(a::JLArray{T}, dims::Base.Dims{N}) where {T,N} = JLArray{T,N}(undef, dims)
 Base.similar(a::JLArray, ::Type{T}, dims::Base.Dims{N}) where {T,N} = JLArray{T,N}(undef, dims)
 
-Base.copy(a::JLArray{T,N}) where {T,N} = JLArray{T,N}(copy(a.data), size(a))
+function Base.copy(a::JLArray{T,N}) where {T,N}
+    b = similar(a)
+    @inbounds copyto!(b, a)
+end
 
 
 ## derived types
@@ -181,30 +230,25 @@ export DenseJLArray, DenseJLVector, DenseJLMatrix, DenseJLVecOrMat,
        StridedJLArray, StridedJLVector, StridedJLMatrix, StridedJLVecOrMat,
        AnyJLArray, AnyJLVector, AnyJLMatrix, AnyJLVecOrMat
 
-ContiguousSubJLArray{T,N,A<:JLArray} = Base.FastContiguousSubArray{T,N,A}
-
 # dense arrays: stored contiguously in memory
-DenseReinterpretJLArray{T,N,A<:Union{JLArray,ContiguousSubJLArray}} =
-    Base.ReinterpretArray{T,N,S,A} where S
-DenseReshapedJLArray{T,N,A<:Union{JLArray,ContiguousSubJLArray,DenseReinterpretJLArray}} =
-    Base.ReshapedArray{T,N,A}
-DenseSubJLArray{T,N,A<:Union{JLArray,DenseReshapedJLArray,DenseReinterpretJLArray}} =
-    Base.FastContiguousSubArray{T,N,A}
-DenseJLArray{T,N} = Union{JLArray{T,N}, DenseSubJLArray{T,N}, DenseReshapedJLArray{T,N},
-                          DenseReinterpretJLArray{T,N}}
+DenseJLArray{T,N} = JLArray{T,N}
 DenseJLVector{T} = DenseJLArray{T,1}
 DenseJLMatrix{T} = DenseJLArray{T,2}
 DenseJLVecOrMat{T} = Union{DenseJLVector{T}, DenseJLMatrix{T}}
 
 # strided arrays
-StridedSubJLArray{T,N,A<:Union{JLArray,DenseReshapedJLArray,DenseReinterpretJLArray},
-                  I<:Tuple{Vararg{Union{Base.RangeIndex, Base.ReshapedUnitRange,
-                                        Base.AbstractCartesianIndex}}}} = SubArray{T,N,A,I}
-StridedJLArray{T,N} = Union{JLArray{T,N}, StridedSubJLArray{T,N}, DenseReshapedJLArray{T,N},
-                            DenseReinterpretJLArray{T,N}}
+StridedSubJLArray{T,N,I<:Tuple{Vararg{Union{Base.RangeIndex, Base.ReshapedUnitRange,
+                                            Base.AbstractCartesianIndex}}}} =
+  SubArray{T,N,<:JLArray,I}
+StridedJLArray{T,N} = Union{JLArray{T,N}, StridedSubJLArray{T,N}}
 StridedJLVector{T} = StridedJLArray{T,1}
 StridedJLMatrix{T} = StridedJLArray{T,2}
 StridedJLVecOrMat{T} = Union{StridedJLVector{T}, StridedJLMatrix{T}}
+
+Base.pointer(x::StridedJLArray{T}) where {T} = Base.unsafe_convert(Ptr{T}, x)
+@inline function Base.pointer(x::StridedJLArray{T}, i::Integer) where T
+    Base.unsafe_convert(Ptr{T}, x) + Base._memory_offset(x, i)
+end
 
 # anything that's (secretly) backed by a JLArray
 AnyJLArray{T,N} = Union{JLArray{T,N}, WrappedArray{T,N,JLArray,JLArray{T,N}}}
@@ -221,13 +265,16 @@ Base.size(x::JLArray) = x.dims
 Base.sizeof(x::JLArray) = Base.elsize(x) * length(x)
 
 Base.unsafe_convert(::Type{Ptr{T}}, x::JLArray{T}) where {T} =
-    Base.unsafe_convert(Ptr{T}, x.data)
+    Base.unsafe_convert(Ptr{T}, x.data[]) + x.offset*Base.elsize(x)
 
 
 ## interop with Julia arrays
 
-JLArray{T,N}(x::AbstractArray{<:Any,N}) where {T,N} =
-    JLArray{T,N}(convert(Array{T}, x), size(x))
+function JLArray{T,N}(xs::AbstractArray{<:Any,N}) where {T,N}
+    A = JLArray{T,N}(undef, size(xs))
+    copyto!(A, convert(Array{T}, xs))
+    return A
+end
 
 # underspecified constructors
 JLArray{T}(xs::AbstractArray{S,N}) where {T,N,S} = JLArray{T,N}(xs)
@@ -345,14 +392,15 @@ end
 GPUArrays.backend(::Type{<:JLArray}) = JLBackend()
 
 Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N} =
-  JLDeviceArray{T,N}(x.data, x.dims)
+  JLDeviceArray{T,N}(x.data[], x.offset, x.dims)
 
 function GPUArrays.mapreducedim!(f, op, R::AnyJLArray, A::Union{AbstractArray,Broadcast.Broadcasted};
                                  init=nothing)
     if init !== nothing
         fill!(R, init)
     end
-    @allowscalar Base.reducedim!(op, R.data, map(f, A))
+    @allowscalar Base.reducedim!(op, typed_data(R), map(f, A))
+    R
 end
 
 end
