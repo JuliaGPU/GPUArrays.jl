@@ -65,6 +65,13 @@ Base.setindex!(A::AbstractGPUArray, v, I...) = _setindex!(A, v, to_indices(A, I)
 
 function _setindex!(dest::AbstractGPUArray, src, Is...)
     isempty(Is) && return dest
+    if length(dest)!=length(src)
+        if length(src)==1
+            throw(ArgumentError("indexed assignment with a single value to possibly many locations is not supported; perhaps use broadcasting `.=` instead?"))
+        else
+            throw(ArgumentError("indexed assignment with different lengths not supported; verify array sizes")) 
+        end
+    end
     idims = length.(Is)
     len = prod(idims)
     len==0 && return dest
