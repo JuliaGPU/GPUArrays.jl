@@ -68,7 +68,7 @@ function _setindex!(dest::AbstractGPUArray, src, Is...)
     idims = length.(Is)
     len = prod(idims)
     len==0 && return dest
-    if length(dest)!=len
+    if length(src)!=len
         if length(src)==1
             throw(ArgumentError("indexed assignment with a single value to possibly many locations is not supported; perhaps use broadcasting `.=` instead?"))
         else
