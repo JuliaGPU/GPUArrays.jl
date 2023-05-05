@@ -58,10 +58,6 @@ steps:
                 Pkg.develop(; path=pwd())
                 Pkg.develop(; name="Metal")
 
-                println("+++ :julia: Building support library")
-                include(joinpath(Pkg.devdir(), "Metal", "deps", "build_ci.jl"))
-                Pkg.activate()
-
                 println("+++ :julia: Running tests")
                 Pkg.test("Metal"; coverage=true)'
     agents:

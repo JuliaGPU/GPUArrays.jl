@@ -15,6 +15,22 @@
     end
 end
 
+@testsuite "reductions/mapreducedim!_large" (AT, eltypes)->begin
+    @testset "$ET" for ET in eltypes
+        # Skip smaller floating types due to precision issues
+        if ET in (Float16, ComplexF16)
+            continue
+        end
+
+        range = ET <: Real ? (ET(1):ET(10)) : ET
+        # Reduce larger array sizes to test multiple-element reading in certain implementations
+        for (sz,red) in [(1000000,)=>(1,), (5000,500)=>(1,1), (500,5000)=>(1,1),
+                         (500,5000)=>(500,1), (5000,500)=>(1,500)]
+            @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, sz), zeros(ET, red))
+        end
+    end
+end
+
 @testsuite "reductions/reducedim!" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
