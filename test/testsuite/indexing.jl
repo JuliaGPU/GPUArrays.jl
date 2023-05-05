@@ -119,9 +119,11 @@ end
         @test compare((X,Y)->(X[1,:] = Y), AT, zeros(Float32, 2,2), ones(Float32, 2))
     end
 
-    @testset "Broadcasting exceptions" begin
+    @testset "Broadcasting exceptions" for T in eltypes
         x = AT(zeros(T, (10, 10, 10, 10)))
         @test_throws ArgumentError x[1, :, :, :] = 0
+        y = AT(rand(T, (5, 5, 5, 5)))
+        @test_throws ArgumentError x .= y
     end
 
 end
