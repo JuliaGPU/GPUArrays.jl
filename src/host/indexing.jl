@@ -72,7 +72,7 @@ function _setindex!(dest::AbstractGPUArray, src, Is...)
         if length(src)==1
             throw(ArgumentError("indexed assignment with a single value to possibly many locations is not supported; perhaps use broadcasting `.=` instead?"))
         else
-            throw(ArgumentError("indexed assignment with different lengths not supported; array sizes "*string(length(src))*" and "*string(len))) 
+            throw(DimensionMismatch("dimensions must match: a has "*string(length(src))*" elements, b has  "*string(len)))
         end
     end
 
