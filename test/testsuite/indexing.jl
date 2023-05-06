@@ -123,7 +123,7 @@ end
         x = AT(zeros(T, (10, 10, 10, 10)))
         @test_throws ArgumentError x[1, :, :, :] = 0
         y = AT(rand(T, (5, 5, 5, 5)))
-        @test_throws ArgumentError x[1:9,1:9,:,:] = y
+        @test_throws DimensionMismatch x[1:9,1:9,:,:] = y
     end
 
 end
