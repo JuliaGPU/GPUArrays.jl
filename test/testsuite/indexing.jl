@@ -118,6 +118,14 @@ end
     @testset "JuliaGPU/CUDA.jl#461: sliced setindex" begin
         @test compare((X,Y)->(X[1,:] = Y), AT, zeros(Float32, 2,2), ones(Float32, 2))
     end
+
+    @testset "Broadcasting exceptions" for T in eltypes
+        x = AT(zeros(T, (10, 10, 10, 10)))
+        @test_throws ArgumentError x[1, :, :, :] = 0
+        y = AT(rand(T, (5, 5, 5, 5)))
+        @test_throws DimensionMismatch x[1:9,1:9,:,:] = y
+    end
+
 end
 
 @testsuite "indexing find" (AT, eltypes)->begin
