@@ -22,6 +22,7 @@ include("device/indexing.jl")
 include("device/memory.jl")
 include("device/synchronization.jl")
 
+using KernelAbstractions
 # host abstractions
 include("host/abstractarray.jl")
 include("host/construction.jl")

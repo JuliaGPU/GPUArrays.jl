@@ -81,13 +81,12 @@ for (D, S) in ((AnyGPUArray, Array),
 end
 
 # kernel-based variant for copying between wrapped GPU arrays
-
-function linear_copy_kernel!(ctx::AbstractKernelContext, dest, dstart, src, sstart, n)
-    i = linear_index(ctx)-1
+# TODO: Add `@Const` to `src`
+@kernel function linear_copy_kernel!(dest, dstart, src, sstart, n)
+    i = @index(Global, Linear) - 1
     if i < n
         @inbounds dest[dstart+i] = src[sstart+i]
     end
-    return
 end
 
 function Base.copyto!(dest::AnyGPUArray, dstart::Integer,
@@ -97,10 +96,8 @@ function Base.copyto!(dest::AnyGPUArray, dstart::Integer,
     destinds, srcinds = LinearIndices(dest), LinearIndices(src)
     (checkbounds(Bool, destinds, dstart) && checkbounds(Bool, destinds, dstart+n-1)) || throw(BoundsError(dest, dstart:dstart+n-1))
     (checkbounds(Bool, srcinds, sstart)  && checkbounds(Bool, srcinds, sstart+n-1))  || throw(BoundsError(src,  sstart:sstart+n-1))
-
-    gpu_call(linear_copy_kernel!,
-             dest, dstart, src, sstart, n;
-             elements=n)
+    kernel = linear_copy_kernel!(backend(dest))
+    kernel(dest, dstart, src, sstart, n; ndrange=elements)
     return dest
 end
 
@@ -150,13 +147,9 @@ end
 
 ## generalized blocks of heterogeneous memory
 
-function cartesian_copy_kernel!(ctx::AbstractKernelContext, dest, dest_offsets, src, src_offsets, shape, length)
-    i = linear_index(ctx)
-    if i <= length
-        idx = CartesianIndices(shape)[i]
-        @inbounds dest[idx + dest_offsets] = src[idx + src_offsets]
-    end
-    return
+@kernel function cartesian_copy_kernel!(ctx::AbstractKernelContext, dest, dest_offsets, src, src_offsets)
+    I = @index(Global, Cartesian)
+    @inbounds dest[I + dest_offsets] = src[I + src_offsets]
 end
 
 function Base.copyto!(dest::AnyGPUArray{<:Any, N}, destcrange::CartesianIndices{N},
@@ -170,9 +163,8 @@ function Base.copyto!(dest::AnyGPUArray{<:Any, N}, destcrange::CartesianIndices{
 
     dest_offsets = first(destcrange) - oneunit(CartesianIndex{N})
     src_offsets = first(srccrange) - oneunit(CartesianIndex{N})
-    gpu_call(cartesian_copy_kernel!,
-             dest, dest_offsets, src, src_offsets, shape, len;
-             elements=len)
+    kernel = cartesian_copy_kernel!(backend(dest))
+    kernel(dest, dest_offsets, src, src_offsets; ndrange=shape)
     dest
 end
 

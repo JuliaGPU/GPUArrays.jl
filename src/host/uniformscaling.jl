@@ -12,20 +12,20 @@ const unittriangularwrappers = (
     (:UnitLowerTriangular, :LowerTriangular)
 )
 
-function kernel_generic(ctx, B, J, min_size)
-    lin_idx = linear_index(ctx)
-    lin_idx > min_size && return nothing
-    @inbounds diag_idx = diagind(B)[lin_idx]
-    @inbounds B[diag_idx] += J
-    return nothing
+@kernel function kernel_generic(ctx, B, J, min_size)
+    lin_idx = @index(Global, Linear)
+    if lin_idx <= min_size
+        @inbounds diag_idx = diagind(B)[lin_idx]
+        @inbounds B[diag_idx] += J
+    end
 end
 
-function kernel_unittriangular(ctx, B, J, diagonal_val, min_size)
-    lin_idx = linear_index(ctx)
-    lin_idx > min_size && return nothing
-    @inbounds diag_idx = diagind(B)[lin_idx]
-    @inbounds B[diag_idx] = diagonal_val + J
-    return nothing
+@kernel function kernel_unittriangular(ctx, B, J, diagonal_val, min_size)
+    lin_idx = @index(Global, Linear)
+    if lin_idx <= min_size
+        @inbounds diag_idx = diagind(B)[lin_idx]
+        @inbounds B[diag_idx] = diagonal_val + J
+    end
 end
 
 for (t1, t2) in unittriangularwrappers
@@ -34,7 +34,8 @@ for (t1, t2) in unittriangularwrappers
             B = similar(parent(A), typeof(oneunit(T) + J))
             copyto!(B, parent(A))
             min_size = minimum(size(B))
-            gpu_call(kernel_unittriangular, B, J, one(eltype(B)), min_size; elements=min_size)
+            kernel = kernel_unittriangular(backend(B))
+            kernel(B, J, one(eltype(B)), min_size; ndrange=min_size)
             return $t2(B)
         end
 
@@ -42,7 +43,8 @@ for (t1, t2) in unittriangularwrappers
             B = similar(parent(A), typeof(J - oneunit(T)))
             B .= .- parent(A)
             min_size = minimum(size(B))
-            gpu_call(kernel_unittriangular, B, J, -one(eltype(B)), min_size; elements=min_size)
+            kernel = kernel_unittriangular(backend(B))
+            kernel(B, J, -one(eltype(B)), min_size; ndrange=min_size)
             return $t2(B)
         end
     end
@@ -54,7 +56,8 @@ for t in genericwrappers
             B = similar(parent(A), typeof(oneunit(T) + J))
             copyto!(B, parent(A))
             min_size = minimum(size(B))
-            gpu_call(kernel_generic, B, J, min_size; elements=min_size)
+            kernel = kernel_generic(backend())
+            kernel(B, J, min_size; ndrange=min_size)
             return $t(B)
         end
 
@@ -62,7 +65,8 @@ for t in genericwrappers
             B = similar(parent(A), typeof(J - oneunit(T)))
             B .= .- parent(A)
             min_size = minimum(size(B))
-            gpu_call(kernel_generic, B, J, min_size; elements=min_size)
+            kernel = kernel_generic(backend())
+            kernel(B, J, min_size; ndrange=min_size)
             return $t(B)
         end
     end
@@ -73,7 +77,8 @@ function (+)(A::Hermitian{T,<:AbstractGPUMatrix}, J::UniformScaling{<:Complex}) 
     B = similar(parent(A), typeof(oneunit(T) + J))
     copyto!(B, parent(A))
     min_size = minimum(size(B))
-    gpu_call(kernel_generic, B, J, min_size; elements=min_size)
+    kernel = kernel_generic(backend())
+    kernel(B, J, min_size; ndrange=min_size)
     return B
 end
 
@@ -81,7 +86,8 @@ function (-)(J::UniformScaling{<:Complex}, A::Hermitian{T,<:AbstractGPUMatrix}) 
     B = similar(parent(A), typeof(J - oneunit(T)))
     B .= .-parent(A)
     min_size = minimum(size(B))
-    gpu_call(kernel_generic, B, J, min_size; elements=min_size)
+    kernel = kernel_generic(backend())
+    kernel(B, J, min_size; ndrange=min_size)
     return B
 end
 
@@ -90,7 +96,8 @@ function (+)(A::AbstractGPUMatrix{T}, J::UniformScaling) where T
     B = similar(A, typeof(oneunit(T) + J))
     copyto!(B, A)
     min_size = minimum(size(B))
-    gpu_call(kernel_generic, B, J, min_size; elements=min_size)
+    kernel = kernel_generic(backend())
+    kernel(B, J, min_size; ndrange=min_size)
     return B
 end
 
@@ -98,6 +105,7 @@ function (-)(J::UniformScaling, A::AbstractGPUMatrix{T}) where T
     B = similar(A, typeof(J - oneunit(T)))
     B .= .-A
     min_size = minimum(size(B))
-    gpu_call(kernel_generic, B, J, min_size; elements=min_size)
+    kernel = kernel_generic(backend())
+    kernel(B, J, min_size; ndrange=min_size)
     return B
 end
