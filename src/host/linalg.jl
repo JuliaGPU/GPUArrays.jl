@@ -324,7 +324,7 @@ using LinearAlgebra: MulAddMul
 function LinearAlgebra.generic_matmatmul!(C::AbstractGPUVecOrMat, tA, tB, A::AbstractGPUVecOrMat, B::AbstractGPUVecOrMat, _add::MulAddMul=MulAddMul())
     transA = tA == 'N' ? identity : tA == 'T' ? transpose : adjoint
     transB = tB == 'N' ? identity : tB == 'T' ? transpose : adjoint
-    generic_matmatmul!(C, transA(A), transB(B), a, b)
+    generic_matmatmul!(C, transA(A), transB(B), A, B)
 end
 
 function generic_rmul!(X::AbstractArray, s::Number)
