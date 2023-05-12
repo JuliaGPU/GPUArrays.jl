@@ -327,7 +327,7 @@ function LinearAlgebra.gemv!(C::AbstractGPUVector, tA::AbstractChar, A::Abstract
 end
 function LinearAlgebra.generic_matvecmul!(C::AbstractGPUVector, tA::AbstractChar, A::AbstractGPUMatrix, B::AbstractGPUVector, _add::MulAddMul = MulAddMul())
     transA = tA == 'N' ? identity : tA == 'T' ? transpose : adjoint
-    generic_matmatmul!(C, transA(A), B, a, b)
+    generic_matmatmul!(C, transA(A), B, _add.alpha, _add.beta)
 end
 # disambiguation
 function LinearAlgebra.gemv!(C::AbstractGPUVector{T}, tA::AbstractChar, A::AbstractGPUMatrix{T}, B::AbstractGPUVector{T}, a::Number, b::Number) where {T<:LinearAlgebra.BlasFloat}
