@@ -116,6 +116,8 @@ end
     end
 
 Denote which operations can use scalar indexing.
+              
+Example: `x = @allowscalar a[1]`.
 
 See also: [`allowscalar`](@ref).
 """
