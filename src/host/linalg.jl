@@ -361,10 +361,10 @@ function LinearAlgebra.gemv!(C::AbstractGPUVector{T}, tA::AbstractChar, A::Abstr
     generic_matmatmul!(C, wrap(A, tA), B, a, b)
 end
 
-LinearAlgebra.gemm_wrapper!(C::AbstractGPUVecOrMat, tA, tB, A::AbstractGPUVecOrMat, B::AbstractGPUVecOrMat, _add::MulAddMul) =
+LinearAlgebra.gemm_wrapper!(C::AbstractGPUVecOrMat, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat, B::AbstractGPUVecOrMat, _add::MulAddMul) =
     LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, _add)
 # disambiguation
-LinearAlgebra.gemm_wrapper!(C::AbstractGPUVecOrMat{T}, tA, tB, A::AbstractGPUVecOrMat{T}, B::AbstractGPUVecOrMat{T}, _add::MulAddMul) where {T<:LinearAlgebra.BlasFloat} =
+LinearAlgebra.gemm_wrapper!(C::AbstractGPUVecOrMat{T}, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat{T}, B::AbstractGPUVecOrMat{T}, _add::MulAddMul) where {T<:LinearAlgebra.BlasFloat} =
     LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, _add)
 
 function LinearAlgebra.syrk_wrapper!(C::AbstractGPUMatrix, tA::AbstractChar, A::AbstractGPUVecOrMat, _add::MulAddMul = MulAddMul())
