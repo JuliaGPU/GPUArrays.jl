@@ -17,6 +17,9 @@
         end
 
         @test_throws ErrorException x[]
+
+        @allowscalar y = 42
+        @test y == 42
     end
 
     @allowscalar @testset "getindex with $T" for T in eltypes

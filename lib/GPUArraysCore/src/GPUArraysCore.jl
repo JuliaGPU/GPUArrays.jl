@@ -110,6 +110,16 @@ function assertscalar(op = "operation")
     return
 end
 
+# Like a try-finally block, except without introducing the try scope
+# NOTE: This is deprecated and should not be used from user logic. A proper solution to
+# this problem will be introduced in https://github.com/JuliaLang/julia/pull/39217
+macro __tryfinally(ex, fin)
+    Expr(:tryfinally,
+       :($(esc(ex))),
+       :($(esc(fin)))
+       )
+end
+
 """
     @allowscalar() begin
         # code that can use scalar indexing
@@ -121,9 +131,11 @@ See also: [`allowscalar`](@ref).
 """
 macro allowscalar(ex)
     quote
-        task_local_storage(:ScalarIndexing, ScalarAllowed) do
-            $(esc(ex))
-        end
+        local tls_value = get(task_local_storage(), :ScalarIndexing, nothing)
+        task_local_storage(:ScalarIndexing, ScalarAllowed)
+        @__tryfinally($(esc(ex)),
+                      isnothing(tls_value) ? delete!(task_local_storage(), :ScalarIndexing)
+                                           : task_local_storage(:ScalarIndexing, tls_value))
     end
 end
 
