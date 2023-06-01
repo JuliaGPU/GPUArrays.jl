@@ -324,8 +324,11 @@ function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::Abstrac
         return fill!(C, zero(R))
     end
 
+    add = MulAddMul(a, b)
+
     gpu_call(C, A, B; name="matmatmul!") do ctx, C, A, B
         idx = @linearidx C
+        assume.(size(C) .> 0)
         i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
 
         @inbounds if i <= size(A,1) && j <= size(B,2)
@@ -334,7 +337,7 @@ function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::Abstrac
             for k in 1:size(A,2)
                 Ctmp += A[i, k]*B[k, j]
             end
-            C[i,j] = Ctmp*a + C[i,j]*b
+            C[i,j] = add(Ctmp, C[i,j])
         end
 
         return
@@ -382,7 +385,7 @@ function LinearAlgebra.herk_wrapper!(C::AbstractGPUMatrix, tA::AbstractChar, A::
     end
 end
 end # VERSION
-    
+
 function generic_rmul!(X::AbstractArray, s::Number)
     gpu_call(X, s; name="rmul!") do ctx, X, s
         i = @linearidx X
