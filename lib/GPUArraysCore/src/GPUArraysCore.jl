@@ -97,7 +97,7 @@ end
 Assert that a certain operation `op` performs scalar indexing. If this is not allowed, an
 error will be thrown ([`allowscalar`](@ref)).
 """
-function assertscalar(op = "operation")
+function assertscalar(op::String)
     behavior = get(task_local_storage(), :ScalarIndexing, nothing)
     if behavior === nothing
         behavior = requested_scalar_indexing[]
