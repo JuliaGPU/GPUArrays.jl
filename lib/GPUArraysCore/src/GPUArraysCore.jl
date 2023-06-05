@@ -48,7 +48,48 @@ export allowscalar, @allowscalar, assertscalar
 
 # if the user explicitly calls allowscalar, use that setting for all new tasks
 # XXX: use context variables to inherit the parent task's setting, once available.
-const default_scalar_indexing = Ref{Union{Nothing,ScalarIndexing}}(nothing)
+const requested_scalar_indexing = Ref{Union{Nothing,ScalarIndexing}}(nothing)
+
+const _repl_frontend_task = Ref{Union{Nothing,Missing,Task}}()
+function repl_frontend_task()
+    if !isassigned(_repl_frontend_task)
+        _repl_frontend_task[] = get_repl_frontend_task()
+    end
+    _repl_frontend_task[]
+end
+function get_repl_frontend_task()
+    @static if VERSION >= v"1.10.0-DEV.444" || v"1.9-beta4" <= VERSION < v"1.10-"
+        if isdefined(Base, :active_repl)
+            Base.active_repl.frontend_task
+        else
+             missing
+        end
+    else
+        nothing
+    end
+end
+
+@noinline function default_scalar_indexing()
+    if isinteractive()
+        # try to detect the REPL
+        repl_task = repl_frontend_task()
+        if repl_task isa Task
+            if repl_task === current_task()
+                # we always allow scalar iteration on the REPL's frontend task,
+                # where we often trigger scalar indexing by displaying GPU objects.
+                ScalarAllowed
+            else
+                ScalarDisallowed
+            end
+        else
+            # we couldn't detect a REPL in this interactive session, so default to a warning
+            ScalarWarn
+        end
+    else
+        # non-interactively, we always disallow scalar iteration
+        ScalarDisallowed
+    end
+end
 
 """
     assertscalar(op::String)
@@ -57,23 +98,25 @@ Assert that a certain operation `op` performs scalar indexing. If this is not al
 error will be thrown ([`allowscalar`](@ref)).
 """
 function assertscalar(op = "operation")
-    # try to detect the REPL
-    @static if VERSION >= v"1.10.0-DEV.444" || v"1.9-beta4" <= VERSION < v"1.10-"
-        if isdefined(Base, :active_repl) && current_task() == Base.active_repl.frontend_task
-            # we always allow scalar iteration on the REPL's frontend task,
-            # where we often trigger scalar indexing by displaying GPU objects.
-            return false
+    behavior = get(task_local_storage(), :ScalarIndexing, nothing)
+    if behavior === nothing
+        behavior = requested_scalar_indexing[]
+        if behavior === nothing
+            behavior = default_scalar_indexing()
         end
-        default_behavior = ScalarDisallowed
-    else
-        # we can't detect the REPL, but it will only be used in interactive sessions,
-        # so default to allowing scalar indexing there (but warn).
-        default_behavior = isinteractive() ? ScalarWarn : ScalarDisallowed
+        task_local_storage(:ScalarIndexing, behavior)
     end
 
-    val = get!(task_local_storage(), :ScalarIndexing) do
-        something(default_scalar_indexing[], default_behavior)
+    behavior = behavior::ScalarIndexing
+    if behavior === ScalarAllowed
+        # fast path
+        return
     end
+
+    _assertscalar(op, behavior)
+end
+
+@noinline function _assertscalar(op, behavior)
     desc = """Invocation of $op resulted in scalar indexing of a GPU array.
               This is typically caused by calling an iterating implementation of a method.
               Such implementations *do not* execute on the GPU, but very slowly on the CPU,
@@ -81,15 +124,36 @@ function assertscalar(op = "operation")
 
               If you want to allow scalar iteration, use `allowscalar` or `@allowscalar`
               to enable scalar iteration globally or for the operations in question."""
-    if val == ScalarDisallowed
-        error("""Scalar indexing is disallowed.
-                 $desc""")
-    elseif val == ScalarWarn
-        @warn("""Performing scalar indexing on task $(current_task()).
-                 $desc""")
+    if behavior == ScalarDisallowed
+        errorscalar(op)
+    elseif behavior == ScalarWarn
+        warnscalar(op)
         task_local_storage(:ScalarIndexing, ScalarWarned)
     end
+
     return
+end
+
+function scalardesc(op)
+    desc = """Invocation of $op resulted in scalar indexing of a GPU array.
+              This is typically caused by calling an iterating implementation of a method.
+              Such implementations *do not* execute on the GPU, but very slowly on the CPU,
+              and therefore should be avoided.
+
+              If you want to allow scalar iteration, use `allowscalar` or `@allowscalar`
+              to enable scalar iteration globally or for the operations in question."""
+end
+
+@noinline function warnscalar(op)
+    desc = scalardesc(op)
+    @warn("""Performing scalar indexing on task $(current_task()).
+             $desc""")
+end
+
+@noinline function errorscalar(op)
+    desc = scalardesc(op)
+    error("""Scalar indexing is disallowed.
+             $desc""")
 end
 
 # Like a try-finally block, except without introducing the try scope
@@ -126,7 +190,7 @@ function allowscalar(allow::Bool=true)
     end
     setting = allow ? ScalarAllowed : ScalarDisallowed
     task_local_storage(:ScalarIndexing, setting)
-    default_scalar_indexing[] = setting
+    requested_scalar_indexing[] = setting
     return
 end
 
