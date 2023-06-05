@@ -117,7 +117,7 @@ function assertscalar(op = "operation")
 end
 
 @noinline function _assertscalar(op, behavior)
-    desc = """Invocation of $op resulted in scalar indexing of a GPU array.
+    desc = """Invocation of '$op' resulted in scalar indexing of a GPU array.
               This is typically caused by calling an iterating implementation of a method.
               Such implementations *do not* execute on the GPU, but very slowly on the CPU,
               and therefore should be avoided.
