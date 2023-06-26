@@ -46,9 +46,9 @@ version = "1.4.1"
 
 [[LLVM]]
 deps = ["CEnum", "LLVMExtra_jll", "Libdl", "Printf", "Unicode"]
-git-tree-sha1 = "ce502fbe565c66e60c2279114c442ddab31fa56b"
+git-tree-sha1 = "7d5788011dd273788146d40eb5b1fbdc199d0296"
 uuid = "929cbde3-209d-540e-8aea-75f648917ca0"
-version = "6.0.0"
+version = "6.0.1"
 
 [[LLVMExtra_jll]]
 deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl", "TOML"]
