@@ -26,15 +26,13 @@
             Array(GPUArrays._permutedims!(UInt64, AT(zero(y)), AT(x), (2,1,4,3))) ≈ y
         end
         # high dimensional tensor
-        @static if VERSION >= v"1.7"
-            @test compare(x -> permutedims(x, 18:-1:1), AT, rand(Float32, 4, [2 for _ = 2:18]...))
-            # test the Uint64 type version for large array permutedims
-            AT <: GPUArrays.AbstractGPUArray && @test let
-                x = rand(Float32, 4, [2 for _ = 2:18]...)
-                pm = (18:-1:1...,)
-                y = permutedims(x, pm)
-                Array(GPUArrays._permutedims!(UInt64, AT(zero(y)), AT(x), pm)) ≈ y
-            end
+        @test compare(x -> permutedims(x, 18:-1:1), AT, rand(Float32, 4, [2 for _ = 2:18]...))
+        # test the Uint64 type version for large array permutedims
+        AT <: GPUArrays.AbstractGPUArray && @test let
+            x = rand(Float32, 4, [2 for _ = 2:18]...)
+            pm = (18:-1:1...,)
+            y = permutedims(x, pm)
+            Array(GPUArrays._permutedims!(UInt64, AT(zero(y)), AT(x), pm)) ≈ y
         end
     end
 
@@ -203,14 +201,7 @@
             D = Diagonal(d)
             B = AT(rand(Float32, n, n))
 
-            # three-argument version does not throw SingularException on 1.7
-            if VERSION < v"1.8-"
-                ldiv!(X, D, B)
-                ldiv!(Y, Diagonal(collect(d)), collect(B))
-                @test collect(X) ≈ Y
-            else
-                @test_throws SingularException ldiv!(X, D, B)
-            end
+            @test_throws SingularException ldiv!(X, D, B)
 
             # two-argument version throws SingularException
             @test_throws SingularException ldiv!(D, B)

@@ -144,7 +144,8 @@ struct JLArray{T, N} <: AbstractGPUArray{T, N}
     dims::Dims{N}
 
     function JLArray{T,N}(data::Array{T, N}, dims::Dims{N}) where {T,N}
-        @assert isbitstype(T) "JLArray only supports bits types"
+        isbitstype(T) || error("JLArray only supports bits types")
+        # when supporting isbits-union types, use `Base.allocatedinline` here.
         new(data, dims)
     end
 end

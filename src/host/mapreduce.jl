@@ -22,9 +22,7 @@ neutral_element(::typeof(Base.:(*)), T) = one(T)
 neutral_element(::typeof(Base.mul_prod), T) = one(T)
 neutral_element(::typeof(Base.min), T) = typemax(T)
 neutral_element(::typeof(Base.max), T) = typemin(T)
-if VERSION >= v"1.8.0-DEV.1465"
-    neutral_element(::typeof(Base._extrema_rf), ::Type{<:NTuple{2,T}}) where {T} = typemax(T), typemin(T)
-end
+neutral_element(::typeof(Base._extrema_rf), ::Type{<:NTuple{2,T}}) where {T} = typemax(T), typemin(T)
 
 # resolve ambiguities
 Base.mapreduce(f, op, A::AnyGPUArray, As::AbstractArrayOrBroadcasted...;
