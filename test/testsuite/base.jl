@@ -300,13 +300,13 @@ end
     end
 
     @testset "view" begin
-      @test compare(AT, rand(5)) do x
+      @test compare(AT, rand(Float32, 5)) do x
         y = x[2:4]
         y .= 1
         x
       end
 
-      @test compare(AT, rand(5)) do x
+      @test compare(AT, rand(Float32, 5)) do x
         y = view(x, 2:4)
         y .= 1
         x
@@ -325,7 +325,7 @@ end
       end
 
       # bug in conversion of indices (#506)
-      show(devnull, AT(view(ones(1), [1])))
+      show(devnull, AT(view(ones(Float32, 1), [1])))
 
       # performance loss due to Array indices
       let x = AT{Int}(undef, 1)
@@ -336,14 +336,14 @@ end
       end
 
       @testset "GPU array source" begin
-          a = rand(3)
+          a = rand(Float32, 3)
           i = rand(1:3, 2)
           @test compare(view, AT, a, i)
           @test compare(view, AT, a, view(i, 2:2))
       end
 
       @testset "CPU array source" begin
-          a = rand(3)
+          a = rand(Float32, 3)
           i = rand(1:3, 2)
           @test compare(view, AT, a, i)
           @test compare(view, AT, a, view(i, 2:2))
