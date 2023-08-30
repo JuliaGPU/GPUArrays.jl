@@ -156,20 +156,6 @@ function findminmax(binop, xs::AnyGPUArray; init, dims)
         return t1
     end
 
-    @static if VERSION < v"1.7.0-DEV.119"
-    # before JuliaLang/julia#35316, isless/isgreated did not order NaNs last
-    function reduction(t1::Tuple{<:AbstractFloat,<:Any}, t2::Tuple{<:AbstractFloat,<:Any})
-        (x, i), (y, j) = t1, t2
-
-        isnan(x) && return t1
-        isnan(y) && return t2
-
-        binop(x, y) && return t2
-        x == y && return (x, min(i, j))
-        return t1
-    end
-    end
-
     if dims == Colon()
         res = mapreduce(tuple, reduction, xs, indices; init = (init, dummy_index))
 
