@@ -32,13 +32,13 @@ function retain(rc::RefCounted)
     return
 end
 
-function release(rc::RefCounted)
+function release(rc::RefCounted, args...)
     if rc.count[] == 0
         throw(ArgumentError("Attempt to release freed data."))
     end
     refcount = Threads.atomic_add!(rc.count, -1)
     if refcount == 1 && rc.finalizer !== nothing
-        rc.finalizer(rc.obj)
+        rc.finalizer(rc.obj, args...)
     end
     return
 end
