@@ -53,7 +53,7 @@ end
 # per-object structure; `freed` here indicates whether the *object* has been freed.
 # this is separate from the contained refcount, which protects the underlying data.
 mutable struct DataRef{D}
-    data::RefCounted{D}
+    rc::RefCounted{D}
     freed::Bool
 end
 
@@ -67,23 +67,25 @@ function Base.getindex(ref::DataRef)
     if ref.freed
         throw(ArgumentError("Attempt to use a freed reference."))
     end
-    ref.data[]
+    ref.rc[]
 end
 
 function Base.copy(ref::DataRef{D}) where {D}
     if ref.freed
         throw(ArgumentError("Attempt to copy a freed reference."))
     end
-    retain(ref.data)
-    return DataRef{D}(ref.data, false)
+    retain(ref.rc)
+    return DataRef{D}(ref.rc, false)
 end
 
 function unsafe_free!(ref::DataRef, args...)
     if ref.freed
-        # multiple frees are allowed
+        # multiple frees *of the same object* are allowed.
+        # we should only ever call `release` once per object, though,
+        # as multiple releases of the underlying data is not allowed.
         return
     end
-    release(ref.data, args...)
+    release(ref.rc, args...)
     ref.freed = true
     return
 end
