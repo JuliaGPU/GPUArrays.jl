@@ -15,9 +15,10 @@ export DataRef
 # - `ref[]`: get the data;
 # - `copy(ref)`: create a new reference, increasing the reference count;
 # - `unsafe_free!(ref)`: decrease the reference count, and free the data if it reaches 0.
-# Do not use the contained directly.
+#
+# The contained RefCounted struct should not be used directly.
 
-# structure shared across objects that reference the same data
+# shared, reference-counted state.
 mutable struct RefCounted{D}
   obj::D
   finalizer
@@ -50,8 +51,9 @@ function Base.getindex(rc::RefCounted)
     rc.obj
 end
 
-# per-object structure; `freed` here indicates whether the *object* has been freed.
-# this is separate from the contained refcount, which protects the underlying data.
+# per-object state, with a flag to indicate whether the object has been freed.
+# this is to support multiple calls to `unsafe_free!` on the same object,
+# while only lowering the referene count of the underlying data once.
 mutable struct DataRef{D}
     rc::RefCounted{D}
     freed::Bool
