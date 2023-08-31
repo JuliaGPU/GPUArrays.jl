@@ -378,7 +378,8 @@ LinearAlgebra.lmul!(a::Number, B::AbstractGPUArray) = generic_lmul!(a, B)
 LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) =
     permutedims!(dest, src, Tuple(perm))
 
-@inline @generated function permute_linearindex(size::NTuple{N,T}, l::T, strides::NTuple{N,T}) where {N,T}
+@inline @generated function permute_linearindex(size::NTuple{N,T}, l::T,
+                                                strides::NTuple{N,T}) where {N,T}
     quote
         l -= one(T)
         res = one(T)
@@ -390,13 +391,19 @@ LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray, perm) 
         return @inbounds res + strides[N] * l
     end
 end
-function LinearAlgebra.permutedims!(dest::AbstractGPUArray, src::AbstractGPUArray,
+
+function LinearAlgebra.permutedims!(dest::AbstractGPUArray,
+                                    src::AbstractGPUArray,
                                     perm::NTuple{N}) where N
-    length(dest) <= typemax(UInt32) ? _permutedims!(UInt32, dest, src, perm) : _permutedims!(UInt64, dest, src, perm)
+    if length(dest) <= typemax(UInt32)
+        _permutedims!(UInt32, dest, src, perm)
+    else
+        _permutedims!(UInt64, dest, src, perm)
+    end
 end
 
-function _permutedims!(::Type{IT}, dest::AbstractGPUArray, src::AbstractGPUArray,
-                                    perm::NTuple{N}) where {IT,N}
+function _permutedims!(::Type{IT}, dest::AbstractGPUArray,
+                       src::AbstractGPUArray, perm::NTuple{N}) where {IT,N}
     @assert length(src) <= typemax(IT)
     Base.checkdims_perm(dest, src, perm)
     dest_strides = ntuple(k->k==1 ? 1 : prod(i->size(dest, i), 1:k-1), N)
