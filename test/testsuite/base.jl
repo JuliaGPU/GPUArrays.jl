@@ -385,44 +385,21 @@ end
       end
 
       if AT <: AbstractGPUArray
-        @testset "exception: non-isbits" begin
-          local err
-          @test try
-            reinterpret(Float64, AT([1,nothing]))
-            nothing
-          catch err′
-            err = err′
-          end isa Exception
-          @test occursin(
-            "cannot reinterpret an `Union{Nothing, Int64}` array to `Float64`, because not all types are bitstypes",
-            sprint(showerror, err))
+        # XXX: use a predicate function?
+        supports_bitsunion = try
+          AT([1,nothing])
+          true
+        catch
+          false
         end
 
-        @testset "exception: 0-dim" begin
-          local err
-          @test try
-            reinterpret(Int128, AT(fill(1f0)))
-            nothing
-          catch err′
-            err = err′
-          end isa Exception
-          @test occursin(
-            "cannot reinterpret a zero-dimensional `Float32` array to `Int128` which is of a different size",
-            sprint(showerror, err))
+        if supports_bitsunion
+          @test_throws "cannot reinterpret an `Union{Nothing, Int64}` array to `Float64`, because not all types are bitstypes" reinterpret(Float64, AT([1,nothing]))
         end
 
-        @testset "exception: divisibility" begin
-          local err
-          @test try
-            reinterpret(Int128, AT(ones(Float32, 3)))
-            nothing
-          catch err′
-            err = err′
-          end isa Exception
-          @test occursin(
-            "cannot reinterpret an `Float32` array to `Int128` whose first dimension has size `3`.",
-            sprint(showerror, err))
-        end
+        @test_throws "cannot reinterpret a zero-dimensional `Float32` array to `Int128` which is of a different size" reinterpret(Int128, AT(fill(1f0)))
+
+        @test_throws "cannot reinterpret an `Float32` array to `Int128` whose first dimension has size `3`." reinterpret(Int128, AT(ones(Float32, 3)))
       end
     end
 end
