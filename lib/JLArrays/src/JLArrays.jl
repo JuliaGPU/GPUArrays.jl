@@ -203,13 +203,17 @@ const JLVector{T} = JLArray{T,1}
 const JLMatrix{T} = JLArray{T,2}
 const JLVecOrMat{T} = Union{JLVector{T},JLMatrix{T}}
 
-# type and dimensionality specified, accepting dims as series of Ints
-JLArray{T,N}(::UndefInitializer, dims::Integer...) where {T,N} = JLArray{T,N}(undef, dims)
+# type and dimensionality specified
+JLArray{T,N}(::UndefInitializer, dims::NTuple{N,Integer}) where {T,N} =
+    JLArray{T,N}(undef, convert(Tuple{Vararg{Int}}, dims))
+JLArray{T,N}(::UndefInitializer, dims::Vararg{Integer,N}) where {T,N} =
+    JLArray{T,N}(undef, convert(Tuple{Vararg{Int}}, dims))
 
 # type but not dimensionality specified
-JLArray{T}(::UndefInitializer, dims::Dims{N}) where {T,N} = JLArray{T,N}(undef, dims)
-JLArray{T}(::UndefInitializer, dims::Integer...) where {T} =
-  JLArray{T}(undef, convert(Tuple{Vararg{Int}}, dims))
+JLArray{T}(::UndefInitializer, dims::NTuple{N,Integer}) where {T,N} =
+  JLArray{T,N}(undef, convert(Tuple{Vararg{Int}}, dims))
+JLArray{T}(::UndefInitializer, dims::Vararg{Integer,N}) where {T,N} =
+  JLArray{T,N}(undef, convert(Dims{N}, dims))
 
 # empty vector constructor
 JLArray{T,1}() where {T} = JLArray{T,1}(undef, 0)

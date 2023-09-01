@@ -19,9 +19,12 @@
 
         # compare against Array
         for typs in [(), (Int,), (Int,1), (Int,2), (Float32,), (Float32,1), (Float32,2)],
-            args in [(), (1,), (1,2), ((1,),), ((1,2),),
-                    (undef,), (undef, 1,), (undef, 1,2), (undef, (1,),), (undef, (1,2),),
-                    (Int,), (Int, 1,), (Int, 1,2), (Int, (1,),), (Int, (1,2),),
+            args in [(), (1,), (1,2),  (Int32(1),Int64(2)), ((1,),), ((1,2),),
+                        ((Int32(1),Int64(2)),),
+                    (undef,), (undef, 1,), (undef, 1,2), (undef, Int32(1),Int64(2)),
+                        (undef, (1,),), (undef, (1,2),), (undef, (Int32(1),Int64(2)),),
+                    (Int,), (Int, 1,), (Int, 1,2), (Int, Int32(1),Int64(2)), (Int, (1,),),
+                        (Int, (1,2),), (Int, (Int32(1),Int64(2)),),
                     ([1,2],), ([1 2],)]
             cpu = try
                 Array{typs...}(args...)
