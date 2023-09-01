@@ -298,4 +298,108 @@ end
                 occursin(Regex("^1×1 adjoint\\(::$AT{Int64,\\s?1.*}\\) with eltype Int64:\n 1\$"), msg)
         end
     end
+
+    @testset "view" begin
+      @test compare(AT, rand(Float32, 5)) do x
+        y = x[2:4]
+        y .= 1
+        x
+      end
+
+      @test compare(AT, rand(Float32, 5)) do x
+        y = view(x, 2:4)
+        y .= 1
+        x
+      end
+
+      @test compare(x->view(x, :, 1:4, 3), AT, rand(Float32, 5, 4, 3))
+
+      let x = AT(rand(Float32, 5, 4, 3))
+        @test_throws BoundsError view(x, :, :, 1:10)
+      end
+
+      # bug in parentindices conversion
+      let x = AT{Int}(undef, 1, 1)
+        x[1,:] .= 42
+        @test Array(x)[1,1] == 42
+      end
+
+      # bug in conversion of indices (#506)
+      show(devnull, AT(view(ones(Float32, 1), [1])))
+
+      # performance loss due to Array indices
+      let x = AT{Int}(undef, 1)
+        i = [1]
+        y = view(x, i)
+        @test parent(y) isa AT
+        @test parentindices(y) isa Tuple{<:AT}
+      end
+
+      @testset "GPU array source" begin
+          a = rand(Float32, 3)
+          i = rand(1:3, 2)
+          @test compare(view, AT, a, i)
+          @test compare(view, AT, a, view(i, 2:2))
+      end
+
+      @testset "CPU array source" begin
+          a = rand(Float32, 3)
+          i = rand(1:3, 2)
+          @test compare(view, AT, a, i)
+          @test compare(view, AT, a, view(i, 2:2))
+      end
+    end
+
+    @testset "reshape" begin
+      A = [1 2 3 4
+           5 6 7 8]
+      gA = reshape(AT(A),1,8)
+      _A = reshape(A,1,8)
+      _gA = Array(gA)
+      @test all(_A .== _gA)
+      A = [1,2,3,4]
+      gA = reshape(AT(A),4)
+    end
+
+    @testset "reinterpret" begin
+      A = Int32[-1,-2,-3]
+      dA = AT(A)
+      dB = reinterpret(UInt32, dA)
+      @test reinterpret(UInt32, A) == Array(dB)
+
+      @test collect(reinterpret(Int32, AT(fill(1f0))))[] == reinterpret(Int32, 1f0)
+
+      @testset "reinterpret(reshape)" begin
+        a = AT(ComplexF32[1.0f0+2.0f0*im, 2.0f0im, 3.0f0im])
+        b = reinterpret(reshape, Float32, a)
+        @test a isa AT{ComplexF32, 1}
+        if AT <: AbstractGPUArray
+          # only GPUArrays materialize the reinterpret(reshape) wrapper
+          @test b isa AT{Float32, 2}
+        end
+        @test Array(b) == [1.0 0.0 0.0; 2.0 2.0 3.0]
+
+        a = AT(Float32[1.0 0.0 0.0; 2.0 2.0 3.0])
+        b = reinterpret(reshape, ComplexF32, a)
+        @test Array(b) == ComplexF32[1.0f0+2.0f0*im, 2.0f0im, 3.0f0im]
+      end
+
+      if AT <: AbstractGPUArray
+        # XXX: use a predicate function?
+        supports_bitsunion = try
+          AT([1,nothing])
+          true
+        catch
+          false
+        end
+
+        if supports_bitsunion
+          @test_throws "cannot reinterpret an `Union{Nothing, Int64}` array to `Float64`, because not all types are bitstypes" reinterpret(Float64, AT([1,nothing]))
+        end
+
+        @test_throws "cannot reinterpret a zero-dimensional `Float32` array to `Int128` which is of a different size" reinterpret(Int128, AT(fill(1f0)))
+
+        @test_throws "cannot reinterpret an `Float32` array to `Int128` whose first dimension has size `3`." reinterpret(Int128, AT(ones(Float32, 3)))
+      end
+    end
 end
