@@ -1,6 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
+julia_version = "1.8.5"
 manifest_format = "2.0"
+project_hash = "4dfed89d202cd0fdf5b0a2673b4d018605a290d4"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
