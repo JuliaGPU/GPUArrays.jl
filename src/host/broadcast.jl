@@ -21,7 +21,11 @@ backend(::Type{Base.RefValue{AT}}) where {AT<:AbstractGPUArray} = backend(AT)
 # but make sure we don't dispatch to the optimized copy method that directly indexes
 function Broadcast.copy(bc::Broadcasted{<:AbstractGPUArrayStyle{0}})
     ElType = Broadcast.combine_eltypes(bc.f, bc.args)
-    isbitstype(ElType) || error("Cannot broadcast function returning non-isbits $ElType.")
+    if ElType == Union{}
+        # using a Union{} eltype would fail early, during GPU array construction,
+        # so use Nothing instead to give the error a chance to be thrown dynamically.
+        ElType = Nothing
+    end
     dest = copyto!(similar(bc, ElType), bc)
     return @allowscalar dest[CartesianIndex()]  # 0D broadcast needs to unwrap results
 end
@@ -30,9 +34,10 @@ end
 # iteration (see, e.g., CUDA.jl#145)
 @inline function Broadcast.copy(bc::Broadcasted{<:AbstractGPUArrayStyle})
     ElType = Broadcast.combine_eltypes(bc.f, bc.args)
-    if !Base.isconcretetype(ElType)
-        error("""GPU broadcast resulted in non-concrete element type $ElType.
-                 This probably means that the function you are broadcasting contains an error or type instability.""")
+    if ElType == Union{}
+        # using a Union{} eltype would fail early, during GPU array construction,
+        # so use Nothing instead to give the error a chance to be thrown dynamically.
+        ElType = Nothing
     end
     copyto!(similar(bc, ElType), bc)
 end
