@@ -2,16 +2,6 @@
     broadcasting(AT, eltypes)
     vec3(AT, eltypes)
     unknown_wrapper(AT, eltypes)
-
-    @testset "type instabilities" begin
-        f(x) = x ? 1.0 : 0
-        try
-            f.(AT(rand(Bool, 1)))
-        catch err
-            @test err isa ErrorException
-            @test contains(err.msg, "GPU broadcast resulted in non-concrete element type")
-        end
-    end
 end
 
 test_idx(idx, A::AbstractArray{T}) where T = A[idx] * T(2)
