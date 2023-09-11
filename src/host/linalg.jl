@@ -590,5 +590,5 @@ function LinearAlgebra.getproperty(F::QR{T,<:AnyGPUMatrix{T}}, d::Symbol) where 
     end
 end
 
-Base.print_array(io::IO, Q::QRPackedQ) =
+Base.print_array(io::IO, Q::QRPackedQ{T,<:AnyGPUMatrix{T},<:AnyGPUMatrix{T}}) where {T} =
     Base.print_array(io, collect(adapt(ToArray(), Q)))
