@@ -322,6 +322,6 @@ end
 @testsuite "QR" (AT, eltypes)->begin
     @testset "get property" for dims in [(3,5),(3,3),(5,3)],
                                 prop in [:Q, :R], T in eltypes
-        @test compare(x -> getproperty(x,prop), AT, rand(T, dims) )
+        @test compare(x -> getproperty(qr(x),prop), AT, rand(T, dims) )
     end
 end
