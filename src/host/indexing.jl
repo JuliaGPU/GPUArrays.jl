@@ -61,23 +61,17 @@ end
 
 ## vectorized indexing
 
-function vectorized_checkbounds(src, Is)
-    # Base's boundscheck accesses the indices, so make sure they reside on the CPU.
-    # this is expensive, but it's a bounds check after all.
-    Is_cpu = map(I->adapt(BackToCPU(), I), Is)
-    checkbounds(src, Is_cpu...)
-end
-
 function vectorized_getindex(src::AbstractGPUArray, Is...)
-    @boundscheck vectorized_checkbounds(src, Is)
     shape = Base.index_shape(Is...)
     dest = similar(src, shape)
     any(isempty, Is) && return dest # indexing with empty array
     idims = map(length, Is)
 
-    AT = typeof(src).name.wrapper
     # NOTE: we are pretty liberal here supporting non-GPU indices...
-    gpu_call(getindex_kernel, dest, src, idims, adapt(AT, Is)...)
+    Is = map(x->adapt(ToGPU(src), x), Is)
+    @boundscheck checkbounds(src, Is...)
+
+    gpu_call(getindex_kernel, dest, src, idims, Is...)
     return dest
 end
 
@@ -94,7 +88,6 @@ end
 end
 
 function vectorized_setindex!(dest::AbstractGPUArray, src, Is...)
-    @boundscheck vectorized_checkbounds(dest, Is)
     isempty(Is) && return dest
     idims = length.(Is)
     len = prod(idims)
@@ -107,9 +100,11 @@ function vectorized_setindex!(dest::AbstractGPUArray, src, Is...)
         end
     end
 
-    AT = typeof(dest).name.wrapper
-    # NOTE: we are pretty liberal here supporting non-GPU sources and indices...
-    gpu_call(setindex_kernel, dest, adapt(AT, src), idims, len, adapt(AT, Is)...;
+    # NOTE: we are pretty liberal here supporting non-GPU indices...
+    Is = map(x->adapt(ToGPU(dest), x), Is)
+    @boundscheck checkbounds(dest, Is...)
+
+    gpu_call(setindex_kernel, dest, adapt(ToGPU(dest), src), idims, len, Is...;
              elements=len)
     return dest
 end
@@ -125,6 +120,44 @@ end
         return
     end
 end
+
+
+# bounds checking
+
+using Base: tail
+
+# some bounds checks may involve indices on the GPU. since we need to copy them to the GPU
+# anyway, also perform the bounds check there. the alternative is potentially having to copy
+# indices back to the CPU, which is wasteful.
+
+@inline function Base.checkbounds(::Type{Bool}, A::AbstractGPUArray, I)
+    gpu_checkindex(A, eachindex(IndexLinear(), A), I)
+end
+
+function gpu_checkindex(A, inds::AbstractUnitRange, I::AbstractArray)
+    all(broadcast(adapt(ToGPU(A), I)) do i
+        gpu_checkindex(Bool, inds, i)
+    end)
+end
+# these are safe to evaluate on the CPU
+gpu_checkindex(A, inds::AbstractUnitRange, I::Array) = checkindex(Bool, inds, I)
+gpu_checkindex(A, inds::AbstractUnitRange, I) = checkindex(Bool, inds, I)
+
+# case for multiple indices
+@inline function Base.checkbounds(::Type{Bool}, A::AbstractGPUArray, I...)
+    gpu_checkindex_indices(A, axes(A), I)
+end
+
+function gpu_checkindex_indices(A, IA::Tuple, I::Tuple)
+    @inline
+    gpu_checkindex(A, IA[1], I[1])::Bool & gpu_checkindex_indices(A, tail(IA), tail(I))
+end
+function gpu_checkindex_indices(A, ::Tuple{}, I::Tuple)
+    @inline
+    gpu_checkindex(A, OneTo(1), I[1])::Bool & gpu_checkindex_indices(A, (), tail(I))
+end
+gpu_checkindex_indices(A, IA::Tuple, ::Tuple{}) = (@inline; all(x->length(x)==1, IA))
+gpu_checkindex_indices(A, ::Tuple{}, ::Tuple{}) = true
 
 
 # find*
