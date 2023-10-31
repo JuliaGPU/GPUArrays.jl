@@ -1,8 +1,11 @@
+Manifest.toml
+
 *.jl.cov
 *.jl.*.cov
 *.jl.mem
 
 # editor generated files
+*.orig
 .*.swp
 .*.swo
 *~
