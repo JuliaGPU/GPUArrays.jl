@@ -97,7 +97,7 @@ Base.size(x::JLDeviceArray) = x.dims
 Base.sizeof(x::JLDeviceArray) = Base.elsize(x) * length(x)
 
 Base.unsafe_convert(::Type{Ptr{T}}, x::JLDeviceArray{T}) where {T} =
-    Base.unsafe_convert(Ptr{T}, x.data) + x.offset*Base.elsize(x)
+    convert(Ptr{T}, pointer(x.data)) + x.offset*Base.elsize(x)
 
 # conversion of untyped data to a typed Array
 function typed_data(x::JLDeviceArray{T}) where {T}
@@ -269,7 +269,7 @@ Base.size(x::JLArray) = x.dims
 Base.sizeof(x::JLArray) = Base.elsize(x) * length(x)
 
 Base.unsafe_convert(::Type{Ptr{T}}, x::JLArray{T}) where {T} =
-    Base.unsafe_convert(Ptr{T}, x.data[]) + x.offset*Base.elsize(x)
+    convert(Ptr{T}, pointer(x.data[])) + x.offset*Base.elsize(x)
 
 
 ## interop with Julia arrays
