@@ -124,40 +124,25 @@ end
 
 # bounds checking
 
-using Base: tail
+# indices residing on the GPU should be bounds-checked on the GPU to avoid iteration.
 
-# some bounds checks may involve indices on the GPU. since we need to copy them to the GPU
-# anyway, also perform the bounds check there. the alternative is potentially having to copy
-# indices back to the CPU, which is wasteful.
+# not all wrapped GPU arrays make sense as indices, so we use a subset of `AnyGPUArray`
+const IndexGPUArray{T} = Union{AbstractGPUArray{T},
+                               SubArray{T, <:Any, <:AbstractGPUArray},
+                               LinearAlgebra.Adjoint{T}}
 
-@inline function Base.checkbounds(::Type{Bool}, A::AbstractGPUArray, I)
-    gpu_checkindex(A, eachindex(IndexLinear(), A), I)
-end
-
-function gpu_checkindex(A, inds::AbstractUnitRange, I::AbstractArray)
-    all(broadcast(adapt(ToGPU(A), I)) do i
-        gpu_checkindex(Bool, inds, i)
+@inline function Base.checkindex(::Type{Bool}, inds::AbstractUnitRange, I::IndexGPUArray)
+    all(broadcast(I) do i
+        Base.checkindex(Bool, inds, i)
     end)
 end
-# these are safe to evaluate on the CPU
-gpu_checkindex(A, inds::AbstractUnitRange, I::Array) = checkindex(Bool, inds, I)
-gpu_checkindex(A, inds::AbstractUnitRange, I) = checkindex(Bool, inds, I)
 
-# case for multiple indices
-@inline function Base.checkbounds(::Type{Bool}, A::AbstractGPUArray, I...)
-    gpu_checkindex_indices(A, axes(A), I)
+@inline function Base.checkindex(::Type{Bool}, inds::Tuple,
+                                 I::IndexGPUArray{<:CartesianIndex})
+    all(broadcast(I) do i
+        Base.checkbounds_indices(Bool, inds, (i,))
+    end)
 end
-
-function gpu_checkindex_indices(A, IA::Tuple, I::Tuple)
-    @inline
-    gpu_checkindex(A, IA[1], I[1])::Bool & gpu_checkindex_indices(A, tail(IA), tail(I))
-end
-function gpu_checkindex_indices(A, ::Tuple{}, I::Tuple)
-    @inline
-    gpu_checkindex(A, Base.OneTo(1), I[1])::Bool & gpu_checkindex_indices(A, (), tail(I))
-end
-gpu_checkindex_indices(A, IA::Tuple, ::Tuple{}) = (@inline; all(x->length(x)==1, IA))
-gpu_checkindex_indices(A, ::Tuple{}, ::Tuple{}) = true
 
 
 # find*
