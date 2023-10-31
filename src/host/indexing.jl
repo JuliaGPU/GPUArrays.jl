@@ -154,7 +154,7 @@ function gpu_checkindex_indices(A, IA::Tuple, I::Tuple)
 end
 function gpu_checkindex_indices(A, ::Tuple{}, I::Tuple)
     @inline
-    gpu_checkindex(A, OneTo(1), I[1])::Bool & gpu_checkindex_indices(A, (), tail(I))
+    gpu_checkindex(A, Base.OneTo(1), I[1])::Bool & gpu_checkindex_indices(A, (), tail(I))
 end
 gpu_checkindex_indices(A, IA::Tuple, ::Tuple{}) = (@inline; all(x->length(x)==1, IA))
 gpu_checkindex_indices(A, ::Tuple{}, ::Tuple{}) = true
