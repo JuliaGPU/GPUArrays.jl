@@ -129,6 +129,12 @@ end
         @test_throws DimensionMismatch x[1:9,1:9,:,:] = y
     end
 
+    @testset "mismatching axes/indices" begin
+        a = rand(Float32, 1,1)
+        @test compare(a->a[1:1], AT, a)
+        @test compare(a->a[1:1,1:1], AT, a)
+        @test compare(a->a[1:1,1:1,1:1], AT, a)
+    end
 end
 
 @testsuite "indexing find" (AT, eltypes)->begin
