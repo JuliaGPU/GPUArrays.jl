@@ -165,6 +165,38 @@ function LinearAlgebra.triu!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
   return A
 end
 
+# check if upper triangular starting from the kth superdiagonal.
+function LinearAlgebra.istriu(A::AbstractGPUMatrix, k::Integer = 0)
+    function mapper(a, I)
+        row, col = Tuple(I)
+        if col < row + k
+            return iszero(a)
+        else
+            true
+        end
+    end
+    function reducer(a, b)
+        a && b
+    end
+    mapreduce(mapper, reducer, A, eachindex(IndexCartesian(), A); init=true)
+end
+
+# check if lower triangular starting from the kth subdiagonal.
+function LinearAlgebra.istril(A::AbstractGPUMatrix, k::Integer = 0)
+    function mapper(a, I)
+        row, col = Tuple(I)
+        if col > row + k
+            return iszero(a)
+        else
+            true
+        end
+    end
+    function reducer(a, b)
+        a && b
+    end
+    mapreduce(mapper, reducer, A, eachindex(IndexCartesian(), A); init=true)
+end
+
 
 ## diagonal
 
