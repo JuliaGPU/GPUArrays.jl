@@ -105,6 +105,22 @@
                 @test gpu_c isa TR
             end
         end
+
+        @testset "istril" begin
+            for rows in 3:4, cols in 3:4, diag in -4:4
+                A = tril(rand(Float32, rows,cols), diag)
+                B = AT(A)
+                @test istril(A) == istril(B)
+            end
+        end
+
+        @testset "istriu" begin
+            for rows in 3:4, cols in 3:4, diag in -4:4
+                A = triu(rand(Float32, rows,cols), diag)
+                B = AT(A)
+                @test istriu(A) == istriu(B)
+            end
+        end
     end
 
     @testset "diagonal" begin
