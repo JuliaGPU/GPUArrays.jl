@@ -77,6 +77,17 @@
             end
         end
 
+        if isdefined(LinearAlgebra, :copytrito!)
+            @testset "copytrito!" begin
+                @testset for T in eltypes, uplo in ('L', 'U')
+                    n = 16
+                    A = rand(T,n,n)
+                    B = zeros(T,n,n)
+                    @test compare(copytrito!, AT, B, A, uplo)
+                end
+            end
+        end
+
         @testset "copyto! for triangular" begin
             for TR in (UpperTriangular, LowerTriangular)
                 @test compare(transpose!, AT, Array{Float32}(undef, 128, 32), rand(Float32, 32, 128))
