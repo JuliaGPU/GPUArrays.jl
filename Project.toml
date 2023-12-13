@@ -1,6 +1,6 @@
 name = "GPUArrays"
 uuid = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
-version = "9.1.0"
+version = "10.0.0"
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -14,7 +14,7 @@ Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
-Adapt = "2.0, 3.0"
+Adapt = "4"
 GPUArraysCore = "= 0.1.5"
 LLVM = "3.9, 4, 5, 6"
 LinearAlgebra = "1"
