@@ -19,7 +19,9 @@ jobs:
         arch: [x64]
     steps:
       - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@latest
+        with:
+          path: "GPUArrays"
+      - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
@@ -33,13 +35,17 @@ jobs:
             ${{ runner.os }}-test-${{ env.cache-name }}-
             ${{ runner.os }}-test-
             ${{ runner.os }}-
-      - uses: julia-actions/julia-buildpkg@latest
-      - run: |
-          git config --global user.name Tester
-          git config --global user.email te@st.er
-      - uses: julia-actions/julia-runtest@latest
+      - name: Develop subpackages
+        run: julia --project=GPUArrays -e "using Pkg; Pkg.develop(ARGS)" GPUArraysCore JLArrays
+        env:
+          JULIA_PKG_DEVDIR: ${{ github.workspace }}
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          project: GPUArrays
         continue-on-error: ${{ matrix.version == 'nightly' }}
       - uses: julia-actions/julia-processcoverage@v1
+        with:
+          directories: GPUArrays/src,GPUArrays/lib
       - uses: codecov/codecov-action@v3
         with:
           file: lcov.info
@@ -48,13 +54,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@latest
+        with:
+          path: "GPUArrays"
+      - uses: julia-actions/setup-julia@v1
         with:
           version: '1.8'
+      - name: Develop packages
+        run: julia -e "using Pkg; Pkg.develop(ARGS)" GPUArrays GPUArraysCore
+        env:
+          JULIA_PKG_DEVDIR: ${{ github.workspace }}
       - name: Install dependencies
-        run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
+        run: julia --project=GPUArrays/docs/ -e 'using Pkg; Pkg.instantiate()'
       - name: Build and deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
-        run: julia --project=docs/ docs/make.jl
+        run: julia --project=GPUArrays/docs/ GPUArrays/docs/make.jl
