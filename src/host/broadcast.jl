@@ -7,11 +7,6 @@ import Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle, instanti
 const BroadcastGPUArray{T} = Union{AnyGPUArray{T},
                                    Base.RefValue{<:AbstractGPUArray{T}}}
 
-# Wrapper types otherwise forget that they are GPU compatible
-# NOTE: don't directly use GPUArrayStyle here not to lose downstream customizations.
-BroadcastStyle(W::Type{<:WrappedGPUArray})= BroadcastStyle(Adapt.parent(W){Adapt.eltype(W), Adapt.ndims(W)})
-backend(W::Type{<:WrappedGPUArray}) = backend(Adapt.parent(W){Adapt.eltype(W), Adapt.ndims(W)})
-
 # Ref is special: it's not a real wrapper, so not part of Adapt,
 # but it is commonly used to bypass broadcasting of an argument
 # so we need to preserve its dimensionless properties.
