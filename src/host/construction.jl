@@ -140,5 +140,5 @@ end
 # size, but backed by the same data. The `additional_offset` is the number of elements
 # to offset the new array from the original array.
 
-derive(::Type, N::Int, a::AbstractGPUArray, osize::Dims, additional_offset::Int) =
+derive(::Type, a::AbstractGPUArray, osize::Dims, additional_offset::Int) =
     error("Not implemented")
