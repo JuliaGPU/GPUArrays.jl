@@ -190,7 +190,7 @@ function typed_data(x::JLArray{T}) where {T}
     unsafe_wrap(Array, pointer(x), x.dims)
 end
 
-function GPUArrays.derive(::Type{T}, N::Int, a::JLArray, dims::Dims, offset::Int) where {T}
+function GPUArrays.derive(::Type{T}, a::JLArray, dims::Dims{N}, offset::Int) where {T,N}
     ref = copy(a.data)
     offset = (a.offset * Base.elsize(a)) ÷ sizeof(T) + offset
     JLArray{T,N}(ref, dims; offset)
