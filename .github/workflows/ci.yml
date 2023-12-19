@@ -14,13 +14,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ['1.8', '1.9', '1.10.0-beta2', 'nightly']
+        version: ['1.8', '1.9', '1.10.0-rc2', 'nightly']
         os: [ubuntu-latest, macOS-latest, windows-latest]
         arch: [x64]
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: "GPUArrays"
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.version }}
@@ -36,16 +34,16 @@ jobs:
             ${{ runner.os }}-test-
             ${{ runner.os }}-
       - name: Develop subpackages
-        run: julia --project=GPUArrays -e "using Pkg; Pkg.develop(ARGS)" GPUArraysCore JLArrays
-        env:
-          JULIA_PKG_DEVDIR: ${{ github.workspace }}
+        run: |
+          julia --project -e "
+            using Pkg
+            Pkg.develop([PackageSpec(; name=basename(path), path) for path in ARGS])
+          " lib/GPUArraysCore lib/JLArrays
       - uses: julia-actions/julia-runtest@v1
-        with:
-          project: GPUArrays
         continue-on-error: ${{ matrix.version == 'nightly' }}
       - uses: julia-actions/julia-processcoverage@v1
         with:
-          directories: GPUArrays/src,GPUArrays/lib
+          directories: src,lib
       - uses: codecov/codecov-action@v3
         with:
           file: lcov.info
@@ -54,19 +52,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: "GPUArrays"
       - uses: julia-actions/setup-julia@v1
         with:
           version: '1.8'
       - name: Develop packages
-        run: julia -e "using Pkg; Pkg.develop(ARGS)" GPUArrays GPUArraysCore
-        env:
-          JULIA_PKG_DEVDIR: ${{ github.workspace }}
+        run: |
+          julia -e "
+            using Pkg
+            Pkg.develop([PackageSpec(; name=basename(splitext(path)[1]), path) for path in ARGS])
+          " ../GPUArrays.jl lib/GPUArraysCore
       - name: Install dependencies
-        run: julia --project=GPUArrays/docs/ -e 'using Pkg; Pkg.instantiate()'
+        run: julia --project=docs/ -e 'using Pkg; Pkg.instantiate()'
       - name: Build and deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
-        run: julia --project=GPUArrays/docs/ GPUArrays/docs/make.jl
+        run: julia --project=docs/ docs/make.jl
