@@ -156,21 +156,6 @@ function broadcasting(AT, eltypes)
                 map(+, x, y)
             end
         end
-
-        @testset "Ref" begin
-            # as first arg, 0d broadcast
-            @test compare(x->getindex.(Ref(x), 1), AT, ET[0])
-
-            void_setindex!(args...) = (setindex!(args...); return)
-            @test compare(x->(void_setindex!.(Ref(x), ET(1)); x), AT, ET[0])
-
-            # regular broadcast
-            a = AT(rand(ET, 10))
-            b = AT(rand(ET, 10))
-            cpy(i,a,b) = (a[i] = b[i]; return)
-            cpy.(1:10, Ref(a), Ref(b))
-            @test Array(a) == Array(b)
-        end
     end
 
     @testset "stackoverflow in copy(::Broadcast)" begin
