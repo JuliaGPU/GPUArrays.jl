@@ -4,15 +4,6 @@ using Base.Broadcast
 
 import Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle, instantiate
 
-const BroadcastGPUArray{T} = Union{AnyGPUArray{T},
-                                   Base.RefValue{<:AbstractGPUArray{T}}}
-
-# Ref is special: it's not a real wrapper, so not part of Adapt,
-# but it is commonly used to bypass broadcasting of an argument
-# so we need to preserve its dimensionless properties.
-BroadcastStyle(::Type{Base.RefValue{AT}}) where {AT<:AbstractGPUArray} =
-    typeof(BroadcastStyle(AT))(Val(0))
-backend(::Type{Base.RefValue{AT}}) where {AT<:AbstractGPUArray} = backend(AT)
 # but make sure we don't dispatch to the optimized copy method that directly indexes
 function Broadcast.copy(bc::Broadcasted{<:AbstractGPUArrayStyle{0}})
     ElType = Broadcast.combine_eltypes(bc.f, bc.args)
@@ -41,7 +32,7 @@ end
     return _copyto!(dest, instantiate(Broadcasted{Style}(bc.f, bc.args, axes(dest))))
 end
 
-@inline Base.copyto!(dest::BroadcastGPUArray, bc::Broadcasted{Nothing}) = _copyto!(dest, bc) # Keep it for ArrayConflict
+@inline Base.copyto!(dest::AnyGPUArray, bc::Broadcasted{Nothing}) = _copyto!(dest, bc) # Keep it for ArrayConflict
 
 @inline Base.copyto!(dest::AbstractArray, bc::Broadcasted{<:AbstractGPUArrayStyle}) = _copyto!(dest, bc)
 
@@ -77,7 +68,7 @@ end
 allequal(x) = true
 allequal(x, y, z...) = x == y && allequal(y, z...)
 
-function Base.map(f, x::BroadcastGPUArray, xs::AbstractArray...)
+function Base.map(f, x::AnyGPUArray, xs::AbstractArray...)
     # if argument sizes match, their shape needs to be preserved
     xs = (x, xs...)
     if allequal(size.(xs)...)
@@ -96,7 +87,7 @@ function Base.map(f, x::BroadcastGPUArray, xs::AbstractArray...)
     return map!(f, dest, xs...)
 end
 
-function Base.map!(f, dest::BroadcastGPUArray, xs::AbstractArray...)
+function Base.map!(f, dest::AnyGPUArray, xs::AbstractArray...)
     # custom broadcast, ignoring the container size mismatches
     # (avoids the reshape + view that our mapreduce impl has to do)
     indices = LinearIndices.((dest, xs...))
