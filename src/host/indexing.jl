@@ -61,18 +61,22 @@ end
 
 ## vectorized indexing
 
-function vectorized_getindex(src::AbstractGPUArray, Is...)
-    shape = Base.index_shape(Is...)
-    dest = similar(src, shape)
+function vectorized_getindex!(dest::AbstractGPUArray, src::AbstractArray, Is...)
     any(isempty, Is) && return dest # indexing with empty array
     idims = map(length, Is)
 
     # NOTE: we are pretty liberal here supporting non-GPU indices...
-    Is = map(x->adapt(ToGPU(src), x), Is)
+    Is = map(adapt(ToGPU(dest)), Is)
     @boundscheck checkbounds(src, Is...)
 
     gpu_call(getindex_kernel, dest, src, idims, Is...)
     return dest
+end
+
+function vectorized_getindex(src::AbstractGPUArray, Is...)
+    shape = Base.index_shape(Is...)
+    dest = similar(src, shape)
+    return vectorized_getindex!(dest, src, Is...)
 end
 
 @generated function getindex_kernel(ctx::AbstractKernelContext, dest, src, idims,
@@ -87,7 +91,7 @@ end
     end
 end
 
-function vectorized_setindex!(dest::AbstractGPUArray, src, Is...)
+function vectorized_setindex!(dest::AbstractArray, src, Is...)
     isempty(Is) && return dest
     idims = length.(Is)
     len = prod(idims)
@@ -101,7 +105,7 @@ function vectorized_setindex!(dest::AbstractGPUArray, src, Is...)
     end
 
     # NOTE: we are pretty liberal here supporting non-GPU indices...
-    Is = map(x->adapt(ToGPU(dest), x), Is)
+    Is = map(adapt(ToGPU(dest)), Is)
     @boundscheck checkbounds(dest, Is...)
 
     gpu_call(setindex_kernel, dest, adapt(ToGPU(dest), src), idims, len, Is...;
@@ -144,6 +148,19 @@ end
     end)
 end
 
+## Vectorized index overloading for `WrappedGPUArray`
+# We overloading `getindex` by dispatch the copy part to our implement.
+function Base._unsafe_getindex!(dest::AbstractGPUArray, src::AbstractArray, Is::Vararg{Union{Real, AbstractArray}, N}) where {N}
+    return vectorized_getindex!(dest, src, Base.ensure_indexable(Is)...)
+end
+# Similar for `setindex!`.
+function Base._unsafe_setindex!(::IndexStyle, A::WrappedGPUArray, x, Is::Vararg{Union{Real,AbstractArray}, N}) where N
+    return vectorized_setindex!(A, x, Base.ensure_indexable(Is)...)
+end
+# And allow one more `ReshapedArray` wrapper to handle the `_maybe_reshape` optimization.
+function Base._unsafe_setindex!(::IndexStyle, A::Base.ReshapedArray{<:Any, <:Any, <:WrappedGPUArray}, x, Is::Vararg{Union{Real,AbstractArray}, N}) where N
+    return vectorized_setindex!(A, x, Base.ensure_indexable(Is)...)
+end
 
 # find*
 

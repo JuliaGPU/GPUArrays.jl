@@ -301,6 +301,7 @@ end
 struct ToGPU
     array::AbstractGPUArray
 end
+ToGPU(A::WrappedArray) = ToGPU(parent(A))
 function Adapt.adapt_storage(to::ToGPU, xs::Array)
     arr = similar(to.array, eltype(xs), size(xs))
     copyto!(arr, xs)
