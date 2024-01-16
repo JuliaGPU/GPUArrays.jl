@@ -149,11 +149,15 @@ end
 end
 
 ## Vectorized index overloading for `WrappedGPUArray`
-# We overloading `getindex` by dispatch the copy part to our implement.
+# We'd better not to overload `getindex`/`setindex!` directly as otherwise
+# the ambiguities from the default scalar fallback become a mess.
+# The default `getindex` for `AbstractArray` follows a `similar`-`copyto!` style.
+# Thus we only dispatch the `copyto!` part (`Base._unsafe_getindex!`) to our implement.
 function Base._unsafe_getindex!(dest::AbstractGPUArray, src::AbstractArray, Is::Vararg{Union{Real, AbstractArray}, N}) where {N}
     return vectorized_getindex!(dest, src, Base.ensure_indexable(Is)...)
 end
-# Similar for `setindex!`.
+# Similar for `setindex!`, its default fallback is equivalent to `copyto!`.
+# We only dispatch the `copyto!` part (`Base._unsafe_setindex!`) to our implement.
 function Base._unsafe_setindex!(::IndexStyle, A::WrappedGPUArray, x, Is::Vararg{Union{Real,AbstractArray}, N}) where N
     return vectorized_setindex!(A, x, Base.ensure_indexable(Is)...)
 end
