@@ -377,7 +377,8 @@ end
           # only GPUArrays materialize the reinterpret(reshape) wrapper
           @test b isa AT{Float32, 2}
         end
-        @test Array(b) == [1.0 0.0 0.0; 2.0 2.0 3.0]
+        @test(Array(b) == [1.0 0.0 0.0; 2.0 2.0 3.0],
+              broken=(AT <: Array && VERSION >= v"1.11.0-DEV.727"))
 
         a = AT(Float32[1.0 0.0 0.0; 2.0 2.0 3.0])
         b = reinterpret(reshape, ComplexF32, a)
