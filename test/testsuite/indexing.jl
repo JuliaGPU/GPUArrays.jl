@@ -135,6 +135,23 @@ end
         @test compare(a->a[1:1,1:1], AT, a)
         @test compare(a->a[1:1,1:1,1:1], AT, a)
     end
+
+    @testset "getindex for WrapperGPUArray" begin
+        a = rand(Float32, 5, 5)
+        @test compare(a->a'[:, 1], AT, a)
+        @test compare(a->Base.PermutedDimsArray(a, (2, 1))[2:-1:1, 1:2], AT, a)
+        @test compare(a->LowerTriangular(a)[:], AT, a) broken=(string(AT) in ["MtlArray", "oneArray"])
+        @test compare(a->Symmetric(a, :U)[a .> 0], AT, a)
+    end
+
+    @testset "setindex! for WrapperGPUArray" for T in eltypes
+        x = AT(zeros(T, (10, 10)))'
+        y = AT(rand(T, (5, 5)))
+        x[2:6, 2:6] = y
+        @test Array(parent(x)[2:6, 2:6]) == Array(y)'
+        x[2:6, 2:6] = 1:25
+        @test Array(parent(x)[2:6, 2:6]) == reshape(1:25, 5, 5)'
+    end
 end
 
 @testsuite "indexing find" (AT, eltypes)->begin
