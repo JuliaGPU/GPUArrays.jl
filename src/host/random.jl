@@ -30,14 +30,14 @@ function next_rand(state::NTuple{4, T}) where {T <: Unsigned}
     return state, tmp
 end
 
-function gpu_rand(::Type{T}, ctx::AbstractKernelContext, randstate::AbstractVector{NTuple{4, UInt32}}) where T
+function gpu_rand(::Type{T}, threadid, randstate::AbstractVector{NTuple{4, UInt32}}) where T
     threadid = GPUArrays.threadidx(ctx)
     stateful_rand = next_rand(randstate[threadid])
     randstate[threadid] = stateful_rand[1]
     return make_rand_num(T, stateful_rand[2])
 end
 
-function gpu_rand(::Type{T}, ctx::AbstractKernelContext, randstate::AbstractVector{NTuple{4, UInt32}}) where T <: Integer
+function gpu_rand(::Type{T}, threadid, randstate::AbstractVector{NTuple{4, UInt32}}) where T <: Integer
     threadid = GPUArrays.threadidx(ctx)
     result = zero(T)
     if sizeof(T) >= 4
@@ -55,9 +55,9 @@ end
 
 # support for complex numbers
 
-function gpu_rand(::Type{Complex{T}}, ctx::AbstractKernelContext, randstate::AbstractVector{NTuple{4, UInt32}}) where T
-    re = gpu_rand(T, ctx, randstate)
-    im = gpu_rand(T, ctx, randstate)
+function gpu_rand(::Type{Complex{T}}, threadid, randstate::AbstractVector{NTuple{4, UInt32}}) where T
+    re = gpu_rand(T, threadid, randstate)
+    im = gpu_rand(T, threadid, randstate)
     return complex(re, im)
 end
 
@@ -86,7 +86,7 @@ end
 function Random.rand!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
     @kernel rand!(a, randstate)
         idx = @index(Global, Linear)
-        @inbounds a[idx] = gpu_rand(T, ctx, randstates)
+        @inbounds a[idx] = gpu_rand(T, idx, randstates)
     end
     kernel = rand!(backend(A))
     kernel(A, rng.state)
@@ -99,8 +99,8 @@ function Random.randn!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
     @kernel randn!(a, randstates)
         i = @index(Global, Linear) 
         idx = 2*(i - 1) + 1
-        U1 = gpu_rand(T, ctx, randstates)
-        U2 = gpu_rand(T, ctx, randstates)
+        U1 = gpu_rand(T, i, randstates)
+        U2 = gpu_rand(T, i, randstates)
         Z0 = sqrt(T(-2.0)*log(U1))*cos(T(2pi)*U2)
         Z1 = sqrt(T(-2.0)*log(U1))*sin(T(2pi)*U2)
         @inbounds a[idx] = Z0

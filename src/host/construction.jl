@@ -23,7 +23,7 @@ end
 
 ## identity matrices
 
-@kernel function identity_kernel(ctx::AbstractKernelContext, res::AbstractArray{T}, stride, val) where T
+@kernel function identity_kernel(res::AbstractArray{T}, stride, val) where T
     i = @index(Global, Linear)
     ilin = (stride * (i - 1)) + i
     ilin > length(res) && return

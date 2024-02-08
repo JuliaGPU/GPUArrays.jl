@@ -5,7 +5,6 @@ import Base: _RepeatInnerOuter
 # faster if repeating elements along the first axis (i.e. `inner=(n, ones...)`), as data
 # access can be contiguous on write.
 function repeat_inner_dst_kernel!(
-    ctx::AbstractKernelContext,
     xs::AbstractArray{<:Any, N},
     inner::NTuple{N, Int},
     out::AbstractArray{<:Any, N}
