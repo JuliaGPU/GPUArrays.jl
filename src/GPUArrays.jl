@@ -18,9 +18,9 @@ using Reexport
 include("device/execution.jl")
 ## executed on-device
 include("device/abstractarray.jl")
-include("device/indexing.jl")
+#include("device/indexing.jl")
 include("device/memory.jl")
-include("device/synchronization.jl")
+#include("device/synchronization.jl")
 
 using KernelAbstractions
 # host abstractions
@@ -28,7 +28,7 @@ include("host/abstractarray.jl")
 include("host/construction.jl")
 ## integrations and specialized methods
 include("host/base.jl")
-include("host/indexing.jl")
+#include("host/indexing.jl")
 include("host/broadcast.jl")
 include("host/mapreduce.jl")
 include("host/linalg.jl")

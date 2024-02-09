@@ -11,8 +11,8 @@ Base.convert(::Type{T}, a::AbstractArray) where {T<:AbstractGPUArray} = a isa T 
 
 function Base.fill!(A::AnyGPUArray{T}, x) where T
     length(A) == 0 && return A
-    @kernel fill!(a, val)
-        idx = @index(Linear, Global)
+    @kernel function fill!(a, val)
+        idx = @index(Global, Linear)
         @inbounds a[idx] = val
     end
     kernel = fill!(backend(A))
@@ -26,8 +26,9 @@ end
 @kernel function identity_kernel(res::AbstractArray{T}, stride, val) where T
     i = @index(Global, Linear)
     ilin = (stride * (i - 1)) + i
-    ilin > length(res) && return
-    @inbounds res[ilin] = val
+    if ilin < length(res)
+        @inbounds res[ilin] = val
+    end
 end
 
 function (T::Type{<: AnyGPUArray{U}})(s::UniformScaling, dims::Dims{2}) where {U}

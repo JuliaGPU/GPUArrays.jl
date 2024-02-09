@@ -4,7 +4,7 @@ import Base: _RepeatInnerOuter
 # Handle `out = repeat(x; inner)` by parallelizing over `out` array This can benchmark
 # faster if repeating elements along the first axis (i.e. `inner=(n, ones...)`), as data
 # access can be contiguous on write.
-function repeat_inner_dst_kernel!(
+@kernel function repeat_inner_dst_kernel!(
     xs::AbstractArray{<:Any, N},
     inner::NTuple{N, Int},
     out::AbstractArray{<:Any, N}
@@ -12,13 +12,12 @@ function repeat_inner_dst_kernel!(
     # Get the "stride" index in each dimension, where the size
     # of the stride is given by `inner`. The stride-index (sdx) then
     # corresponds to the index of the repeated value in `xs`.
-    odx = @cartesianidx out
+    odx = @index(Global, Cartesian)
     dest_inds = odx.I
     sdx = ntuple(N) do i
         @inbounds (dest_inds[i] - 1) ÷ inner[i] + 1
     end
     @inbounds out[odx] = xs[CartesianIndex(sdx)]
-    return nothing
 end
 
 # Handle `out = repeat(x; inner)` by parallelizing over the `xs` array This tends to
@@ -89,8 +88,6 @@ end
         end
         @inbounds out[CartesianIndex(odx)] = val
     end
-
-    return nothing
 end
 
 function repeat_outer(xs::AnyGPUArray, outer)

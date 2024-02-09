@@ -51,23 +51,22 @@ end
     bc′ = Broadcast.preprocess(dest, bc)
 
     # grid-stride kernel
-    function broadcast_kernel(ctx, dest, bc′, nelem)
+    @kernel function broadcast_kernel(dest, bc′, nelem)
         i = 0
+        I = @index(Global, Cartesian)
         while i < nelem
             i += 1
-            I = @cartesianidx(dest, i)
+            # TODO: replicate this functionality with KA
+            #I = @cartesianidx(dest, i)
             @inbounds dest[I] = bc′[I]
         end
-        return
     end
     elements = length(dest)
     elements_per_thread = typemax(Int)
-    heuristic = launch_heuristic(backend(dest), broadcast_kernel, dest, bc′, 1;
-                                 elements, elements_per_thread)
-    config = launch_configuration(backend(dest), heuristic;
-                                  elements, elements_per_thread)
-    gpu_call(broadcast_kernel, dest, bc′, config.elements_per_thread;
-             threads=config.threads, blocks=config.blocks)
+    # TODO: figure out actual arguments, 3 should be workgroupsize
+    config = KernelAbstractions.launch_config(broadcast_kernel, elements, elements_per_thread)
+    kernel! = broadcast_kernel(get_backend(dest), config.threads)
+    kernel!(dest, bc', nelem, ndrange = config.ndrange)
 
     return dest
 end
