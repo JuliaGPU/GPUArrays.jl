@@ -53,18 +53,18 @@ end
     # grid-stride kernel
     @kernel function broadcast_kernel(dest, bc′, nelem)
         i = 0
-        I = @index(Global, Cartesian)
+        I = @index(Global, Linear)
         while i < nelem
             i += 1
-            # TODO: replicate this functionality with KA
-            #I = @cartesianidx(dest, i)
-            @inbounds dest[I] = bc′[I]
+            idx = CartesianIndices(dest)[(I-1)*nelem + i]
+            @inbounds dest[idx] = bc′[idx]
         end
     end
     elements = length(dest)
     elements_per_thread = typemax(Int)
     # TODO: figure out actual arguments, 3 should be workgroupsize
-    config = KernelAbstractions.launch_config(broadcast_kernel, elements, elements_per_thread)
+    config = KernelAbstractions.launch_config(broadcast_kernel, elements,
+                                              elements/elements_per_thread)
     kernel! = broadcast_kernel(get_backend(dest), config.threads)
     kernel!(dest, bc', nelem, ndrange = config.ndrange)
 
