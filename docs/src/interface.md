@@ -13,8 +13,6 @@ all, you need to provide a type that represents your execution back-end and a wa
 kernels:
 
 ```@docs
-GPUArrays.AbstractGPUBackend
-GPUArrays.AbstractKernelContext
 GPUArrays.gpu_call
 GPUArrays.thread_block_heuristic
 ```

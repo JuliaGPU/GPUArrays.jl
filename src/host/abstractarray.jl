@@ -147,7 +147,7 @@ end
 
 ## generalized blocks of heterogeneous memory
 
-@kernel function cartesian_copy_kernel!(ctx::AbstractKernelContext, dest, dest_offsets, src, src_offsets)
+@kernel function cartesian_copy_kernel!(dest, dest_offsets, src, src_offsets)
     I = @index(Global, Cartesian)
     @inbounds dest[I + dest_offsets] = src[I + src_offsets]
 end
