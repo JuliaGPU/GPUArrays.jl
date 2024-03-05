@@ -32,32 +32,41 @@ end
     return _copyto!(dest, instantiate(Broadcasted{Style}(bc.f, bc.args, axes(dest))))
 end
 
-@inline Base.copyto!(dest::AnyGPUArray, bc::Broadcasted{Nothing}) = _copyto!(dest, bc) # Keep it for ArrayConflict
+@inline Base.copyto!(dest::AnyGPUArray, bc::Broadcasted{Nothing}) =
+    _copyto!(dest, bc) # Keep it for ArrayConflict
 
-@inline Base.copyto!(dest::AbstractArray, bc::Broadcasted{<:AbstractGPUArrayStyle}) = _copyto!(dest, bc)
+@inline Base.copyto!(dest::AbstractArray, bc::Broadcasted{<:AbstractGPUArrayStyle}) =
+    _copyto!(dest, bc)
 
 @inline function _copyto!(dest::AbstractArray, bc::Broadcasted)
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     isempty(dest) && return dest
     bc′ = Broadcast.preprocess(dest, bc)
 
+    # if we can't efficiently index, use static indices to help the compiler eliminate idivs
+    Is = if isa(IndexStyle(dest), IndexCartesian) || isa(IndexStyle(bc′), IndexCartesian)
+        StaticCartesianIndices(dest)
+    else
+        CartesianIndices(dest)
+    end
+
     # grid-stride kernel
-    function broadcast_kernel(ctx, dest, bc′, nelem)
-        i = 0
-        while i < nelem
-            i += 1
-            I = @cartesianidx(dest, i)
+    function broadcast_kernel(ctx, dest, Is, bc′, nelem)
+        i = 1
+        while i <= nelem
+            I = @cartesianidx(Is, i)
             @inbounds dest[I] = bc′[I]
+            i += 1
         end
         return
     end
     elements = length(dest)
     elements_per_thread = typemax(Int)
-    heuristic = launch_heuristic(backend(dest), broadcast_kernel, dest, bc′, 1;
+    heuristic = launch_heuristic(backend(dest), broadcast_kernel, dest, Is, bc′, 1;
                                  elements, elements_per_thread)
     config = launch_configuration(backend(dest), heuristic;
                                   elements, elements_per_thread)
-    gpu_call(broadcast_kernel, dest, bc′, config.elements_per_thread;
+    gpu_call(broadcast_kernel, dest, Is, bc′, config.elements_per_thread;
              threads=config.threads, blocks=config.blocks)
 
     return dest
@@ -99,24 +108,34 @@ function Base.map!(f, dest::AnyGPUArray, xs::AbstractArray...)
         bc = Broadcast.preprocess(dest, bc)
     end
 
+    # if we can't efficiently index, use static indices to help the compiler eliminate idivs
+    Is = if isa(IndexStyle(bc), IndexCartesian)
+        StaticCartesianIndices(axes(bc))
+    else
+        CartesianIndices(axes(bc))
+    end
+
     # grid-stride kernel
-    function map_kernel(ctx, dest, bc, nelem)
-        for i in 1:nelem
+    function map_kernel(ctx, dest, Is, bc, nelem)
+        i = 1
+        while i <= nelem
             j = linear_index(ctx, i)
             j > common_length && return
 
-            J = CartesianIndices(axes(bc))[j]
-            @inbounds dest[j] = bc[J]
+            I = @cartesianidx(Is, i)
+            @inbounds dest[j] = bc[I]
+
+            i += 1
         end
         return
     end
     elements = common_length
     elements_per_thread = typemax(Int)
-    heuristic = launch_heuristic(backend(dest), map_kernel, dest, bc, 1;
+    heuristic = launch_heuristic(backend(dest), map_kernel, dest, Is, bc, 1;
                                  elements, elements_per_thread)
     config = launch_configuration(backend(dest), heuristic;
                                   elements, elements_per_thread)
-    gpu_call(map_kernel, dest, bc, config.elements_per_thread;
+    gpu_call(map_kernel, dest, Is, bc, config.elements_per_thread;
              threads=config.threads, blocks=config.blocks)
 
     return dest
