@@ -2,7 +2,7 @@
 
 using Base.Broadcast
 
-import Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle, instantiate
+using Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle, instantiate
 
 # but make sure we don't dispatch to the optimized copy method that directly indexes
 function Broadcast.copy(bc::Broadcasted{<:AbstractGPUArrayStyle{0}})
@@ -41,32 +41,40 @@ end
 @inline function _copyto!(dest::AbstractArray, bc::Broadcasted)
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     isempty(dest) && return dest
-    bc′ = Broadcast.preprocess(dest, bc)
+    bc = Broadcast.preprocess(dest, bc)
 
-    # if we can't efficiently index, use static indices to help the compiler eliminate idivs
-    Is = if isa(IndexStyle(dest), IndexCartesian) || isa(IndexStyle(bc′), IndexCartesian)
-        StaticCartesianIndices(dest)
-    else
-        CartesianIndices(dest)
-    end
-
-    # grid-stride kernel
-    function broadcast_kernel(ctx, dest, Is, bc′, nelem)
-        i = 1
-        while i <= nelem
-            I = @cartesianidx(Is, i)
-            @inbounds dest[I] = bc′[I]
-            i += 1
+    broadcast_kernel = if ndims(bc) == 1 ||
+                          (isa(IndexStyle(dest), IndexLinear) &&
+                           isa(IndexStyle(bc), IndexLinear))
+        function (ctx, dest, bc, nelem)
+            i = 1
+            while i <= nelem
+                I = @linearidx(dest, i)
+                @inbounds dest[I] = bc[I]
+                i += 1
+            end
+            return
         end
-        return
+    else
+        # XXX: we could use StaticCartesianIndices here, but that results in many compilations
+        function (ctx, dest, bc, nelem)
+            i = 0
+            while i < nelem
+                i += 1
+                I = @cartesianidx(dest, i)
+                @inbounds dest[I] = bc[I]
+            end
+            return
+        end
     end
+
     elements = length(dest)
     elements_per_thread = typemax(Int)
-    heuristic = launch_heuristic(backend(dest), broadcast_kernel, dest, Is, bc′, 1;
+    heuristic = launch_heuristic(backend(dest), broadcast_kernel, dest, bc, 1;
                                  elements, elements_per_thread)
     config = launch_configuration(backend(dest), heuristic;
                                   elements, elements_per_thread)
-    gpu_call(broadcast_kernel, dest, Is, bc′, config.elements_per_thread;
+    gpu_call(broadcast_kernel, dest, bc, config.elements_per_thread;
              threads=config.threads, blocks=config.blocks)
 
     return dest
