@@ -83,30 +83,3 @@ macro cartesianidx(A, grididx=1, ctxsym=:ctx)
         @inbounds CartesianIndices(x)[i]
     end
 end
-
-
-## utilities
-
-# indexing a CartesianIndices at run time generates an integer division, which is slow.
-# to work around this, we can use a static CartesianIndices type to avoid the division.
-# this informs LLVM and the back-end about the static iteration bounds, allowing it to
-# lower the integer divison to a series of bit shifts, dramatically improving performance.
-# also see: maleadt/StaticCartesian.jl, JuliaGPU/GPUArrays.jl#454
-
-struct StaticCartesianIndices{N, I} end
-
-StaticCartesianIndices(iter::CartesianIndices{N}) where {N} =
-    StaticCartesianIndices{N, iter.indices}()
-StaticCartesianIndices(x) = StaticCartesianIndices(CartesianIndices(x))
-
-Base.CartesianIndices(iter::StaticCartesianIndices{N, I}) where {N, I} =
-    CartesianIndices{N, typeof(I)}(I)
-
-Base.@propagate_inbounds Base.getindex(I::StaticCartesianIndices, i::Int) =
-    CartesianIndices(I)[i]
-Base.length(I::StaticCartesianIndices) = length(CartesianIndices(I))
-
-function Base.show(io::IO, I::StaticCartesianIndices)
-    print(io, "Static")
-    show(io, CartesianIndices(I))
-end
