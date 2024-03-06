@@ -116,13 +116,6 @@ function Base.map!(f, dest::AnyGPUArray, xs::AbstractArray...)
         bc = Broadcast.preprocess(dest, bc)
     end
 
-    # if we can't efficiently index, use static indices to help the compiler eliminate idivs
-    Is = if isa(IndexStyle(bc), IndexCartesian)
-        StaticCartesianIndices(axes(bc))
-    else
-        CartesianIndices(axes(bc))
-    end
-
     # grid-stride kernel
     function map_kernel(ctx, dest, Is, bc, nelem)
         i = 1
@@ -130,8 +123,8 @@ function Base.map!(f, dest::AnyGPUArray, xs::AbstractArray...)
             j = linear_index(ctx, i)
             j > common_length && return
 
-            I = @cartesianidx(Is, i)
-            @inbounds dest[j] = bc[I]
+            J = CartesianIndices(axes(bc))[j]
+            @inbounds dest[j] = bc[J]
 
             i += 1
         end
@@ -139,11 +132,11 @@ function Base.map!(f, dest::AnyGPUArray, xs::AbstractArray...)
     end
     elements = common_length
     elements_per_thread = typemax(Int)
-    heuristic = launch_heuristic(backend(dest), map_kernel, dest, Is, bc, 1;
+    heuristic = launch_heuristic(backend(dest), map_kernel, dest, bc, 1;
                                  elements, elements_per_thread)
     config = launch_configuration(backend(dest), heuristic;
                                   elements, elements_per_thread)
-    gpu_call(map_kernel, dest, Is, bc, config.elements_per_thread;
+    gpu_call(map_kernel, dest, bc, config.elements_per_thread;
              threads=config.threads, blocks=config.blocks)
 
     return dest
