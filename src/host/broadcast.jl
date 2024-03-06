@@ -56,7 +56,6 @@ end
             return
         end
     else
-        # XXX: we could use StaticCartesianIndices here, but that results in many compilations
         function (ctx, dest, bc, nelem)
             i = 0
             while i < nelem
