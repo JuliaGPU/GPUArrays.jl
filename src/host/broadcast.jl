@@ -43,7 +43,7 @@ end
     isempty(dest) && return dest
     bc = Broadcast.preprocess(dest, bc)
 
-    broadcast_kernel = if ndims(bc) == 1 ||
+    broadcast_kernel = if ndims(dest) == 1 ||
                           (isa(IndexStyle(dest), IndexLinear) &&
                            isa(IndexStyle(bc), IndexLinear))
         function (ctx, dest, bc, nelem)
@@ -116,7 +116,7 @@ function Base.map!(f, dest::AnyGPUArray, xs::AbstractArray...)
     end
 
     # grid-stride kernel
-    function map_kernel(ctx, dest, Is, bc, nelem)
+    function map_kernel(ctx, dest, bc, nelem)
         i = 1
         while i <= nelem
             j = linear_index(ctx, i)
