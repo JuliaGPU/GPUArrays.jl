@@ -20,13 +20,19 @@ end
 # iteration (see, e.g., CUDA.jl#145)
 @inline function Broadcast.copy(bc::Broadcasted{<:AbstractGPUArrayStyle})
     ElType = Broadcast.combine_eltypes(bc.f, bc.args)
-    if ElType == Union{}
-        # using a Union{} eltype would fail early, during GPU array construction,
-        # so use Nothing instead to give the error a chance to be thrown dynamically.
-        ElType = Nothing
+    if ElType == Union{} || !Base.allocatedinline(ElType)
+        # a Union{} or non-isbits eltype would fail early, during GPU array construction,
+        # so use a special marker to give the error a chance to be thrown during compilation
+        # or even dynamically, and pick that marker up afterwards to throw an error.
+        ElType = BrokenBroadcast{ElType}
     end
     copyto!(similar(bc, ElType), bc)
 end
+
+struct BrokenBroadcast{T} end
+Base.convert(::Type{BrokenBroadcast{T}}, x) where T = BrokenBroadcast{T}()
+Base.convert(::Type{BrokenBroadcast{T}}, x::BrokenBroadcast{T}) where T = x
+Base.eltype(::Type{BrokenBroadcast{T}}) where T = T
 
 @inline function Base.materialize!(::Style, dest, bc::Broadcasted) where {Style<:AbstractGPUArrayStyle}
     return _copyto!(dest, instantiate(Broadcasted{Style}(bc.f, bc.args, axes(dest))))
@@ -76,8 +82,13 @@ end
     gpu_call(broadcast_kernel, dest, bc, config.elements_per_thread;
              threads=config.threads, blocks=config.blocks)
 
+    if eltype(dest) <: BrokenBroadcast
+        throw(ArgumentError("Broadcast operation resulting in $(eltype(eltype(dest))) is not GPU compatible"))
+    end
+
     return dest
 end
+
 
 ## map
 
@@ -97,7 +108,10 @@ function Base.map(f, x::AnyGPUArray, xs::AbstractArray...)
 
     # construct a broadcast to figure out the destination container
     ElType = Broadcast.combine_eltypes(f, xs)
-    isbitstype(ElType) || error("Cannot map function returning non-isbits $ElType.")
+    if ElType == Union{} || !Base.allocatedinline(ElType)
+        # see `broadcast`
+        ElType = BrokenBroadcast{ElType}
+    end
     dest = similar(x, ElType, common_length)
 
     return map!(f, dest, xs...)
@@ -137,6 +151,10 @@ function Base.map!(f, dest::AnyGPUArray, xs::AbstractArray...)
                                   elements, elements_per_thread)
     gpu_call(map_kernel, dest, bc, config.elements_per_thread;
              threads=config.threads, blocks=config.blocks)
+
+    if eltype(dest) <: BrokenBroadcast
+        throw(ArgumentError("Map operation resulting in $(eltype(eltype(dest))) is not GPU compatible"))
+    end
 
     return dest
 end
