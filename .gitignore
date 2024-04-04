@@ -9,3 +9,6 @@ Manifest.toml
 .*.swp
 .*.swo
 *~
+
+# MacOS generated files
+*.DS_Store
