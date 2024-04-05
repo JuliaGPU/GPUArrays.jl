@@ -84,6 +84,7 @@ function Random.seed!(rng::RNG, seed::Vector{UInt32})
 end
 
 function Random.rand!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
+    isempty(A) && return A
     gpu_call(A, rng.state) do ctx, a, randstates
         idx = linear_index(ctx)
         idx > length(a) && return
@@ -94,8 +95,8 @@ function Random.rand!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
 end
 
 function Random.randn!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
+    isempty(A) && return A
     threads = (length(A) - 1) ÷ 2 + 1
-    length(A) == 0 && return
     gpu_call(A, rng.state; elements = threads) do ctx, a, randstates
         idx = 2*(linear_index(ctx) - 1) + 1
         U1 = gpu_rand(T, ctx, randstates)

@@ -33,6 +33,12 @@
         fill!(A, true)
         rand!(rng, A)
         @test false in Array(A)
+
+        # AT of length 0
+        B = AT{Float32}(undef, 0)
+        fill!(B, 1f0)
+        rand!(rng, B)
+        @test isempty(Array(B))
     end
 
     @testset "randn" begin  # normally-distributed
@@ -56,5 +62,11 @@
                 randn!(cpu_rng, A)
             end
         end
+
+        # AT of length 0
+        A = AT{Float32}(undef, 0)
+        fill!(A, 1f0)
+        randn!(rng, A)
+        @test isempty(Array(A))
     end
 end

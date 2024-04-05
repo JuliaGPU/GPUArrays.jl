@@ -10,7 +10,7 @@ Base.convert(::Type{T}, a::AbstractArray) where {T<:AbstractGPUArray} = a isa T 
 ## convenience constructors
 
 function Base.fill!(A::AnyGPUArray{T}, x) where T
-    length(A) == 0 && return A
+    isempty(A) && return A
     gpu_call(A, convert(T, x)) do ctx, a, val
         idx = @linearidx(a)
         @inbounds a[idx] = val
