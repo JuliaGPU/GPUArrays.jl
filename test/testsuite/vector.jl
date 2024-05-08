@@ -21,6 +21,13 @@
     # we don't shrink buffers yet... TODO shrink them... or should we?
     @test length(GPUArrays.buffer(x)) == 5
 
+    a = Float32[0, 1, 2]
+    x = AT(a)
+    append!(x, [3, 4])
+    @test length(x) == 5
+    @test x[4] == 3
+    @test x[5] == 4
+
     x = AT(Array{Float32}(undef, 16))
     reshape!(x, (2, 2, 2, 2))
     @test size(x) == (2, 2, 2, 2)

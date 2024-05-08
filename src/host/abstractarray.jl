@@ -318,3 +318,12 @@ Base.deepcopy(x::AbstractGPUArray) = copy(x)
 
 # revert of JuliaLang/julia#31929
 Base.filter(f, As::AbstractGPUArray) = As[map(f, As)::AbstractGPUArray{Bool}]
+
+# appending
+
+function Base.append!(a::AbstractGPUVector, items::AbstractVector)
+  n = length(items)
+  resize!(a, length(a) + n)
+  copyto!(a, length(a) - n + 1, items, firstindex(items), n)
+  return a
+end
