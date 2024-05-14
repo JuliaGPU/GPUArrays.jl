@@ -322,8 +322,15 @@ Base.filter(f, As::AbstractGPUArray) = As[map(f, As)::AbstractGPUArray{Bool}]
 # appending
 
 function Base.append!(a::AbstractGPUVector, items::AbstractVector)
-  n = length(items)
-  resize!(a, length(a) + n)
-  copyto!(a, length(a) - n + 1, items, firstindex(items), n)
-  return a
+    n = length(items)
+    resize!(a, length(a) + n)
+    copyto!(a, length(a) - n + 1, items, firstindex(items), n)
+    return a
+end
+
+# this is needed because copyto! of most GPU arrays
+# doesn't support Tuple sources write now
+function Base.append!(a::AbstractGPUVector, items::Tuple)
+    append!(a, collect(items))
+    return a
 end

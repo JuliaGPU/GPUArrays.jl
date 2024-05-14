@@ -372,6 +372,14 @@ end
 Base.copyto!(dest::DenseJLArray{T}, source::DenseJLArray{T}) where {T} =
     copyto!(dest, 1, source, 1, length(source))
 
+function Base.resize!(a::DenseJLVector{T}, nl::Integer) where {T}
+    a_resized = JLVector{T}(undef, nl)
+    copyto!(a_resized, 1, a, 1, min(length(a), nl))
+    a.data = a_resized.data
+    a.offset = 0
+    a.dims = size(a_resized)
+    return a
+end
 
 ## random number generation
 

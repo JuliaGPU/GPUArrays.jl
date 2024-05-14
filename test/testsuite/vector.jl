@@ -1,38 +1,43 @@
 @testsuite "vectors" (AT, eltypes)->begin
-    a = Float32[]
-    x = AT(a)
-    @test length(x) == 0
-    push!(x, 12f0)
-    @test length(x) == 1
-    @test x[1] == 12f0
+    ## push! not defined for most GPU arrays,
+    ## uncomment once it is.
+    # a = Float32[]
+    # x = AT(a)
+    # @test length(x) == 0
+    # @test push!(x, 12)
+    # @allowscalar begin
+    #     @test x[1] == 12
+    # end
 
     a = Float32[0]
     x = AT(a)
-    @test length(x) == 1
-    @test length(GPUArrays.buffer(x)) == 1
-    push!(x, 12)
-    @test length(GPUArrays.buffer(x)) == GPUArrays.grow_dimensions(0, 1, 1)
-    resize!(x, 5)
-    @test length(x) == 5
-    @test length(GPUArrays.buffer(x)) == 5
-
     resize!(x, 3)
     @test length(x) == 3
-    # we don't shrink buffers yet... TODO shrink them... or should we?
-    @test length(GPUArrays.buffer(x)) == 5
+
+    a = Float32[0, 1, 2]
+    x = AT(a)
+    resize!(x, 2)
+    @test length(x) == 2
+    @allowscalar begin
+        @test x[1] == 0
+        @test x[2] == 1
+    end
 
     a = Float32[0, 1, 2]
     x = AT(a)
     append!(x, [3, 4])
     @test length(x) == 5
-    @test x[4] == 3
-    @test x[5] == 4
+    @allowscalar begin
+        @test x[4] == 3
+        @test x[5] == 4
+    end
 
-    x = AT(Array{Float32}(undef, 16))
-    reshape!(x, (2, 2, 2, 2))
-    @test size(x) == (2, 2, 2, 2)
-    x = AT(Array{Float32}(undef, 16))
-    y = AT(rand(Float32, 32))
-    update!(x, y)
-    @test size(x) == (32,)
+    a = Float32[0, 1, 2]
+    x = AT(a)
+    append!(x, (3, 4))
+    @test length(x) == 5
+    @allowscalar begin
+        @test x[4] == 3
+        @test x[5] == 4
+    end
 end
