@@ -102,6 +102,12 @@
 
     @testset "convenience" begin
         for T in eltypes
+            A = AT(rand(T, 0))
+            b = rand(T)
+            fill!(A, b)
+            @test A isa AT{T,1}
+            @test Array(A) == fill(b, 0)
+
             A = AT(rand(T, 3))
             b = rand(T)
             fill!(A, b)

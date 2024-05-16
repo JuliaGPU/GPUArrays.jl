@@ -87,8 +87,8 @@ function unsafe_free!(ref::DataRef, args...)
         # as multiple releases of the underlying data is not allowed.
         return
     end
-    release(ref.rc, args...)
     ref.freed = true
+    release(ref.rc, args...)
     return
 end
 

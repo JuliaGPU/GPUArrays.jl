@@ -64,7 +64,9 @@ macro linearidx(A, grididx=1, ctxsym=:ctx)
     quote
         x = $(esc(A))
         i = linear_index($(esc(ctxsym)), $(esc(grididx)))
-        i > length(x) && return
+        if !(1 <= i <= length(x))
+            return
+        end
         i
     end
 end

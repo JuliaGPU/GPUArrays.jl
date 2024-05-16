@@ -80,17 +80,16 @@ function Base.copyto!(A::Array{T,N}, B::Transpose{T, <:AbstractGPUArray{T,N}}) w
     copyto!(A, Transpose(Array(parent(B))))
 end
 
-
 ## copy upper triangle to lower and vice versa
 
-function LinearAlgebra.copytri!(A::AbstractGPUMatrix{T}, uplo::AbstractChar, conjugate::Bool=false) where T
+function LinearAlgebra.copytri!(A::AbstractGPUMatrix, uplo::AbstractChar, conjugate::Bool=false)
   n = LinearAlgebra.checksquare(A)
   if uplo == 'U' && conjugate
       gpu_call(A) do ctx, _A
         I = @cartesianidx _A
         i, j = Tuple(I)
         if j > i
-          _A[j,i] = conj(_A[i,j])
+          @inbounds _A[j,i] = conj(_A[i,j])
         end
         return
       end
@@ -99,7 +98,7 @@ function LinearAlgebra.copytri!(A::AbstractGPUMatrix{T}, uplo::AbstractChar, con
         I = @cartesianidx _A
         i, j = Tuple(I)
         if j > i
-          _A[j,i] = _A[i,j]
+          @inbounds _A[j,i] = _A[i,j]
         end
         return
       end
@@ -108,7 +107,7 @@ function LinearAlgebra.copytri!(A::AbstractGPUMatrix{T}, uplo::AbstractChar, con
         I = @cartesianidx _A
         i, j = Tuple(I)
         if j > i
-          _A[i,j] = conj(_A[j,i])
+          @inbounds _A[i,j] = conj(_A[j,i])
         end
         return
       end
@@ -117,7 +116,7 @@ function LinearAlgebra.copytri!(A::AbstractGPUMatrix{T}, uplo::AbstractChar, con
         I = @cartesianidx _A
         i, j = Tuple(I)
         if j > i
-          _A[i,j] = _A[j,i]
+          @inbounds _A[i,j] = _A[j,i]
         end
         return
       end
@@ -127,6 +126,36 @@ function LinearAlgebra.copytri!(A::AbstractGPUMatrix{T}, uplo::AbstractChar, con
   A
 end
 
+## copy a triangular part of a matrix to another matrix
+
+if isdefined(LinearAlgebra, :copytrito!)
+    function LinearAlgebra.copytrito!(B::AbstractGPUMatrix, A::AbstractGPUMatrix, uplo::AbstractChar)
+        LinearAlgebra.BLAS.chkuplo(uplo)
+        m,n = size(A)
+        m1,n1 = size(B)
+        (m1 < m || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least the same number of rows and columns than A of size ($m,$n)"))
+        if uplo == 'U'
+            gpu_call(A, B) do ctx, _A, _B
+                I = @cartesianidx _A
+                i, j = Tuple(I)
+                if j >= i
+                    @inbounds _B[i,j] = _A[i,j]
+                end
+                return
+            end
+        else  # uplo == 'L'
+            gpu_call(A, B) do ctx, _A, _B
+                I = @cartesianidx _A
+                i, j = Tuple(I)
+                if j <= i
+                    @inbounds _B[i,j] = _A[i,j]
+                end
+                return
+            end
+        end
+        return B
+    end
+end
 
 ## triangular
 
@@ -146,7 +175,7 @@ function LinearAlgebra.tril!(A::AnyGPUMatrix{T}, d::Integer = 0) where T
     I = @cartesianidx _A
     i, j = Tuple(I)
     if i < j - _d
-      _A[i, j] = 0
+      @inbounds _A[i, j] = zero(T)
     end
     return
   end
@@ -158,11 +187,43 @@ function LinearAlgebra.triu!(A::AnyGPUMatrix{T}, d::Integer = 0) where T
     I = @cartesianidx _A
     i, j = Tuple(I)
     if j < i + _d
-      _A[i, j] = 0
+      @inbounds _A[i, j] = zero(T)
     end
     return
   end
   return A
+end
+
+# check if upper triangular starting from the kth superdiagonal.
+function LinearAlgebra.istriu(A::AbstractGPUMatrix, k::Integer = 0)
+    function mapper(a, I)
+        row, col = Tuple(I)
+        if col < row + k
+            return iszero(a)
+        else
+            true
+        end
+    end
+    function reducer(a, b)
+        a && b
+    end
+    mapreduce(mapper, reducer, A, eachindex(IndexCartesian(), A); init=true)
+end
+
+# check if lower triangular starting from the kth subdiagonal.
+function LinearAlgebra.istril(A::AbstractGPUMatrix, k::Integer = 0)
+    function mapper(a, I)
+        row, col = Tuple(I)
+        if col > row + k
+            return iszero(a)
+        else
+            true
+        end
+    end
+    function reducer(a, b)
+        a && b
+    end
+    mapreduce(mapper, reducer, A, eachindex(IndexCartesian(), A); init=true)
 end
 
 

@@ -77,6 +77,17 @@
             end
         end
 
+        if isdefined(LinearAlgebra, :copytrito!)
+            @testset "copytrito!" begin
+                @testset for T in eltypes, uplo in ('L', 'U')
+                    n = 16
+                    A = rand(T,n,n)
+                    B = zeros(T,n,n)
+                    @test compare(copytrito!, AT, B, A, uplo)
+                end
+            end
+        end
+
         @testset "copyto! for triangular" begin
             for TR in (UpperTriangular, LowerTriangular)
                 @test compare(transpose!, AT, Array{Float32}(undef, 128, 32), rand(Float32, 32, 128))
@@ -103,6 +114,22 @@
                 @test all(Array(gpu_b) .== Array(gpu_a))
                 @test all(Array(gpu_c) .== Array(gpu_a))
                 @test gpu_c isa TR
+            end
+        end
+
+        @testset "istril" begin
+            for rows in 3:4, cols in 3:4, diag in -4:4
+                A = tril(rand(Float32, rows,cols), diag)
+                B = AT(A)
+                @test istril(A) == istril(B)
+            end
+        end
+
+        @testset "istriu" begin
+            for rows in 3:4, cols in 3:4, diag in -4:4
+                A = triu(rand(Float32, rows,cols), diag)
+                B = AT(A)
+                @test istriu(A) == istriu(B)
             end
         end
     end

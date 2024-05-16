@@ -2,22 +2,8 @@
 
 using Base.Broadcast
 
-import Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle, instantiate
+using Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle, instantiate
 
-const BroadcastGPUArray{T} = Union{AnyGPUArray{T},
-                                   Base.RefValue{<:AbstractGPUArray{T}}}
-
-# Wrapper types otherwise forget that they are GPU compatible
-# NOTE: don't directly use GPUArrayStyle here not to lose downstream customizations.
-BroadcastStyle(W::Type{<:WrappedGPUArray})= BroadcastStyle(Adapt.parent(W){Adapt.eltype(W), Adapt.ndims(W)})
-backend(W::Type{<:WrappedGPUArray}) = backend(Adapt.parent(W){Adapt.eltype(W), Adapt.ndims(W)})
-
-# Ref is special: it's not a real wrapper, so not part of Adapt,
-# but it is commonly used to bypass broadcasting of an argument
-# so we need to preserve its dimensionless properties.
-BroadcastStyle(::Type{Base.RefValue{AT}}) where {AT<:AbstractGPUArray} =
-    typeof(BroadcastStyle(AT))(Val(0))
-backend(::Type{Base.RefValue{AT}}) where {AT<:AbstractGPUArray} = backend(AT)
 # but make sure we don't dispatch to the optimized copy method that directly indexes
 function Broadcast.copy(bc::Broadcasted{<:AbstractGPUArrayStyle{0}})
     ElType = Broadcast.combine_eltypes(bc.f, bc.args)
@@ -34,55 +20,82 @@ end
 # iteration (see, e.g., CUDA.jl#145)
 @inline function Broadcast.copy(bc::Broadcasted{<:AbstractGPUArrayStyle})
     ElType = Broadcast.combine_eltypes(bc.f, bc.args)
-    if ElType == Union{}
-        # using a Union{} eltype would fail early, during GPU array construction,
-        # so use Nothing instead to give the error a chance to be thrown dynamically.
-        ElType = Nothing
+    if ElType == Union{} || !Base.allocatedinline(ElType)
+        # a Union{} or non-isbits eltype would fail early, during GPU array construction,
+        # so use a special marker to give the error a chance to be thrown during compilation
+        # or even dynamically, and pick that marker up afterwards to throw an error.
+        ElType = BrokenBroadcast{ElType}
     end
     copyto!(similar(bc, ElType), bc)
 end
+
+struct BrokenBroadcast{T} end
+Base.convert(::Type{BrokenBroadcast{T}}, x) where T = BrokenBroadcast{T}()
+Base.convert(::Type{BrokenBroadcast{T}}, x::BrokenBroadcast{T}) where T = x
+Base.eltype(::Type{BrokenBroadcast{T}}) where T = T
 
 @inline function Base.materialize!(::Style, dest, bc::Broadcasted) where {Style<:AbstractGPUArrayStyle}
     return _copyto!(dest, instantiate(Broadcasted{Style}(bc.f, bc.args, axes(dest))))
 end
 
-@inline Base.copyto!(dest::BroadcastGPUArray, bc::Broadcasted{Nothing}) = _copyto!(dest, bc) # Keep it for ArrayConflict
+@inline Base.copyto!(dest::AnyGPUArray, bc::Broadcasted{Nothing}) =
+    _copyto!(dest, bc) # Keep it for ArrayConflict
 
-@inline Base.copyto!(dest::AbstractArray, bc::Broadcasted{<:AbstractGPUArrayStyle}) = _copyto!(dest, bc)
+@inline Base.copyto!(dest::AbstractArray, bc::Broadcasted{<:AbstractGPUArrayStyle}) =
+    _copyto!(dest, bc)
 
 @inline function _copyto!(dest::AbstractArray, bc::Broadcasted)
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     isempty(dest) && return dest
-    bc′ = Broadcast.preprocess(dest, bc)
+    bc = Broadcast.preprocess(dest, bc)
 
-    # grid-stride kernel
-    function broadcast_kernel(ctx, dest, bc′, nelem)
-        i = 0
-        while i < nelem
-            i += 1
-            I = @cartesianidx(dest, i)
-            @inbounds dest[I] = bc′[I]
+    broadcast_kernel = if ndims(dest) == 1 ||
+                          (isa(IndexStyle(dest), IndexLinear) &&
+                           isa(IndexStyle(bc), IndexLinear))
+        function (ctx, dest, bc, nelem)
+            i = 1
+            while i <= nelem
+                I = @linearidx(dest, i)
+                @inbounds dest[I] = bc[I]
+                i += 1
+            end
+            return
         end
-        return
+    else
+        function (ctx, dest, bc, nelem)
+            i = 0
+            while i < nelem
+                i += 1
+                I = @cartesianidx(dest, i)
+                @inbounds dest[I] = bc[I]
+            end
+            return
+        end
     end
+
     elements = length(dest)
     elements_per_thread = typemax(Int)
-    heuristic = launch_heuristic(backend(dest), broadcast_kernel, dest, bc′, 1;
+    heuristic = launch_heuristic(backend(dest), broadcast_kernel, dest, bc, 1;
                                  elements, elements_per_thread)
     config = launch_configuration(backend(dest), heuristic;
                                   elements, elements_per_thread)
-    gpu_call(broadcast_kernel, dest, bc′, config.elements_per_thread;
+    gpu_call(broadcast_kernel, dest, bc, config.elements_per_thread;
              threads=config.threads, blocks=config.blocks)
+
+    if eltype(dest) <: BrokenBroadcast
+        throw(ArgumentError("Broadcast operation resulting in $(eltype(eltype(dest))) is not GPU compatible"))
+    end
 
     return dest
 end
+
 
 ## map
 
 allequal(x) = true
 allequal(x, y, z...) = x == y && allequal(y, z...)
 
-function Base.map(f, x::BroadcastGPUArray, xs::AbstractArray...)
+function Base.map(f, x::AnyGPUArray, xs::AbstractArray...)
     # if argument sizes match, their shape needs to be preserved
     xs = (x, xs...)
     if allequal(size.(xs)...)
@@ -95,13 +108,16 @@ function Base.map(f, x::BroadcastGPUArray, xs::AbstractArray...)
 
     # construct a broadcast to figure out the destination container
     ElType = Broadcast.combine_eltypes(f, xs)
-    isbitstype(ElType) || error("Cannot map function returning non-isbits $ElType.")
+    if ElType == Union{} || !Base.allocatedinline(ElType)
+        # see `broadcast`
+        ElType = BrokenBroadcast{ElType}
+    end
     dest = similar(x, ElType, common_length)
 
     return map!(f, dest, xs...)
 end
 
-function Base.map!(f, dest::BroadcastGPUArray, xs::AbstractArray...)
+function Base.map!(f, dest::AnyGPUArray, xs::AbstractArray...)
     # custom broadcast, ignoring the container size mismatches
     # (avoids the reshape + view that our mapreduce impl has to do)
     indices = LinearIndices.((dest, xs...))
@@ -115,12 +131,15 @@ function Base.map!(f, dest::BroadcastGPUArray, xs::AbstractArray...)
 
     # grid-stride kernel
     function map_kernel(ctx, dest, bc, nelem)
-        for i in 1:nelem
+        i = 1
+        while i <= nelem
             j = linear_index(ctx, i)
             j > common_length && return
 
             J = CartesianIndices(axes(bc))[j]
             @inbounds dest[j] = bc[J]
+
+            i += 1
         end
         return
     end
@@ -132,6 +151,10 @@ function Base.map!(f, dest::BroadcastGPUArray, xs::AbstractArray...)
                                   elements, elements_per_thread)
     gpu_call(map_kernel, dest, bc, config.elements_per_thread;
              threads=config.threads, blocks=config.blocks)
+
+    if eltype(dest) <: BrokenBroadcast
+        throw(ArgumentError("Map operation resulting in $(eltype(eltype(dest))) is not GPU compatible"))
+    end
 
     return dest
 end

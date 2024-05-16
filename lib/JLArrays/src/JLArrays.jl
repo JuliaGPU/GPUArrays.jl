@@ -97,7 +97,7 @@ Base.size(x::JLDeviceArray) = x.dims
 Base.sizeof(x::JLDeviceArray) = Base.elsize(x) * length(x)
 
 Base.unsafe_convert(::Type{Ptr{T}}, x::JLDeviceArray{T}) where {T} =
-    Base.unsafe_convert(Ptr{T}, x.data) + x.offset*Base.elsize(x)
+    convert(Ptr{T}, pointer(x.data)) + x.offset*Base.elsize(x)
 
 # conversion of untyped data to a typed Array
 function typed_data(x::JLDeviceArray{T}) where {T}
@@ -190,7 +190,7 @@ function typed_data(x::JLArray{T}) where {T}
     unsafe_wrap(Array, pointer(x), x.dims)
 end
 
-function GPUArrays.derive(::Type{T}, N::Int, a::JLArray, dims::Dims, offset::Int) where {T}
+function GPUArrays.derive(::Type{T}, a::JLArray, dims::Dims{N}, offset::Int) where {T,N}
     ref = copy(a.data)
     offset = (a.offset * Base.elsize(a)) ÷ sizeof(T) + offset
     JLArray{T,N}(ref, dims; offset)
@@ -269,7 +269,7 @@ Base.size(x::JLArray) = x.dims
 Base.sizeof(x::JLArray) = Base.elsize(x) * length(x)
 
 Base.unsafe_convert(::Type{Ptr{T}}, x::JLArray{T}) where {T} =
-    Base.unsafe_convert(Ptr{T}, x.data[]) + x.offset*Base.elsize(x)
+    convert(Ptr{T}, pointer(x.data[])) + x.offset*Base.elsize(x)
 
 
 ## interop with Julia arrays
@@ -311,16 +311,15 @@ Base.convert(::Type{T}, x::T) where T <: JLArray = x
 using Base.Broadcast: BroadcastStyle, Broadcasted
 
 struct JLArrayStyle{N} <: AbstractGPUArrayStyle{N} end
-JLArrayStyle(::Val{N}) where N = JLArrayStyle{N}()
 JLArrayStyle{M}(::Val{N}) where {N,M} = JLArrayStyle{N}()
 
-BroadcastStyle(::Type{JLArray{T,N}}) where {T,N} = JLArrayStyle{N}()
+# identify the broadcast style of a (wrapped) array
+BroadcastStyle(::Type{<:JLArray{T,N}}) where {T,N} = JLArrayStyle{N}()
+BroadcastStyle(::Type{<:AnyJLArray{T,N}}) where {T,N} = JLArrayStyle{N}()
 
-# Allocating the output container
-Base.similar(bc::Broadcasted{JLArrayStyle{N}}, ::Type{T}) where {N,T} =
-    similar(JLArray{T}, axes(bc))
-Base.similar(bc::Broadcasted{JLArrayStyle{N}}, ::Type{T}, dims) where {N,T} =
-    JLArray{T}(undef, dims)
+# allocation of output arrays
+Base.similar(bc::Broadcasted{JLArrayStyle{N}}, ::Type{T}, dims) where {T,N} =
+    similar(JLArray{T}, dims)
 
 
 ## memory operations
