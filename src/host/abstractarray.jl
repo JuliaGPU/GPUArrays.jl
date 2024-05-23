@@ -329,7 +329,7 @@ function Base.append!(a::AbstractGPUVector, items::AbstractVector)
 end
 
 # this is needed because copyto! of most GPU arrays
-# doesn't support Tuple sources write now
+# doesn't currently support Tuple sources
 function Base.append!(a::AbstractGPUVector, items::Tuple)
     append!(a, collect(items))
     return a
