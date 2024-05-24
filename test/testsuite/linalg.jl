@@ -132,6 +132,39 @@
                 @test istriu(A) == istriu(B)
             end
         end
+
+        if VERSION >= v"1.10-"
+        @testset "mul! + Triangular" begin
+            @testset "trimatmul! ($TR x $T, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
+                n = 128
+                A = AT(rand(T, n,n))
+                b = AT(rand(T, n))
+                Ct = AT(zeros(T, n))
+                C = zeros(T, n)
+                mul!(Ct, f(TR(A)), b)
+                mul!(C, f(TR(collect(A))), collect(b))
+                @test collect(Ct) ≈ C
+
+                B = AT(rand(T, n, n))
+                Ct = AT(zeros(T, n, n))
+                C = zeros(T, n, n)
+                mul!(Ct, f(TR(A)), B)
+                mul!(C, f(TR(collect(A))), collect(B))
+                @test collect(Ct) ≈ C
+            end
+
+            @testset "mattrimul ($TR x $T, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
+                n = 128
+                A = AT(rand(T, n,n))
+                B = AT(rand(T, n, n))
+                Ct = AT(zeros(T, n, n))
+                C = zeros(T, n, n)
+                mul!(Ct, A, f(TR(B)))
+                mul!(C, collect(A), f(TR(collect(B))))
+                @test collect(Ct) ≈ C
+            end
+        end
+        end
     end
 
     @testset "diagonal" begin
