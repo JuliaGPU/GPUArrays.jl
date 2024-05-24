@@ -318,3 +318,19 @@ Base.deepcopy(x::AbstractGPUArray) = copy(x)
 
 # revert of JuliaLang/julia#31929
 Base.filter(f, As::AbstractGPUArray) = As[map(f, As)::AbstractGPUArray{Bool}]
+
+# appending
+
+function Base.append!(a::AbstractGPUVector, items::AbstractVector)
+    n = length(items)
+    resize!(a, length(a) + n)
+    copyto!(a, length(a) - n + 1, items, firstindex(items), n)
+    return a
+end
+
+# this is needed because copyto! of most GPU arrays
+# doesn't currently support Tuple sources
+function Base.append!(a::AbstractGPUVector, items::Tuple)
+    append!(a, collect(items))
+    return a
+end
