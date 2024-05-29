@@ -339,7 +339,7 @@ end
 
 ## matrix multiplication
 # legacy method
-generic_matmatmul!(C::AbstractArray, A::AbstractArray, B::AbstractArray, a::Number, b::Number) where {T,S,R} =
+generic_matmatmul!(C::AbstractArray, A::AbstractArray, B::AbstractArray, a::Number, b::Number) =
     generic_matmatmul!(C, A, B, MulAddMul(a, b))
 function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::AbstractArray{S}, add::MulAddMul) where {T,S,R}
     if size(A,2) != size(B,1)
