@@ -1,6 +1,6 @@
 using GPUArrays, Test, Pkg
 
-@tests "GPUArraysCore" begin
+@testset "GPUArraysCore" begin
     include("gpuarrayscore.jl")
 end
 
