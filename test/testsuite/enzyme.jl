@@ -1,5 +1,9 @@
 using Enzyme
 
+function scalarfirst(x)
+	@allowscalar x[1]
+end
+
 @testsuite "Enzyme" (AT, eltypes)->begin
     for ET in eltypes
         T = AT{ET}
