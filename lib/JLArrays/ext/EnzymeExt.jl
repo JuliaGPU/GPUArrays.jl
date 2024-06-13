@@ -2,30 +2,33 @@ module EnzymeExt
 
 using JLArrays
 
+using GPUArrays
+
 if isdefined(Base, :get_extension)
     using Enzyme
 else
     using ..Enzyme
 end
 
+
 # Override default type tree. This is because JLArray stores data as Vector{UInt8}, causing issues for
 # type analysis not determining the proper element type (instead determining the memory is of type UInt8).
 function Enzyme.typetree_inner(::Type{JLT}, ctx, dl, seen::Enzyme.TypeTreeTable) where {JLT<:JLArray}
-    if T isa UnionAll || T isa Union || T == Union{} || Base.isabstracttype(T)
-        return TypeTree()
+    if JLT isa UnionAll || JLT isa Union || JLT == Union{} || Base.isabstracttype(JLT)
+        return Enzyme.TypeTree()
     end
 
-    if !Base.isconcretetype(T)
+    if !Base.isconcretetype(JLT)
         return Enzyme.TypeTree(Enzyme.API.DT_Pointer, -1, ctx)
     end
 
     elT = eltype(JLT)
 
-    fieldTypes = [DataRef{Vector{elT}}, Int, Dims{length(size(JLT))}]
+    fieldTypes = [DataRef{Vector{elT}}, Int, Dims{ndims(JLT)}]
 
     tt = Enzyme.TypeTree()
-    for f in 1:fieldcount(T)
-        offset = fieldoffset(T, f)
+    for f in 1:fieldcount(JLT)
+        offset = fieldoffset(JLT, f)
         subT = fieldTypes[f]
         subtree = copy(Enzyme.typetree(subT, ctx, dl, seen))
 
@@ -35,16 +38,16 @@ function Enzyme.typetree_inner(::Type{JLT}, ctx, dl, seen::Enzyme.TypeTreeTable)
         end
 
         # Allocated inline so adjust first path
-        if allocatedinline(subT)
+        if Enzyme.allocatedinline(subT)
             Enzyme.shift!(subtree, dl, 0, sizeof(subT), offset)
         else
-            Enzyme.merge!(subtree, TypeTree(API.DT_Pointer, ctx))
+            Enzyme.merge!(subtree, Enzyme.TypeTree(Enzyme.API.DT_Pointer, ctx))
             Enzyme.only!(subtree, offset)
         end
 
         Enzyme.merge!(tt, subtree)
     end
-    Enzyme.canonicalize!(tt, sizeof(T), dl)
+    Enzyme.canonicalize!(tt, sizeof(JLT), dl)
     return tt
 end
 
