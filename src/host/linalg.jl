@@ -133,8 +133,12 @@ if isdefined(LinearAlgebra, :copytrito!)
         LinearAlgebra.BLAS.chkuplo(uplo)
         m,n = size(A)
         m1,n1 = size(B)
-        (m1 < m || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least the same number of rows and columns than A of size ($m,$n)"))
         if uplo == 'U'
+            if n < m
+                (m1 < n || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least size ($n,$n)"))
+            else
+                (m1 < m || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least size ($m,$n)"))
+            end
             gpu_call(A, B) do ctx, _A, _B
                 I = @cartesianidx _A
                 i, j = Tuple(I)
@@ -144,6 +148,11 @@ if isdefined(LinearAlgebra, :copytrito!)
                 return
             end
         else  # uplo == 'L'
+            if m < n
+                (m1 < m || n1 < m) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least size ($m,$m)"))
+            else
+                (m1 < m || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least size ($m,$n)"))
+            end
             gpu_call(A, B) do ctx, _A, _B
                 I = @cartesianidx _A
                 i, j = Tuple(I)
