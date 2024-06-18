@@ -53,7 +53,11 @@ end
                           (isa(IndexStyle(dest), IndexLinear) &&
                            isa(IndexStyle(bc), IndexLinear))
         function (ctx, dest, bcstyle, bcf, bcaxes, nelem, bcargs...)
+@static if VERSION >= v"1.10-"
             bc2 = Base.Broadcast.Broadcasted(bcstyle, bcf, bcargs, bcaxes)
+else
+            bc2 = Base.Broadcast.Broadcasted{bcstyle}(bcf, bcargs, bcaxes)
+end
             i = 1
             while i <= nelem
                 I = @linearidx(dest, i)
@@ -64,7 +68,11 @@ end
         end
     else
         function (ctx, dest, bcstyle, bcf, bcaxes, nelem, bcargs...)
+@static if VERSION >= v"1.10-"
             bc2 = Base.Broadcast.Broadcasted(bcstyle, bcf, bcargs, bcaxes)
+else
+            bc2 = Base.Broadcast.Broadcasted{bcstyle}(bcf, bcargs, bcaxes)
+end
             i = 0
             while i < nelem
                 i += 1
@@ -77,11 +85,16 @@ end
 
     elements = length(dest)
     elements_per_thread = typemax(Int)
-    heuristic = launch_heuristic(backend(dest), broadcast_kernel, dest, bc.style, bc.f, bc.axes, 1, bc.args...;
+@static if VERSION >= v"1.10-"
+    style = bc.style
+else
+    style = Base.Broadcast.BroadcastStyle(typeof(bc))
+end
+    heuristic = launch_heuristic(backend(dest), broadcast_kernel, dest, style, bc.f, bc.axes, 1, bc.args...;
                                  elements, elements_per_thread)
     config = launch_configuration(backend(dest), heuristic;
                                   elements, elements_per_thread)
-    gpu_call(broadcast_kernel, dest, bc.style, bc.f, bc.axes, config.elements_per_thread, bc.args...;
+    gpu_call(broadcast_kernel, dest, style, bc.f, bc.axes, config.elements_per_thread, bc.args...;
              threads=config.threads, blocks=config.blocks)
 
     if eltype(dest) <: BrokenBroadcast
