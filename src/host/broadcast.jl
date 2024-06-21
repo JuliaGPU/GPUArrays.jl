@@ -88,7 +88,7 @@ end
 @static if VERSION >= v"1.10-"
     style = bc.style
 else
-    style = Base.Broadcast.BroadcastStyle(typeof(bc))
+    style = typeof(Base.Broadcast.BroadcastStyle(typeof(bc)))
 end
     heuristic = launch_heuristic(backend(dest), broadcast_kernel, dest, style, bc.f, bc.axes, 1, bc.args...;
                                  elements, elements_per_thread)
