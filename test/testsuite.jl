@@ -8,6 +8,7 @@ export supported_eltypes
 
 using GPUArrays
 
+using KernelAbstractions
 using LinearAlgebra
 using Random
 using Test
@@ -85,7 +86,6 @@ macro testsuite(name, ex)
 end
 
 include("testsuite/construction.jl")
-include("testsuite/gpuinterface.jl")
 include("testsuite/indexing.jl")
 include("testsuite/base.jl")
 include("testsuite/vector.jl")

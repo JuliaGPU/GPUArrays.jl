@@ -10,7 +10,7 @@ steps:
 
                 println("--- :julia: Instantiating project")
                 Pkg.develop(; path=pwd())
-                Pkg.develop(; name="CUDA")
+                Pkg.add(; url="https://github.com/leios/CUDA.jl/", rev="GtK_trans")
 
                 println("+++ :julia: Running tests")
                 Pkg.test("CUDA"; coverage=true)'
@@ -31,10 +31,13 @@ steps:
 
                 println("--- :julia: Instantiating project")
                 Pkg.develop(; path=pwd())
-                Pkg.develop(; name="oneAPI")
+                Pkg.add(; url="https://github.com/leios/oneAPI.jl/", rev="GtK_transition")
 
                 println("+++ :julia: Building support library")
-                include(joinpath(Pkg.devdir(), "oneAPI", "deps", "build_ci.jl"))
+                filename = Base.find_package("oneAPI")
+                filename = filename[1:findfirst("oneAPI.jl", filename)[1]-1]
+                filename *= "../deps/build_ci.jl"
+                include(filename)
                 Pkg.activate()
 
                 println("+++ :julia: Running tests")
@@ -56,7 +59,7 @@ steps:
 
                 println("--- :julia: Instantiating project")
                 Pkg.develop(; path=pwd())
-                Pkg.develop(; name="Metal")
+                Pkg.add(; url="https://github.com/leios/Metal.jl/", rev="GtK_transition")
 
                 println("+++ :julia: Running tests")
                 Pkg.test("Metal"; coverage=true)'
