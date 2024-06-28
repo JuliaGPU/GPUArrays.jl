@@ -375,7 +375,10 @@ Base.copyto!(dest::DenseJLArray{T}, source::DenseJLArray{T}) where {T} =
 function Base.resize!(a::DenseJLVector{T}, nl::Integer) where {T}
     a_resized = JLVector{T}(undef, nl)
     copyto!(a_resized, 1, a, 1, min(length(a), nl))
-    a.data = a_resized.data
+    # Free old memory and increase reference count of the resized array, to avoid new memory
+    # from being freed after we leave this function.
+    finalize(a)
+    a.data = copy(a_resized.data)  # this copies the pointer and increments the reference count
     a.offset = 0
     a.dims = size(a_resized)
     return a
