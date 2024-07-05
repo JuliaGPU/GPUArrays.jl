@@ -1,5 +1,7 @@
 # host-level indexing
 
+using Base: @propagate_inbounds
+
 
 # indexing operators
 
@@ -12,29 +14,29 @@ vectorized_indices(Is...) = Val{true}()
 #       by only implementing `getindex(A, ::Int)` etc. this is difficult due to
 #       ambiguities with the vectorized method that can take any index type.
 
-Base.@propagate_inbounds Base.getindex(A::AbstractGPUArray, Is...) =
+@propagate_inbounds Base.getindex(A::AbstractGPUArray, Is...) =
     _getindex(vectorized_indices(Is...), A, to_indices(A, Is)...)
-Base.@propagate_inbounds _getindex(::Val{false}, A::AbstractGPUArray, Is...) =
+@propagate_inbounds _getindex(::Val{false}, A::AbstractGPUArray, Is...) =
     scalar_getindex(A, to_indices(A, Is)...)
-Base.@propagate_inbounds _getindex(::Val{true}, A::AbstractGPUArray, Is...) =
+@propagate_inbounds _getindex(::Val{true}, A::AbstractGPUArray, Is...) =
     vectorized_getindex(A, to_indices(A, Is)...)
 
-Base.@propagate_inbounds Base.setindex!(A::AbstractGPUArray, v, Is...) =
+@propagate_inbounds Base.setindex!(A::AbstractGPUArray, v, Is...) =
     _setindex!(vectorized_indices(Is...), A, v, to_indices(A, Is)...)
-Base.@propagate_inbounds _setindex!(::Val{false}, A::AbstractGPUArray, v, Is...) =
+@propagate_inbounds _setindex!(::Val{false}, A::AbstractGPUArray, v, Is...) =
     scalar_setindex!(A, v, to_indices(A, Is)...)
-Base.@propagate_inbounds _setindex!(::Val{true}, A::AbstractGPUArray, v, Is...) =
+@propagate_inbounds _setindex!(::Val{true}, A::AbstractGPUArray, v, Is...) =
     vectorized_setindex!(A, v, to_indices(A, Is)...)
 
 ## scalar indexing
 
-function scalar_getindex(A::AbstractGPUArray{T}, Is...) where T
+@propagate_inbounds function scalar_getindex(A::AbstractGPUArray{T}, Is...) where T
     @boundscheck checkbounds(A, Is...)
     I = Base._to_linear_index(A, Is...)
     getindex(A, I)
 end
 
-function scalar_setindex!(A::AbstractGPUArray{T}, v, Is...) where T
+@propagate_inbounds function scalar_setindex!(A::AbstractGPUArray{T}, v, Is...) where T
     @boundscheck checkbounds(A, Is...)
     I = Base._to_linear_index(A, Is...)
     setindex!(A, v, I)
@@ -43,7 +45,7 @@ end
 # we still dispatch to `Base.getindex(a, ::Int)` etc so that there's a single method to
 # override when a back-end (e.g. with unified memory) wants to allow scalar indexing.
 
-function Base.getindex(A::AbstractGPUArray{T}, I::Int) where T
+@propagate_inbounds function Base.getindex(A::AbstractGPUArray{T}, I::Int) where T
     @boundscheck checkbounds(A, I)
     assertscalar("getindex")
     x = Array{T}(undef, 1)
@@ -51,7 +53,7 @@ function Base.getindex(A::AbstractGPUArray{T}, I::Int) where T
     return x[1]
 end
 
-function Base.setindex!(A::AbstractGPUArray{T}, v, I::Int) where T
+@propagate_inbounds function Base.setindex!(A::AbstractGPUArray{T}, v, I::Int) where T
     @boundscheck checkbounds(A, I)
     assertscalar("setindex!")
     x = T[v]
@@ -61,7 +63,8 @@ end
 
 ## vectorized indexing
 
-function vectorized_getindex!(dest::AbstractGPUArray, src::AbstractArray, Is...)
+@propagate_inbounds function vectorized_getindex!(dest::AbstractGPUArray,
+                                                  src::AbstractArray, Is...)
     any(isempty, Is) && return dest # indexing with empty array
     idims = map(length, Is)
 
@@ -73,7 +76,7 @@ function vectorized_getindex!(dest::AbstractGPUArray, src::AbstractArray, Is...)
     return dest
 end
 
-function vectorized_getindex(src::AbstractGPUArray, Is...)
+@propagate_inbounds function vectorized_getindex(src::AbstractGPUArray, Is...)
     shape = Base.index_shape(Is...)
     dest = similar(src, shape)
     return vectorized_getindex!(dest, src, Is...)
@@ -91,7 +94,7 @@ end
     end
 end
 
-function vectorized_setindex!(dest::AbstractArray, src, Is...)
+@propagate_inbounds function vectorized_setindex!(dest::AbstractArray, src, Is...)
     isempty(Is) && return dest
     idims = length.(Is)
     len = prod(idims)
