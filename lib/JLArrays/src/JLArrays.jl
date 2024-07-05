@@ -169,7 +169,9 @@ mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
         check_eltype(T)
         maxsize = prod(dims) * sizeof(T)
         data = Vector{UInt8}(undef, maxsize)
-        ref = DataRef(data)
+        ref = DataRef(data) do data
+            resize!(data, 0)
+        end
         obj = new{T,N}(ref, 0, dims)
         finalizer(unsafe_free!, obj)
     end
@@ -373,11 +375,18 @@ Base.copyto!(dest::DenseJLArray{T}, source::DenseJLArray{T}) where {T} =
     copyto!(dest, 1, source, 1, length(source))
 
 function Base.resize!(a::DenseJLVector{T}, nl::Integer) where {T}
-    a_resized = JLVector{T}(undef, nl)
-    copyto!(a_resized, 1, a, 1, min(length(a), nl))
-    a.data = a_resized.data
-    a.offset = 0
-    a.dims = size(a_resized)
+    # JLArrays aren't performance critical, so simply allocate a new one
+    # instead of duplicating the underlying data allocation from the ctor.
+    b = JLVector{T}(undef, nl)
+    copyto!(b, 1, a, 1, min(length(a), nl))
+
+    # replace the data, freeing the old one and increasing the refcount of the new one
+    # to avoid it from being freed when we leave this function.
+    unsafe_free!(a)
+    a.data = copy(b.data)
+
+    a.offset = b.offset
+    a.dims = b.dims
     return a
 end
 
