@@ -1,5 +1,7 @@
 module GPUArrays
 
+import AbstractNumbers as AN
+
 using Serialization
 using Random
 using LinearAlgebra
@@ -25,6 +27,7 @@ include("device/synchronization.jl")
 # host abstractions
 include("host/abstractarray.jl")
 include("host/construction.jl")
+include("host/gpunumber.jl")
 ## integrations and specialized methods
 include("host/base.jl")
 include("host/indexing.jl")

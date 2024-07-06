@@ -34,6 +34,9 @@ function test_result(as::NTuple{N,Any}, bs::NTuple{N,Any}; kwargs...) where {N}
         test_result(a, b; kwargs...)
     end
 end
+# Special case for `extrema` accross all dims.
+test_result(as::NTuple{N,Any}, bs::GPUArrays.GPUNumber; kwargs...) where {N} =
+    test_result(as, GPUArrays.maybe_number(bs))
 
 function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
     # copy on the CPU, adapt on the GPU, but keep Ref's

@@ -204,7 +204,7 @@ function Base.findfirst(f::Function, A::AnyGPUArray)
     end
 
     res = mapreduce((x, y)->(f(x), y), reduction, A, indices;
-                    init = (false, dummy_index))
+                    init = (false, dummy_index)) |> AN.number
     if res[1]
         # out of consistency with Base.findarray, return a CartesianIndex
         # when the input is a multidimensional array
@@ -230,14 +230,15 @@ function findminmax(binop, A::AnyGPUArray; init, dims)
     end
 
     if dims == Colon()
-        res = mapreduce(tuple, reduction, A, indices; init = (init, dummy_index))
+        res = mapreduce(tuple, reduction, A, indices;
+            init = (init, dummy_index)) |> AN.number
 
         # out of consistency with Base.findarray, return a CartesianIndex
         # when the input is a multidimensional array
         return (res[1], ndims(A) == 1 ? res[2] : CartesianIndices(A)[res[2]])
     else
         res = mapreduce(tuple, reduction, A, indices;
-                        init = (init, dummy_index), dims=dims)
+                        init = (init, dummy_index), dims=dims) |> maybe_number
         vals = map(x->x[1], res)
         inds = map(x->ndims(A) == 1 ? x[2] : CartesianIndices(A)[x[2]], res)
         return (vals, inds)
