@@ -11,7 +11,6 @@ struct GPUNumber{T <: AbstractGPUArray} <: AN.AbstractNumber{T}
 end
 
 AN.number(g::GPUNumber) = @allowscalar g.val[]
-
 maybe_number(g::GPUNumber) = AN.number(g)
 maybe_number(g) = g
 
@@ -30,3 +29,12 @@ Base.one(::Type{GPUNumber{T}}) where T = one(eltype(T))
 Base.zero(g::GPUNumber) = zero(number_type(g))
 Base.zero(::Type{GPUNumber{T}}) where T = zero(eltype(T))
 Base.identity(g::GPUNumber) = g
+
+Base.getindex(g::GPUNumber) = AN.number(g)
+
+Base.isequal(g::GPUNumber, v::Number) = isequal(g[], v)
+Base.isequal(v::Number, g::GPUNumber) = isequal(v, g[])
+
+Base.nextpow(a, x::GPUNumber) = nextpow(a, x[])
+Base.nextpow(a::GPUNumber, x) = nextpow(a[], x)
+Base.nextpow(a::GPUNumber, x::GPUNumber) = nextpow(a[], x[])
