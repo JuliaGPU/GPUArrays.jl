@@ -26,5 +26,7 @@ Base.broadcastable(g::GPUNumber) = g.val
 
 # Overload to avoid copies.
 Base.one(g::GPUNumber) = one(number_type(g))
+Base.one(::Type{GPUNumber{T}}) where T = one(eltype(T))
 Base.zero(g::GPUNumber) = zero(number_type(g))
+Base.zero(::Type{GPUNumber{T}}) where T = zero(eltype(T))
 Base.identity(g::GPUNumber) = g
