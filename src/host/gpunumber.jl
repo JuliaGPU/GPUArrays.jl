@@ -38,3 +38,5 @@ Base.isequal(v::Number, g::GPUNumber) = isequal(v, g[])
 Base.nextpow(a, x::GPUNumber) = nextpow(a, x[])
 Base.nextpow(a::GPUNumber, x) = nextpow(a[], x)
 Base.nextpow(a::GPUNumber, x::GPUNumber) = nextpow(a[], x[])
+
+Base.convert(::Type{Number}, g::GPUNumber) = g[]
