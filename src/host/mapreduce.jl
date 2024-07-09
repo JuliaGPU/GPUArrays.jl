@@ -68,17 +68,20 @@ function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,
     end
 
     if dims === Colon()
-        GPUNumber(R)
+        # Return `GPUNumber` for `Number` eltypes, otherwise - transfer to host.
+        eltype(R) <: Number ?
+            GPUNumber(reshape(R, :)) :
+            @allowscalar(R[])
     else
         R
     end
 end
 
-Base.any(A::AnyGPUArray{Bool}) = mapreduce(identity, |, A) |> AN.number
-Base.all(A::AnyGPUArray{Bool}) = mapreduce(identity, &, A) |> AN.number
+Base.any(A::AnyGPUArray{Bool}) = mapreduce(identity, |, A)[]
+Base.all(A::AnyGPUArray{Bool}) = mapreduce(identity, &, A)[]
 
-Base.any(f::Function, A::AnyGPUArray) = mapreduce(f, |, A) |> AN.number
-Base.all(f::Function, A::AnyGPUArray) = mapreduce(f, &, A) |> AN.number
+Base.any(f::Function, A::AnyGPUArray) = mapreduce(f, |, A)[]
+Base.all(f::Function, A::AnyGPUArray) = mapreduce(f, &, A)[]
 
 Base.count(pred::Function, A::AnyGPUArray; dims=:, init=0) =
     mapreduce(pred, Base.add_sum, A; init=init, dims=dims) |> maybe_number
@@ -94,8 +97,7 @@ for (fname, op) in [(:sum, :(Base.add_sum)), (:prod, :(Base.mul_prod)),
     end
 end
 
-LinearAlgebra.ishermitian(A::AbstractGPUMatrix) =
-    mapreduce(==, &, A, adjoint(A)) |> AN.number
+LinearAlgebra.ishermitian(A::AbstractGPUMatrix) = mapreduce(==, &, A, adjoint(A))[]
 
 
 # comparisons
@@ -106,7 +108,7 @@ function Base.isequal(A::AnyGPUArray, B::AnyGPUArray)
     if axes(A) != axes(B)
         return false
     end
-    mapreduce(isequal, &, A, B; init=true) |> AN.number
+    mapreduce(isequal, &, A, B; init=true)[]
 end
 
 # returns `missing` when missing values are involved
@@ -131,6 +133,6 @@ function Base.:(==)(A::AnyGPUArray, B::AnyGPUArray)
         end
     end
     res = mapreduce(mapper, reducer, A, B;
-        init=(; is_missing=false, is_equal=true)) |> AN.number
+        init=(; is_missing=false, is_equal=true))
     res.is_missing ? missing : res.is_equal
 end
