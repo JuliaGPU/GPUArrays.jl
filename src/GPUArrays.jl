@@ -1,6 +1,6 @@
 module GPUArrays
 
-import AbstractNumbers as AN
+import AbstractNumbers
 
 using Serialization
 using Random

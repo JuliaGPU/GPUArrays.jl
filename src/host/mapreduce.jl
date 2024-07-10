@@ -68,9 +68,9 @@ function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,
     end
 
     if dims === Colon()
-        # Return `GPUNumber` for `Number` eltypes, otherwise - transfer to host.
+        # Return `AsyncNumber` for `Number` eltypes, otherwise - transfer to host.
         eltype(R) <: Number ?
-            GPUNumber(reshape(R, :)) :
+            AsyncNumber(reshape(R, :)) :
             @allowscalar(R[])
     else
         R

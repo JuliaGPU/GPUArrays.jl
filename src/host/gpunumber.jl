@@ -1,42 +1,42 @@
 # Custom GPU-compatible `Number` interface.
-struct GPUNumber{T <: AbstractGPUArray} <: AN.AbstractNumber{T}
+struct AsyncNumber{T <: AbstractGPUArray} <: AbstractNumbers.AbstractNumber{T}
     val::T
 
-    function GPUNumber(val::T) where T <: AbstractGPUArray
+    function AsyncNumber(val::T) where T <: AbstractGPUArray
         length(val) != 1 && error(
-            "`GPUNumber` accepts only 1-element GPU arrays, " *
+            "`AsyncNumber` accepts only 1-element GPU arrays, " *
             "instead `$(length(val))`-element array was given.")
         new{T}(val)
     end
 end
 
-AN.number(g::GPUNumber) = @allowscalar g.val[]
-maybe_number(g::GPUNumber) = AN.number(g)
+AbstractNumbers.number(g::AsyncNumber) = @allowscalar g.val[]
+maybe_number(g::AsyncNumber) = AbstractNumbers.number(g)
 maybe_number(g) = g
 
-number_type(::GPUNumber{T}) where T = eltype(T)
+number_type(::AsyncNumber{T}) where T = eltype(T)
 
 # When operations involve other `::Number` types,
-# do not convert back to `GPUNumber`.
-AN.like(::Type{<: GPUNumber}, x) = x
+# do not convert back to `AsyncNumber`.
+AbstractNumbers.like(::Type{<: AsyncNumber}, x) = x
 
 # When broadcasting, just pass the array itself.
-Base.broadcastable(g::GPUNumber) = g.val
+Base.broadcastable(g::AsyncNumber) = g.val
 
 # Overload to avoid copies.
-Base.one(g::GPUNumber) = one(number_type(g))
-Base.one(::Type{GPUNumber{T}}) where T = one(eltype(T))
-Base.zero(g::GPUNumber) = zero(number_type(g))
-Base.zero(::Type{GPUNumber{T}}) where T = zero(eltype(T))
-Base.identity(g::GPUNumber) = g
+Base.one(g::AsyncNumber) = one(number_type(g))
+Base.one(::Type{AsyncNumber{T}}) where T = one(eltype(T))
+Base.zero(g::AsyncNumber) = zero(number_type(g))
+Base.zero(::Type{AsyncNumber{T}}) where T = zero(eltype(T))
+Base.identity(g::AsyncNumber) = g
 
-Base.getindex(g::GPUNumber) = AN.number(g)
+Base.getindex(g::AsyncNumber) = AbstractNumbers.number(g)
 
-Base.isequal(g::GPUNumber, v::Number) = isequal(g[], v)
-Base.isequal(v::Number, g::GPUNumber) = isequal(v, g[])
+Base.isequal(g::AsyncNumber, v::Number) = isequal(g[], v)
+Base.isequal(v::Number, g::AsyncNumber) = isequal(v, g[])
 
-Base.nextpow(a, x::GPUNumber) = nextpow(a, x[])
-Base.nextpow(a::GPUNumber, x) = nextpow(a[], x)
-Base.nextpow(a::GPUNumber, x::GPUNumber) = nextpow(a[], x[])
+Base.nextpow(a, x::AsyncNumber) = nextpow(a, x[])
+Base.nextpow(a::AsyncNumber, x) = nextpow(a[], x)
+Base.nextpow(a::AsyncNumber, x::AsyncNumber) = nextpow(a[], x[])
 
-Base.convert(::Type{Number}, g::GPUNumber) = g[]
+Base.convert(::Type{Number}, g::AsyncNumber) = g[]
