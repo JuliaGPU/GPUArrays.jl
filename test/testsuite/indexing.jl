@@ -140,7 +140,7 @@ end
         a = rand(Float32, 5, 5)
         @test compare(a->a'[:, 1], AT, a)
         @test compare(a->Base.PermutedDimsArray(a, (2, 1))[2:-1:1, 1:2], AT, a)
-        @test compare(a->LowerTriangular(a)[:], AT, a) broken=(string(AT) in ["oneArray"])
+        @test compare(a->LowerTriangular(a)[:], AT, a)
         @test compare(a->Symmetric(a, :U)[a .> 0], AT, a)
     end
 
