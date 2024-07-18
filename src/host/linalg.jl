@@ -1,28 +1,6 @@
 # integration with LinearAlgebra stdlib
 
-using LinearAlgebra: MulAddMul
-
-if isdefined(LinearAlgebra, :wrap) # i.e., VERSION >= v"1.10.0-DEV.1365"
-    using LinearAlgebra: wrap
-else
-    function wrap(A::AbstractVecOrMat, tA::AbstractChar)
-        if tA == 'N'
-            return A
-        elseif tA == 'T'
-            return transpose(A)
-        elseif tA == 'C'
-            return adjoint(A)
-        elseif tA == 'H'
-            return Hermitian(A, :U)
-        elseif tA == 'h'
-            return Hermitian(A, :L)
-        elseif tA == 'S'
-            return Symmetric(A, :U)
-        else # tA == 's'
-            return Symmetric(A, :L)
-        end
-    end
-end
+using LinearAlgebra: MulAddMul, wrap
 
 ## transpose and adjoint
 
@@ -558,46 +536,12 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
     C
 end
 
-if VERSION >= v"1.10-"
 function LinearAlgebra.generic_trimatmul!(C::AbstractGPUVecOrMat, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix, B::AbstractGPUVecOrMat)
     generic_trimatmul!(C, uploc, isunitc, tfun, A, B)
 end
 function LinearAlgebra.generic_mattrimul!(C::AbstractGPUMatrix, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix, B::AbstractGPUMatrix)
     generic_mattrimul!(C, uploc, isunitc, tfun, A, B)
 end
-end
-
-if VERSION < v"1.10.0-DEV.1365"
-# catch other functions that are called by LinearAlgebra's mul!
-function LinearAlgebra.gemv!(C::AbstractGPUVector, tA::AbstractChar, A::AbstractGPUMatrix, B::AbstractGPUVector, a::Number, b::Number)
-    generic_matmatmul!(C, wrap(A, tA), B, MulAddMul(a, b))
-end
-# disambiguation
-function LinearAlgebra.gemv!(C::AbstractGPUVector{T}, tA::AbstractChar, A::AbstractGPUMatrix{T}, B::AbstractGPUVector{T}, a::Number, b::Number) where {T<:LinearAlgebra.BlasFloat}
-    generic_matmatmul!(C, wrap(A, tA), B, MulAddMul(a, b))
-end
-
-LinearAlgebra.gemm_wrapper!(C::AbstractGPUVecOrMat, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat, B::AbstractGPUVecOrMat, _add::MulAddMul) =
-    generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), _add)
-# disambiguation
-LinearAlgebra.gemm_wrapper!(C::AbstractGPUVecOrMat{T}, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat{T}, B::AbstractGPUVecOrMat{T}, _add::MulAddMul) where {T<:LinearAlgebra.BlasFloat} =
-    generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), _add)
-
-function LinearAlgebra.syrk_wrapper!(C::AbstractGPUMatrix, tA::AbstractChar, A::AbstractGPUVecOrMat, _add::MulAddMul = MulAddMul())
-    if tA == 'T'
-        generic_matmatmul!(C, wrap(A, 'T'), A, _add)
-    else # tA == 'N'
-        generic_matmatmul!(C, A, wrap(A, 'T'), _add)
-    end
-end
-function LinearAlgebra.herk_wrapper!(C::AbstractGPUMatrix, tA::AbstractChar, A::AbstractGPUVecOrMat, _add::MulAddMul = MulAddMul())
-    if tA == 'C'
-        generic_matmatmul!(C, wrap(A, 'C'), A, _add)
-    else # tA == 'N'
-        generic_matmatmul!(C, A, wrap(A, 'C'), _add)
-    end
-end
-end # VERSION
 
 function generic_rmul!(X::AbstractArray, s::Number)
     gpu_call(X, s; name="rmul!") do ctx, X, s

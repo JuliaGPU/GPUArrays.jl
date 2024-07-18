@@ -133,7 +133,6 @@
             end
         end
 
-        if VERSION >= v"1.10-"
         @testset "mul! + Triangular" begin
             @testset "trimatmul! ($TR x $T, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
                 n = 128
@@ -163,7 +162,6 @@
                 mul!(C, collect(A), f(TR(collect(B))))
                 @test collect(Ct) ≈ C
             end
-        end
         end
     end
 
