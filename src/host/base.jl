@@ -289,13 +289,8 @@ GPUIndexStyle(i1::Colon, I...) = GPUIndexStyle(I...)
 viewlength() = ()
 @inline viewlength(::Real, I...) = viewlength(I...) # skip scalar
 
-if VERSION >= v"1.8.0-DEV.120"
 @inline viewlength(i1::AbstractUnitRange, I...) = (Base.length(i1), viewlength(I...)...)
 @inline viewlength(i1::AbstractUnitRange, ::Base.ScalarIndex...) = (Base.length(i1),)
-else
-@inline viewlength(i1::AbstractUnitRange, I...) = (length(i1), viewlength(I...)...)
-@inline viewlength(i1::AbstractUnitRange, ::Base.ScalarIndex...) = (length(i1),)
-end
 
 # adaptor to upload an array to the GPU
 struct ToGPU

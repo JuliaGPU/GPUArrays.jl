@@ -57,15 +57,11 @@ function repl_frontend_task()
     end
     _repl_frontend_task[]
 end
-function get_repl_frontend_task()
-    @static if VERSION >= v"1.10.0-DEV.444" || v"1.9-beta4" <= VERSION < v"1.10-"
-        if isdefined(Base, :active_repl)
-            Base.active_repl.frontend_task
-        else
-             missing
-        end
+@noinline function get_repl_frontend_task()
+    if isdefined(Base, :active_repl)
+        Base.active_repl.frontend_task
     else
-        nothing
+        missing
     end
 end
 
