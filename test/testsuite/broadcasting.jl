@@ -200,8 +200,9 @@ Base.size(A::WrapArray) = size(A.data)
 # For kernal support
 Adapt.adapt_structure(to, s::WrapArray) = WrapArray(Adapt.adapt(to, s.data))
 # For broadcast support
-GPUArrays.backend(::Type{WrapArray{T,N,P}}) where {T,N,P} = GPUArrays.backend(P)
 Broadcast.BroadcastStyle(::Type{WrapArray{T,N,P}}) where {T,N,P} = Broadcast.BroadcastStyle(P)
+KernelAbstractions.get_backend(a::WA) where WA <: WrapArray = get_backend(a.data)
+
 
 function unknown_wrapper(AT, eltypes)
     for ET in eltypes

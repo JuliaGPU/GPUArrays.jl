@@ -1,10 +1,10 @@
 # Base mathematical operations
 
 function Base.clamp!(A::AnyGPUArray, low, high)
-    gpu_call(A, low, high) do ctx, A, low, high
-        I = @linearidx A
+    @kernel function clamp_kernel!(A, low, high)
+        I = @index(Global, Cartesian)
         A[I] = clamp(A[I], low, high)
-        return
     end
+    clamp_kernel!(get_backend(A))(A, low, high, ndrange = size(A))
     return A
 end
