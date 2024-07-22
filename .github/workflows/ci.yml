@@ -61,13 +61,14 @@ jobs:
 
                     println("--- :julia: Installing TestEnv")
                     Pkg.activate(; temp=true)
-                    Pkg.add("TestEnv")
-                    using TestEnv
+                    Pkg.add(["TestEnv", "Git"])
+                    using TestEnv, Git
 
                     println("--- :julia: Installing OpenCL.jl")
                     withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
                             "JULIA_PKG_DEVDIR" => devdir) do
                       Pkg.develop("OpenCL")
+                      run(setenv(`$(git()) checkout tb/gpuarrays_kernelabstractions`; dir=package))
                       Pkg.activate(package)
 
                       try

@@ -9,10 +9,9 @@ will get a lot of functionality for free. This will allow to have multiple GPUAr
 implementation for different purposes, while maximizing the ability to share code.
 
 **This package is not intended for end users!** Instead, you should use one of the packages
-that builds on GPUArrays.jl. There is currently only a single package that actively builds
-on these interfaces, namely [CuArrays.jl](https://github.com/JuliaGPU/CuArrays.jl).
+that builds on GPUArrays.jl such as [CUDA](https://github.com/JuliaGPU/CUDA.jl), [AMDGPU](https://github.com/JuliaGPU/AMDGPU.jl), [OneAPI](https://github.com/JuliaGPU/oneAPI.jl), or [Metal](https://github.com/JuliaGPU/Metal.jl).
 
-In this documentation, you will find more information on the interface that you are expected
+This documentation is meant for users who might wish to implement a version of GPUArrays for another GPU backend and will cover the features you will need
 to implement, the functionality you gain by doing so, and the test suite that is available
 to verify your implementation. GPUArrays.jl also provides a reference implementation of
 these interfaces on the CPU: The `JLArray` array type uses Julia's parallel programming

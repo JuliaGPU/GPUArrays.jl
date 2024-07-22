@@ -72,7 +72,7 @@ end
     Is = map(adapt(ToGPU(dest)), Is)
     @boundscheck checkbounds(src, Is...)
 
-    gpu_call(getindex_kernel, dest, src, idims, Is...)
+    getindex_kernel(get_backend(dest))(dest, src, idims, Is...; ndrange=size(dest))
     return dest
 end
 
@@ -82,15 +82,16 @@ end
     return vectorized_getindex!(dest, src, Is...)
 end
 
-@generated function getindex_kernel(ctx::AbstractKernelContext, dest, src, idims,
-                                    Is::Vararg{Any,N}) where {N}
+@kernel function getindex_kernel(dest, src, idims, Is...)
+    i = @index(Global, Linear)
+    getindex_generated(dest, src, idims, i, Is...)
+end
+@generated function getindex_generated(dest, src, idims, i, Is::Vararg{Any,N}) where {N}
     quote
-        i = @linearidx dest
         is = @inbounds CartesianIndices(idims)[i]
         @nexprs $N i -> I_i = @inbounds(Is[i][is[i]])
         val = @ncall $N getindex src i -> I_i
         @inbounds dest[i] = val
-        return
     end
 end
 
@@ -111,15 +112,17 @@ end
     Is = map(adapt(ToGPU(dest)), Is)
     @boundscheck checkbounds(dest, Is...)
 
-    gpu_call(setindex_kernel, dest, adapt(ToGPU(dest), src), idims, len, Is...;
-             elements=len)
+    setindex_kernel(get_backend(dest))(dest, adapt(ToGPU(dest), src), idims, len, Is...;
+             ndrange = length(dest))
     return dest
 end
 
-@generated function setindex_kernel(ctx::AbstractKernelContext, dest, src, idims, len,
-                                    Is::Vararg{Any,N}) where {N}
+@kernel function setindex_kernel(dest, src, idims, len, Is...)
+    i = @index(Global, Linear)
+    setindex_generated(dest, src, idims, len, i, Is...)
+end
+@generated function setindex_generated(dest, src, idims, len, i, Is::Vararg{Any,N}) where {N}
     quote
-        i = linear_index(ctx)
         i > len && return
         is = @inbounds CartesianIndices(idims)[i]
         @nexprs $N i -> I_i = @inbounds(Is[i][is[i]])
