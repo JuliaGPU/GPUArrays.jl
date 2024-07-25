@@ -1,5 +1,6 @@
 module GPUArrays
 
+using KernelAbstractions
 using Serialization
 using Random
 using LinearAlgebra
@@ -14,14 +15,10 @@ using LLVM.Interop
 using Reexport
 @reexport using GPUArraysCore
 
-# device functionality
-include("device/execution.jl")
 ## executed on-device
 include("device/abstractarray.jl")
-include("device/indexing.jl")
-include("device/memory.jl")
-include("device/synchronization.jl")
 
+using KernelAbstractions
 # host abstractions
 include("host/abstractarray.jl")
 include("host/construction.jl")

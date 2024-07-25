@@ -14,20 +14,20 @@ function LinearAlgebra.transpose!(B::AbstractGPUMatrix, A::AbstractGPUVector)
 end
 function LinearAlgebra.adjoint!(B::AbstractGPUVector, A::AbstractGPUMatrix)
     axes(B,1) == axes(A,2) && axes(A,1) == 1:1 || throw(DimensionMismatch("adjoint"))
-    gpu_call(B, A) do ctx, B, A
-        idx = @linearidx B
+    @kernel function adjoint_kernel!(B, A)
+        idx = @index(Global, Linear)
         @inbounds B[idx] = adjoint(A[1, idx])
-        return
     end
+    adjoint_kernel!(get_backend(B))(B, A, ndrange = size(B))
     B
 end
 function LinearAlgebra.adjoint!(B::AbstractGPUMatrix, A::AbstractGPUVector)
     axes(B,2) == axes(A,1) && axes(B,1) == 1:1 || throw(DimensionMismatch("adjoint"))
-    gpu_call(B, A) do ctx, B, A
-        idx = @linearidx A
+    @kernel function adjoint_kernel!(B, A)
+        idx = @index(Global, Linear)
         @inbounds B[1, idx] = adjoint(A[idx])
-        return
     end
+    adjoint_kernel!(get_backend(A))(B, A, ndrange = size(A))
     B
 end
 
@@ -35,11 +35,11 @@ LinearAlgebra.transpose!(B::AnyGPUArray, A::AnyGPUArray) = transpose_f!(transpos
 LinearAlgebra.adjoint!(B::AnyGPUArray, A::AnyGPUArray) = transpose_f!(adjoint, B, A)
 function transpose_f!(f, B::AnyGPUMatrix{T}, A::AnyGPUMatrix{T}) where T
     axes(B,1) == axes(A,2) && axes(B,2) == axes(A,1) || throw(DimensionMismatch(string(f)))
-    gpu_call(B, A) do ctx, B, A
-        idx = @cartesianidx A
+    @kernel function transpose_kernel!(B, A)
+        idx = @index(Global, Cartesian)
         @inbounds B[idx[2], idx[1]] = f(A[idx[1], idx[2]])
-        return
     end
+    transpose_kernel!(get_backend(B))(B, A, ndrange = size(A))
     B
 end
 
@@ -60,48 +60,48 @@ end
 
 ## copy upper triangle to lower and vice versa
 
-function LinearAlgebra.copytri!(A::AbstractGPUMatrix, uplo::AbstractChar, conjugate::Bool=false)
-  n = LinearAlgebra.checksquare(A)
-  if uplo == 'U' && conjugate
-      gpu_call(A) do ctx, _A
-        I = @cartesianidx _A
-        i, j = Tuple(I)
-        if j > i
-          @inbounds _A[j,i] = conj(_A[i,j])
+function LinearAlgebra.copytri!(A::AbstractGPUMatrix{T}, uplo::AbstractChar, conjugate::Bool=false) where T
+    n = LinearAlgebra.checksquare(A)
+    if uplo == 'U' && conjugate
+        @kernel function U_conj!(_A)
+            I = @index(Global, Cartesian)
+            i, j = Tuple(I)
+            if j > i
+              @inbounds _A[j,i] = conj(_A[i,j])
+            end
         end
-        return
-      end
-  elseif uplo == 'U' && !conjugate
-      gpu_call(A) do ctx, _A
-        I = @cartesianidx _A
-        i, j = Tuple(I)
-        if j > i
-          @inbounds _A[j,i] = _A[i,j]
+        U_conj!(get_backend(A))(A, ndrange = size(A))
+    elseif uplo == 'U' && !conjugate
+        @kernel function U_noconj!(_A)
+            I = @index(Global, Cartesian)
+            i, j = Tuple(I)
+            if j > i
+              @inbounds _A[j,i] = _A[i,j]
+            end
         end
-        return
-      end
-  elseif uplo == 'L' && conjugate
-      gpu_call(A) do ctx, _A
-        I = @cartesianidx _A
-        i, j = Tuple(I)
-        if j > i
-          @inbounds _A[i,j] = conj(_A[j,i])
+        U_noconj!(get_backend(A))(A, ndrange = size(A))
+    elseif uplo == 'L' && conjugate
+        @kernel function L_conj!(_A)
+            I = @index(Global, Cartesian)
+            i, j = Tuple(I)
+            if j > i
+              @inbounds _A[i,j] = conj(_A[j,i])
+            end
         end
-        return
-      end
-  elseif uplo == 'L' && !conjugate
-      gpu_call(A) do ctx, _A
-        I = @cartesianidx _A
-        i, j = Tuple(I)
-        if j > i
-          @inbounds _A[i,j] = _A[j,i]
+        L_conj!(get_backend(A))(A, ndrange = size(A))
+    elseif uplo == 'L' && !conjugate
+        @kernel function L_noconj!(_A)
+            I = @index(Global, Cartesian)
+            i, j = Tuple(I)
+            if j > i
+              @inbounds _A[i,j] = _A[j,i]
+            end
         end
-        return
-      end
-  else
-      throw(ArgumentError("uplo argument must be 'U' (upper) or 'L' (lower), got $uplo"))
-  end
-  A
+        L_noconj!(get_backend(A))(A, ndrange = size(A))
+    else
+        throw(ArgumentError("uplo argument must be 'U' (upper) or 'L' (lower), got $uplo"))
+    end
+    A
 end
 
 ## copy a triangular part of a matrix to another matrix
@@ -113,23 +113,23 @@ if isdefined(LinearAlgebra, :copytrito!)
         m1,n1 = size(B)
         (m1 < m || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least the same number of rows and columns than A of size ($m,$n)"))
         if uplo == 'U'
-            gpu_call(A, B) do ctx, _A, _B
-                I = @cartesianidx _A
+            @kernel function U_kernel!(_A, _B)
+                I = @index(Global, Cartesian)
                 i, j = Tuple(I)
                 if j >= i
                     @inbounds _B[i,j] = _A[i,j]
                 end
-                return
             end
+            U_kernel!(get_backend(B))(A, B, ndrange = size(A))
         else  # uplo == 'L'
-            gpu_call(A, B) do ctx, _A, _B
-                I = @cartesianidx _A
+            @kernel function L_kernel!(_A, _B)
+                I = @index(Global, Cartesian)
                 i, j = Tuple(I)
                 if j <= i
                     @inbounds _B[i,j] = _A[i,j]
                 end
-                return
             end
+            L_kernel!(get_backend(A))(A, B, ndrange = size(A))
         end
         return B
     end
@@ -149,26 +149,26 @@ for T in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriang
 end
 
 function LinearAlgebra.tril!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
-  gpu_call(A, d; name="tril!") do ctx, _A, _d
-    I = @cartesianidx _A
+  @kernel function tril_kernel!(_A, _d)
+    I = @index(Global, Cartesian)
     i, j = Tuple(I)
     if i < j - _d
       @inbounds _A[i, j] = zero(T)
     end
-    return
   end
+  tril_kernel!(get_backend(A))(A, d, ndrange = size(A))
   return A
 end
 
 function LinearAlgebra.triu!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
-  gpu_call(A, d; name="triu!") do ctx, _A, _d
-    I = @cartesianidx _A
+  @kernel function triu_kernel!(_A, _d)
+    I = @index(Global, Cartesian)
     i, j = Tuple(I)
     if j < i + _d
       @inbounds _A[i, j] = zero(T)
     end
-    return
   end
+  triu_kernel!(get_backend(A))(A, d, ndrange = size(A))
   return A
 end
 
@@ -330,9 +330,9 @@ function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::Abstrac
         return fill!(C, zero(R))
     end
 
-    gpu_call(C, A, B; name="matmatmul!") do ctx, C, A, B
-        idx = @linearidx C
+    @kernel function matmatmul_kernel!(C, A, B)
         assume.(size(C) .> 0)
+        idx = @index(Global, Linear)
         i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
 
         @inbounds if i <= size(A,1) && j <= size(B,2)
@@ -343,10 +343,8 @@ function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::Abstrac
             end
             C[i,j] = add(Cij, C[i,j])
         end
-
-        return
     end
-
+    matmatmul_kernel!(get_backend(C))(C, A, B, ndrange = size(C))
     C
 end
 
@@ -382,8 +380,8 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
     upper = tfun === identity ? uploc == 'U' :  uploc != 'U'
     unit  = isunitc == 'U'
 
-    function trimatmul(ctx, C, A, B)
-        idx = @linearidx C
+    @kernel function trimatmul(C, A, B)
+        idx = @index(Global, Linear)
         assume.(size(C) .> 0)
         i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
         l, m, n = size(A, 1), size(B, 1), size(B, 2)
@@ -397,12 +395,10 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
             end
             C[i,j] += Cij
         end
-
-        return
     end
 
-    function trimatmul_t(ctx, C, A, B)
-        idx = @linearidx C
+    @kernel function trimatmul_t(C, A, B)
+        idx = @index(Global, Linear)
         assume.(size(C) .> 0)
         i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
         l, m, n = size(A, 1), size(B, 1), size(B, 2)
@@ -416,12 +412,10 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
             end
             C[i,j] += Cij
         end
-
-        return
     end
 
-    function trimatmul_a(ctx, C, A, B)
-        idx = @linearidx C
+    @kernel function trimatmul_a(C, A, B)
+        idx = @index(Global, Linear)
         assume.(size(C) .> 0)
         i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
         l, m, n = size(A, 1), size(B, 1), size(B, 2)
@@ -435,16 +429,14 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
             end
             C[i,j] += Cij
         end
-
-        return
     end
 
     if tfun === identity
-        gpu_call(trimatmul, C, A, B; name="trimatmul")
+        trimatmul(get_backend(C))(C, A, B, ndrange = length(C))
     elseif tfun == transpose
-        gpu_call(trimatmul_t, C, A, B; name="trimatmul_t")
+        trimatmul_t(get_backend(C))(C, A, B, ndrange = length(C))
     elseif tfun === adjoint
-        gpu_call(trimatmul_a, C, A, B; name="trimatmul_a")
+        trimatmul_a(get_backend(C))(C, A, B, ndrange = length(C))
     else
         error("Not supported")
     end
@@ -466,8 +458,8 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
     upper = tfun === identity ? uploc == 'U' :  uploc != 'U'
     unit  = isunitc == 'U'
 
-    function mattrimul(ctx, C, A, B)
-        idx = @linearidx C
+    @kernel function mattrimul(C, A, B)
+        idx = @index(Global, Linear)
         assume.(size(C) .> 0)
         i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
         l, m, n = size(A, 1), size(B, 1), size(B, 2)
@@ -481,12 +473,10 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
             end
             C[i,j] += Cij
         end
-
-        return
     end
 
-    function mattrimul_t(ctx, C, A, B)
-        idx = @linearidx C
+    @kernel function mattrimul_t(C, A, B)
+        idx = @index(Global, Linear)
         assume.(size(C) .> 0)
         i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
         l, m, n = size(A, 1), size(B, 1), size(B, 2)
@@ -500,12 +490,10 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
             end
             C[i,j] += Cij
         end
-
-        return
     end
 
-    function mattrimul_a(ctx, C, A, B)
-        idx = @linearidx C
+    @kernel function mattrimul_a(C, A, B)
+        idx = @index(Global, Linear)
         assume.(size(C) .> 0)
         i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
         l, m, n = size(A, 1), size(B, 1), size(B, 2)
@@ -519,16 +507,14 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
             end
             C[i,j] += Cij
         end
-
-        return
     end
 
     if tfun === identity
-        gpu_call(mattrimul, C, A, B; name="mattrimul")
+        mattrimul(get_backend(C))(C, A, B, ndrange = length(C))
     elseif tfun == transpose
-        gpu_call(mattrimul_t, C, A, B; name="mattrimul_t")
+        mattrimul_t(get_backend(C))(C, A, B, ndrange = length(C))
     elseif tfun === adjoint
-        gpu_call(mattrimul_a, C, A, B; name="mattrimul_a")
+        mattrimul_a(get_backend(C))(C, A, B, ndrange = length(C))
     else
         error("Not supported")
     end
@@ -544,22 +530,22 @@ function LinearAlgebra.generic_mattrimul!(C::AbstractGPUMatrix, uploc, isunitc, 
 end
 
 function generic_rmul!(X::AbstractArray, s::Number)
-    gpu_call(X, s; name="rmul!") do ctx, X, s
-        i = @linearidx X
+    @kernel function rmul_kernel!(X, s)
+        i = @index(Global, Linear)
         @inbounds X[i] *= s
-        return
     end
+    rmul_kernel!(get_backend(X))(X, s, ndrange = size(X))
     return X
 end
 
 LinearAlgebra.rmul!(A::AbstractGPUArray, b::Number) = generic_rmul!(A, b)
 
 function generic_lmul!(s::Number, X::AbstractArray)
-    gpu_call(X, s; name="lmul!") do ctx, X, s
-        i = @linearidx X
+    @kernel function lmul_kernel!(X, s)
+        i = @index(Global, Linear)
         @inbounds X[i] = s*X[i]
-        return
     end
+    lmul_kernel!(get_backend(X))(X, s, ndrange = size(X))
     return X
 end
 
@@ -601,15 +587,16 @@ function _permutedims!(::Type{IT}, dest::AbstractGPUArray,
     dest_strides = ntuple(k->k==1 ? 1 : prod(i->size(dest, i), 1:k-1), N)
     dest_strides_perm = ntuple(i->IT(dest_strides[findfirst(==(i), perm)]), N)
     size_src = IT.(size(src))
-    function permutedims_kernel(ctx, dest, src, size_src, dest_strides_perm)
-        SLI = @linearidx dest
+    @kernel function permutedims_kernel!(dest, src, size_src, dest_strides_perm)
+        SLI = @index(Global, Linear)
         assume(0 < SLI <= typemax(IT))
         LI = IT(SLI)
         dest_index = permute_linearindex(size_src, LI, dest_strides_perm)
         @inbounds dest[dest_index] = src[LI]
-        return
     end
-    gpu_call(permutedims_kernel, vec(dest), vec(src), size_src, dest_strides_perm)
+    permutedims_kernel!(get_backend(dest))(vec(dest), vec(src), size_src,
+                                           dest_strides_perm,
+                                           ndrange = size(dest))
     return dest
 end
 
@@ -686,28 +673,28 @@ end
 ## rotate
 
 function LinearAlgebra.rotate!(x::AbstractGPUArray, y::AbstractGPUArray, c::Number, s::Number)
-    gpu_call(x, y, c, s; name="rotate!") do ctx, x, y, c, s
-        i = @linearidx x
+    @kernel function rotate_kernel!(x, y, c, s)
+        i = @index(Global, Linear)
         @inbounds xi = x[i]
         @inbounds yi = y[i]
         @inbounds x[i] =       c  * xi + s * yi
         @inbounds y[i] = -conj(s) * xi + c * yi
-        return
     end
+    rotate_kernel!(get_backend(x))(x, y, c, s, ndrange = size(x))
     return x, y
 end
 
 ## reflect
 
 function LinearAlgebra.reflect!(x::AbstractGPUArray, y::AbstractGPUArray, c::Number, s::Number)
-    gpu_call(x, y, c, s; name="reflect!") do ctx, x, y, c, s
-        i = @linearidx x
+    @kernel function  reflect_kernel!(x, y, c, s)
+        i = @index(Global, Linear)
         @inbounds xi = x[i]
         @inbounds yi = y[i]
         @inbounds x[i] =      c  * xi + s * yi
         @inbounds y[i] = conj(s) * xi - c * yi
-        return
     end
+    reflect_kernel!(get_backend(x))(x, y, c, s, ndrange = size(x))
     return x, y
 end
 

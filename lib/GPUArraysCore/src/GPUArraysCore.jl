@@ -218,10 +218,10 @@ end
 
 Gets the GPUArrays back-end responsible for managing arrays of type `T`.
 """
-backend(::Type) = error("This object is not a GPU array") # COV_EXCL_LINE
-backend(x) = backend(typeof(x))
+get_backend(::Type) = error("This object is not a GPU array") # COV_EXCL_LINE
+get_backend(x) = get_backend(typeof(x))
 
 # WrappedArray from Adapt for Base wrappers.
-backend(::Type{WA}) where WA<:WrappedArray = backend(unwrap_type(WA))
+get_backend(::Type{WA}) where WA<:WrappedArray = backend(unwrap_type(WA))
 
 end # module GPUArraysCore

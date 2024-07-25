@@ -49,38 +49,25 @@ end
     isempty(dest) && return dest
     bc = Broadcast.preprocess(dest, bc)
 
-    broadcast_kernel = if ndims(dest) == 1 ||
-                          (isa(IndexStyle(dest), IndexLinear) &&
-                           isa(IndexStyle(bc), IndexLinear))
-        function (ctx, dest, bc, nelem)
-            i = 1
-            while i <= nelem
-                I = @linearidx(dest, i)
-                @inbounds dest[I] = bc[I]
-                i += 1
-            end
-            return
-        end
-    else
-        function (ctx, dest, bc, nelem)
-            i = 0
-            while i < nelem
-                i += 1
-                I = @cartesianidx(dest, i)
-                @inbounds dest[I] = bc[I]
-            end
-            return
-        end
+    @kernel function broadcast_kernel_linear(dest, bc)
+        I = @index(Global, Linear)
+        @inbounds dest[I] = bc[I]
     end
 
-    elements = length(dest)
-    elements_per_thread = typemax(Int)
-    heuristic = launch_heuristic(backend(dest), broadcast_kernel, dest, bc, 1;
-                                 elements, elements_per_thread)
-    config = launch_configuration(backend(dest), heuristic;
-                                  elements, elements_per_thread)
-    gpu_call(broadcast_kernel, dest, bc, config.elements_per_thread;
-             threads=config.threads, blocks=config.blocks)
+    @kernel function broadcast_kernel_cartesian(dest, bc)
+        I = @index(Global, Cartesian)
+        @inbounds dest[I] = bc[I]
+    end
+
+    # grid-stride kernel, ndrange set for possible 0D evaluation
+    if ndims(dest) == 1 || (isa(IndexStyle(dest), IndexLinear) &&
+                           isa(IndexStyle(bc), IndexLinear))
+        broadcast_kernel_linear(get_backend(dest))(dest, bc;
+            ndrange = length(size(dest)) > 0 ? length(dest) : 1)
+    else
+        broadcast_kernel_cartesian(get_backend(dest))(dest, bc;
+            ndrange = sz = length(size(dest)) > 0 ? size(dest) : (1,))
+    end
 
     if eltype(dest) <: BrokenBroadcast
         throw(ArgumentError("Broadcast operation resulting in $(eltype(eltype(dest))) is not GPU compatible"))
@@ -130,27 +117,14 @@ function Base.map!(f, dest::AnyGPUArray, xs::AbstractArray...)
     end
 
     # grid-stride kernel
-    function map_kernel(ctx, dest, bc, nelem)
-        i = 1
-        while i <= nelem
-            j = linear_index(ctx, i)
-            j > common_length && return
-
-            J = CartesianIndices(axes(bc))[j]
-            @inbounds dest[j] = bc[J]
-
-            i += 1
-        end
-        return
+    @kernel function map_kernel(dest, bc)
+        j = @index(Global, Linear)
+        @inbounds dest[j] = bc[j]
     end
-    elements = common_length
-    elements_per_thread = typemax(Int)
-    heuristic = launch_heuristic(backend(dest), map_kernel, dest, bc, 1;
-                                 elements, elements_per_thread)
-    config = launch_configuration(backend(dest), heuristic;
-                                  elements, elements_per_thread)
-    gpu_call(map_kernel, dest, bc, config.elements_per_thread;
-             threads=config.threads, blocks=config.blocks)
+
+    kernel = map_kernel(get_backend(dest))
+    config = KernelAbstractions.launch_config(kernel, common_length, nothing)
+    kernel(dest, bc; ndrange = config[1], workgroupsize = config[2])
 
     if eltype(dest) <: BrokenBroadcast
         throw(ArgumentError("Map operation resulting in $(eltype(eltype(dest))) is not GPU compatible"))
