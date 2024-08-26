@@ -40,6 +40,23 @@ end
     end
 
     @testset "copyto!" begin
+        x = fill(0f0, 1)
+        y = rand(Float32, 1)
+        a = AT(x)
+        copyto!(x, 1:1, y, 1:1)
+        copyto!(a, 1:1, y, 1:1)
+        @test x == Array(a)
+
+        x = fill(0f0, 10)
+        y = rand(Float32, 20)
+        a = AT(x)
+        b = AT(y)
+        r1 = 1:7
+        r2 = 11:17
+        copyto!(x, r1, y, r2)
+        copyto!(a, r1, b, r2)
+        @test x == Array(a)
+
         x = fill(0f0, (10, 10))
         y = rand(Float32, (20, 10))
         a = AT(x)
