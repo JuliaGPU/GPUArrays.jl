@@ -134,16 +134,14 @@ Base.collect(X::AnyGPUArray) = collect_to_cpu(X)
 
 # memory copying
 
+# expects the GPU array type to have linear `copyto!` methods (i.e. accepting an integer
+# offset and length) from and to CPU arrays and between GPU arrays.
+
 function Base.copy!(dst::AbstractGPUVector, src::AbstractGPUVector)
     axes(dst) == axes(src) || throw(ArgumentError(
     "arrays must have the same axes for `copy!`. consider using `copyto!` instead"))
     copyto!(dst, src)
 end
-
-## basic linear copies of identically-typed memory
-
-# expects the GPU array type to have linear `copyto!` methods (i.e. accepting an integer
-# offset and length) from and to CPU arrays and between GPU arrays.
 
 for (D, S) in ((AnyGPUArray, Array),
                (Array, AnyGPUArray),
@@ -154,18 +152,6 @@ for (D, S) in ((AnyGPUArray, Array),
             drange = CartesianIndices((rdest,))
             srange = CartesianIndices((ssrc,))
             copyto!(dest, drange, src, srange)
-        end
-
-        function Base.copyto!(dest::$D, d_range::CartesianIndices{1},
-                              src::$S, s_range::CartesianIndices{1})
-            len = length(d_range)
-            if length(s_range) != len
-                throw(ArgumentError("Copy range needs same length. Found: dest: $len, src: $(length(s_range))"))
-            end
-            len == 0 && return dest
-            d_offset = first(d_range)[1]
-            s_offset = first(s_range)[1]
-            copyto!(dest, d_offset, src, s_offset, len)
         end
 
         Base.copyto!(dest::$D, src::$S) = copyto!(dest, 1, src, 1, length(src))
@@ -260,6 +246,13 @@ function Base.copyto!(dest::AnyGPUArray{<:Any, N}, destcrange::CartesianIndices{
     len = length(destcrange)
     len == 0 && return dest
 
+    # linear copy if we can
+    if N == 1
+        d_offset = first(destcrange)[1]
+        s_offset = first(srccrange)[1]
+        return copyto!(dest, d_offset, src, s_offset, len)
+    end
+
     dest_offsets = first(destcrange) - oneunit(CartesianIndex{N})
     src_offsets = first(srccrange) - oneunit(CartesianIndex{N})
     gpu_call(cartesian_copy_kernel!,
@@ -274,6 +267,15 @@ for (dstTyp, srcTyp) in (AbstractGPUArray=>Array, Array=>AbstractGPUArray)
         isempty(dstrange) && return dst
         if size(dstrange) != size(srcrange)
             throw(ArgumentError("source and destination must have same size (got $(size(srcrange)) and $(size(dstrange)))"))
+        end
+        len = length(dstrange)
+        len == 0 && return dest
+
+        # linear copy if we can
+        if N == 1
+            d_offset = first(dstrange)[1]
+            s_offset = first(srcrange)[1]
+            return copyto!(dst, d_offset, src, s_offset, len)
         end
 
         # figure out how many dimensions of the Cartesian ranges map onto contiguous memory
