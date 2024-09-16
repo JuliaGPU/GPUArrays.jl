@@ -117,14 +117,28 @@ function Base.map!(f, dest::AnyGPUArray, xs::AbstractArray...)
     end
 
     # grid-stride kernel
-    @kernel function map_kernel(dest, bc)
-        j = @index(Global, Linear)
-        @inbounds dest[j] = bc[j]
-    end
+    @kernel function map_kernel(dest, bc, nelem, common_length)
 
+        j = 0
+        J = @index(Global, Linear)
+        for i in 1:nelem
+            j += 1
+            if j <= common_length
+
+                J_c = CartesianIndices(axes(bc))[(J-1)*nelem + j]
+                @inbounds dest[J_c] = bc[J_c]
+            end
+        end
+    end
+    elements = common_length
+    elements_per_thread = typemax(Int)
     kernel = map_kernel(get_backend(dest))
-    config = KernelAbstractions.launch_config(kernel, common_length, nothing)
-    kernel(dest, bc; ndrange = config[1], workgroupsize = config[2])
+    heuristic = launch_heuristic(get_backend(dest), kernel, dest, bc, 1,
+                                 common_length; elements, elements_per_thread)
+    config = launch_configuration(get_backend(dest), heuristic;
+                                  elements, elements_per_thread)
+    kernel(dest, bc, config.elements_per_thread,
+           common_length; ndrange = config.threads)
 
     if eltype(dest) <: BrokenBroadcast
         throw(ArgumentError("Map operation resulting in $(eltype(eltype(dest))) is not GPU compatible"))

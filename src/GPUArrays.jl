@@ -16,6 +16,7 @@ using Reexport
 @reexport using GPUArraysCore
 
 ## executed on-device
+include("device/execution.jl")
 include("device/abstractarray.jl")
 
 using KernelAbstractions
