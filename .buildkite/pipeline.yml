@@ -9,8 +9,10 @@ steps:
       julia -e 'using Pkg
 
                 println("--- :julia: Instantiating project")
-                Pkg.develop(; path=pwd())
-                Pkg.develop(; name="CUDA")
+                Pkg.develop([PackageSpec(path=pwd()),
+                             PackageSpec(path=joinpath(pwd(), "lib", "GPUArraysCore"))])
+                Pkg.add(; url="https://github.com/JuliaGPU/CUDA.jl/",
+                          rev="tb/gpuarrays_kernelabstractions")
 
                 println("+++ :julia: Running tests")
                 Pkg.test("CUDA"; coverage=true)'
@@ -30,11 +32,14 @@ steps:
       julia -e 'using Pkg;
 
                 println("--- :julia: Instantiating project")
-                Pkg.develop(; path=pwd())
-                Pkg.develop(; name="oneAPI")
+                Pkg.develop([PackageSpec(path=pwd()),
+                             PackageSpec(path=joinpath(pwd(), "lib", "GPUArraysCore"))])
+                Pkg.add(; url="https://github.com/JuliaGPU/oneAPI.jl/",
+                          rev="tb/gpuarrays_kernelabstractions")
 
                 println("+++ :julia: Building support library")
-                include(joinpath(Pkg.devdir(), "oneAPI", "deps", "build_ci.jl"))
+                oneapi = dirname(dirname(Base.find_package("oneAPI")))
+                include(joinpath(oneapi, "deps", "build_ci.jl"))
                 Pkg.activate()
 
                 println("+++ :julia: Running tests")
@@ -55,8 +60,10 @@ steps:
       julia -e 'using Pkg;
 
                 println("--- :julia: Instantiating project")
-                Pkg.develop(; path=pwd())
-                Pkg.develop(; name="Metal")
+                Pkg.develop([PackageSpec(path=pwd()),
+                             PackageSpec(path=joinpath(pwd(), "lib", "GPUArraysCore"))])
+                Pkg.add(; url="https://github.com/JuliaGPU/Metal.jl/",
+                          rev="tb/gpuarrays_kernelabstractions")
 
                 println("+++ :julia: Running tests")
                 Pkg.test("Metal"; coverage=true)'

@@ -1,53 +1,32 @@
 # Interface
 
 To extend the above functionality to a new array type, you should use the types and
-implement the interfaces listed on this page. GPUArrays is design around having two
-different array types to represent a GPU array: one that only ever lives on the host, and
+implement the interfaces listed on this page. GPUArrays is designed around having two
+different array types to represent a GPU array: one that exists only on the host, and
 one that actually can be instantiated on the device (i.e. in kernels).
-
-
-## Device functionality
-
-Several types and interfaces are related to the device and execution of code on it. First of
-all, you need to provide a type that represents your execution back-end and a way to call
-kernels:
-
-```@docs
-GPUArrays.AbstractGPUBackend
-GPUArrays.AbstractKernelContext
-GPUArrays.gpu_call
-GPUArrays.thread_block_heuristic
-```
-
-You then need to provide implementations of certain methods that will be executed on the
-device itself:
-
-```@docs
-GPUArrays.AbstractDeviceArray
-GPUArrays.LocalMemory
-GPUArrays.synchronize_threads
-GPUArrays.blockidx
-GPUArrays.blockdim
-GPUArrays.threadidx
-GPUArrays.griddim
-```
-
+Device functionality is then handled by [KernelAbstractions.jl](https://github.com/JuliaGPU/KernelAbstractions.jl).
 
 ## Host abstractions
 
-You should provide an array type that builds on the `AbstractGPUArray` supertype:
+You should provide an array type that builds on the `AbstractGPUArray` supertype, such as:
 
-```@docs
-AbstractGPUArray
+```
+mutable struct CustomArray{T, N} <: AbstractGPUArray{T, N}
+    data::DataRef{Vector{UInt8}}
+    offset::Int
+    dims::Dims{N}
+    ...
+end
+
 ```
 
-First of all, you should implement operations that are expected to be defined for any
-`AbstractArray` type. Refer to the Julia manual for more details, or look at the `JLArray`
-reference implementation.
+This will allow your defined type (in this case `JLArray`) to use the GPUArrays interface where available.
+To be able to actually use the functionality that is defined for `AbstractGPUArray`s, you need to define the backend, like so:
 
-To be able to actually use the functionality that is defined for `AbstractGPUArray`s, you
-should provide implementations of the following interfaces:
-
-```@docs
-GPUArrays.backend
 ```
+import KernelAbstractions: Backend
+struct CustomBackend <: KernelAbstractions.GPU
+KernelAbstractions.get_backend(a::CA) where CA <: CustomArray = CustomBackend()
+```
+
+There are numerous examples of potential interfaces for GPUArrays, such as with [JLArrays](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/lib/JLArrays/src/JLArrays.jl), [CuArrays](https://github.com/JuliaGPU/CUDA.jl/blob/master/src/gpuarrays.jl), and [ROCArrays](https://github.com/JuliaGPU/AMDGPU.jl/blob/master/src/gpuarrays.jl).
