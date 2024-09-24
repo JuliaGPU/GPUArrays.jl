@@ -332,15 +332,6 @@ end
 Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N} =
   JLDeviceArray{T,N}(x.data[], x.offset, x.dims)
 
-function GPUArrays.mapreducedim!(f, op, R::AnyJLArray, A::Union{AbstractArray,Broadcast.Broadcasted};
-                                 init=nothing)
-    if init !== nothing
-        fill!(R, init)
-    end
-    @allowscalar Base.reducedim!(op, typed_data(R), map(f, A))
-    R
-end
-
 ## KernelAbstractions interface
 
 KernelAbstractions.get_backend(a::JLA) where JLA <: JLArray = JLBackend()
