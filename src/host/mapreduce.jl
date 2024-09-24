@@ -143,8 +143,11 @@ function Base.:(==)(A::AnyGPUArray, B::AnyGPUArray)
     res.is_missing ? missing : res.is_equal
 end
 
+
+import KernelAbstractions: @context
+
 @inline function reduce_group(@context, op, val::T, neutral, ::Val{maxitems}) where {T, maxitems}
-    items = @groupsize[1]
+    items = @groupsize()[1]
     item = @index(Local, Linear)
 
     # local mem for a complete reduction
@@ -223,13 +226,11 @@ Base.@propagate_inbounds _map_getindex(args::Tuple{}, I) = ()
             R[Iout] = val
         end
     end
-
-    return
 end
 
 ## COV_EXCL_STOP
 
-function GPUArrays.mapreducedim!(f::F, op::OP, R::AnyGPUArray{T}, A::AbstractArrayOrBroadcasted;
+function mapreducedim!(f::F, op::OP, R::AnyGPUArray{T}, A::AbstractArrayOrBroadcasted;
                                  init=nothing) where {F, OP, T}
     Base.check_reducedims(R, A)
     length(A) == 0 && return R # isempty(::Broadcasted) iterates
