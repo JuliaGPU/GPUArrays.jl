@@ -88,7 +88,8 @@ end
 function launch_configuration(backend::AbstractGPUBackend, heuristic;
                               elements::Int, elements_per_thread::Int)
     threads = clamp(elements, 1, heuristic.threads)
-    blocks = max(cld(elements, threads), 1)
+    blocks = clamp(cld(elements, threads), elements, heuristic.blocks)
+    threads = cld(elements, blocks)
 
     if elements_per_thread > 1 && blocks > heuristic.blocks
         # we want to launch more blocks than required, so prefer a grid-stride loop instead
