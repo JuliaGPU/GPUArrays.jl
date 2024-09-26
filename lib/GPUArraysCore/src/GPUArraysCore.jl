@@ -7,7 +7,7 @@ using Adapt
 
 export AbstractGPUArray, AbstractGPUVector, AbstractGPUMatrix, AbstractGPUVecOrMat,
        WrappedGPUArray, AnyGPUArray, AbstractGPUArrayStyle,
-       AnyGPUArray, AnyGPUVector, AnyGPUMatrix
+       AnyGPUArray, AnyGPUVector, AnyGPUMatrix, AnyGPUVecOrMat
 
 """
     AbstractGPUArray{T, N} <: DenseArray{T, N}
@@ -27,6 +27,7 @@ const WrappedGPUArray{T,N} = WrappedArray{T,N,AbstractGPUArray,AbstractGPUArray{
 const AnyGPUArray{T,N} = Union{AbstractGPUArray{T,N}, WrappedGPUArray{T,N}}
 const AnyGPUVector{T} = AnyGPUArray{T, 1}
 const AnyGPUMatrix{T} = AnyGPUArray{T, 2}
+const AnyGPUVecOrMat{T} = Union{AnyGPUArray{T, 1}, AnyGPUArray{T, 2}}
 
 
 ## broadcasting

@@ -148,7 +148,7 @@ for T in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriang
     @eval Base.copyto!(A::$T{T, <:AbstractGPUArray{T,N}}, B::$T{T, <:AbstractGPUArray{T,N}}) where {T,N} = $T(copyto!(parent(A), parent(B)))
 end
 
-function LinearAlgebra.tril!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
+function LinearAlgebra.tril!(A::AnyGPUMatrix{T}, d::Integer = 0) where T
   gpu_call(A, d; name="tril!") do ctx, _A, _d
     I = @cartesianidx _A
     i, j = Tuple(I)
@@ -160,7 +160,7 @@ function LinearAlgebra.tril!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
   return A
 end
 
-function LinearAlgebra.triu!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
+function LinearAlgebra.triu!(A::AnyGPUMatrix{T}, d::Integer = 0) where T
   gpu_call(A, d; name="triu!") do ctx, _A, _d
     I = @cartesianidx _A
     i, j = Tuple(I)
@@ -739,3 +739,21 @@ function Base.isone(x::AbstractGPUMatrix{T}) where {T}
 
     Array(y)[]
 end
+
+## QR
+
+import LinearAlgebra: QRPackedQ
+
+function LinearAlgebra.getproperty(F::QR{T,<:AnyGPUMatrix{T}}, d::Symbol) where {T}
+    m, n = size(F)
+    if d === :R
+        return triu!(view(getfield(F, :factors), 1:min(m,n), 1:n))
+    elseif d === :Q
+        return QRPackedQ(getfield(F, :factors), F.τ)
+    else
+        getfield(F, d)
+    end
+end
+
+Base.print_array(io::IO, Q::QRPackedQ{T,<:AnyGPUMatrix{T},<:AnyGPUMatrix{T}}) where {T} =
+    Base.print_array(io, collect(adapt(ToArray(), Q)))
