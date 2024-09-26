@@ -3,6 +3,7 @@ uuid = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
 version = "10.3.1"
 
 [deps]
+AbstractNumbers = "85c772de-338a-5e7f-b815-41e76c26ac1f"
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
 LLVM = "929cbde3-209d-540e-8aea-75f648917ca0"
@@ -14,6 +15,7 @@ Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
+AbstractNumbers = "0.2"
 Adapt = "4.0"
 GPUArraysCore = "= 0.1.6"
 LLVM = "3.9, 4, 5, 6, 7, 8, 9"

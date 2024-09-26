@@ -68,20 +68,23 @@ function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,
     end
 
     if dims === Colon()
-        @allowscalar R[]
+        # Return `AsyncNumber` for `Number` eltypes, otherwise - transfer to host.
+        eltype(R) <: Number ?
+            AsyncNumber(reshape(R, :)) :
+            @allowscalar(R[])
     else
         R
     end
 end
 
-Base.any(A::AnyGPUArray{Bool}) = mapreduce(identity, |, A)
-Base.all(A::AnyGPUArray{Bool}) = mapreduce(identity, &, A)
+Base.any(A::AnyGPUArray{Bool}) = mapreduce(identity, |, A)[]
+Base.all(A::AnyGPUArray{Bool}) = mapreduce(identity, &, A)[]
 
-Base.any(f::Function, A::AnyGPUArray) = mapreduce(f, |, A)
-Base.all(f::Function, A::AnyGPUArray) = mapreduce(f, &, A)
+Base.any(f::Function, A::AnyGPUArray) = mapreduce(f, |, A)[]
+Base.all(f::Function, A::AnyGPUArray) = mapreduce(f, &, A)[]
 
 Base.count(pred::Function, A::AnyGPUArray; dims=:, init=0) =
-    mapreduce(pred, Base.add_sum, A; init=init, dims=dims)
+    mapreduce(pred, Base.add_sum, A; init=init, dims=dims) |> maybe_number
 
 # avoid calling into `initarray!`
 for (fname, op) in [(:sum, :(Base.add_sum)), (:prod, :(Base.mul_prod)),
@@ -94,7 +97,7 @@ for (fname, op) in [(:sum, :(Base.add_sum)), (:prod, :(Base.mul_prod)),
     end
 end
 
-LinearAlgebra.ishermitian(A::AbstractGPUMatrix) = mapreduce(==, &, A, adjoint(A))
+LinearAlgebra.ishermitian(A::AbstractGPUMatrix) = mapreduce(==, &, A, adjoint(A))[]
 
 
 # comparisons
@@ -105,7 +108,7 @@ function Base.isequal(A::AnyGPUArray, B::AnyGPUArray)
     if axes(A) != axes(B)
         return false
     end
-    mapreduce(isequal, &, A, B; init=true)
+    mapreduce(isequal, &, A, B; init=true)[]
 end
 
 # returns `missing` when missing values are involved
@@ -129,6 +132,7 @@ function Base.:(==)(A::AnyGPUArray, B::AnyGPUArray)
             (; is_missing=false, is_equal=a.is_equal & b.is_equal)
         end
     end
-    res = mapreduce(mapper, reducer, A, B; init=(; is_missing=false, is_equal=true))
+    res = mapreduce(mapper, reducer, A, B;
+        init=(; is_missing=false, is_equal=true))
     res.is_missing ? missing : res.is_equal
 end
