@@ -5,24 +5,28 @@
     x = AT(Vector{Int}(undef, N))
     x .= 0
     gpu_call(x) do ctx, x
-        x[linear_index(ctx)] = 2
+        i = @linearidx x
+        x[i] = 2
         return
     end
     @test all(x-> x == 2, Array(x))
 
     gpu_call(x; elements=N) do ctx, x
-        x[linear_index(ctx)] = 2
+        i = @linearidx x
+        x[i] = 2
         return
     end
     @test all(x-> x == 2, Array(x))
     gpu_call(x; threads=2, blocks=(N ÷ 2)) do ctx, x
-        x[linear_index(ctx)] = threadidx(ctx)
+        i = @linearidx x
+        x[i] = threadidx(ctx)
         return
     end
     @test Array(x) == [1,2,1,2,1,2,1,2,1,2]
 
     gpu_call(x; threads=2, blocks=(N ÷ 2)) do ctx, x
-        x[linear_index(ctx)] = blockidx(ctx)
+        i = @linearidx x
+        x[i] = blockidx(ctx)
         return
     end
     @test Array(x) == [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
