@@ -8,12 +8,35 @@ steps:
     command: |
       julia -e 'using Pkg
 
-                println("--- :julia: Instantiating project")
-                Pkg.develop(; path=pwd())
-                Pkg.develop(; name="CUDA")
+                gpuarrays = pwd()
+                gpuarrayscore = joinpath(gpuarrays, "lib", "GPUArraysCore")
+                devdir = mktempdir()
+                package = joinpath(devdir, "CUDA")
+
+                println("--- :julia: Installing TestEnv")
+                Pkg.activate(; temp=true)
+                Pkg.add("TestEnv")
+                using TestEnv
+
+                println("--- :julia: Installing CUDA.jl")
+                withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
+                        "JULIA_PKG_DEVDIR" => devdir) do
+                  Pkg.develop("CUDA")
+                  Pkg.activate(package)
+
+                  try
+                    Pkg.develop([PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore)])
+                    TestEnv.activate()
+                  catch err
+                    @error "Could not install CUDA.jl" exception=(err,catch_backtrace())
+                    exit(3)
+                  finally
+                    Pkg.activate(package)
+                  end
+                end
 
                 println("+++ :julia: Running tests")
-                Pkg.test("CUDA"; coverage=true)'
+                Pkg.test(; coverage=true)'
     agents:
       queue: "juliagpu"
       cuda: "*"
@@ -27,18 +50,38 @@ steps:
       - JuliaCI/julia-coverage#v1:
           codecov: true
     command: |
-      julia -e 'using Pkg;
+      julia -e 'using Pkg
 
-                println("--- :julia: Instantiating project")
-                Pkg.develop(; path=pwd())
-                Pkg.develop(; name="oneAPI")
+                gpuarrays = pwd()
+                gpuarrayscore = joinpath(gpuarrays, "lib", "GPUArraysCore")
+                devdir = mktempdir()
+                package = joinpath(devdir, "oneAPI")
 
-                println("+++ :julia: Building support library")
-                include(joinpath(Pkg.devdir(), "oneAPI", "deps", "build_ci.jl"))
-                Pkg.activate()
+                println("--- :julia: Installing TestEnv")
+                Pkg.activate(; temp=true)
+                Pkg.add("TestEnv")
+                using TestEnv
+
+                println("--- :julia: Installing oneAPI.jl")
+                withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
+                        "JULIA_PKG_DEVDIR" => devdir) do
+                  Pkg.develop("oneAPI")
+                  include(joinpath(package, "deps", "build_ci.jl"))
+                  Pkg.activate(package)
+
+                  try
+                    Pkg.develop([PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore)])
+                    TestEnv.activate()
+                  catch err
+                    @error "Could not install oneAPI.jl" exception=(err,catch_backtrace())
+                    exit(3)
+                  finally
+                    Pkg.activate(package)
+                  end
+                end
 
                 println("+++ :julia: Running tests")
-                Pkg.test("oneAPI"; coverage=true)'
+                Pkg.test(; coverage=true)'
     agents:
       queue: "juliagpu"
       intel: "*"
@@ -52,18 +95,86 @@ steps:
       - JuliaCI/julia-coverage#v1:
           codecov: true
     command: |
-      julia -e 'using Pkg;
+      julia -e 'using Pkg
 
-                println("--- :julia: Instantiating project")
-                Pkg.develop(; path=pwd())
-                Pkg.develop(; name="Metal")
+                gpuarrays = pwd()
+                gpuarrayscore = joinpath(gpuarrays, "lib", "GPUArraysCore")
+                devdir = mktempdir()
+                package = joinpath(devdir, "Metal")
+
+                println("--- :julia: Installing TestEnv")
+                Pkg.activate(; temp=true)
+                Pkg.add("TestEnv")
+                using TestEnv
+
+                println("--- :julia: Installing Metal.jl")
+                withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
+                        "JULIA_PKG_DEVDIR" => devdir) do
+                  Pkg.develop("Metal")
+                  Pkg.activate(package)
+
+                  try
+                    Pkg.develop([PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore)])
+                    TestEnv.activate()
+                  catch err
+                    @error "Could not install Metal.jl" exception=(err,catch_backtrace())
+                    exit(3)
+                  finally
+                    Pkg.activate(package)
+                  end
+                end
 
                 println("+++ :julia: Running tests")
-                Pkg.test("Metal"; coverage=true)'
+                Pkg.test(; coverage=true)'
     agents:
       queue: "juliaecosystem"
       os: "macos"
       arch: "aarch64"
+    if: build.message !~ /\[skip tests\]/
+    timeout_in_minutes: 60
+
+  - label: "OpenCL.jl"
+    plugins:
+      - JuliaCI/julia#v1:
+          version: "1.10"
+      - JuliaCI/julia-coverage#v1:
+          codecov: true
+    command: |
+      julia -e 'using Pkg
+
+                gpuarrays = pwd()
+                gpuarrayscore = joinpath(gpuarrays, "lib", "GPUArraysCore")
+                devdir = mktempdir()
+                package = joinpath(devdir, "OpenCL")
+
+                println("--- :julia: Installing TestEnv")
+                Pkg.activate(; temp=true)
+                Pkg.add("TestEnv")
+                using TestEnv
+
+                println("--- :julia: Installing OpenCL.jl")
+                withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
+                        "JULIA_PKG_DEVDIR" => devdir) do
+                  Pkg.develop("OpenCL")
+                  Pkg.activate(package)
+
+                  try
+                    Pkg.develop([PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore)])
+                    TestEnv.activate()
+                  catch err
+                    @error "Could not install OpenCL.jl" exception=(err,catch_backtrace())
+                    exit(3)
+                  finally
+                    Pkg.activate(package)
+                  end
+                end
+
+                println("+++ :julia: Running tests")
+                Pkg.test(; coverage=true)'
+    agents:
+      queue: "juliaecosystem"
+      os: "linux"
+      arch: "x86_64"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
 
