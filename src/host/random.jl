@@ -30,15 +30,13 @@ function next_rand(state::NTuple{4, T}) where {T <: Unsigned}
     return state, tmp
 end
 
-function gpu_rand(::Type{T}, ctx::AbstractKernelContext, randstate::AbstractVector{NTuple{4, UInt32}}) where T
-    threadid = GPUArrays.threadidx(ctx)
+function gpu_rand(::Type{T}, threadid, randstate::AbstractVector{NTuple{4, UInt32}}) where T
     stateful_rand = next_rand(randstate[threadid])
     randstate[threadid] = stateful_rand[1]
     return make_rand_num(T, stateful_rand[2])
 end
 
-function gpu_rand(::Type{T}, ctx::AbstractKernelContext, randstate::AbstractVector{NTuple{4, UInt32}}) where T <: Integer
-    threadid = GPUArrays.threadidx(ctx)
+function gpu_rand(::Type{T}, threadid, randstate::AbstractVector{NTuple{4, UInt32}}) where T <: Integer
     result = zero(T)
     if sizeof(T) >= 4
         for _ in 1:sizeof(T) >> 2
@@ -55,9 +53,9 @@ end
 
 # support for complex numbers
 
-function gpu_rand(::Type{Complex{T}}, ctx::AbstractKernelContext, randstate::AbstractVector{NTuple{4, UInt32}}) where T
-    re = gpu_rand(T, ctx, randstate)
-    im = gpu_rand(T, ctx, randstate)
+function gpu_rand(::Type{Complex{T}}, threadid, randstate::AbstractVector{NTuple{4, UInt32}}) where T
+    re = gpu_rand(T, threadid, randstate)
+    im = gpu_rand(T, threadid, randstate)
     return complex(re, im)
 end
 
@@ -85,29 +83,31 @@ end
 
 function Random.rand!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
     isempty(A) && return A
-    gpu_call(A, rng.state) do ctx, a, randstates
-        idx = linear_index(ctx)
-        idx > length(a) && return
-        @inbounds a[idx] = gpu_rand(T, ctx, randstates)
-        return
+    @kernel function rand!(a, randstate)
+        idx = @index(Global, Linear)
+        @inbounds a[idx] = gpu_rand(T, ((idx-1)%length(randstate)+1), randstate)
     end
+    rand!(get_backend(A))(A, rng.state; ndrange = size(A))
     A
 end
 
 function Random.randn!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
     isempty(A) && return A
     threads = (length(A) - 1) ÷ 2 + 1
-    gpu_call(A, rng.state; elements = threads) do ctx, a, randstates
-        idx = 2*(linear_index(ctx) - 1) + 1
-        U1 = gpu_rand(T, ctx, randstates)
-        U2 = gpu_rand(T, ctx, randstates)
+    @kernel function randn!(a, randstates)
+        i = @index(Global, Linear)
+        idx = 2*(i - 1) + 1
+        U1 = gpu_rand(T, i, randstates)
+        U2 = gpu_rand(T, i, randstates)
         Z0 = sqrt(T(-2.0)*log(U1))*cos(T(2pi)*U2)
         Z1 = sqrt(T(-2.0)*log(U1))*sin(T(2pi)*U2)
         @inbounds a[idx] = Z0
-        idx + 1 > length(a) && return
-        @inbounds a[idx + 1] = Z1
-        return
+        if idx + 1 <= length(a)
+            @inbounds a[idx + 1] = Z1
+        end
     end
+    kernel = randn!(get_backend(A))
+    kernel(A, rng.state; ndrange=threads)
     A
 end
 

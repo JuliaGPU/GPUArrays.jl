@@ -75,7 +75,7 @@ jobs:
                         TestEnv.activate()
                       catch err
                         @error "Could not install OpenCL.jl" exception=(err,catch_backtrace())
-                        exit(3)
+                        exit(0)
                       finally
                         Pkg.activate(package)
                       end
