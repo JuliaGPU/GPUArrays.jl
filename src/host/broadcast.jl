@@ -95,9 +95,8 @@ end
 allequal(x) = true
 allequal(x, y, z...) = x == y && allequal(y, z...)
 
-function Base.map(f, x::AnyGPUArray, xs::AbstractArray...)
+function Base.map(f, xs::AnyGPUArray...)
     # if argument sizes match, their shape needs to be preserved
-    xs = (x, xs...)
     if allequal(size.(xs)...)
          return f.(xs...)
     end
@@ -112,12 +111,12 @@ function Base.map(f, x::AnyGPUArray, xs::AbstractArray...)
         # see `broadcast`
         ElType = BrokenBroadcast{ElType}
     end
-    dest = similar(x, ElType, common_length)
+    dest = similar(first(xs), ElType, common_length)
 
     return map!(f, dest, xs...)
 end
 
-function Base.map!(f, dest::AnyGPUArray, xs::AbstractArray...)
+function Base.map!(f, dest::AnyGPUArray, xs::AnyGPUArray...)
     # custom broadcast, ignoring the container size mismatches
     # (avoids the reshape + view that our mapreduce impl has to do)
     indices = LinearIndices.((dest, xs...))
