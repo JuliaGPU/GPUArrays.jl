@@ -197,9 +197,9 @@ end
                 @test compare((A, B) -> isequal(A, B), AT, Ac, Bc)
             end
         end
-
-        # missing values should only trip up ==
-        @test compare((A, B) -> A == B, AT, [missing], [missing])
-        @test compare((A, B) -> isequal(A, B), AT, [missing], [missing])
     end
+
+    # missing values should only trip up ==
+    @test compare((A, B) -> A == B, AT, [missing], [missing])
+    @test compare((A, B) -> isequal(A, B), AT, [missing], [missing])
 end
