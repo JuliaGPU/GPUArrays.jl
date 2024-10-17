@@ -173,8 +173,8 @@ steps:
                 Pkg.test(; coverage=true)'
     agents:
       queue: "juliaecosystem"
-      os: "linux"
-      arch: "x86_64"
+      os: "macos"
+      arch: "aarch64"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
 
