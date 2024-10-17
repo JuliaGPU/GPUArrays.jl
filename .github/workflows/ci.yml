@@ -23,16 +23,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: actions/cache@v4
-        env:
-          cache-name: cache-artifacts
-        with:
-          path: ~/.julia/artifacts
-          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-test-${{ env.cache-name }}-
-            ${{ runner.os }}-test-
-            ${{ runner.os }}-
+      - uses: julia-actions/cache@v2
       - name: Develop subpackages
         run: |
           julia --project -e "
@@ -41,6 +32,57 @@ jobs:
           " lib/GPUArraysCore lib/JLArrays
       - uses: julia-actions/julia-runtest@v1
         continue-on-error: ${{ matrix.version == 'nightly' }}
+      - uses: julia-actions/julia-processcoverage@v1
+        with:
+          directories: src,lib
+      - uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          file: lcov.info
+  opencl:
+    name: OpenCL.jl
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+          arch: x64
+      - uses: julia-actions/cache@v2
+      - name: Run tests
+        run: |
+          julia -e 'using Pkg
+
+                    gpuarrays = pwd()
+                    gpuarrayscore = joinpath(gpuarrays, "lib", "GPUArraysCore")
+                    devdir = mktempdir()
+                    package = joinpath(devdir, "OpenCL")
+
+                    println("--- :julia: Installing TestEnv")
+                    Pkg.activate(; temp=true)
+                    Pkg.add("TestEnv")
+                    using TestEnv
+
+                    println("--- :julia: Installing OpenCL.jl")
+                    withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
+                            "JULIA_PKG_DEVDIR" => devdir) do
+                      Pkg.develop("OpenCL")
+                      Pkg.activate(package)
+
+                      try
+                        Pkg.develop([PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore)])
+                        TestEnv.activate()
+                      catch err
+                        @error "Could not install OpenCL.jl" exception=(err,catch_backtrace())
+                        exit(3)
+                      finally
+                        Pkg.activate(package)
+                      end
+                    end
+
+                    println("+++ :julia: Running tests")
+                    Pkg.test(; coverage=true)'
       - uses: julia-actions/julia-processcoverage@v1
         with:
           directories: src,lib
