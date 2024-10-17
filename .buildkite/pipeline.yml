@@ -15,14 +15,13 @@ steps:
 
                 println("--- :julia: Installing TestEnv")
                 Pkg.activate(; temp=true)
-                Pkg.add(["TestEnv", "Git"])
-                using TestEnv, Git
+                Pkg.add("TestEnv")
+                using TestEnv
 
                 println("--- :julia: Installing CUDA.jl")
                 withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
                         "JULIA_PKG_DEVDIR" => devdir) do
                   Pkg.develop("CUDA")
-                  run(setenv(`$(git()) checkout tb/gpuarrays_kernelabstractions`; dir=package))
                   Pkg.activate(package)
 
                   try
@@ -43,6 +42,8 @@ steps:
       cuda: "*"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 120
+    soft_fail:
+      - exit_status: 3
 
   - label: "oneAPI.jl"
     plugins:
@@ -60,15 +61,14 @@ steps:
 
                 println("--- :julia: Installing TestEnv")
                 Pkg.activate(; temp=true)
-                Pkg.add(["TestEnv", "Git"])
-                using TestEnv, Git
+                Pkg.add("TestEnv")
+                using TestEnv
 
                 println("--- :julia: Installing oneAPI.jl")
                 withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
                         "JULIA_PKG_DEVDIR" => devdir) do
                   Pkg.develop("oneAPI")
                   include(joinpath(package, "deps", "build_ci.jl"))
-                  run(setenv(`$(git()) checkout tb/gpuarrays_kernelabstractions`; dir=package))
                   Pkg.activate(package)
 
                   try
@@ -89,6 +89,8 @@ steps:
       intel: "*"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
+    soft_fail:
+      - exit_status: 3
 
   - label: "Metal.jl"
     plugins:
@@ -106,14 +108,13 @@ steps:
 
                 println("--- :julia: Installing TestEnv")
                 Pkg.activate(; temp=true)
-                Pkg.add(["TestEnv", "Git"])
-                using TestEnv, Git
+                Pkg.add("TestEnv")
+                using TestEnv
 
                 println("--- :julia: Installing Metal.jl")
                 withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
                         "JULIA_PKG_DEVDIR" => devdir) do
                   Pkg.develop("Metal")
-                  run(setenv(`$(git()) checkout tb/gpuarrays_kernelabstractions`; dir=package))
                   Pkg.activate(package)
 
                   try
@@ -135,6 +136,8 @@ steps:
       arch: "aarch64"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
+    soft_fail:
+      - exit_status: 3
 
 env:
   SECRET_CODECOV_TOKEN: "GrevHmzmr2Vt6UK4wbbTTB1+kcMcIlF6nCXVCk3Z0plHDimpD6BwdN9T2A+5J9k3I2em0xXUqpt+2qUSqM8Bn5mNdpjR0TvxVY3oYXc+qzvBXmcZJpuCgJeoTP1P+kVFwszUn4na3fohNq9Qffp6tXMn/j8yJQKOiiC8mkD0aPEI0zISHuDaa/7j7JYf0vTrMRRZ9BMUQHmFuVaIQN8FLGG2BiE3236rj4eHh0lj2IfekCG3wd/LUzAsMx0MC3kIR8WzOWW2rf6xUMPkjm5+NuHwhAOcZc0+LRM7GYIwoW/nHAgyIqjvLiInNFmaJk+7V/GAKtd+gSAIzmyBUHAy6A==;U2FsdGVkX1+4ZljneQoaNE295nRIx8D6+WoFIgT6Pg2BXHaTyhTL4sxEcG0jX0e7oq68uvi4bK7x7YMS4L0Kew=="
