@@ -31,19 +31,6 @@ Base.mapreduce(f, op, A::Broadcast.Broadcasted{<:AbstractGPUArrayStyle}, As::Abs
                dims=:, init=nothing) = _mapreduce(f, op, A, As...; dims=dims, init=init)
 
 function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,N,D}
-    # mapreduce should apply `f` like `map` does, consuming elements like iterators
-    bc = if allequal(size.(As)...)
-        Broadcast.instantiate(Broadcast.broadcasted(f, As...))
-    else
-        # TODO: can we avoid the reshape + view?
-        indices = LinearIndices.(As)
-        common_length = minimum(length.(indices))
-        Bs = map(As) do A
-            view(reshape(A, length(A)), 1:common_length)
-        end
-        Broadcast.instantiate(Broadcast.broadcasted(f, Bs...))
-    end
-
     # figure out the destination container type by looking at the initializer element,
     # or by relying on inference to reason through the map and reduce functions
     if init === nothing
@@ -57,16 +44,39 @@ function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,
         ET = typeof(init)
     end
 
-    sz = size(bc)
-    red = ntuple(i->(dims==Colon() || i in dims) ? 1 : sz[i], length(sz))
-    R = similar(bc, ET, red)
+    # apply the mapping function to the input arrays
+    if N == 1
+        # ... with only a single input, we can defer this to the reduce step
+        A = only(As)
+    else
+        # mapreduce should apply `f` like `map` does, consuming elements like iterators
+        A = if allequal(size.(As)...)
+            Broadcast.instantiate(Broadcast.broadcasted(f, As...))
+        else
+            # TODO: can we avoid the reshape + view?
+            indices = LinearIndices.(As)
+            common_length = minimum(length.(indices))
+            Bs = map(As) do A
+                view(reshape(A, length(A)), 1:common_length)
+            end
+            Broadcast.instantiate(Broadcast.broadcasted(f, Bs...))
+        end
+        f = identity
+    end
 
+    # allocate an output container
+    sz = size(A)
+    red = ntuple(i->(dims==Colon() || i in dims) ? 1 : sz[i], length(sz))
+    R = similar(A, ET, red)
+
+    # perform the reduction
     if prod(sz) == 0
         fill!(R, init)
     else
-        mapreducedim!(identity, op, R, bc; init=init)
+        mapreducedim!(f, op, R, A; init)
     end
 
+    # return the result
     if dims === Colon()
         @allowscalar R[]
     else
