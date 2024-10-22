@@ -47,10 +47,9 @@ include("setup.jl")     # make sure everything is precompiled
 # choose tests
 const tests = []
 const test_runners = Dict()
-## GPUArrays testsuite
 for AT in (JLArray, Array), name in keys(TestSuite.tests)
-    push!(tests, "$(AT)$(Base.Filesystem.path_separator)$name")
-    test_runners["$(AT)$(Base.Filesystem.path_separator)$name"] = ()->TestSuite.tests[name](AT)
+    push!(tests, "$(AT)/$name")
+    test_runners["$(AT)/$name"] = ()->TestSuite.tests[name](AT)
 end
 unique!(tests)
 
