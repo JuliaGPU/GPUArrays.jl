@@ -15,9 +15,6 @@ using Test
 
 using Adapt
 
-struct ArrayAdaptor{AT} end
-Adapt.adapt_storage(::ArrayAdaptor{AT}, xs::AbstractArray) where {AT} = AT(xs)
-
 test_result(a::Number, b::Number; kwargs...) = ≈(a, b; kwargs...)
 test_result(a::Missing, b::Missing; kwargs...) = true
 test_result(a::Number, b::Missing; kwargs...) = false
@@ -39,7 +36,7 @@ end
 function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
     # copy on the CPU, adapt on the GPU, but keep Ref's
     cpu_in = map(x -> isa(x, Base.RefValue) ? x[] : deepcopy(x), xs)
-    gpu_in = map(x -> isa(x, Base.RefValue) ? x[] : adapt(ArrayAdaptor{AT}(), x), xs)
+    gpu_in = map(x -> isa(x, Base.RefValue) ? x[] : adapt(AT, x), xs)
 
     cpu_out = f(cpu_in...)
     gpu_out = f(gpu_in...)
