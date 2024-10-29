@@ -112,11 +112,7 @@ if isdefined(LinearAlgebra, :copytrito!)
         m,n = size(A)
         m1,n1 = size(B)
         if uplo == 'U'
-            if n < m
-                (m1 < n || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least size ($n,$n)"))
-            else
-                (m1 < m || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least size ($m,$n)"))
-            end
+            LinearAlgebra.LAPACK.lacpy_size_check((m1, n1), (n < m ? n : m, n))
             @kernel function U_kernel!(_A, _B)
                 I = @index(Global, Cartesian)
                 i, j = Tuple(I)
@@ -126,11 +122,7 @@ if isdefined(LinearAlgebra, :copytrito!)
             end
             U_kernel!(get_backend(B))(A, B; ndrange = size(A))
         else  # uplo == 'L'
-            if m < n
-                (m1 < m || n1 < m) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least size ($m,$m)"))
-            else
-                (m1 < m || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least size ($m,$n)"))
-            end
+            LinearAlgebra.LAPACK.lacpy_size_check((m1, n1), (m, m < n ? m : n))
             @kernel function L_kernel!(_A, _B)
                 I = @index(Global, Cartesian)
                 i, j = Tuple(I)
