@@ -85,6 +85,13 @@
                     B = zeros(T,n,n)
                     @test compare(copytrito!, AT, B, A, uplo)
                 end
+                @testset for T in eltypes, uplo in ('L', 'U')
+                    n = 16
+                    m = 32
+                    A = uplo == 'U' ? rand(T,m,n) : rand(T,n,m)
+                    B = zeros(T,n,n)
+                    @test compare(copytrito!, AT, B, A, uplo)
+                end
             end
         end
 
