@@ -105,7 +105,7 @@ mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
     end
 end
 
-unsafe_free!(a::JLArray) = GPUArrays.unsafe_free!(a.data)
+GPUArrays.storage(a::JLArray) = a.data
 
 # conversion of untyped data to a typed Array
 function typed_data(x::JLArray{T}) where {T}

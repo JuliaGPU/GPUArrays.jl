@@ -21,6 +21,14 @@ end
 end
 
 @testsuite "base" (AT, eltypes)->begin
+    if AT <: AbstractGPUArray
+        @testset "storage" begin
+          x = AT(rand(Float32, 10))
+          @test GPUArrays.storage(x) isa GPUArrays.DataRef
+          GPUArrays.unsafe_free!(x)
+        end
+    end
+
     @testset "copy!" begin
         for (dst, src,) in (
                             (rand(Float32, (10,)),   rand(Float32, (10,))),   # vectors
