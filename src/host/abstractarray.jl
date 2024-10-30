@@ -3,7 +3,7 @@
 
 # storage handling
 
-export DataRef
+export DataRef, unsafe_free!
 
 # DataRef provides a helper class to manage the storage of an array.
 #
@@ -91,6 +91,19 @@ function unsafe_free!(ref::DataRef, args...)
     release(ref.rc, args...)
     return
 end
+
+# array methods
+
+storage(x::AbstractGPUArray) = error("Not implemented") # COV_EXCL_LINE
+
+"""
+    unsafe_free!(a::GPUArray)
+
+Release the memory of an array for reuse by future allocations. This operation is
+performed automatically by the GC when an array goes out of scope, but can be called
+earlier to reduce pressure on the memory allocator.
+"""
+unsafe_free!(x::AbstractGPUArray) = unsafe_free!(storage(x))
 
 
 # input/output
