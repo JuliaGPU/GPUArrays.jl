@@ -172,6 +172,7 @@ function Base._unsafe_setindex!(::IndexStyle, A::Base.ReshapedArray{<:Any, <:Any
     return vectorized_setindex!(A, x, Base.ensure_indexable(Is)...)
 end
 
+
 # find*
 
 # simple array type that returns the index used to access an element, while
@@ -249,3 +250,52 @@ end
 
 Base.findmax(a::AnyGPUArray; dims=:) = findminmax(Base.isless, a; init=typemin(eltype(a)), dims)
 Base.findmin(a::AnyGPUArray; dims=:) = findminmax(Base.isgreater, a; init=typemax(eltype(a)), dims)
+
+function Base.findall(bools::AbstractGPUArray{Bool})
+    I = keytype(bools)
+    indices = cumsum(reshape(bools, prod(size(bools))))
+
+    n = @allowscalar indices[end]
+    ys = similar(bools, I, n)
+
+    if n > 0
+        @kernel function findall_kernel(ys, bools, indices)
+            i = @index(Global, Linear)
+
+            @inbounds if i <= length(bools) && bools[i]
+                i′ = CartesianIndices(bools)[i]
+                b = indices[i]   # new position
+                ys[b] = i′
+            end
+        end
+
+        kernel = findall_kernel(get_backend(ys))
+        kernel(ys, bools, indices; ndrange=length(indices))
+    end
+
+    unsafe_free!(indices.data)
+
+    return ys
+end
+
+function Base.findall(f::Function, A::AbstractGPUArray)
+    bools = map(f, A)
+    ys = findall(bools)
+    unsafe_free!(bools)
+    return ys
+end
+
+
+# logical indexing
+
+# we cannot use Base.LogicalIndex, which does not support indexing but requires iteration.
+# TODO: it should still be possible to use the same technique;
+#       Base.LogicalIndex basically contains the same as our `findall` here does.
+Base.to_index(::AbstractGPUArray, I::AbstractArray{Bool}) = findall(I)
+if VERSION >= v"1.11.0-DEV.1157"
+    Base.to_indices(A::AbstractGPUArray, I::Tuple{AbstractArray{Bool}}) = (Base.to_index(A, I[1]),)
+else
+    Base.to_indices(A::AbstractGPUArray, inds,
+                    I::Tuple{Union{Array{Bool,N}, BitArray{N}}}) where {N} =
+        (Base.to_index(A, I[1]),)
+end

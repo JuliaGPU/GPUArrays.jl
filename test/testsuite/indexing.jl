@@ -243,4 +243,14 @@ end
         @test compare(argmin, AT, rand(Int, 10))
         @test compare(argmin, AT, -rand(Int, 10))
     end
+
+    @testset "findall" begin
+        # 1D
+        @test compare(findall, AT, rand(Bool, 100))
+        @test compare(x->findall(>(0.5f0), x), AT, rand(Float32, 100))
+
+        # ND
+        @test compare(findall, AT, rand(Bool, 10, 10))
+        @test compare(x->findall(>(0.5f0), x), AT, rand(Float32, 10, 10))
+    end
 end
