@@ -35,7 +35,7 @@ function alloc!(alloc_f, cache::CacheAllocator, ::Type{T}, dims::Dims{N}) where 
     while !isempty(free_pool) && x ≡ nothing
         tmp = pop!(free_pool)
         # Array was manually freed via `unsafe_free!`.
-        tmp.buf.freed && continue
+        storage(tmp).freed && continue
         x = tmp
     end
 
