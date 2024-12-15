@@ -85,6 +85,27 @@ function named_cache_allocator!(pdcache::PerDeviceCacheAllocator{T}, device, nam
     return named_cache
 end
 
+function Base.sizeof(pdcache::PerDeviceCacheAllocator, device, name::Symbol)
+    sz = UInt64(0)
+    h = hash(device)
+
+    dev_cache = get(pdcache.caches, h, nothing)
+    dev_cache ≡ nothing && return sz
+
+    named_cache = get(dev_cache, name, nothing)
+    named_cache ≡ nothing && return sz
+
+    Base.@lock named_cache.lock begin
+        for (_, pool) in named_cache.free
+            sz += sum(sizeof, pool; init=UInt64(0))
+        end
+        for (_, pool) in named_cache.busy
+            sz += sum(sizeof, pool; init=UInt64(0))
+        end
+    end
+    return sz
+end
+
 function invalidate_cache_allocator!(pdcache::PerDeviceCacheAllocator, device, name::Symbol)
     h = hash(device)
     dev_cache = get(pdcache.caches, h, nothing)
@@ -130,3 +151,5 @@ cache_alloc_scope(::Backend) = error("Not implemented.")
 cache_allocator(::Backend) = error("Not implemented.")
 
 free_busy_cache_alloc!(pdcache, name::Symbol) = error("Not implemented.")
+
+invalidate_cache_allocator!(pdcache, name::Symbol) = error("Not implemented.")
