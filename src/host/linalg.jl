@@ -763,3 +763,36 @@ function LinearAlgebra.kron(x::AbstractGPUVector{T1}, y::AbstractGPUVector{T2}) 
     z = similar(x, T, length(x) * length(y))
     return LinearAlgebra.kron!(z, x, y)
 end
+
+function LinearAlgebra.kron!(Z::AbstractGPUMatrix{T1}, A::AbstractGPUMatrix{T2}, B::AbstractGPUMatrix{T3}) where {T1, T2, T3}
+    @assert size(Z, 1) == size(A, 1) * size(B, 1)
+    @assert size(Z, 2) == size(A, 2) * size(B, 2)
+
+    @kernel function kron_kernel!(Z, @Const(A), @Const(B))
+        ai, aj = @index(Global, NTuple)  # Indices in the result matrix
+
+        lb1, lb2 = size(B)  # Dimensions of B
+
+        # Map global indices (ai, aj) to submatrices of the Kronecker product
+        i_a = (ai - 1) ÷ lb1 + 1  # Corresponding row index in A
+        i_b = (ai - 1) % lb1 + 1  # Corresponding row index in B
+        j_a = (aj - 1) ÷ lb2 + 1  # Corresponding col index in A
+        j_b = (aj - 1) % lb2 + 1  # Corresponding col index in B
+
+        @inbounds Z[ai, aj] = A[i_a, j_a] * B[i_b, j_b]
+    end
+
+    backend = KernelAbstractions.get_backend(Z)
+    kernel = kron_kernel!(backend)
+
+    kernel(Z, A, B, ndrange=(size(Z, 1), size(Z, 2)))
+
+    return Z
+end
+
+function LinearAlgebra.kron(A::AbstractGPUMatrix{T1}, B::AbstractGPUMatrix{T2}) where {T1, T2}
+    T = promote_type(T1, T2)
+    size_Z = (size(A, 1) * size(B, 1), size(A, 2) * size(B, 2))
+    Z = similar(A, T, size_Z...)
+    return kron!(Z, A, B)
+end

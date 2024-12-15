@@ -314,6 +314,7 @@
     @testset "kron" begin
         for T in eltypes
             @test compare(kron, AT, rand(T, 32), rand(T, 64))
+            @test compare(kron, AT, rand(T, 32, 64), rand(T, 128, 16))
         end
     end
 end
