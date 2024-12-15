@@ -764,35 +764,54 @@ function LinearAlgebra.kron(x::AbstractGPUVector{T1}, y::AbstractGPUVector{T2}) 
     return LinearAlgebra.kron!(z, x, y)
 end
 
-function LinearAlgebra.kron!(Z::AbstractGPUMatrix{T1}, A::AbstractGPUMatrix{T2}, B::AbstractGPUMatrix{T3}) where {T1, T2, T3}
-    @assert size(Z, 1) == size(A, 1) * size(B, 1)
-    @assert size(Z, 2) == size(A, 2) * size(B, 2)
+trans_adj_wrappers = ((T -> :(AbstractGPUMatrix{$T}), T -> 'N', identity),
+               (T -> :(Transpose{$T, <:AbstractGPUMatrix{$T}}), T -> 'T', A -> :(parent($A))),
+               (T -> :(Adjoint{$T, <:AbstractGPUMatrix{$T}}), T -> T <: Real ? 'T' : 'C', A -> :(parent($A))))
 
-    @kernel function kron_kernel!(Z, @Const(A), @Const(B))
-        ai, aj = @index(Global, NTuple)  # Indices in the result matrix
+for (wrapa, transa, unwrapa) in trans_adj_wrappers, (wrapb, transb, unwrapb) in trans_adj_wrappers
+    TypeA = wrapa(:(T1))
+    TypeB = wrapb(:(T2))
+    TypeC = :(AbstractGPUMatrix{T3})
 
-        lb1, lb2 = size(B)  # Dimensions of B
+    @eval function LinearAlgebra.kron!(C::$TypeC, A::$TypeA, B::$TypeB) where {T1,T2,T3}
+        @assert size(C, 1) == size(A, 1) * size(B, 1)
+        @assert size(C, 2) == size(A, 2) * size(B, 2)
 
-        # Map global indices (ai, aj) to submatrices of the Kronecker product
-        i_a = (ai - 1) ÷ lb1 + 1  # Corresponding row index in A
-        i_b = (ai - 1) % lb1 + 1  # Corresponding row index in B
-        j_a = (aj - 1) ÷ lb2 + 1  # Corresponding col index in A
-        j_b = (aj - 1) % lb2 + 1  # Corresponding col index in B
+        ta = $transa(T1)
+        tb = $transb(T2)
+    
+        @kernel function kron_kernel!(C, @Const(A), @Const(B))
+            ai, aj = @index(Global, NTuple)  # Indices in the result matrix
+    
+            # lb1, lb2 = size(B)  # Dimensions of B
+            lb1, lb2 = tb == 'N' ? size(B) : reverse(size(B))
+    
+            # Map global indices (ai, aj) to submatrices of the Kronecker product
+            i_a = (ai - 1) ÷ lb1 + 1  # Corresponding row index in A
+            i_b = (ai - 1) % lb1 + 1  # Corresponding row index in B
+            j_a = (aj - 1) ÷ lb2 + 1  # Corresponding col index in A
+            j_b = (aj - 1) % lb2 + 1  # Corresponding col index in B
 
-        @inbounds Z[ai, aj] = A[i_a, j_a] * B[i_b, j_b]
+            @inbounds begin
+                a_ij = ta == 'N' ? A[i_a, j_a] : (ta == 'T' ? A[j_a, i_a] : conj(A[j_a, i_a]))
+                b_ij = tb == 'N' ? B[i_b, j_b] : (tb == 'T' ? B[j_b, i_b] : conj(B[j_b, i_b]))
+
+                C[ai, aj] = a_ij * b_ij
+            end
+        end
+    
+        backend = KernelAbstractions.get_backend(C)
+        kernel = kron_kernel!(backend)
+    
+        kernel(C, $(unwrapa(:A)), $(unwrapb(:B)), ndrange=(size(C, 1), size(C, 2)))
+    
+        return C
     end
 
-    backend = KernelAbstractions.get_backend(Z)
-    kernel = kron_kernel!(backend)
-
-    kernel(Z, A, B, ndrange=(size(Z, 1), size(Z, 2)))
-
-    return Z
-end
-
-function LinearAlgebra.kron(A::AbstractGPUMatrix{T1}, B::AbstractGPUMatrix{T2}) where {T1, T2}
-    T = promote_type(T1, T2)
-    size_Z = (size(A, 1) * size(B, 1), size(A, 2) * size(B, 2))
-    Z = similar(A, T, size_Z...)
-    return kron!(Z, A, B)
+    @eval function LinearAlgebra.kron(A::$TypeA, B::$TypeB) where {T1, T2}
+        T = promote_type(T1, T2)
+        size_C = (size(A, 1) * size(B, 1), size(A, 2) * size(B, 2))
+        C = similar(A, T, size_C...)
+        return kron!(C, A, B)
+    end
 end
