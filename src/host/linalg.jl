@@ -736,3 +736,30 @@ function Base.isone(x::AbstractGPUMatrix{T}) where {T}
 
     Array(y)[]
 end
+
+## Kronecker product
+
+function LinearAlgebra.kron!(z::AbstractGPUVector{T1}, x::AbstractGPUVector{T2}, y::AbstractGPUVector{T3}) where {T1,T2,T3}
+    @assert length(z) == length(x) * length(y)
+
+    @kernel function kron_kernel!(z, @Const(x), @Const(y))
+        i, j = @index(Global, NTuple)
+    
+        ly = length(y)
+    
+        @inbounds z[(i - 1) * ly + j] = x[i] * y[j]
+    end
+
+    backend = KernelAbstractions.get_backend(z)
+    kernel = kron_kernel!(backend)
+
+    kernel(z, x, y, ndrange=(length(x), length(y)))
+
+    return z
+end
+
+function LinearAlgebra.kron(x::AbstractGPUVector{T1}, y::AbstractGPUVector{T2}) where {T1,T2}
+    T = promote_type(T1, T2)
+    z = similar(x, T, length(x) * length(y))
+    return LinearAlgebra.kron!(z, x, y)
+end

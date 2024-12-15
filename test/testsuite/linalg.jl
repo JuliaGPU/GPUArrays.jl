@@ -310,6 +310,12 @@
         @test iszero(A)
         @test isone(A) == false
     end
+
+    @testset "kron" begin
+        for T in eltypes
+            @test compare(kron, AT, rand(T, 32), rand(T, 64))
+        end
+    end
 end
 
 @testsuite "linalg/mul!/vector-matrix" (AT, eltypes)->begin
