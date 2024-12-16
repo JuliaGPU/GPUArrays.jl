@@ -745,9 +745,7 @@ function LinearAlgebra.kron!(z::AbstractGPUVector{T1}, x::AbstractGPUVector{T2},
     @kernel function kron_kernel!(z, @Const(x), @Const(y))
         i, j = @index(Global, NTuple)
     
-        ly = length(y)
-    
-        @inbounds z[(i - 1) * ly + j] = x[i] * y[j]
+        @inbounds z[(i - 1) * length(y) + j] = x[i] * y[j]
     end
 
     backend = KernelAbstractions.get_backend(z)
