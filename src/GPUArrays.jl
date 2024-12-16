@@ -4,6 +4,9 @@ using KernelAbstractions
 using Serialization
 using Random
 using LinearAlgebra
+using SparseArrays
+using SparseArrays: getcolptr, getrowval, getnzval
+
 using Printf
 
 using LinearAlgebra.BLAS
@@ -14,8 +17,6 @@ using LLVM.Interop
 
 using Reexport
 @reexport using GPUArraysCore
-
-using KernelAbstractions
 
 # device functionality
 include("device/abstractarray.jl")
@@ -33,6 +34,7 @@ include("host/math.jl")
 include("host/random.jl")
 include("host/quirks.jl")
 include("host/uniformscaling.jl")
+include("host/sparse.jl")
 include("host/statistics.jl")
 
 

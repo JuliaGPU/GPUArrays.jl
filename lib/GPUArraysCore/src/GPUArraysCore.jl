@@ -1,13 +1,18 @@
 module GPUArraysCore
 
 using Adapt
-
+using SparseArrays
 
 ## essential types
 
 export AbstractGPUArray, AbstractGPUVector, AbstractGPUMatrix, AbstractGPUVecOrMat,
        WrappedGPUArray, AnyGPUArray, AbstractGPUArrayStyle,
        AnyGPUArray, AnyGPUVector, AnyGPUMatrix
+
+export AbstractGPUSparseArray, AbstractGPUSparseMatrix, AbstractGPUSparseVector, AbstractGPUSparseVecOrMat,
+       WrappedGPUSparseArray, AnyGPUSparseArray, AnyGPUSparseVector, AnyGPUSparseMatrix,
+       AbstractGPUSparseMatrixCSC, AbstractGPUSparseMatrixCSR, AbstractGPUSparseMatrixCOO,
+       WrappedGPUSparseMatrixCSC, AnyGPUSparseMatrixCSC, WrappedGPUSparseMatrixCSR, AnyGPUSparseMatrixCSR, WrappedGPUSparseMatrixCOO, AnyGPUSparseMatrixCOO
 
 """
     AbstractGPUArray{T, N} <: DenseArray{T, N}
@@ -28,6 +33,31 @@ const AnyGPUArray{T,N} = Union{AbstractGPUArray{T,N}, WrappedGPUArray{T,N}}
 const AnyGPUVector{T} = AnyGPUArray{T, 1}
 const AnyGPUMatrix{T} = AnyGPUArray{T, 2}
 
+## sparse arrays
+
+abstract type AbstractGPUSparseArray{Tv, Ti, N} <: AbstractSparseArray{Tv, Ti, N} end
+
+const AbstractGPUSparseMatrix{Tv, Ti} = AbstractGPUSparseArray{Tv, Ti, 2}
+const AbstractGPUSparseVector{Tv, Ti} = AbstractGPUSparseArray{Tv, Ti, 1}
+const AbstractGPUSparseVecOrMat{Tv, Ti} = Union{AbstractGPUSparseVector{Tv, Ti}, AbstractGPUSparseMatrix{Tv, Ti}}
+
+const WrappedGPUSparseArray{Tv, Ti, N} = WrappedArray{Tv,N,AbstractGPUSparseArray,AbstractGPUSparseArray{Tv, Ti, N}}
+const AnyGPUSparseArray{Tv, Ti, N} = Union{AbstractGPUSparseArray{Tv, Ti, N}, WrappedGPUSparseArray{Tv, Ti, N}}
+const AnyGPUSparseVector{Tv, Ti} = AnyGPUSparseArray{Tv, Ti, 1}
+const AnyGPUSparseMatrix{Tv, Ti} = AnyGPUSparseArray{Tv, Ti, 2}
+
+abstract type AbstractGPUSparseMatrixCSC{Tv,Ti<:Integer} <: AbstractGPUSparseMatrix{Tv,Ti} end
+abstract type AbstractGPUSparseMatrixCSR{Tv,Ti<:Integer} <: AbstractGPUSparseMatrix{Tv,Ti} end
+abstract type AbstractGPUSparseMatrixCOO{Tv,Ti<:Integer} <: AbstractGPUSparseMatrix{Tv,Ti} end
+
+const WrappedGPUSparseMatrixCSC{Tv,Ti} = WrappedArray{Tv,AbstractGPUSparseMatrixCSC,AbstractGPUSparseMatrixCSC{Tv,Ti}}
+const AnyGPUSparseMatrixCSC{Tv,Ti} = Union{AbstractGPUSparseMatrixCSC{Tv,Ti}, WrappedGPUSparseMatrixCSC{Tv,Ti}}
+
+const WrappedGPUSparseMatrixCSR{Tv,Ti} = WrappedArray{Tv,AbstractGPUSparseMatrixCSR,AbstractGPUSparseMatrixCSR{Tv,Ti}}
+const AnyGPUSparseMatrixCSR{Tv,Ti} = Union{AbstractGPUSparseMatrixCSR{Tv,Ti}, WrappedGPUSparseMatrixCSR{Tv,Ti}}
+
+const WrappedGPUSparseMatrixCOO{Tv,Ti} = WrappedArray{Tv,AbstractGPUSparseMatrixCOO,AbstractGPUSparseMatrixCOO{Tv,Ti}}
+const AnyGPUSparseMatrixCOO{Tv,Ti} = Union{AbstractGPUSparseMatrixCOO{Tv,Ti}, WrappedGPUSparseMatrixCOO{Tv,Ti}}
 
 ## broadcasting
 
