@@ -1,4 +1,29 @@
-export JLSparseMatrixCSC
+export JLSparseVector, JLSparseMatrixCSC
+
+## Sparse Vector
+
+struct JLSparseVector{Tv,Ti<:Integer} <: AbstractGPUSparseVector{Tv,Ti}
+    n::Ti              # Length of the sparse vector
+    nzind::JLVector{Ti}   # Indices of stored values
+    nzval::JLVector{Tv}   # Stored values, typically nonzeros
+
+    function JLSparseVector{Tv,Ti}(n::Integer, nzind::JLVector{Ti}, nzval::JLVector{Tv}) where {Tv,Ti<:Integer}
+        n >= 0 || throw(ArgumentError("The number of elements must be non-negative."))
+        length(nzind) == length(nzval) ||
+            throw(ArgumentError("index and value vectors must be the same length"))
+        new(convert(Ti, n), nzind, nzval)
+    end
+end
+
+JLSparseVector(n::Integer, nzind::JLVector{Ti}, nzval::JLVector{Tv}) where {Tv,Ti} =
+    JLSparseVector{Tv,Ti}(n, nzind, nzval)
+
+JLSparseVector(V::SparseVector) = JLSparseVector(V.n, JLVector(V.nzind), JLVector(V.nzval))
+SparseVector(V::JLSparseVector) = SparseVector(V.n, Vector(V.nzind), Vector(V.nzval))
+
+Base.copy(V::JLSparseVector) = JLSparseVector(V.n, copy(V.nzind), copy(V.nzval))
+
+## SparseMatrixCSC
 
 struct JLSparseMatrixCSC{Tv,Ti<:Integer} <: AbstractGPUSparseMatrixCSC{Tv,Ti}
     m::Int                  # Number of rows
@@ -29,5 +54,6 @@ function JLSparseMatrixCSC(m::Integer, n::Integer, colptr::JLVector, rowval::JLV
 end
 
 JLSparseMatrixCSC(A::SparseMatrixCSC) = JLSparseMatrixCSC(A.m, A.n, JLVector(A.colptr), JLVector(A.rowval), JLVector(A.nzval))
+SparseMatrixCSC(A::JLSparseMatrixCSC) = SparseMatrixCSC(A.m, A.n, Vector(A.colptr), Vector(A.rowval), Vector(A.nzval))
 
 Base.copy(A::JLSparseMatrixCSC) = JLSparseMatrixCSC(A.m, A.n, copy(A.colptr), copy(A.rowval), copy(A.nzval))

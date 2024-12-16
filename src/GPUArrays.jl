@@ -5,7 +5,7 @@ using Serialization
 using Random
 using LinearAlgebra
 using SparseArrays
-using SparseArrays: getcolptr, getrowval, getnzval
+using SparseArrays: getcolptr, getrowval, getnzval, nonzeroinds
 
 using Printf
 

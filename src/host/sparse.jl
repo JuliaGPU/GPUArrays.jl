@@ -1,3 +1,32 @@
+## Sparse Vector
+
+Base.length(V::AbstractGPUSparseVector) = V.n
+Base.size(V::AbstractGPUSparseVector) = (V.n,)
+
+SparseArrays.nonzeros(V::AbstractGPUSparseVector) = V.nzval
+SparseArrays.getnzval(V::AbstractGPUSparseVector) = nonzeros(V)
+SparseArrays.nnz(V::AbstractGPUSparseVector) = length(nzval(V))
+SparseArrays.nonzeroinds(V::AbstractGPUSparseVector) = V.nzind
+
+function Base.sizehint!(V::AbstractGPUSparseVector, newlen::Integer)
+    sizehint!(nonzeroinds(V), newlen)
+    sizehint!(nonzeros(V), newlen)
+    return V
+end
+
+function LinearAlgebra.dot(x::AbstractGPUSparseVector, y::AbstractGPUVector)
+    n = length(y)
+    length(x) == n || throw(DimensionMismatch(
+        "Vector x has a length $(length(x)) but y has a length $n"))
+    nzind = nonzeroinds(x)
+    nzval = nonzeros(x)
+    y_view = y[nzind] # TODO: by using the view it throws scalar indexing
+    return dot(nzval, y_view)
+end
+LinearAlgebra.dot(x::AbstractGPUVector{T}, y::AbstractGPUSparseVector{T}) where T<:Real = dot(y, x)
+LinearAlgebra.dot(x::AbstractGPUVector{T}, y::AbstractGPUSparseVector{T}) where T<:Complex = conj(dot(y, x))
+
+
 ## General Sparse Matrix
 
 Base.size(A::AbstractGPUSparseMatrix) = (A.m, A.n)
@@ -28,7 +57,7 @@ function _goodbuffers_csc(m, n, colptr, rowval, nzval)
     # TODO: also add the condition that colptr[end] - 1 == length(nzval) (allowscalar?)
 end
 
-@inline function LinearAlgebra.mul!(C::AbstractGPUVector, A::AnyGPUSparseMatrixCSC, B::AbstractGPUVector, α::Number, β::Number)
+@inline function LinearAlgebra.mul!(C::AbstractGPUVector, A::AbstractGPUSparseMatrixCSC, B::AbstractGPUVector, α::Number, β::Number)
     return LinearAlgebra.generic_matvecmul!(C, LinearAlgebra.wrapper_char(A), LinearAlgebra._unwrap(A), B, LinearAlgebra.MulAddMul(α, β))
 end
 
