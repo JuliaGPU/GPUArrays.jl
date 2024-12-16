@@ -23,6 +23,12 @@ SparseVector(V::JLSparseVector) = SparseVector(V.n, Vector(V.nzind), Vector(V.nz
 
 Base.copy(V::JLSparseVector) = JLSparseVector(V.n, copy(V.nzind), copy(V.nzval))
 
+Base.length(V::JLSparseVector) = V.n
+Base.size(V::JLSparseVector) = (V.n,)
+
+SparseArrays.nonzeros(V::JLSparseVector) = V.nzval
+SparseArrays.nonzeroinds(V::JLSparseVector) = V.nzind
+
 ## SparseMatrixCSC
 
 struct JLSparseMatrixCSC{Tv,Ti<:Integer} <: AbstractGPUSparseMatrixCSC{Tv,Ti}
@@ -57,3 +63,10 @@ JLSparseMatrixCSC(A::SparseMatrixCSC) = JLSparseMatrixCSC(A.m, A.n, JLVector(A.c
 SparseMatrixCSC(A::JLSparseMatrixCSC) = SparseMatrixCSC(A.m, A.n, Vector(A.colptr), Vector(A.rowval), Vector(A.nzval))
 
 Base.copy(A::JLSparseMatrixCSC) = JLSparseMatrixCSC(A.m, A.n, copy(A.colptr), copy(A.rowval), copy(A.nzval))
+
+Base.size(A::JLSparseMatrixCSC) = (A.m, A.n)
+Base.length(A::JLSparseMatrixCSC) = A.m * A.n
+
+SparseArrays.nonzeros(A::JLSparseMatrixCSC) = A.nzval
+SparseArrays.getcolptr(A::JLSparseMatrixCSC) = A.colptr
+SparseArrays.rowvals(A::JLSparseMatrixCSC) = A.rowval
