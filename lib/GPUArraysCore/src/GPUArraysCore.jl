@@ -1,6 +1,7 @@
 module GPUArraysCore
 
 using Adapt
+using LinearAlgebra
 using SparseArrays
 
 ## essential types
@@ -10,7 +11,7 @@ export AbstractGPUArray, AbstractGPUVector, AbstractGPUMatrix, AbstractGPUVecOrM
     AnyGPUArray, AnyGPUVector, AnyGPUMatrix
 
 export AbstractGPUSparseArray, AbstractGPUSparseMatrix, AbstractGPUSparseVector, AbstractGPUSparseVecOrMat,
-    AbstractGPUSparseMatrixCSC, AbstractGPUSparseMatrixCSR, AbstractGPUSparseMatrixCOO
+    AbstractGPUSparseMatrixCSC, AbstractGPUSparseMatrixCSR, AbstractGPUSparseMatrixCOO, AnyGPUSparseMatrixCSC, AnyGPUSparseMatrixCSR, AnyGPUSparseMatrixCOO
 
 """
     AbstractGPUArray{T, N} <: DenseArray{T, N}
@@ -42,6 +43,10 @@ const AbstractGPUSparseVecOrMat{Tv,Ti} = Union{AbstractGPUSparseVector{Tv,Ti},Ab
 abstract type AbstractGPUSparseMatrixCSC{Tv,Ti<:Integer} <: AbstractGPUSparseMatrix{Tv,Ti} end
 abstract type AbstractGPUSparseMatrixCSR{Tv,Ti<:Integer} <: AbstractGPUSparseMatrix{Tv,Ti} end
 abstract type AbstractGPUSparseMatrixCOO{Tv,Ti<:Integer} <: AbstractGPUSparseMatrix{Tv,Ti} end
+
+const AnyGPUSparseMatrixCSC{Tv,Ti} = Union{AbstractGPUSparseMatrixCSC{Tv,Ti},Transpose{Tv,<:AbstractGPUSparseMatrixCSC{Tv,Ti}},Adjoint{Tv,<:AbstractGPUSparseMatrixCSC{Tv,Ti}}}
+const AnyGPUSparseMatrixCSR{Tv,Ti} = Union{AbstractGPUSparseMatrixCSR{Tv,Ti},Transpose{Tv,<:AbstractGPUSparseMatrixCSR{Tv,Ti}},Adjoint{Tv,<:AbstractGPUSparseMatrixCSR{Tv,Ti}}}
+const AnyGPUSparseMatrixCOO{Tv,Ti} = Union{AbstractGPUSparseMatrixCOO{Tv,Ti},Transpose{Tv,<:AbstractGPUSparseMatrixCOO{Tv,Ti}},Adjoint{Tv,<:AbstractGPUSparseMatrixCOO{Tv,Ti}}}
 
 ## broadcasting
 

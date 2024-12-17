@@ -1,3 +1,13 @@
+## Wrappers
+
+trans_adj_wrappers_dense_vecormat = ((T -> :(AbstractGPUVecOrMat{$T}), false, identity, identity),
+    (T -> :(Transpose{$T,<:AbstractGPUMatrix{$T}}), true, identity, A -> :(parent($A))),
+    (T -> :(Adjoint{$T,<:AbstractGPUMatrix{$T}}), true, x -> :(conj($x)), A -> :(parent($A))))
+
+trans_adj_wrappers_csc = ((T -> :(AbstractGPUSparseMatrixCSC{$T}), false, identity, identity),
+    (T -> :(Transpose{$T,<:AbstractGPUSparseMatrixCSC{$T}}), true, identity, A -> :(parent($A))),
+    (T -> :(Adjoint{$T,<:AbstractGPUSparseMatrixCSC{$T}}), true, x -> :(conj($x)), A -> :(parent($A))))
+
 ## Sparse Vector
 
 SparseArrays.getnzval(V::AbstractGPUSparseVector) = nonzeros(V)
@@ -18,8 +28,8 @@ function LinearAlgebra.dot(x::AbstractGPUSparseVector, y::AbstractGPUVector)
     y_view = y[nzind] # TODO: by using the view it throws scalar indexing
     return dot(nzval, y_view)
 end
-LinearAlgebra.dot(x::AbstractGPUVector{T}, y::AbstractGPUSparseVector{T}) where T<:Real = dot(y, x)
-LinearAlgebra.dot(x::AbstractGPUVector{T}, y::AbstractGPUSparseVector{T}) where T<:Complex = conj(dot(y, x))
+LinearAlgebra.dot(x::AbstractGPUVector{T}, y::AbstractGPUSparseVector{T}) where {T<:Real} = dot(y, x)
+LinearAlgebra.dot(x::AbstractGPUVector{T}, y::AbstractGPUSparseVector{T}) where {T<:Complex} = conj(dot(y, x))
 
 
 ## General Sparse Matrix
@@ -49,49 +59,77 @@ function _goodbuffers_csc(m, n, colptr, rowval, nzval)
     # TODO: also add the condition that colptr[end] - 1 == length(nzval) (allowscalar?)
 end
 
-@inline function LinearAlgebra.mul!(C::AbstractGPUVector, A::AbstractGPUSparseMatrixCSC, B::AbstractGPUVector, α::Number, β::Number)
-    return LinearAlgebra.generic_matvecmul!(C, LinearAlgebra.wrapper_char(A), LinearAlgebra._unwrap(A), B, LinearAlgebra.MulAddMul(α, β))
-end
+# @inline function LinearAlgebra.mul!(C::AbstractGPUVector, A::AnyGPUSparseMatrixCSC, B::AbstractGPUVector, α::Number, β::Number)
+#     return LinearAlgebra.generic_matvecmul!(C, LinearAlgebra.wrapper_char(A), LinearAlgebra._unwrap(A), B, LinearAlgebra.MulAddMul(α, β))
+# end
 
 @inline function LinearAlgebra.generic_matvecmul!(C::AbstractGPUVector, tA, A::AbstractGPUSparseMatrixCSC, B::AbstractGPUVector, _add::LinearAlgebra.MulAddMul)
-    return SparseArrays.spdensemul!(C, tA, 'N', A, B, _add)
+    return _spmatmul!(C, wrap(A, tA), B, _add.alpha, _add.beta)
 end
 
-Base.@constprop :aggressive function SparseArrays.spdensemul!(C::AbstractGPUVecOrMat, tA, tB, A::AbstractGPUSparseMatrixCSC, B::AbstractGPUVecOrMat, _add::LinearAlgebra.MulAddMul)
-    if tA == 'N'
-        return _spmatmul!(C, A, wrap(B, tB), _add.alpha, _add.beta)
-    else
-        throw(ArgumentError("tA different from 'N' not yet supported"))
-    end
+@inline function LinearAlgebra.generic_matmatmul!(C::AbstractGPUMatrix, tA, tb, A::AbstractGPUSparseMatrixCSC, B::AbstractGPUMatrix, _add::LinearAlgebra.MulAddMul)
+    return _spmatmul!(C, wrap(A, tA), wrap(B, tb), _add.alpha, _add.beta)
 end
 
-function _spmatmul!(C::AbstractGPUVecOrMat, A::AbstractGPUSparseMatrixCSC, B::AbstractGPUVecOrMat, α::Number, β::Number)
-    size(A, 2) == size(B, 1) ||
-        throw(DimensionMismatch("second dimension of A, $(size(A,2)), does not match the first dimension of B, $(size(B,1))"))
-    size(A, 1) == size(C, 1) ||
-        throw(DimensionMismatch("first dimension of A, $(size(A,1)), does not match the first dimension of C, $(size(C,1))"))
-    size(B, 2) == size(C, 2) ||
-        throw(DimensionMismatch("second dimension of B, $(size(B,2)), does not match the second dimension of C, $(size(C,2))"))
-    
-    β != one(β) && LinearAlgebra._rmul_or_fill!(C, β)
+for (wrapa, transa, opa, unwrapa) in trans_adj_wrappers_csc
+    for (wrapb, transb, opb, unwrapb) in trans_adj_wrappers_dense_vecormat
+        TypeA = wrapa(:(T1))
+        TypeB = wrapb(:(T2))
+        TypeC = :(AbstractGPUVecOrMat{T3})
 
-    @kernel function kernel_spmatmul!(C, @Const(A), @Const(B))
-        k, col = @index(Global, NTuple)
+        kernel_spmatmul! = transa ? :kernel_spmatmul_T! : :kernel_spmatmul_N!
 
-        @inbounds axj = B[col, k] * α
-        @inbounds for j in getcolptr(A)[col]:(getcolptr(A)[col+1]-1) # nzrange(A, col)
-            KernelAbstractions.@atomic C[rowvals(A)[j], k] += getnzval(A)[j] * axj
+        indB = transb ? (i, j) -> :(($j, $i)) : (i, j) -> :(($i, $j)) # transpose indices
+
+        @eval function _spmatmul!(C::$TypeC, A::$TypeA, B::$TypeB, α::Number, β::Number) where {T1,T2,T3}
+            size(A, 2) == size(B, 1) ||
+                throw(DimensionMismatch("second dimension of A, $(size(A,2)), does not match the first dimension of B, $(size(B,1))"))
+            size(A, 1) == size(C, 1) ||
+                throw(DimensionMismatch("first dimension of A, $(size(A,1)), does not match the first dimension of C, $(size(C,1))"))
+            size(B, 2) == size(C, 2) ||
+                throw(DimensionMismatch("second dimension of B, $(size(B,2)), does not match the second dimension of C, $(size(C,2))"))
+
+            _A = $(unwrapa(:A))
+            _B = $(unwrapb(:B))
+
+            backend_C = KernelAbstractions.get_backend(C)
+            backend_A = KernelAbstractions.get_backend(_A)
+            backend_B = KernelAbstractions.get_backend(_B)
+
+            backend_A == backend_B == backend_C || throw(ArgumentError("All arrays must be on the same backend"))
+
+            @kernel function kernel_spmatmul_N!(C, @Const(A_colptr), @Const(A_rowval), @Const(A_nzval), @Const(B))
+                k, col = @index(Global, NTuple)
+
+                Bi, Bj = $(indB(:col, :k))
+
+                @inbounds axj = $(opb(:(B[Bi, Bj]))) * α
+                @inbounds for j in A_colptr[col]:(A_colptr[col+1]-1) # nzrange(A, col)
+                    KernelAbstractions.@atomic C[A_rowval[j], k] += $(opa(:(A_nzval[j]))) * axj
+                end
+            end
+
+            @kernel function kernel_spmatmul_T!(C, @Const(A_colptr), @Const(A_rowval), @Const(A_nzval), @Const(B))
+                k, col = @index(Global, NTuple)
+
+                tmp = zero(eltype(C))
+                @inbounds for j in A_colptr[col]:(A_colptr[col+1]-1) # nzrange(A, col)
+                    Bi, Bj = $(indB(:(A_rowval[j]), :k))
+                    tmp += $(opa(:(A_nzval[j]))) * $(opb(:(B[Bi, Bj])))
+                end
+                @inbounds C[col, k] += tmp * α
+            end
+
+            β != one(β) && LinearAlgebra._rmul_or_fill!(C, β)
+
+            A_colptr = getcolptr(_A)
+            A_rowval = getrowval(_A)
+            A_nzval = getnzval(_A)
+
+            kernel! = $kernel_spmatmul!(backend_A)
+            kernel!(C, A_colptr, A_rowval, A_nzval, _B; ndrange=(size(C, 2), size(_A, 2)))
+
+            return C
         end
     end
-
-    backend_C = KernelAbstractions.get_backend(C)
-    backend_A = KernelAbstractions.get_backend(A)
-    backend_B = KernelAbstractions.get_backend(B)
-
-    backend_A == backend_B == backend_C || throw(ArgumentError("All arrays must be on the same backend"))
-
-    kernel! = kernel_spmatmul!(backend_A)
-    kernel!(C, A_colptr, A_rowval, A_nzval, B; ndrange=(size(C, 2), size(A, 2)))
-
-    return C
 end
