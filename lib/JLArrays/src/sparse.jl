@@ -70,3 +70,26 @@ Base.length(A::JLSparseMatrixCSC) = A.m * A.n
 SparseArrays.nonzeros(A::JLSparseMatrixCSC) = A.nzval
 SparseArrays.getcolptr(A::JLSparseMatrixCSC) = A.colptr
 SparseArrays.rowvals(A::JLSparseMatrixCSC) = A.rowval
+
+## Device
+
+function Adapt.adapt_structure(to, A::JLSparseMatrixCSC)
+    m = A.m
+    n = A.n
+    colptr = Adapt.adapt(to, getcolptr(A))
+    rowval = Adapt.adapt(to, rowvals(A))
+    nzval = Adapt.adapt(to, nonzeros(A))
+    return JLSparseDeviceMatrixCSC(m, n, colptr, rowval, nzval)
+end
+
+struct JLSparseDeviceMatrixCSC{Tv,Ti} <: AbstractGPUSparseMatrixCSC{Tv,Ti}
+    m::Int
+    n::Int
+    colptr::JLDeviceArray{Ti,1}
+    rowval::JLDeviceArray{Ti,1}
+    nzval::JLDeviceArray{Tv,1}
+end
+
+SparseArrays.nonzeros(A::JLSparseDeviceMatrixCSC) = A.nzval
+SparseArrays.getcolptr(A::JLSparseDeviceMatrixCSC) = A.colptr
+SparseArrays.rowvals(A::JLSparseDeviceMatrixCSC) = A.rowval

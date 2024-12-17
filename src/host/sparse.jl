@@ -98,36 +98,32 @@ for (wrapa, transa, opa, unwrapa) in trans_adj_wrappers_csc
 
             backend_A == backend_B == backend_C || throw(ArgumentError("All arrays must be on the same backend"))
 
-            @kernel function kernel_spmatmul_N!(C, @Const(A_colptr), @Const(A_rowval), @Const(A_nzval), @Const(B))
+            @kernel function kernel_spmatmul_N!(C, @Const(A), @Const(B))
                 k, col = @index(Global, NTuple)
 
                 Bi, Bj = $(indB(:col, :k))
 
                 @inbounds axj = $(opb(:(B[Bi, Bj]))) * α
-                @inbounds for j in A_colptr[col]:(A_colptr[col+1]-1) # nzrange(A, col)
-                    KernelAbstractions.@atomic C[A_rowval[j], k] += $(opa(:(A_nzval[j]))) * axj
+                @inbounds for j in getcolptr(A)[col]:(getcolptr(A)[col+1]-1) # nzrange(A, col)
+                    KernelAbstractions.@atomic C[getrowval(A)[j], k] += $(opa(:(getnzval(A)[j]))) * axj
                 end
             end
 
-            @kernel function kernel_spmatmul_T!(C, @Const(A_colptr), @Const(A_rowval), @Const(A_nzval), @Const(B))
+            @kernel function kernel_spmatmul_T!(C, @Const(A), @Const(B))
                 k, col = @index(Global, NTuple)
 
                 tmp = zero(eltype(C))
-                @inbounds for j in A_colptr[col]:(A_colptr[col+1]-1) # nzrange(A, col)
-                    Bi, Bj = $(indB(:(A_rowval[j]), :k))
-                    tmp += $(opa(:(A_nzval[j]))) * $(opb(:(B[Bi, Bj])))
+                @inbounds for j in getcolptr(A)[col]:(getcolptr(A)[col+1]-1) # nzrange(A, col)
+                    Bi, Bj = $(indB(:(getrowval(A)[j]), :k))
+                    tmp += $(opa(:(getnzval(A)[j]))) * $(opb(:(B[Bi, Bj])))
                 end
                 @inbounds C[col, k] += tmp * α
             end
 
             β != one(β) && LinearAlgebra._rmul_or_fill!(C, β)
 
-            A_colptr = getcolptr(_A)
-            A_rowval = getrowval(_A)
-            A_nzval = getnzval(_A)
-
             kernel! = $kernel_spmatmul!(backend_A)
-            kernel!(C, A_colptr, A_rowval, A_nzval, _B; ndrange=(size(C, 2), size(_A, 2)))
+            kernel!(C, _A, _B; ndrange=(size(C, 2), size(_A, 2)))
 
             return C
         end

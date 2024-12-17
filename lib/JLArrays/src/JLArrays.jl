@@ -12,6 +12,7 @@ using GPUArrays
 
 using Adapt
 using SparseArrays
+using SparseArrays: getcolptr, getrowval, getnzval, nonzeroinds
 
 import KernelAbstractions
 import KernelAbstractions: Adapt, StaticArrays, Backend, Kernel, StaticSize, DynamicSize, partition, blocks, workitems, launch_config
