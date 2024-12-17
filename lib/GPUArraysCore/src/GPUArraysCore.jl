@@ -1,13 +1,17 @@
 module GPUArraysCore
 
 using Adapt
-
+using LinearAlgebra
+using SparseArrays
 
 ## essential types
 
 export AbstractGPUArray, AbstractGPUVector, AbstractGPUMatrix, AbstractGPUVecOrMat,
-       WrappedGPUArray, AnyGPUArray, AbstractGPUArrayStyle,
-       AnyGPUArray, AnyGPUVector, AnyGPUMatrix
+    WrappedGPUArray, AnyGPUArray, AbstractGPUArrayStyle,
+    AnyGPUArray, AnyGPUVector, AnyGPUMatrix
+
+export AbstractGPUSparseArray, AbstractGPUSparseMatrix, AbstractGPUSparseVector, AbstractGPUSparseVecOrMat,
+    AbstractGPUSparseMatrixCSC, AbstractGPUSparseMatrixCSR, AbstractGPUSparseMatrixCOO, AnyGPUSparseMatrixCSC, AnyGPUSparseMatrixCSR, AnyGPUSparseMatrixCOO
 
 """
     AbstractGPUArray{T, N} <: DenseArray{T, N}
@@ -16,18 +20,33 @@ Supertype for `N`-dimensional GPU arrays (or array-like types) with elements of 
 Instances of this type are expected to live on the host, see [`AbstractDeviceArray`](@ref)
 for device-side objects.
 """
-abstract type AbstractGPUArray{T, N} <: DenseArray{T, N} end
+abstract type AbstractGPUArray{T,N} <: DenseArray{T,N} end
 
-const AbstractGPUVector{T} = AbstractGPUArray{T, 1}
-const AbstractGPUMatrix{T} = AbstractGPUArray{T, 2}
-const AbstractGPUVecOrMat{T} = Union{AbstractGPUArray{T, 1}, AbstractGPUArray{T, 2}}
+const AbstractGPUVector{T} = AbstractGPUArray{T,1}
+const AbstractGPUMatrix{T} = AbstractGPUArray{T,2}
+const AbstractGPUVecOrMat{T} = Union{AbstractGPUArray{T,1},AbstractGPUArray{T,2}}
 
 # convenience aliases for working with wrapped arrays
 const WrappedGPUArray{T,N} = WrappedArray{T,N,AbstractGPUArray,AbstractGPUArray{T,N}}
-const AnyGPUArray{T,N} = Union{AbstractGPUArray{T,N}, WrappedGPUArray{T,N}}
-const AnyGPUVector{T} = AnyGPUArray{T, 1}
-const AnyGPUMatrix{T} = AnyGPUArray{T, 2}
+const AnyGPUArray{T,N} = Union{AbstractGPUArray{T,N},WrappedGPUArray{T,N}}
+const AnyGPUVector{T} = AnyGPUArray{T,1}
+const AnyGPUMatrix{T} = AnyGPUArray{T,2}
 
+## sparse arrays
+
+abstract type AbstractGPUSparseArray{Tv,Ti,N} <: AbstractSparseArray{Tv,Ti,N} end
+
+const AbstractGPUSparseMatrix{Tv,Ti} = AbstractGPUSparseArray{Tv,Ti,2}
+const AbstractGPUSparseVector{Tv,Ti} = AbstractGPUSparseArray{Tv,Ti,1}
+const AbstractGPUSparseVecOrMat{Tv,Ti} = Union{AbstractGPUSparseVector{Tv,Ti},AbstractGPUSparseMatrix{Tv,Ti}}
+
+abstract type AbstractGPUSparseMatrixCSC{Tv,Ti<:Integer} <: AbstractGPUSparseMatrix{Tv,Ti} end
+abstract type AbstractGPUSparseMatrixCSR{Tv,Ti<:Integer} <: AbstractGPUSparseMatrix{Tv,Ti} end
+abstract type AbstractGPUSparseMatrixCOO{Tv,Ti<:Integer} <: AbstractGPUSparseMatrix{Tv,Ti} end
+
+const AnyGPUSparseMatrixCSC{Tv,Ti} = Union{AbstractGPUSparseMatrixCSC{Tv,Ti},Transpose{Tv,<:AbstractGPUSparseMatrixCSC{Tv,Ti}},Adjoint{Tv,<:AbstractGPUSparseMatrixCSC{Tv,Ti}}}
+const AnyGPUSparseMatrixCSR{Tv,Ti} = Union{AbstractGPUSparseMatrixCSR{Tv,Ti},Transpose{Tv,<:AbstractGPUSparseMatrixCSR{Tv,Ti}},Adjoint{Tv,<:AbstractGPUSparseMatrixCSR{Tv,Ti}}}
+const AnyGPUSparseMatrixCOO{Tv,Ti} = Union{AbstractGPUSparseMatrixCOO{Tv,Ti},Transpose{Tv,<:AbstractGPUSparseMatrixCOO{Tv,Ti}},Adjoint{Tv,<:AbstractGPUSparseMatrixCOO{Tv,Ti}}}
 
 ## broadcasting
 
@@ -157,9 +176,9 @@ end
 # this problem will be introduced in https://github.com/JuliaLang/julia/pull/39217
 macro __tryfinally(ex, fin)
     Expr(:tryfinally,
-       :($(esc(ex))),
-       :($(esc(fin)))
-       )
+        :($(esc(ex))),
+        :($(esc(fin)))
+    )
 end
 
 """
@@ -182,7 +201,7 @@ end
 function allowscalar(allow::Bool=true)
     if allow
         @warn """It's not recommended to use allowscalar([true]) to allow scalar indexing.
-                 Instead, use `allowscalar() do end` or `@allowscalar` to denote exactly which operations can use scalar operations.""" maxlog=1
+                 Instead, use `allowscalar() do end` or `@allowscalar` to denote exactly which operations can use scalar operations.""" maxlog = 1
     end
     setting = allow ? ScalarAllowed : ScalarDisallowed
     task_local_storage(:ScalarIndexing, setting)
@@ -204,8 +223,8 @@ macro allowscalar(ex)
         local tls_value = get(task_local_storage(), :ScalarIndexing, nothing)
         task_local_storage(:ScalarIndexing, ScalarAllowed)
         @__tryfinally($(esc(ex)),
-                      isnothing(tls_value) ? delete!(task_local_storage(), :ScalarIndexing)
-                                           : task_local_storage(:ScalarIndexing, tls_value))
+            isnothing(tls_value) ? delete!(task_local_storage(), :ScalarIndexing)
+            : task_local_storage(:ScalarIndexing, tls_value))
     end
 end
 

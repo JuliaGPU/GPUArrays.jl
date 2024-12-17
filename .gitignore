@@ -12,3 +12,5 @@ Manifest.toml
 
 # MacOS generated files
 *.DS_Store
+
+/.vscode/

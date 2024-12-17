@@ -11,6 +11,8 @@ export JLArray, JLVector, JLMatrix, jl, JLBackend
 using GPUArrays
 
 using Adapt
+using SparseArrays
+using SparseArrays: getcolptr, getrowval, getnzval, nonzeroinds
 
 import KernelAbstractions
 import KernelAbstractions: Adapt, StaticArrays, Backend, Kernel, StaticSize, DynamicSize, partition, blocks, workitems, launch_config
@@ -386,5 +388,7 @@ end
 Adapt.adapt_storage(::JLBackend, a::Array) = Adapt.adapt(JLArrays.JLArray, a)
 Adapt.adapt_storage(::JLBackend, a::JLArrays.JLArray) = a
 Adapt.adapt_storage(::KernelAbstractions.CPU, a::JLArrays.JLArray) = convert(Array, a)
+
+include("sparse.jl")
 
 end
