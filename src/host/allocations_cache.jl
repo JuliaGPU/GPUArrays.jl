@@ -1,4 +1,8 @@
-using Base.ScopedValues
+@static if VERSION < v"1.11"
+    using ScopedValues
+else
+    using Base.ScopedValues
+end
 
 const CacheAllocatorName = ScopedValue(:none)
 
@@ -23,6 +27,19 @@ function get_pool!(cache::CacheAllocator{T}, pool::Symbol, uid::UInt64) where T
     return uid_pool
 end
 
+"""
+    alloc!(alloc_f, cache::CacheAllocator, ::Type{T}, dims::Dims{N}; skip_free::Bool) where {T, N}
+
+Attempt to retrieve cached allocation from `cache` using eltype `T` and `dims`
+as keys for searching.
+If no such allocation is found, execute `alloc_f` that does actual allocation,
+store it in cache for future use and return it.
+
+`skip_free::Bool` is used together with `PerDeviceCacheAllocator.free_immediately`.
+When `true` arrays are bulk-freed instead of stored in cache.
+In this case `alloc!` will avoid looking into "free" part of `cache`
+and execute `alloc_f` immediately, storing allocation for future bulk-freeing.
+"""
 function alloc!(alloc_f, cache::CacheAllocator, ::Type{T}, dims::Dims{N}; skip_free::Bool) where {T, N}
     x = nothing
     uid = hash((T, dims))
@@ -55,7 +72,7 @@ function free_busy!(cache::CacheAllocator; free_immediately::Bool)
         free_pool = get_pool!(cache, :free, uid)
         Base.@lock cache.lock begin
             if free_immediately
-                for p in busy_pool unsafe_free!(p) end
+                map(unsafe_free!, busy_pool)
             else
                 append!(free_pool, busy_pool)
             end
@@ -119,6 +136,11 @@ function Base.sizeof(pdcache::PerDeviceCacheAllocator, device, name::Symbol)
     return sz
 end
 
+"""
+    invalidate_cache_allocator!(kab::Backend, name::Symbol)
+
+Free all memory held by `name`d cached allocator given KernelAbstractions `backend`.
+"""
 invalidate_cache_allocator!(kab::Backend, name::Symbol) =
     invalidate_cache_allocator!(cache_allocator(kab), device(kab), name)
 
@@ -149,6 +171,47 @@ function free_busy!(kab::Backend, name::Symbol)
     free_busy!(named_cache_allocator!(pdcache, device(kab), name); pdcache.free_immediately)
 end
 
+"""
+    @cache_scope backend name expr
+
+Evaluate expression `expr` using `name`d caching allocator
+for the given KernelAbstractions `backend`.
+
+When during execution of `expr` gpu allocation is requested,
+allocator will try to find such allocation in "free" parts of cache,
+marking them as "busy" and returning allocation to the user.
+If no allocation is found in "free" part, an actual allocation is performed,
+marking it as "busy" and returned to the user.
+
+**After** the execution of `expr` all "busy" allocations are marked as "free"
+thus they can be re-used next time the program enters this scope.
+
+This is useful to apply in a repeating block of code to avoid relying on
+GC to free gpu memory in time.
+
+`name` is a `Symbol` that defines which allocator to use
+(`:none` is reserved and means no allocator).
+
+# Example
+
+In following example we apply caching allocator at every iteration of the for-loop.
+Every iteration requires 2 GiB of gpu memory, without caching allocator
+GC wouldn't be able to free arrays in time resulting in higher memory usage.
+With caching allocator, memory usage stays at exactly 2 GiB.
+
+After the loop, we free all cached memory if there's any.
+
+```julia
+kab = CUDABackend()
+n = 1024^3
+for i in 1:1000
+    @cache_scope kab :loop begin
+        sin.(CUDA.rand(Float32, n))
+    end
+end
+invalidate_cache_allocator!(kab, :loop)
+```
+"""
 macro cache_scope(backend, name, expr)
     quote
         res = @with $(esc(CacheAllocatorName)) => $(esc(name)) $(esc(expr))
@@ -157,6 +220,12 @@ macro cache_scope(backend, name, expr)
     end
 end
 
+"""
+    @no_cache_scope expr
+
+Evaluate expression `expr` without using caching allocator.
+This is useful to call from within `@cache_scope` to avoid caching arrays.
+"""
 macro no_cache_scope(expr)
     quote
         @with $(esc(CacheAllocatorName)) => :none $(esc(expr))
@@ -165,6 +234,18 @@ end
 
 # Interface API.
 
+"""
+    cache_allocator(::Backend)
+
+Given KernelAbstractions `backend`, return corresponding `PerDeviceCacheAllocator` for it.
+Each GPU backend must implement this.
+"""
 cache_allocator(::Backend) = error("Not implemented.")
 
+"""
+    device(::Backend)
+
+Given KernelAbstractions `backend`, return current device.
+Each GPU backend must implement this.
+"""
 device(::Backend) = error("Not implemented.")
