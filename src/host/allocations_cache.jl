@@ -69,11 +69,11 @@ function free_busy!(cache::CacheAllocator; free_immediately::Bool)
         busy_pool = get_pool!(cache, :busy, uid)
         isempty(busy_pool) && continue
 
-        free_pool = get_pool!(cache, :free, uid)
         Base.@lock cache.lock begin
             if free_immediately
                 map(unsafe_free!, busy_pool)
             else
+                free_pool = get_pool!(cache, :free, uid)
                 append!(free_pool, busy_pool)
             end
             empty!(busy_pool)
@@ -81,7 +81,7 @@ function free_busy!(cache::CacheAllocator; free_immediately::Bool)
     end
 end
 
-struct PerDeviceCacheAllocator{T <: AbstractGPUArray}
+mutable struct PerDeviceCacheAllocator{T <: AbstractGPUArray}
     lock::ReentrantLock
     caches::Dict{UInt64, Dict{Symbol, CacheAllocator{T}}}
     free_immediately::Bool
@@ -104,7 +104,7 @@ function named_cache_allocator!(pdcache::PerDeviceCacheAllocator{T}, device, nam
     named_cache = get(dev_cache, name, nothing)
     if named_cache ≡ nothing
         named_cache = CacheAllocator(T)
-        Base.@lock dev_cache.lock dev_cache[name] = named_cache
+        Base.@lock pdcache.lock dev_cache[name] = named_cache
     end
     return named_cache
 end
