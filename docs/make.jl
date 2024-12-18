@@ -20,6 +20,7 @@ function main()
             "Test suite"    => "testsuite.md",
         ],
         doctest = true,
+        warnonly=[:missing_docs],
     )
 
     deploydocs(
