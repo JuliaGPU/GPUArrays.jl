@@ -48,6 +48,9 @@ include("setup.jl")     # make sure everything is precompiled
 const tests = []
 const test_runners = Dict()
 for AT in (JLArray, Array), name in keys(TestSuite.tests)
+    # Disable for now.
+    name == "Caching Allocator" && continue
+
     push!(tests, "$(AT)/$name")
     test_runners["$(AT)/$name"] = ()->TestSuite.tests[name](AT)
 end

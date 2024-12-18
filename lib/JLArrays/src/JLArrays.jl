@@ -88,12 +88,20 @@ mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
     function JLArray{T,N}(::UndefInitializer, dims::Dims{N}) where {T,N}
         check_eltype(T)
         maxsize = prod(dims) * sizeof(T)
-        data = Vector{UInt8}(undef, maxsize)
-        ref = DataRef(data) do data
-            resize!(data, 0)
+
+        function _alloc_f()
+            data = Vector{UInt8}(undef, maxsize)
+            ref = DataRef(data) do data
+                resize!(data, 0)
+            end
+            obj = new{T,N}(ref, 0, dims)
+            finalizer(unsafe_free!, obj)
         end
-        obj = new{T,N}(ref, 0, dims)
-        finalizer(unsafe_free!, obj)
+
+        name = GPUArrays.CacheAllocatorName[]
+        return name == :none ?
+            _alloc_f() :
+            GPUArrays.alloc!(_alloc_f, JLBackend(), name, T, dims)::JLArray{T, N}
     end
 
     # low-level constructor for wrapping existing data
@@ -386,5 +394,13 @@ end
 Adapt.adapt_storage(::JLBackend, a::Array) = Adapt.adapt(JLArrays.JLArray, a)
 Adapt.adapt_storage(::JLBackend, a::JLArrays.JLArray) = a
 Adapt.adapt_storage(::KernelAbstractions.CPU, a::JLArrays.JLArray) = convert(Array, a)
+
+# Caching Allocator.
+
+const JLACacheAllocator = GPUArrays.PerDeviceCacheAllocator(JLArray; free_immediately=false)
+
+GPUArrays.cache_allocator(::JLBackend) = JLACacheAllocator
+
+GPUArrays.device(::JLBackend) = 1
 
 end
