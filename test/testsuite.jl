@@ -94,6 +94,9 @@ include("testsuite/random.jl")
 include("testsuite/uniformscaling.jl")
 include("testsuite/statistics.jl")
 
+# TODO re-enable once backends support it.
+# include("testsuite/caching_allocator.jl")
+
 """
 Runs the entire GPUArrays test suite on array type `AT`
 """
