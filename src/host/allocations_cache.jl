@@ -177,11 +177,11 @@ end
 Evaluate expression `expr` using `name`d caching allocator
 for the given KernelAbstractions `backend`.
 
-When during execution of `expr` gpu allocation is requested,
-allocator will try to find such allocation in "free" parts of cache,
-marking them as "busy" and returning allocation to the user.
-If no allocation is found in "free" part, an actual allocation is performed,
-marking it as "busy" and returned to the user.
+When gpu allocation is requested during execution of `expr`,
+allocator will try to use its "free" cache instead of doing an actual allocation.
+If no "free" allocation exists, an actual allocation is performed.
+Before returning allocation to the user, it is marked as busy and
+will not be used by allocation in the scope defined by `@cache_scope`.
 
 **After** the execution of `expr` all "busy" allocations are marked as "free"
 thus they can be re-used next time the program enters this scope.
@@ -194,13 +194,13 @@ GC to free gpu memory in time.
 
 # Example
 
-In following example we apply caching allocator at every iteration of the for-loop.
-Every iteration requires 2 GiB of gpu memory, without caching allocator
-GC wouldn't be able to free arrays in time resulting in higher memory usage.
-With caching allocator, memory usage stays at exactly 2 GiB.
+In the following example, each iteration of the for-loop requires `2 GiB`
+of gpu memory.
+Without caching allocator GC wouldn't be able to free arrays in time
+resulting in higher memory usage.
+With caching allocator, memory usage stays at exactly `2 GiB`.
 
-After the loop, we free all cached memory if there's any.
-
+See [`@no_cache_scope`](@ref), [`invalidate_cache_allocator!`](@ref).
 ```julia
 kab = CUDABackend()
 n = 1024^3
