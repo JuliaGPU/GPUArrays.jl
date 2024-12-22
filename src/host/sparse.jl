@@ -152,3 +152,30 @@ function _goodbuffers_csc(m, n, colptr, rowval, nzval)
     return (length(colptr) == n + 1 && length(rowval) == length(nzval))
     # TODO: also add the condition that colptr[end] - 1 == length(nzval) (allowscalar?)
 end
+
+## Broadcasting
+
+# broadcast container type promotion for combinations of sparse arrays and other types
+struct GPUSparseVecStyle <: Broadcast.AbstractArrayStyle{1} end
+struct GPUSparseMatStyle <: Broadcast.AbstractArrayStyle{2} end
+Broadcast.BroadcastStyle(::Type{<:AbstractGPUSparseVector}) = GPUSparseVecStyle()
+Broadcast.BroadcastStyle(::Type{<:AbstractGPUSparseMatrix}) = GPUSparseMatStyle()
+const SPVM = Union{GPUSparseVecStyle,GPUSparseMatStyle}
+
+# GPUSparseVecStyle handles 0-1 dimensions, GPUSparseMatStyle 0-2 dimensions.
+# GPUSparseVecStyle promotes to GPUSparseMatStyle for 2 dimensions.
+# Fall back to DefaultArrayStyle for higher dimensionality.
+GPUSparseVecStyle(::Val{0}) = GPUSparseVecStyle()
+GPUSparseVecStyle(::Val{1}) = GPUSparseVecStyle()
+GPUSparseVecStyle(::Val{2}) = GPUSparseMatStyle()
+GPUSparseVecStyle(::Val{N}) where N = Broadcast.DefaultArrayStyle{N}()
+GPUSparseMatStyle(::Val{0}) = GPUSparseMatStyle()
+GPUSparseMatStyle(::Val{1}) = GPUSparseMatStyle()
+GPUSparseMatStyle(::Val{2}) = GPUSparseMatStyle()
+GPUSparseMatStyle(::Val{N}) where N = Broadcast.DefaultArrayStyle{N}()
+
+Broadcast.BroadcastStyle(::GPUSparseMatStyle, ::GPUSparseVecStyle) = GPUSparseMatStyle()
+
+# Tuples promote to dense
+Broadcast.BroadcastStyle(::GPUSparseVecStyle, ::Broadcast.Style{Tuple}) = Broadcast.DefaultArrayStyle{1}()
+Broadcast.BroadcastStyle(::GPUSparseMatStyle, ::Broadcast.Style{Tuple}) = Broadcast.DefaultArrayStyle{2}()
