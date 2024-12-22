@@ -13,11 +13,24 @@ trans_adj_wrappers_csc = ((T -> :(AbstractGPUSparseMatrixCSC{$T}), false, identi
 SparseArrays.getnzval(V::AbstractGPUSparseVector) = nonzeros(V)
 SparseArrays.nnz(V::AbstractGPUSparseVector) = length(nzval(V))
 
+function unsafe_free!(V::AbstractGPUSparseVector)
+    unsafe_free!(nonzeroinds(V))
+    unsafe_free!(nonzeros(V))
+    return nothing
+end
+
 function Base.sizehint!(V::AbstractGPUSparseVector, newlen::Integer)
     sizehint!(nonzeroinds(V), newlen)
     sizehint!(nonzeros(V), newlen)
     return V
 end
+
+Base.copy(V::AbstractGPUSparseVector) = typeof(V)(length(V), copy(nonzeroinds(V)), copy(nonzeros(V)))
+Base.similar(V::AbstractGPUSparseVector) = copy(V) # We keep the same sparsity of the source
+
+Base.:(*)(α::Number, V::AbstractGPUSparseVector) = typeof(V)(length(V), copy(nonzeroinds(V)), α * nonzeros(V))
+Base.:(*)(V::AbstractGPUSparseVector, α::Number) = α * V
+Base.:(/)(V::AbstractGPUSparseVector, α::Number) = typeof(V)(length(V), copy(nonzeroinds(V)), nonzeros(V) / α)
 
 function LinearAlgebra.dot(x::AbstractGPUSparseVector, y::AbstractGPUVector)
     n = length(y)
@@ -54,14 +67,19 @@ end
 SparseArrays.getrowval(A::AbstractGPUSparseMatrixCSC) = rowvals(A)
 # SparseArrays.nzrange(A::AbstractGPUSparseMatrixCSC, col::Integer) = getcolptr(A)[col]:(getcolptr(A)[col+1]-1) # TODO: this uses scalar indexing
 
-function _goodbuffers_csc(m, n, colptr, rowval, nzval)
-    return (length(colptr) == n + 1 && length(rowval) == length(nzval))
-    # TODO: also add the condition that colptr[end] - 1 == length(nzval) (allowscalar?)
+function unsafe_free!(A::AbstractGPUSparseMatrixCSC)
+    unsafe_free!(getcolptr(A))
+    unsafe_free!(rowvals(A))
+    unsafe_free!(nonzeros(A))
+    return nothing
 end
 
-# @inline function LinearAlgebra.mul!(C::AbstractGPUVector, A::AnyGPUSparseMatrixCSC, B::AbstractGPUVector, α::Number, β::Number)
-#     return LinearAlgebra.generic_matvecmul!(C, LinearAlgebra.wrapper_char(A), LinearAlgebra._unwrap(A), B, LinearAlgebra.MulAddMul(α, β))
-# end
+Base.copy(A::AbstractGPUSparseMatrixCSC) = typeof(A)(size(A), copy(getcolptr(A)), copy(rowvals(A)), copy(getnzval(A)))
+Base.similar(A::AbstractGPUSparseMatrixCSC) = copy(A) # We keep the same sparsity of the source
+
+Base.:(*)(α::Number, A::AbstractGPUSparseMatrixCSC) = typeof(A)(size(A), copy(getcolptr(A)), copy(rowvals(A)), α * nonzeros(A))
+Base.:(*)(A::AbstractGPUSparseMatrixCSC, α::Number) = α * A
+Base.:(/)(A::AbstractGPUSparseMatrixCSC, α::Number) = typeof(A)(size(A), copy(getcolptr(A)), copy(rowvals(A)), nonzeros(A) / α)
 
 @inline function LinearAlgebra.generic_matvecmul!(C::AbstractGPUVector, tA, A::AbstractGPUSparseMatrixCSC, B::AbstractGPUVector, _add::LinearAlgebra.MulAddMul)
     return _spmatmul!(C, wrap(A, tA), B, _add.alpha, _add.beta)
@@ -128,4 +146,9 @@ for (wrapa, transa, opa, unwrapa) in trans_adj_wrappers_csc
             return C
         end
     end
+end
+
+function _goodbuffers_csc(m, n, colptr, rowval, nzval)
+    return (length(colptr) == n + 1 && length(rowval) == length(nzval))
+    # TODO: also add the condition that colptr[end] - 1 == length(nzval) (allowscalar?)
 end
