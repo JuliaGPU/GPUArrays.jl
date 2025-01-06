@@ -9,7 +9,7 @@ else
     using Base.ScopedValues
 end
 
-const CacheAllocatorName = ScopedValue(:none)
+const CacheAllocatorName = ScopedValue{Union{Nothing, Symbol}}(nothing)
 
 struct CacheAllocator{T <: AbstractGPUArray}
     lock::ReentrantLock
@@ -178,14 +178,13 @@ end
 """
     @enable AT name expr
 
-Evaluate expression `expr` using `name`d caching allocator
-for the given array type `AT`.
+Evaluate expression `expr` using `name`d caching allocator for the given array type `AT`.
 
 When gpu allocation is requested during execution of `expr`,
 allocator will try to use its "free" cache instead of doing an actual allocation.
 If no "free" allocation exists, an actual allocation is performed.
 Before returning allocation to the user, it is marked as busy and
-will not be used by allocation in the scope defined by `@cache_scope`.
+will not be used by allocation in the scope defined by `@enable`.
 
 **After** the execution of `expr` all "busy" allocations are marked as "free"
 thus they can be re-used next time the program enters this scope.
@@ -194,17 +193,16 @@ This is useful to apply in a repeating block of code to avoid relying on
 GC to free gpu memory in time.
 
 `name` is a `Symbol` that defines which allocator to use
-(`:none` is reserved and means no allocator).
+(`nothing`, which is a default, disables it).
 
 # Example
 
-In the following example, each iteration of the for-loop requires `2 GiB`
-of gpu memory.
+In the following example, each iteration of the for-loop requires `2 GiB` of gpu memory.
 Without caching allocator GC wouldn't be able to free arrays in time
 resulting in higher memory usage.
 With caching allocator, memory usage stays at exactly `2 GiB`.
 
-See [`@no_cache_scope`](@ref), [`invalidate_cache_allocator!`](@ref).
+See [`@disable`](@ref), [`invalidate!`](@ref).
 ```julia
 n = 1024^3
 for i in 1:1000
@@ -231,7 +229,7 @@ This is useful to call from within `@enable` to avoid caching arrays.
 """
 macro disable(expr)
     quote
-        @with $(esc(CacheAllocatorName)) => :none $(esc(expr))
+        @with $(esc(CacheAllocatorName)) => nothing $(esc(expr))
     end
 end
 

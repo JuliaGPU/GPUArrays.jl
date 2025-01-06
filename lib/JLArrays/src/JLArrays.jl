@@ -98,10 +98,10 @@ mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
             finalizer(unsafe_free!, obj)
         end
 
-        name = GPUArrays.CacheAllocatorName[]
-        return name == :none ?
+        name = GPUArrays.AllocCache.CacheAllocatorName[]
+        return name ≡ nothing ?
             _alloc_f() :
-            GPUArrays.alloc!(_alloc_f, JLBackend(), name, T, dims)::JLArray{T, N}
+            GPUArrays.AllocCache.alloc!(_alloc_f, JLArray, name, (T, dims))::JLArray{T, N}
     end
 
     # low-level constructor for wrapping existing data
@@ -397,10 +397,10 @@ Adapt.adapt_storage(::KernelAbstractions.CPU, a::JLArrays.JLArray) = convert(Arr
 
 # Caching Allocator.
 
-const JLACacheAllocator = GPUArrays.PerDeviceCacheAllocator(JLArray; free_immediately=false)
+const JLACacheAllocator = GPUArrays.AllocCache.PerDeviceCacheAllocator(JLArray; free_immediately=false)
 
-GPUArrays.cache_allocator(::JLBackend) = JLACacheAllocator
+GPUArrays.AllocCache.cache_allocator(::Type{<: JLArray}) = JLACacheAllocator
 
-GPUArrays.device(::JLBackend) = 1
+GPUArrays.AllocCache.device(::Type{<: JLArray}) = 1
 
 end
