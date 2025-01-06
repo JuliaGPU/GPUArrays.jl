@@ -34,7 +34,7 @@ There are numerous examples of potential interfaces for GPUArrays, such as with 
 ## Caching Allocator
 
 ```@docs
-GPUArrays.@cache_scope
-GPUArrays.@no_cache_scope
-GPUArrays.invalidate_cache_allocator!
+GPUArrays.AllocCache.@enable
+GPUArrays.AllocCache.@disable
+GPUArrays.AllocCache.invalidate!
 ```

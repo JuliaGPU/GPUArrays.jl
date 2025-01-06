@@ -1,3 +1,8 @@
+module AllocCache
+
+using ..GPUArrays
+using KernelAbstractions
+
 @static if VERSION < v"1.11"
     using ScopedValues
 else
@@ -8,7 +13,7 @@ const CacheAllocatorName = ScopedValue(:none)
 
 struct CacheAllocator{T <: AbstractGPUArray}
     lock::ReentrantLock
-    busy::Dict{UInt64, Vector{T}} # hash((T, dims)) => GPUArray[]
+    busy::Dict{UInt64, Vector{T}} # hash(key) => GPUArray[]
     free::Dict{UInt64, Vector{T}}
 end
 
@@ -28,10 +33,9 @@ function get_pool!(cache::CacheAllocator{T}, pool::Symbol, uid::UInt64) where T
 end
 
 """
-    alloc!(alloc_f, cache::CacheAllocator, ::Type{T}, dims::Dims{N}; skip_free::Bool) where {T, N}
+    alloc!(alloc_f, cache::CacheAllocator, key; skip_free::Bool)
 
-Attempt to retrieve cached allocation from `cache` using eltype `T` and `dims`
-as keys for searching.
+Attempt to retrieve cached allocation from `cache` using `key` for searching.
 If no such allocation is found, execute `alloc_f` that does actual allocation,
 store it in cache for future use and return it.
 
@@ -40,9 +44,9 @@ When `true` arrays are bulk-freed instead of stored in cache.
 In this case `alloc!` will avoid looking into "free" part of `cache`
 and execute `alloc_f` immediately, storing allocation for future bulk-freeing.
 """
-function alloc!(alloc_f, cache::CacheAllocator, ::Type{T}, dims::Dims{N}; skip_free::Bool) where {T, N}
+function alloc!(alloc_f, cache::CacheAllocator, key; skip_free::Bool)
     x = nothing
-    uid = hash((T, dims))
+    uid = hash(key)
     busy_pool = get_pool!(cache, :busy, uid)
 
     if skip_free
@@ -54,7 +58,7 @@ function alloc!(alloc_f, cache::CacheAllocator, ::Type{T}, dims::Dims{N}; skip_f
         while !isempty(free_pool) && x ≡ nothing
             tmp = Base.@lock cache.lock pop!(free_pool)
             # Array was manually freed via `unsafe_free!`.
-            storage(tmp).freed && continue
+            GPUArrays.storage(tmp).freed && continue
             x = tmp
         end
     end
@@ -109,10 +113,10 @@ function named_cache_allocator!(pdcache::PerDeviceCacheAllocator{T}, device, nam
     return named_cache
 end
 
-function alloc!(alloc_f, kab::Backend, name::Symbol, ::Type{T}, dims::Dims{N}) where {T, N}
-    pdcache = cache_allocator(kab)
-    cache = named_cache_allocator!(pdcache, device(kab), name)
-    alloc!(alloc_f, cache, T, dims; skip_free=pdcache.free_immediately)
+function alloc!(alloc_f, AT::Type{<: AbstractGPUArray}, name::Symbol, key)
+    pdcache = cache_allocator(AT)
+    cache = named_cache_allocator!(pdcache, device(AT), name)
+    alloc!(alloc_f, cache, key; skip_free=pdcache.free_immediately)
 end
 
 function Base.sizeof(pdcache::PerDeviceCacheAllocator, device, name::Symbol)
@@ -137,14 +141,14 @@ function Base.sizeof(pdcache::PerDeviceCacheAllocator, device, name::Symbol)
 end
 
 """
-    invalidate_cache_allocator!(kab::Backend, name::Symbol)
+    invalidate!(AT::Type{AbstractGPUArray}, name::Symbol)
 
-Free all memory held by `name`d cached allocator given KernelAbstractions `backend`.
+Free all memory held by `name`d cached allocator given array type `AT`.
 """
-invalidate_cache_allocator!(kab::Backend, name::Symbol) =
-    invalidate_cache_allocator!(cache_allocator(kab), device(kab), name)
+invalidate!(AT::Type{<: AbstractGPUArray}, name::Symbol) =
+    invalidate!(cache_allocator(AT), device(AT), name)
 
-function invalidate_cache_allocator!(pdcache::PerDeviceCacheAllocator, device, name::Symbol)
+function invalidate!(pdcache::PerDeviceCacheAllocator, device, name::Symbol)
     h = hash(device)
     dev_cache = get(pdcache.caches, h, nothing)
     dev_cache ≡ nothing && return
@@ -166,16 +170,16 @@ function invalidate_cache_allocator!(pdcache::PerDeviceCacheAllocator, device, n
     return
 end
 
-function free_busy!(kab::Backend, name::Symbol)
-    pdcache = cache_allocator(kab)
-    free_busy!(named_cache_allocator!(pdcache, device(kab), name); pdcache.free_immediately)
+function free_busy!(AT::Type{<: AbstractGPUArray}, name::Symbol)
+    pdcache = cache_allocator(AT)
+    free_busy!(named_cache_allocator!(pdcache, device(AT), name); pdcache.free_immediately)
 end
 
 """
-    @cache_scope backend name expr
+    @enable AT name expr
 
 Evaluate expression `expr` using `name`d caching allocator
-for the given KernelAbstractions `backend`.
+for the given array type `AT`.
 
 When gpu allocation is requested during execution of `expr`,
 allocator will try to use its "free" cache instead of doing an actual allocation.
@@ -202,31 +206,30 @@ With caching allocator, memory usage stays at exactly `2 GiB`.
 
 See [`@no_cache_scope`](@ref), [`invalidate_cache_allocator!`](@ref).
 ```julia
-kab = CUDABackend()
 n = 1024^3
 for i in 1:1000
-    @cache_scope kab :loop begin
+    CUDA.AllocCache.@enable CuArray :loop begin
         sin.(CUDA.rand(Float32, n))
     end
 end
-invalidate_cache_allocator!(kab, :loop)
+CUDA.AllocCache.invalidate!(CuArray, :loop)
 ```
 """
-macro cache_scope(backend, name, expr)
+macro enable(AT, name, expr)
     quote
         res = @with $(esc(CacheAllocatorName)) => $(esc(name)) $(esc(expr))
-        free_busy!($(esc(backend)), $(esc(name)))
+        free_busy!($(esc(AT)), $(esc(name)))
         res
     end
 end
 
 """
-    @no_cache_scope expr
+    @disable expr
 
 Evaluate expression `expr` without using caching allocator.
-This is useful to call from within `@cache_scope` to avoid caching arrays.
+This is useful to call from within `@enable` to avoid caching arrays.
 """
-macro no_cache_scope(expr)
+macro disable(expr)
     quote
         @with $(esc(CacheAllocatorName)) => :none $(esc(expr))
     end
@@ -235,17 +238,19 @@ end
 # Interface API.
 
 """
-    cache_allocator(::Backend)
+    cache_allocator(::Type{AbstractGPUArray})
 
-Given KernelAbstractions `backend`, return corresponding `PerDeviceCacheAllocator` for it.
+Given array type, return corresponding `PerDeviceCacheAllocator` for it.
 Each GPU backend must implement this.
 """
-cache_allocator(::Backend) = error("Not implemented.")
+cache_allocator(::Type{AbstractGPUArray}) = error("Not implemented.")
 
 """
-    device(::Backend)
+    device(::Type{AbstractGPUArray})
 
-Given KernelAbstractions `backend`, return current device.
+Given array type, return current device.
 Each GPU backend must implement this.
 """
-device(::Backend) = error("Not implemented.")
+device(::Type{AbstractGPUArray}) = error("Not implemented.")
+
+end
