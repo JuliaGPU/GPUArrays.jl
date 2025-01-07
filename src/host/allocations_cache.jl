@@ -33,34 +33,24 @@ function get_pool!(cache::CacheAllocator{T}, pool::Symbol, uid::UInt64) where T
 end
 
 """
-    alloc!(alloc_f, cache::CacheAllocator, key; skip_free::Bool)
+    alloc!(alloc_f, cache::CacheAllocator, key)
 
 Attempt to retrieve cached allocation from `cache` using `key` for searching.
 If no such allocation is found, execute `alloc_f` that does actual allocation,
 store it in cache for future use and return it.
-
-`skip_free::Bool` is used together with `PerDeviceCacheAllocator.free_immediately`.
-When `true` arrays are bulk-freed instead of stored in cache.
-In this case `alloc!` will avoid looking into "free" part of `cache`
-and execute `alloc_f` immediately, storing allocation for future bulk-freeing.
 """
-function alloc!(alloc_f, cache::CacheAllocator, key; skip_free::Bool)
+function alloc!(alloc_f, cache::CacheAllocator, key)
     x = nothing
     uid = hash(key)
     busy_pool = get_pool!(cache, :busy, uid)
+    free_pool = get_pool!(cache, :free, uid)
+    isempty(free_pool) && (x = alloc_f())
 
-    if skip_free
-        x = alloc_f()
-    else
-        free_pool = get_pool!(cache, :free, uid)
-        isempty(free_pool) && (x = alloc_f())
-
-        while !isempty(free_pool) && x ≡ nothing
-            tmp = Base.@lock cache.lock pop!(free_pool)
-            # Array was manually freed via `unsafe_free!`.
-            GPUArrays.storage(tmp).freed && continue
-            x = tmp
-        end
+    while !isempty(free_pool) && x ≡ nothing
+        tmp = Base.@lock cache.lock pop!(free_pool)
+        # Array was manually freed via `unsafe_free!`.
+        GPUArrays.storage(tmp).freed && continue
+        x = tmp
     end
 
     x ≡ nothing && (x = alloc_f())
@@ -68,18 +58,14 @@ function alloc!(alloc_f, cache::CacheAllocator, key; skip_free::Bool)
     return x
 end
 
-function free_busy!(cache::CacheAllocator; free_immediately::Bool)
+function free_busy!(cache::CacheAllocator)
     for uid in cache.busy.keys
         busy_pool = get_pool!(cache, :busy, uid)
         isempty(busy_pool) && continue
 
         Base.@lock cache.lock begin
-            if free_immediately
-                map(unsafe_free!, busy_pool)
-            else
-                free_pool = get_pool!(cache, :free, uid)
-                append!(free_pool, busy_pool)
-            end
+            free_pool = get_pool!(cache, :free, uid)
+            append!(free_pool, busy_pool)
             empty!(busy_pool)
         end
     end
@@ -88,11 +74,10 @@ end
 mutable struct PerDeviceCacheAllocator{T <: AbstractGPUArray}
     lock::ReentrantLock
     caches::Dict{UInt64, Dict{Symbol, CacheAllocator{T}}}
-    free_immediately::Bool
 end
 
-PerDeviceCacheAllocator(::Type{T}; free_immediately::Bool) where T <: AbstractGPUArray =
-    PerDeviceCacheAllocator(ReentrantLock(), Dict{UInt64, Dict{Symbol, CacheAllocator{T}}}(), free_immediately)
+PerDeviceCacheAllocator(::Type{T}) where T <: AbstractGPUArray =
+    PerDeviceCacheAllocator(ReentrantLock(), Dict{UInt64, Dict{Symbol, CacheAllocator{T}}}())
 
 function named_cache_allocator!(pdcache::PerDeviceCacheAllocator{T}, device, name::Symbol) where T
     h = hash(device)
@@ -116,7 +101,7 @@ end
 function alloc!(alloc_f, AT::Type{<: AbstractGPUArray}, name::Symbol, key)
     pdcache = cache_allocator(AT)
     cache = named_cache_allocator!(pdcache, device(AT), name)
-    alloc!(alloc_f, cache, key; skip_free=pdcache.free_immediately)
+    alloc!(alloc_f, cache, key)
 end
 
 function Base.sizeof(pdcache::PerDeviceCacheAllocator, device, name::Symbol)
@@ -172,7 +157,7 @@ end
 
 function free_busy!(AT::Type{<: AbstractGPUArray}, name::Symbol)
     pdcache = cache_allocator(AT)
-    free_busy!(named_cache_allocator!(pdcache, device(AT), name); pdcache.free_immediately)
+    free_busy!(named_cache_allocator!(pdcache, device(AT), name))
 end
 
 """
