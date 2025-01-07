@@ -7,8 +7,8 @@
         T = Float32
         dims = (1, 2, 3)
 
-        GPUArrays.AllocCache.@enable AT :cache begin
-            x1 = AT(zeros(T, dims))
+        x1 = GPUArrays.AllocCache.@enable AT :cache begin
+            AT(zeros(T, dims))
         end
         @test sizeof(pdcache, device, :cache) == sizeof(Float32) * prod(dims)
         @test length(named_cache.free) == 1
@@ -20,13 +20,14 @@
 
         # Second allocation does not allocate - cache stays the same in size.
 
-        GPUArrays.AllocCache.@enable AT :cache begin
+        x2, x_free = GPUArrays.AllocCache.@enable AT :cache begin
             x2 = AT(zeros(T, dims))
 
             # Does not go to cache.
             GPUArrays.AllocCache.@disable begin
                 x_free = AT(zeros(T, dims))
             end
+            x2, x_free
         end
         @test sizeof(pdcache, device, :cache) == sizeof(Float32) * prod(dims)
         @test length(named_cache.free[key]) == 1
@@ -39,8 +40,8 @@
 
         T2 = Int32
         key2 = hash((T2, dims))
-        GPUArrays.AllocCache.@enable AT :cache begin
-            x3 = AT(zeros(T2, dims))
+        x3 = GPUArrays.AllocCache.@enable AT :cache begin
+            AT(zeros(T2, dims))
         end
         @test sizeof(pdcache, device, :cache) == (sizeof(Float32) + sizeof(Int32)) * prod(dims)
 
