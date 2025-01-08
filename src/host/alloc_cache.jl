@@ -12,10 +12,12 @@ mutable struct AllocCache{T <: AbstractGPUArray}
     free::Dict{UInt64, Vector{T}}
 
     function AllocCache(::Type{T}) where {T <: AbstractGPUArray}
-        cache = new{T}(ReentrantLock(),
+        cache = new{T}(
+            ReentrantLock(),
             Dict{UInt64, Vector{T}}(),
-            Dict{UInt64, Vector{T}}())
-        finalizer(unsafe_free!, cache)
+            Dict{UInt64, Vector{T}}()
+        )
+        return finalizer(unsafe_free!, cache)
     end
 end
 
