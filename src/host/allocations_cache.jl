@@ -17,13 +17,13 @@ struct CacheAllocator{T <: AbstractGPUArray}
     free::Dict{UInt64, Vector{T}}
 end
 
-CacheAllocator(::Type{T}) where T = CacheAllocator(
+CacheAllocator(::Type{T}) where {T} = CacheAllocator(
     ReentrantLock(),
     Dict{UInt64, Vector{T}}(),
     Dict{UInt64, Vector{T}}(),
 )
 
-function get_pool!(cache::CacheAllocator{T}, pool::Symbol, uid::UInt64) where T
+function get_pool!(cache::CacheAllocator{T}, pool::Symbol, uid::UInt64) where {T}
     pool = getproperty(cache, pool)
     uid_pool = get(pool, uid, nothing)
     if uid_pool ≡ nothing
@@ -69,6 +69,7 @@ function free_busy!(cache::CacheAllocator)
             empty!(busy_pool)
         end
     end
+    return
 end
 
 mutable struct PerDeviceCacheAllocator{T <: AbstractGPUArray}
@@ -76,10 +77,10 @@ mutable struct PerDeviceCacheAllocator{T <: AbstractGPUArray}
     caches::Dict{UInt64, Dict{Symbol, CacheAllocator{T}}}
 end
 
-PerDeviceCacheAllocator(::Type{T}) where T <: AbstractGPUArray =
+PerDeviceCacheAllocator(::Type{T}) where {T <: AbstractGPUArray} =
     PerDeviceCacheAllocator(ReentrantLock(), Dict{UInt64, Dict{Symbol, CacheAllocator{T}}}())
 
-function named_cache_allocator!(pdcache::PerDeviceCacheAllocator{T}, device, name::Symbol) where T
+function named_cache_allocator!(pdcache::PerDeviceCacheAllocator{T}, device, name::Symbol) where {T}
     h = hash(device)
     dev_cache = get(pdcache.caches, h, nothing)
     if dev_cache ≡ nothing
@@ -98,10 +99,10 @@ function named_cache_allocator!(pdcache::PerDeviceCacheAllocator{T}, device, nam
     return named_cache
 end
 
-function alloc!(alloc_f, AT::Type{<: AbstractGPUArray}, name::Symbol, key)
+function alloc!(alloc_f, AT::Type{<:AbstractGPUArray}, name::Symbol, key)
     pdcache = cache_allocator(AT)
     cache = named_cache_allocator!(pdcache, device(AT), name)
-    alloc!(alloc_f, cache, key)
+    return alloc!(alloc_f, cache, key)
 end
 
 function Base.sizeof(pdcache::PerDeviceCacheAllocator, device, name::Symbol)
@@ -116,10 +117,10 @@ function Base.sizeof(pdcache::PerDeviceCacheAllocator, device, name::Symbol)
 
     Base.@lock named_cache.lock begin
         for (_, pool) in named_cache.free
-            sz += sum(sizeof, pool; init=UInt64(0))
+            sz += sum(sizeof, pool; init = UInt64(0))
         end
         for (_, pool) in named_cache.busy
-            sz += sum(sizeof, pool; init=UInt64(0))
+            sz += sum(sizeof, pool; init = UInt64(0))
         end
     end
     return sz
@@ -130,7 +131,7 @@ end
 
 Free all memory held by `name`d cached allocator given array type `AT`.
 """
-invalidate!(AT::Type{<: AbstractGPUArray}, name::Symbol) =
+invalidate!(AT::Type{<:AbstractGPUArray}, name::Symbol) =
     invalidate!(cache_allocator(AT), device(AT), name)
 
 function invalidate!(pdcache::PerDeviceCacheAllocator, device, name::Symbol)
@@ -155,9 +156,9 @@ function invalidate!(pdcache::PerDeviceCacheAllocator, device, name::Symbol)
     return
 end
 
-function free_busy!(AT::Type{<: AbstractGPUArray}, name::Symbol)
+function free_busy!(AT::Type{<:AbstractGPUArray}, name::Symbol)
     pdcache = cache_allocator(AT)
-    free_busy!(named_cache_allocator!(pdcache, device(AT), name))
+    return free_busy!(named_cache_allocator!(pdcache, device(AT), name))
 end
 
 """
@@ -199,7 +200,7 @@ CUDA.AllocCache.invalidate!(CuArray, :loop)
 ```
 """
 macro enable(AT, name, expr)
-    quote
+    return quote
         res = @with $(esc(CacheAllocatorName)) => $(esc(name)) $(esc(expr))
         free_busy!($(esc(AT)), $(esc(name)))
         res
@@ -213,7 +214,7 @@ Evaluate expression `expr` without using caching allocator.
 This is useful to call from within `@enable` to avoid caching arrays.
 """
 macro disable(expr)
-    quote
+    return quote
         @with $(esc(CacheAllocatorName)) => nothing $(esc(expr))
     end
 end

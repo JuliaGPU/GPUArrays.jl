@@ -94,8 +94,8 @@ mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
             ref = DataRef(data) do data
                 resize!(data, 0)
             end
-            obj = new{T,N}(ref, 0, dims)
-            finalizer(unsafe_free!, obj)
+            obj = new{T, N}(ref, 0, dims)
+            return finalizer(unsafe_free!, obj)
         end
 
         name = GPUArrays.AllocCache.CacheAllocatorName[]
@@ -399,8 +399,8 @@ Adapt.adapt_storage(::KernelAbstractions.CPU, a::JLArrays.JLArray) = convert(Arr
 
 const JLACacheAllocator = GPUArrays.AllocCache.PerDeviceCacheAllocator(JLArray)
 
-GPUArrays.AllocCache.cache_allocator(::Type{<: JLArray}) = JLACacheAllocator
+GPUArrays.AllocCache.cache_allocator(::Type{<:JLArray}) = JLACacheAllocator
 
-GPUArrays.AllocCache.device(::Type{<: JLArray}) = 1
+GPUArrays.AllocCache.device(::Type{<:JLArray}) = 1
 
 end
