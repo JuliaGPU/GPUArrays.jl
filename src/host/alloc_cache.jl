@@ -81,7 +81,7 @@ function Base.sizeof(cache::AllocCache)
     sz = UInt64(0)
     Base.@lock cache.lock begin
         for kind in (cache.free, cache.busy), (_, pool) in kind
-            sz += sum(sizeof, pool; init=UInt64(0))
+            sz += sum(sizeof, pool; init = UInt64(0))
         end
     end
     return sz
