@@ -397,12 +397,4 @@ Adapt.adapt_storage(::JLBackend, a::Array) = Adapt.adapt(JLArrays.JLArray, a)
 Adapt.adapt_storage(::JLBackend, a::JLArrays.JLArray) = a
 Adapt.adapt_storage(::KernelAbstractions.CPU, a::JLArrays.JLArray) = convert(Array, a)
 
-# Caching Allocator.
-
-const JLACacheAllocator = GPUArrays.AllocCache.PerDeviceCacheAllocator(JLArray)
-
-GPUArrays.AllocCache.cache_allocator(::Type{<:JLArray}) = JLACacheAllocator
-
-GPUArrays.AllocCache.device(::Type{<:JLArray}) = 1
-
 end
