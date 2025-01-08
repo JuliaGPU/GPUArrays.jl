@@ -98,10 +98,12 @@ mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
             return finalizer(unsafe_free!, obj)
         end
 
-        name = GPUArrays.AllocCache.CacheAllocatorName[]
-        return name ≡ nothing ?
-            _alloc_f() :
-            GPUArrays.AllocCache.alloc!(_alloc_f, JLArray, name, (T, dims))::JLArray{T, N}
+        cache = GPUArrays.ALLOC_CACHE[]
+        return if cache ≡ nothing
+            _alloc_f()
+        else
+            GPUArrays.alloc!(_alloc_f, cache, (JLArray, T, dims))::JLArray{T, N}
+        end
     end
 
     # low-level constructor for wrapping existing data

@@ -34,7 +34,7 @@ include("host/random.jl")
 include("host/quirks.jl")
 include("host/uniformscaling.jl")
 include("host/statistics.jl")
-include("host/allocations_cache.jl")
+include("host/alloc_cache.jl")
 
 
 end # module
