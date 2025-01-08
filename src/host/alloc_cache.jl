@@ -67,7 +67,8 @@ function unsafe_free!(cache::AllocCache)
         for (_, pool) in cache.busy
             isempty(pool) || error(
                 "Invalidating allocations cache that's currently in use. " *
-                "Invalidating inside `@enable` is not allowed.")
+                    "Invalidating inside `@enable` is not allowed."
+            )
         end
         for (_, pool) in cache.free
             map(unsafe_free!, pool)
