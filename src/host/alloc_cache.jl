@@ -30,13 +30,18 @@ function get_pool!(cache::AllocCache{T}, pool::Symbol, uid::UInt64) where {T <: 
     return uid_pool
 end
 
-function alloc!(alloc_f, cache::AllocCache, key)
+function cached_alloc(f, key)
+    cache = ALLOC_CACHE[]
+    if cache === nothing
+        return f()
+    end
+
     x = nothing
     uid = hash(key)
 
     busy_pool = get_pool!(cache, :busy, uid)
     free_pool = get_pool!(cache, :free, uid)
-    isempty(free_pool) && (x = alloc_f())
+    isempty(free_pool) && (x = f())
 
     while !isempty(free_pool) && x ≡ nothing
         tmp = Base.@lock cache.lock pop!(free_pool)
@@ -45,7 +50,7 @@ function alloc!(alloc_f, cache::AllocCache, key)
         x = tmp
     end
 
-    x ≡ nothing && (x = alloc_f())
+    x ≡ nothing && (x = f())
     Base.@lock cache.lock push!(busy_pool, x)
     return x
 end
