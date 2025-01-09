@@ -110,37 +110,33 @@ const ALLOC_CACHE = ScopedValue{Union{Nothing, AllocCache}}(nothing)
 """
     @cached(cache, expr)
 
-Evaluate expression `expr` using allocations cache `cache`.
+Evaluate `expr` using allocations cache `cache`.
 
-When gpu allocation is requested during execution of `expr`,
-it will first check if there's "free" cache instead of performing an actual allocation.
-If no "free" allocation exists, an actual allocation is performed.
-Before returning allocation to the user, it is marked as busy and
-will not be used by allocation in the scope defined by `@cached`.
+When GPU memory is allocated during the execution of `expr`, `cache` will first be checked.
+If no memory is available in the cache, a new allocation will be requested.
 
-**After** the execution of `expr` all "busy" allocations are marked as "free"
-thus they can be re-used next time the program enters this scope.
+After the execution of `expr`, all allocations made under the scope of `@cached` will be
+cached within `cache` for future use. This is useful to avoid relying on GC to free GPU
+memory in time.
 
-This is useful to apply in a repeating block of code to avoid relying on
-GC to free gpu memory in time.
+Once `cache` goes out scope, or when the user calls `unsafe_free!` on it, all cached
+allocations will be freed.
 
 # Example
 
-In the following example, each iteration of the for-loop requires `8 GiB` of gpu memory.
-Without caching allocator GC wouldn't be able to free arrays in time
-resulting in higher memory usage.
-With caching allocator, memory usage stays at exactly `8 GiB`.
+In the following example, each iteration of the for-loop requires 8 GiB of GPU memory.
+Without caching those allocations, significant pressure would be put on the GC, resulting
+in high memory usage and latency. By using the allocator cache, the memory usage is stable:
 
 ```julia
 cache = GPUArrays.AllocCache()
-n = 1024^3
 for i in 1:1000
     GPUArrays.@cached cache begin
-        sin.(CUDA.rand(Float32, n))
+        sin.(CUDA.rand(Float32, 1024^3))
     end
 end
-# To free immediately.
-# Otherwise, it will be freed when collected by GC.
+
+# optionally: free the memory now, instead of waiting for the GC to collect `cache`
 GPUArrays.unsafe_free!(cache)
 ```
 
@@ -157,8 +153,9 @@ end
 """
     uncached(expr)
 
-Evaluate expression `expr` without using allocations cache.
-This is useful to call from within `@cached` to avoid caching some allocations.
+Evaluate expression `expr` without using the allocation. This is useful to call from within
+`@cached` to avoid caching some allocations, e.g., because they can be returned out of the
+`@cached` scope.
 """
 macro uncached(expr)
     return quote
