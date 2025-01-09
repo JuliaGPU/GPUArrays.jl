@@ -102,7 +102,7 @@ function Base.show(io::IO, cache::AllocCache)
         n_busy = sum(p -> length(p[2]), cache.busy; init = 0)
         sz, n_free, n_busy
     end
-    print(io, "AllocCache(n_free=$n_free, n_busy=$n_busy, sizeof=$(Base.format_bytes(sz)))")
+    return print(io, "AllocCache(n_free=$n_free, n_busy=$n_busy, sizeof=$(Base.format_bytes(sz)))")
 end
 
 const ALLOC_CACHE = ScopedValue{Union{Nothing, AllocCache}}(nothing)
