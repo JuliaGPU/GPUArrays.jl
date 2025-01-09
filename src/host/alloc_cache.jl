@@ -33,7 +33,7 @@ end
 function cached_alloc(f, key)
     cache = ALLOC_CACHE[]
     if cache === nothing
-        return f()
+        return f()::AbstractGPUArray
     end
 
     x = nothing
@@ -41,7 +41,7 @@ function cached_alloc(f, key)
 
     busy_pool = get_pool!(cache, :busy, uid)
     free_pool = get_pool!(cache, :free, uid)
-    isempty(free_pool) && (x = f())
+    isempty(free_pool) && (x = f()::AbstractGPUArray)
 
     while !isempty(free_pool) && x ≡ nothing
         tmp = Base.@lock cache.lock pop!(free_pool)
@@ -50,7 +50,7 @@ function cached_alloc(f, key)
         x = tmp
     end
 
-    x ≡ nothing && (x = f())
+    x ≡ nothing && (x = f()::AbstractGPUArray)
     Base.@lock cache.lock push!(busy_pool, x)
     return x
 end
