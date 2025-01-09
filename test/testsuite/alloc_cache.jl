@@ -1,6 +1,6 @@
 @testsuite "alloc cache" (AT, eltypes) -> begin
     if AT <: AbstractGPUArray
-        cache = GPUArrays.AllocCache(AT)
+        cache = GPUArrays.AllocCache()
 
         T, dims = Float32, (1, 2, 3)
         GPUArrays.@cached cache begin

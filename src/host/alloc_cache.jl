@@ -6,26 +6,26 @@ else
     using Base.ScopedValues
 end
 
-mutable struct AllocCache{T <: AbstractGPUArray}
+mutable struct AllocCache
     lock::ReentrantLock
-    busy::Dict{UInt64, Vector{T}} # hash(key) => GPUArray[]
-    free::Dict{UInt64, Vector{T}}
+    busy::Dict{UInt64, Vector{Any}} # hash(key) => GPUArray[]
+    free::Dict{UInt64, Vector{Any}}
 
-    function AllocCache(::Type{T}) where {T <: AbstractGPUArray}
-        cache = new{T}(
+    function AllocCache()
+        cache = new(
             ReentrantLock(),
-            Dict{UInt64, Vector{T}}(),
-            Dict{UInt64, Vector{T}}()
+            Dict{UInt64, Vector{Any}}(),
+            Dict{UInt64, Vector{Any}}()
         )
         return finalizer(unsafe_free!, cache)
     end
 end
 
-function get_pool!(cache::AllocCache{T}, pool::Symbol, uid::UInt64) where {T <: AbstractGPUArray}
+function get_pool!(cache::AllocCache, pool::Symbol, uid::UInt64)
     pool = getproperty(cache, pool)
     uid_pool = get(pool, uid, nothing)
     if uid_pool ≡ nothing
-        uid_pool = Base.@lock cache.lock pool[uid] = T[]
+        uid_pool = Base.@lock cache.lock pool[uid] = Any[]
     end
     return uid_pool
 end
@@ -95,6 +95,16 @@ function Base.sizeof(cache::AllocCache)
     return sz
 end
 
+function Base.show(io::IO, cache::AllocCache)
+    sz, n_free, n_busy = Base.@lock cache.lock begin
+        sz = sizeof(cache)
+        n_free = sum(p -> length(p[2]), cache.free; init = 0)
+        n_busy = sum(p -> length(p[2]), cache.busy; init = 0)
+        sz, n_free, n_busy
+    end
+    print(io, "AllocCache(n_free=$n_free, n_busy=$n_busy, sizeof=$(Base.format_bytes(sz)))")
+end
+
 const ALLOC_CACHE = ScopedValue{Union{Nothing, AllocCache}}(nothing)
 
 """
@@ -122,7 +132,7 @@ resulting in higher memory usage.
 With caching allocator, memory usage stays at exactly `8 GiB`.
 
 ```julia
-cache = GPUArrays.AllocCache(CuArray)
+cache = GPUArrays.AllocCache()
 n = 1024^3
 for i in 1:1000
     GPUArrays.@cached cache begin
