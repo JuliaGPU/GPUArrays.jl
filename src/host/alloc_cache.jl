@@ -108,7 +108,7 @@ end
 const ALLOC_CACHE = ScopedValue{Union{Nothing, AllocCache}}(nothing)
 
 """
-    @cached(cache, expr)
+    @cached cache expr
 
 Evaluate `expr` using allocations cache `cache`.
 
@@ -144,14 +144,17 @@ See [`@uncached`](@ref).
 """
 macro cached(cache, expr)
     return quote
-        res = @with $(esc(ALLOC_CACHE)) => $(esc(cache)) $(esc(expr))
-        free_busy!($(esc(cache)))
-        res
+        cache = $(esc(cache))
+        GC.@preserve cache begin
+            res = @with $(esc(ALLOC_CACHE)) => cache $(esc(expr))
+            free_busy!(cache)
+            res
+        end
     end
 end
 
 """
-    uncached(expr)
+    @uncached expr
 
 Evaluate expression `expr` without using the allocation. This is useful to call from within
 `@cached` to avoid caching some allocations, e.g., because they can be returned out of the
