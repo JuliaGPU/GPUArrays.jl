@@ -3,7 +3,7 @@
         cache = GPUArrays.AllocCache(AT)
 
         T, dims = Float32, (1, 2, 3)
-        GPUArrays.@enable cache begin
+        GPUArrays.@cached cache begin
             x1 = AT(zeros(T, dims))
         end
         @test sizeof(cache) == sizeof(T) * prod(dims)
@@ -13,10 +13,10 @@
         @test x1 === cache.free[key][1]
 
         # Second allocation hits cache.
-        GPUArrays.@enable cache begin
+        GPUArrays.@cached cache begin
             x2 = AT(zeros(T, dims))
             # Does not hit the cache.
-            GPUArrays.@disable x_free = AT(zeros(T, dims))
+            GPUArrays.@uncached x_free = AT(zeros(T, dims))
         end
         @test sizeof(cache) == sizeof(T) * prod(dims)
         key = first(keys(cache.free))
@@ -27,7 +27,7 @@
 
         # Third allocation is of different shape - allocates.
         dims = (2, 2)
-        GPUArrays.@enable cache begin
+        GPUArrays.@cached cache begin
             x3 = AT(zeros(T, dims))
         end
         _keys = collect(keys(cache.free))

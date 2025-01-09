@@ -34,6 +34,6 @@ There are numerous examples of potential interfaces for GPUArrays, such as with 
 ## Caching Allocator
 
 ```@docs
-GPUArrays.@enable
-GPUArrays.@disable
+GPUArrays.@cached
+GPUArrays.@uncached
 ```

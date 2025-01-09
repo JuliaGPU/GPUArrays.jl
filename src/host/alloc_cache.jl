@@ -69,7 +69,7 @@ function unsafe_free!(cache::AllocCache)
         for (_, pool) in cache.busy
             isempty(pool) || error(
                 "Invalidating allocations cache that's currently in use. " *
-                    "Invalidating inside `@enable` is not allowed."
+                    "Invalidating inside `@cached` is not allowed."
             )
         end
         for (_, pool) in cache.free
@@ -93,7 +93,7 @@ end
 const ALLOC_CACHE = ScopedValue{Union{Nothing, AllocCache}}(nothing)
 
 """
-    @enable(cache, expr)
+    @cached(cache, expr)
 
 Evaluate expression `expr` using allocations cache `cache`.
 
@@ -101,7 +101,7 @@ When gpu allocation is requested during execution of `expr`,
 it will first check if there's "free" cache instead of performing an actual allocation.
 If no "free" allocation exists, an actual allocation is performed.
 Before returning allocation to the user, it is marked as busy and
-will not be used by allocation in the scope defined by `@enable`.
+will not be used by allocation in the scope defined by `@cached`.
 
 **After** the execution of `expr` all "busy" allocations are marked as "free"
 thus they can be re-used next time the program enters this scope.
@@ -120,7 +120,7 @@ With caching allocator, memory usage stays at exactly `8 GiB`.
 cache = GPUArrays.AllocCache(CuArray)
 n = 1024^3
 for i in 1:1000
-    GPUArrays.@enable cache begin
+    GPUArrays.@cached cache begin
         sin.(CUDA.rand(Float32, n))
     end
 end
@@ -129,9 +129,9 @@ end
 GPUArrays.unsafe_free!(cache)
 ```
 
-See [`@disable`](@ref).
+See [`@uncached`](@ref).
 """
-macro enable(cache, expr)
+macro cached(cache, expr)
     return quote
         res = @with $(esc(ALLOC_CACHE)) => $(esc(cache)) $(esc(expr))
         free_busy!($(esc(cache)))
@@ -140,12 +140,12 @@ macro enable(cache, expr)
 end
 
 """
-    disable(expr)
+    uncached(expr)
 
 Evaluate expression `expr` without using allocations cache.
-This is useful to call from within `@enable` to avoid caching some allocations.
+This is useful to call from within `@cached` to avoid caching some allocations.
 """
-macro disable(expr)
+macro uncached(expr)
     return quote
         @with $(esc(ALLOC_CACHE)) => nothing $(esc(expr))
     end
