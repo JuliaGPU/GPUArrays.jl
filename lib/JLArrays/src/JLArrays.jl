@@ -88,12 +88,16 @@ mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
     function JLArray{T,N}(::UndefInitializer, dims::Dims{N}) where {T,N}
         check_eltype(T)
         maxsize = prod(dims) * sizeof(T)
-        data = Vector{UInt8}(undef, maxsize)
-        ref = DataRef(data) do data
-            resize!(data, 0)
-        end
-        obj = new{T,N}(ref, 0, dims)
-        finalizer(unsafe_free!, obj)
+
+        return GPUArrays.cached_alloc((JLArray, T, dims)) do
+            data = Vector{UInt8}(undef, maxsize)
+            ref = DataRef(data) do data
+                resize!(data, 0)
+            end
+            obj = new{T, N}(ref, 0, dims)
+            finalizer(unsafe_free!, obj)
+            return obj
+        end::JLArray{T, N}
     end
 
     # low-level constructor for wrapping existing data
@@ -102,6 +106,7 @@ mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
         check_eltype(T)
         obj = new{T,N}(ref, offset, dims)
         finalizer(unsafe_free!, obj)
+        return obj
     end
 end
 
