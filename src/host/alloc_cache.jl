@@ -25,7 +25,7 @@ function get_pool!(cache::AllocCache, pool::Symbol, uid::UInt64)
     pool = getproperty(cache, pool)
     uid_pool = get(pool, uid, nothing)
     if uid_pool === nothing
-        uid_pool = Base.@lock cache.lock pool[uid] = DataRef[]
+        uid_pool = pool[uid] = DataRef[]
     end
     return uid_pool
 end
@@ -39,12 +39,13 @@ function cached_alloc(f, key)
     ref = nothing
     uid = hash(key)
 
-    busy_pool = get_pool!(cache, :busy, uid)
-    free_pool = get_pool!(cache, :free, uid)
+    Base.@lock cache.lock begin
+        free_pool = get_pool!(cache, :free, uid)
 
-    if !isempty(free_pool)
-        ref = Base.@lock cache.lock pop!(free_pool)
-        @assert !ref.freed
+        if !isempty(free_pool)
+            ref = Base.@lock cache.lock pop!(free_pool)
+            @assert !ref.freed
+        end
     end
 
     if ref === nothing
@@ -54,16 +55,20 @@ function cached_alloc(f, key)
         retain(ref.rc)
     end
 
-    Base.@lock cache.lock push!(busy_pool, ref)
+    Base.@lock cache.lock begin
+        busy_pool = get_pool!(cache, :busy, uid)
+        push!(busy_pool, ref)
+    end
+
     return ref
 end
 
 function free_busy!(cache::AllocCache)
-    for uid in keys(cache.busy)
-        busy_pool = get_pool!(cache, :busy, uid)
-        isempty(busy_pool) && continue
+    Base.@lock cache.lock begin
+        for uid in keys(cache.busy)
+            busy_pool = get_pool!(cache, :busy, uid)
+            isempty(busy_pool) && continue
 
-        Base.@lock cache.lock begin
             free_pool = get_pool!(cache, :free, uid)
             append!(free_pool, busy_pool)
             empty!(busy_pool)
