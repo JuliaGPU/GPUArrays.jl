@@ -82,7 +82,7 @@ function Base.copy(ref::DataRef{D}) where {D}
     return DataRef{D}(ref.rc, false)
 end
 
-function unsafe_free!(ref::DataRef, args...)
+function unsafe_free!(ref::DataRef)
     if ref.freed
         # multiple frees *of the same object* are allowed.
         # we should only ever call `release` once per object, though,
@@ -90,7 +90,7 @@ function unsafe_free!(ref::DataRef, args...)
         return
     end
     ref.freed = true
-    release(ref.rc, args...)
+    release(ref.rc)
     return
 end
 
