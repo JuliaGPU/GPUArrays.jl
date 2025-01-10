@@ -53,17 +53,19 @@ end
 
 # per-object state, with a flag to indicate whether the object has been freed.
 # this is to support multiple calls to `unsafe_free!` on the same object,
-# while only lowering the referene count of the underlying data once.
+# while only lowering the reference count of the underlying data once.
 mutable struct DataRef{D}
     rc::RefCounted{D}
     freed::Bool
 end
 
-function DataRef(finalizer, data::D) where {D}
-    rc = RefCounted{D}(data, finalizer, Threads.Atomic{Int}(1))
+function DataRef(finalizer, ref::D) where {D}
+    rc = RefCounted{D}(ref, finalizer, Threads.Atomic{Int}(1))
     DataRef{D}(rc, false)
 end
-DataRef(data; kwargs...) = DataRef(nothing, data; kwargs...)
+DataRef(ref; kwargs...) = DataRef(nothing, ref; kwargs...)
+
+Base.sizeof(ref::DataRef) = sizeof(ref.rc[])
 
 function Base.getindex(ref::DataRef)
     if ref.freed
