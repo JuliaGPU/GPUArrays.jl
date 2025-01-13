@@ -44,15 +44,12 @@ function cached_alloc(f, key)
 
         if !isempty(free_pool)
             ref = Base.@lock cache.lock pop!(free_pool)
-            @assert !ref.freed
         end
     end
 
     if ref === nothing
         ref = f()::DataRef
-
-        # increase the refcount of the ref to prevent finalizers from freeing it
-        retain(ref.rc)
+        ref.cached = true
     end
 
     Base.@lock cache.lock begin
@@ -80,16 +77,11 @@ end
 function unsafe_free!(cache::AllocCache)
     Base.@lock cache.lock begin
         for pool in values(cache.busy)
-            isempty(pool) || error(
-                "Invalidating allocations cache that's currently in use. " *
-                    "Invalidating inside `@cached` is not allowed."
-            )
+            isempty(pool) || error("Cannot invalidate a cache that's in active use")
         end
         for pool in values(cache.free), ref in pool
-            # release our hold on the underlying data
-            release(ref.rc)
-
-            # early-release the reference
+            # release the reference
+            ref.cached = false
             unsafe_free!(ref)
         end
         empty!(cache.free)

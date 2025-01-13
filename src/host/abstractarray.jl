@@ -57,11 +57,12 @@ end
 mutable struct DataRef{D}
     rc::RefCounted{D}
     freed::Bool
+    cached::Bool
 end
 
 function DataRef(finalizer, ref::D) where {D}
     rc = RefCounted{D}(ref, finalizer, Threads.Atomic{Int}(1))
-    DataRef{D}(rc, false)
+    DataRef{D}(rc, false, false)
 end
 DataRef(ref; kwargs...) = DataRef(nothing, ref; kwargs...)
 
@@ -79,10 +80,16 @@ function Base.copy(ref::DataRef{D}) where {D}
         throw(ArgumentError("Attempt to copy a freed reference."))
     end
     retain(ref.rc)
-    return DataRef{D}(ref.rc, false)
+    # copies of cached references are not managed by the cache, so
+    # we need to mark them as such to make sure their refcount can drop.
+    return DataRef{D}(ref.rc, false, false)
 end
 
 function unsafe_free!(ref::DataRef)
+    if ref.cached
+        # lifetimes of cached references are tied to the cache.
+        return
+    end
     if ref.freed
         # multiple frees *of the same object* are allowed.
         # we should only ever call `release` once per object, though,
