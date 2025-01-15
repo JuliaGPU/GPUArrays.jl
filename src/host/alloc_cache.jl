@@ -8,8 +8,8 @@ end
 
 mutable struct AllocCache
     lock::ReentrantLock
-    busy::Dict{UInt64, Vector{Any}} # hash(key) => GPUArray[]
-    free::Dict{UInt64, Vector{Any}}
+    busy::Dict{UInt64, Vector{DataRef}}
+    free::Dict{UInt64, Vector{DataRef}}
 
     function AllocCache()
         cache = new(
@@ -24,8 +24,8 @@ end
 function get_pool!(cache::AllocCache, pool::Symbol, uid::UInt64)
     pool = getproperty(cache, pool)
     uid_pool = get(pool, uid, nothing)
-    if uid_pool ≡ nothing
-        uid_pool = Base.@lock cache.lock pool[uid] = Any[]
+    if uid_pool === nothing
+        uid_pool = pool[uid] = DataRef[]
     end
     return uid_pool
 end
@@ -33,34 +33,39 @@ end
 function cached_alloc(f, key)
     cache = ALLOC_CACHE[]
     if cache === nothing
-        return f()::AbstractGPUArray
+        return f()::DataRef
     end
 
-    x = nothing
+    ref = nothing
     uid = hash(key)
 
-    busy_pool = get_pool!(cache, :busy, uid)
-    free_pool = get_pool!(cache, :free, uid)
-    isempty(free_pool) && (x = f()::AbstractGPUArray)
+    Base.@lock cache.lock begin
+        free_pool = get_pool!(cache, :free, uid)
 
-    while !isempty(free_pool) && x ≡ nothing
-        tmp = Base.@lock cache.lock pop!(free_pool)
-        # Array was manually freed via `unsafe_free!`.
-        GPUArrays.storage(tmp).freed && continue
-        x = tmp
+        if !isempty(free_pool)
+            ref = Base.@lock cache.lock pop!(free_pool)
+        end
     end
 
-    x ≡ nothing && (x = f()::AbstractGPUArray)
-    Base.@lock cache.lock push!(busy_pool, x)
-    return x
+    if ref === nothing
+        ref = f()::DataRef
+        ref.cached = true
+    end
+
+    Base.@lock cache.lock begin
+        busy_pool = get_pool!(cache, :busy, uid)
+        push!(busy_pool, ref)
+    end
+
+    return ref
 end
 
 function free_busy!(cache::AllocCache)
-    for uid in cache.busy.keys
-        busy_pool = get_pool!(cache, :busy, uid)
-        isempty(busy_pool) && continue
+    Base.@lock cache.lock begin
+        for uid in keys(cache.busy)
+            busy_pool = get_pool!(cache, :busy, uid)
+            isempty(busy_pool) && continue
 
-        Base.@lock cache.lock begin
             free_pool = get_pool!(cache, :free, uid)
             append!(free_pool, busy_pool)
             empty!(busy_pool)
@@ -71,14 +76,13 @@ end
 
 function unsafe_free!(cache::AllocCache)
     Base.@lock cache.lock begin
-        for (_, pool) in cache.busy
-            isempty(pool) || error(
-                "Invalidating allocations cache that's currently in use. " *
-                    "Invalidating inside `@cached` is not allowed."
-            )
+        for pool in values(cache.busy)
+            isempty(pool) || error("Cannot invalidate a cache that's in active use")
         end
-        for (_, pool) in cache.free
-            map(unsafe_free!, pool)
+        for pool in values(cache.free), ref in pool
+            # release the reference
+            ref.cached = false
+            unsafe_free!(ref)
         end
         empty!(cache.free)
     end
@@ -143,13 +147,11 @@ GPUArrays.unsafe_free!(cache)
 See [`@uncached`](@ref).
 """
 macro cached(cache, expr)
+    try_expr = :(@with $(esc(ALLOC_CACHE)) => cache $(esc(expr)))
+    fin_expr = :(free_busy!($(esc(cache))))
     return quote
-        cache = $(esc(cache))
-        GC.@preserve cache begin
-            res = @with $(esc(ALLOC_CACHE)) => cache $(esc(expr))
-            free_busy!(cache)
-            res
-        end
+        local cache = $(esc(cache))
+        GC.@preserve cache $(Expr(:tryfinally, try_expr, fin_expr))
     end
 end
 
