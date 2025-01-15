@@ -147,13 +147,11 @@ GPUArrays.unsafe_free!(cache)
 See [`@uncached`](@ref).
 """
 macro cached(cache, expr)
+    try_expr = :(@with $(esc(ALLOC_CACHE)) => cache $(esc(expr)))
+    fin_expr = :(free_busy!($(esc(cache))))
     return quote
-        cache = $(esc(cache))
-        GC.@preserve cache begin
-            res = @with $(esc(ALLOC_CACHE)) => cache $(esc(expr))
-            free_busy!(cache)
-            res
-        end
+        local cache = $(esc(cache))
+        GC.@preserve cache $(Expr(:tryfinally, try_expr, fin_expr))
     end
 end
 

@@ -69,6 +69,14 @@
             cached5 = AT(zeros(T, dims))
         end
 
+        # exceptions shouldn't cause issues
+        @test_throws "Allowed exception" GPUArrays.@cached cache begin
+            AT(zeros(T, dims))
+            error("Allowed exception")
+        end
+        # NOTE: this should remaint the last test before calling `unsafe_free!` below,
+        #       as it caught an erroneous assertion in the original code.
+
         # freeing all memory held by cache should free all allocations
         @test !GPUArrays.storage(cached1).freed
         @test GPUArrays.storage(cached1).cached
