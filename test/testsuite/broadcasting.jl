@@ -143,7 +143,7 @@ function broadcasting(AT, eltypes)
             @test compare(AT, rand(ET, 2,2), rand(ET, 2)) do x,y
                 map!(+, x, y)
             end
-            @test compare(AT, rand(ET, 2), 1:2) do x,y
+            @test compare(AT, rand(ET, 2), 1:2) do x, y
                 map!(+, x, y)
             end
         end
