@@ -103,7 +103,7 @@ function Base.map(f, xs::AnyGPUArray...)
     return map!(f, dest, xs...)
 end
 
-function Base.map!(f, dest::AnyGPUArray, xs::AnyGPUArray...)
+function Base.map!(f, dest::AnyGPUArray, xs::AbstractArray...)
     # custom broadcast, ignoring the container size mismatches
     # (avoids the reshape + view that our mapreduce impl has to do)
     indices = LinearIndices.((dest, xs...))
