@@ -326,7 +326,7 @@ function LinearAlgebra.ldiv!(B::AbstractGPUVecOrMat,
 end
 
 # XXX: figure out how to do dynamically
-const TILE_DIM = 16
+MAX_TILE_DIM = 16
 
 ## matrix multiplication
 # legacy method
@@ -347,13 +347,13 @@ function generic_matmatmul!(C::AbstractGPUMatrix{R}, A::AbstractGPUMatrix{T}, B:
     end
 
     @kernel unsafe_indices=true function coalesced_matmul_kernel!(
-            output, input1, input2, N, Q, M,
+            output, @Const(input1), @Const(input2), N, Q, M,
             ::Val{BANK} = Val(1),
         ) where {BANK}
         grow, gcol = @index(Group, NTuple)
         tile_row, tile_col = @index(Local, NTuple)
 
-        # TILE_DIM = @uniform @groupsize()[1]
+        TILE_DIM = @uniform @groupsize()[1]
 
         # +1 to avoid bank conflicts on shared memory
         tile1 = @localmem(R, (TILE_DIM + BANK, TILE_DIM))
@@ -402,7 +402,7 @@ function generic_matmatmul!(C::AbstractGPUMatrix{R}, A::AbstractGPUMatrix{T}, B:
         end
     end
 
-    coalesced_matmul_kernel!(get_backend(C), (TILE_DIM, TILE_DIM))(C, A, B, N, Q, M;ndrange=map(x -> ceil(Int,x/TILE_DIM)*TILE_DIM, size(C)))
+    coalesced_matmul_kernel!(get_backend(C), (MAX_TILE_DIM, MAX_TILE_DIM))(C, A, B, N, Q, M;ndrange=map(x -> ceil(Int,x/MAX_TILE_DIM)*MAX_TILE_DIM, size(C)))
     C
 end
 function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::AbstractArray{S}, add::MulAddMul) where {T,S,R}
