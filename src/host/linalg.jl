@@ -366,19 +366,19 @@ function generic_matmatmul!(C::AbstractGPUMatrix{R}, A::AbstractGPUMatrix{T}, B:
         # number of tiles depends on inner dimension
         @uniform NUM_TILES = div(Q + TILE_DIM - 1, TILE_DIM)
 
-        I = (grow - 1) * TILE_DIM + tile_row
-        J = (gcol - 1) * TILE_DIM + tile_col
+        glob_I = (grow - 1) * TILE_DIM + tile_row
+        glob_J = (gcol - 1) * TILE_DIM + tile_col
 
         # loop over all tiles needed for this calculation
         for t in 0:(NUM_TILES - 1)
             # load inputs into tiles, with bounds checking for non-square matrices
-            if I <= N && t * TILE_DIM + tile_col <= Q
-                @inbounds tile1[tile_row, tile_col] = input1[I, t * TILE_DIM + tile_col]
+            if glob_I <= N && t * TILE_DIM + tile_col <= Q
+                @inbounds tile1[tile_row, tile_col] = input1[glob_I, t * TILE_DIM + tile_col]
             else
                 @inbounds tile1[tile_row, tile_col] = zero(R)
             end
-            if J <= M && t * TILE_DIM + tile_row <= Q
-                @inbounds tile2[tile_row, tile_col] = input2[t * TILE_DIM + tile_row, J]
+            if glob_J <= M && t * TILE_DIM + tile_row <= Q
+                @inbounds tile2[tile_row, tile_col] = input2[t * TILE_DIM + tile_row, glob_J]
             else
                 @inbounds tile2[tile_row, tile_col] = zero(R)
             end
@@ -397,8 +397,8 @@ function generic_matmatmul!(C::AbstractGPUMatrix{R}, A::AbstractGPUMatrix{T}, B:
         end
 
         # save if inbounds
-        if I <= N && J <= M
-            @inbounds output[I, J] = add(outval[1], output[I, J])
+        if glob_I <= N && glob_J <= M
+            @inbounds output[glob_I, glob_J] = add(outval[1], output[glob_I, glob_J])
         end
     end
 
