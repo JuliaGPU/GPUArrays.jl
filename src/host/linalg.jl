@@ -332,7 +332,7 @@ const TILE_DIM = 16
 # legacy method
 generic_matmatmul!(C::AbstractArray, A::AbstractArray, B::AbstractArray, a::Number, b::Number) =
     generic_matmatmul!(C, A, B, MulAddMul(a, b))
-function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::AbstractArray{S}, add::MulAddMul) where {T,S,R}
+function generic_matmatmul!(C::AbstractGPUMatrix{R}, A::AbstractGPUMatrix{T}, B::AbstractGPUMatrix{S}, add::MulAddMul) where {T,S,R}
     N = size(A,1)
     Q = size(A,2)
     M = size(B,2)
@@ -347,7 +347,7 @@ function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::Abstrac
     end
 
     @kernel unsafe_indices=true function coalesced_matmul_kernel!(
-            output, @Const(input1), @Const(input2), N, Q, M,
+            output, input1, input2, N, Q, M,
             ::Val{BANK} = Val(1),
         ) where {BANK}
         grow, gcol = @index(Group, NTuple)
@@ -363,7 +363,6 @@ function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::Abstrac
         outval = @private R 1
         @inbounds outval[1] = -zero(R)
 
-        # @uniform N = size(output, 1)
         # number of tiles depends on inner dimension
         @uniform NUM_TILES = div(Q + TILE_DIM - 1, TILE_DIM)
 
@@ -404,6 +403,34 @@ function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::Abstrac
     end
 
     coalesced_matmul_kernel!(get_backend(C), (TILE_DIM, TILE_DIM))(C, A, B, N, Q, M;ndrange=map(x -> ceil(Int,x/TILE_DIM)*TILE_DIM, size(C)))
+    C
+end
+function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::AbstractArray{S}, add::MulAddMul) where {T,S,R}
+    if size(A,2) != size(B,1)
+        throw(DimensionMismatch("matrix A has dimensions $(size(A)), matrix B has dimensions $(size(B))"))
+    end
+    if size(C,1) != size(A,1) || size(C,2) != size(B,2)
+        throw(DimensionMismatch("result C has dimensions $(size(C)), needs $((size(A,1),size(B,2)))"))
+    end
+    if isempty(A) || isempty(B)
+        return fill!(C, zero(R))
+    end
+
+    @kernel function matmatmul_kernel!(C, A, B)
+        assume.(size(C) .> 0)
+        idx = @index(Global, Linear)
+        i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
+
+        @inbounds if i <= size(A,1) && j <= size(B,2)
+            z2 = zero(A[i, 1]*B[1, j] + A[i, 1]*B[1, j])
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            for k in 1:size(A,2)
+                Cij += A[i, k]*B[k, j]
+            end
+            C[i,j] = add(Cij, C[i,j])
+        end
+    end
+    matmatmul_kernel!(get_backend(C))(C, A, B; ndrange = size(C))
     C
 end
 
