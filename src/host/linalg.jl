@@ -332,7 +332,7 @@ MAX_TILE_DIM = 16
 # legacy method
 generic_matmatmul!(C::AbstractArray, A::AbstractArray, B::AbstractArray, a::Number, b::Number) =
     generic_matmatmul!(C, A, B, MulAddMul(a, b))
-function generic_matmatmul!(C::AbstractGPUMatrix{R}, A::AbstractGPUMatrix{T}, B::AbstractGPUMatrix{S}, add::MulAddMul) where {T,S,R}
+function generic_matmatmul!(C::AbstractGPUMatrix{R}, A::AbstractGPUMatrix{T}, B::AbstractGPUMatrix{S}, add::MulAddMul) where {T<:Number,S<:Number,R<:Number}
     N = size(A,1)
     Q = size(A,2)
     M = size(B,2)
