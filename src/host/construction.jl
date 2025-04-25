@@ -19,7 +19,7 @@ function Base.fill!(A::AnyGPUArray{T}, x) where T
 
     # ndims check for 0D support
     kernel = fill_kernel!(get_backend(A))
-    kernel(A, x; ndrange = ndims(A) > 0 ? length(A) : (1,))
+    kernel(A, x; ndrange = length(A))
     A
 end
 
