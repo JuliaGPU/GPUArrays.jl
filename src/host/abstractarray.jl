@@ -141,12 +141,21 @@ Base.print_array(io::IO, X::AnyGPUArray) =
     Base.print_array(io, adapt(ToArray(), X))
 
 # show
-Base._show_nonempty(io::IO, X::AnyGPUArray, prefix::String) =
+function Base._show_nonempty(io::IO, X::AnyGPUArray, prefix::String)
+    print(io, typeof(X).name.name, "(")
     Base._show_nonempty(io, adapt(ToArray(), X), prefix)
-Base._show_empty(io::IO, X::AnyGPUArray) =
+    print(io, ")")
+end
+function Base._show_empty(io::IO, X::AnyGPUArray)
+    print(io, typeof(X).name.name, "(")
     Base._show_empty(io, adapt(ToArray(), X))
-Base.show_vector(io::IO, v::AnyGPUArray, args...) =
+    print(io, ")")
+end
+function Base.show_vector(io::IO, v::AnyGPUArray, args...)
+    print(io, typeof(v).name.name, "(")
     Base.show_vector(io, adapt(ToArray(), v), args...)
+    print(io, ")")
+end
 
 ## collect to CPU (discarding wrapper type)
 
