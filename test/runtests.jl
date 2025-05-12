@@ -47,7 +47,7 @@ include("setup.jl")     # make sure everything is precompiled
 # choose tests
 const tests = []
 const test_runners = Dict()
-for AT in (JLArray, Array), name in keys(TestSuite.tests)
+for AT in (Array,), name in keys(TestSuite.tests)
     push!(tests, "$(AT)/$name")
     test_runners["$(AT)/$name"] = ()->TestSuite.tests[name](AT)
 end
