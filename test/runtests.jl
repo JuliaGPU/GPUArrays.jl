@@ -1,7 +1,11 @@
+using Pkg
+Pkg.develop("KernelAbstractions")
+
 using Distributed
 using Dates
 import REPL
 using Printf: @sprintf
+
 
 # parse some command-line arguments
 function extract_flag!(args, flag, default=nothing)
