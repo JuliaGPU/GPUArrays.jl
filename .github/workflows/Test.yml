@@ -28,8 +28,8 @@ jobs:
         run: |
           julia --project -e "
             using Pkg
+            Pkg.develop(\"KernelAbstractions\")
             Pkg.develop([PackageSpec(; name=basename(path), path) for path in ARGS])
-            Pkg.develop("KernelAbstractions")
           " lib/GPUArraysCore
       - uses: julia-actions/julia-runtest@v1
         continue-on-error: ${{ matrix.version == 'nightly' }}
