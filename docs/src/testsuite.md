@@ -21,7 +21,7 @@ If you don't want to run the whole suite, you can also run parts of it:
 
 
 ```julia
-T = JLArray
+T = Array # As of KernelAbstractions v0.10, Array uses POCLBackend to run KA kernels
 GPUArrays.allowscalar(false) # fail tests when slow indexing path into Array type is used.
 
 TestSuite.test_gpuinterface(T) # interface functions like gpu_call, threadidx, etc

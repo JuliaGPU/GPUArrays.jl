@@ -20,7 +20,7 @@ end
 
 ```
 
-This will allow your defined type (in this case `JLArray`) to use the GPUArrays interface where available.
+This will allow your defined type (in this case `CustomArray`) to use the GPUArrays interface where available.
 To be able to actually use the functionality that is defined for `AbstractGPUArray`s, you need to define the backend, like so:
 
 ```julia
@@ -29,7 +29,7 @@ struct CustomBackend <: KernelAbstractions.GPU
 KernelAbstractions.get_backend(a::CA) where CA <: CustomArray = CustomBackend()
 ```
 
-There are numerous examples of potential interfaces for GPUArrays, such as with [JLArrays](https://github.com/JuliaGPU/GPUArrays.jl/blob/master/lib/JLArrays/src/JLArrays.jl), [CuArrays](https://github.com/JuliaGPU/CUDA.jl/blob/master/src/gpuarrays.jl), and [ROCArrays](https://github.com/JuliaGPU/AMDGPU.jl/blob/master/src/gpuarrays.jl).
+There are numerous examples of potential interfaces for GPUArrays, such as with [CuArrays](https://github.com/JuliaGPU/CUDA.jl/blob/master/src/CUDAKernels.jl), [ROCArrays](https://github.com/JuliaGPU/AMDGPU.jl/blob/master/src/ROCKernels.jl), [MtlArrays](https://github.com/JuliaGPU/Metal.jl/blob/master/src/MetalKernels.jl).
 
 ## Caching Allocator
 
