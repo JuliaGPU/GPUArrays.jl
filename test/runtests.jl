@@ -1,3 +1,6 @@
+using Pkg
+Pkg.develop("KernelAbstractions")
+
 using Distributed
 using Dates
 import REPL
