@@ -399,9 +399,11 @@ end
         end
         @test(Array(b) == [1.0 0.0 0.0; 2.0 2.0 3.0],
               broken=(AT <: Array &&
-                      VERSION >= v"1.11.0-DEV.727" &&      # broken in JuliaLang/julia#51760
-                      !(v"1.11-rc1" <= VERSION < v"1.12-")) # reverted in -rc1
-             )
+                        (v"1.11.0-DEV.727" <= VERSION < v"1.11.0-beta2" || # broken in JuliaLang/julia#51760 & reverted in beta2
+                          v"1.12.0-" <= VERSION < v"1.12.0-DEV.528"
+                        )
+                      )
+              )
 
         a = AT(Float32[1.0 0.0 0.0; 2.0 2.0 3.0])
         b = reinterpret(reshape, ComplexF32, a)
