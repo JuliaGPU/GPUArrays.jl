@@ -1,4 +1,4 @@
-using Distributed, Test, JLArrays
+using Distributed, Test
 
 include("testsuite.jl")
 
@@ -15,7 +15,7 @@ function runtests(f, name)
         # generate a temporary module to execute the tests in
         mod_name = Symbol("Test", rand(1:100), "Main_", replace(name, '/' => '_'))
         mod = @eval(Main, module $mod_name end)
-        @eval(mod, using Test, Random, JLArrays)
+        @eval(mod, using Test, Random)
 
         let id = myid()
             wait(@spawnat 1 print_testworker_started(name, id))
@@ -24,7 +24,6 @@ function runtests(f, name)
         ex = quote
             GC.gc(true)
             Random.seed!(1)
-            JLArrays.allowscalar(false)
 
             @timed @testset $"$name" begin
                 $f()

@@ -26,10 +26,11 @@ jobs:
       - uses: julia-actions/cache@v2
       - name: Develop subpackages
         run: |
-          julia --project -e "
+          julia --project -e '
             using Pkg
+            Pkg.develop("KernelAbstractions")
             Pkg.develop([PackageSpec(; name=basename(path), path) for path in ARGS])
-          " lib/GPUArraysCore lib/JLArrays
+          ' lib/GPUArraysCore
       - uses: julia-actions/julia-runtest@v1
         continue-on-error: ${{ matrix.version == 'nightly' }}
       - uses: julia-actions/julia-processcoverage@v1
