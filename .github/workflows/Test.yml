@@ -39,7 +39,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
-          file: lcov.info
+          files: lcov.info
   opencl:
     name: OpenCL.jl
     runs-on: ubuntu-latest
@@ -90,7 +90,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
-          file: lcov.info
+          files: lcov.info
   docs:
     name: Documentation
     runs-on: ubuntu-latest
