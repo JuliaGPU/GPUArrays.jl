@@ -9,14 +9,14 @@ on:
 
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         version: ['1.10', '1.11', '^1.12.0-0', 'nightly']
         os: [ubuntu-latest, macOS-latest, windows-latest]
-        arch: [x64]
+        arch: [default]
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
