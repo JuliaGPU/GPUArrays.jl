@@ -9,20 +9,18 @@ on:
 
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         version: ['1.10', '1.11', '^1.12.0-0', 'nightly']
         os: [ubuntu-latest, macOS-latest, windows-latest]
-        arch: [x64]
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v2
       - name: Develop subpackages
         run: |
@@ -39,7 +37,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
-          file: lcov.info
+          files: lcov.info
   opencl:
     name: OpenCL.jl
     runs-on: ubuntu-latest
@@ -48,7 +46,6 @@ jobs:
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1.10'
-          arch: x64
       - uses: julia-actions/cache@v2
       - name: Run tests
         run: |
@@ -90,7 +87,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
-          file: lcov.info
+          files: lcov.info
   docs:
     name: Documentation
     runs-on: ubuntu-latest
