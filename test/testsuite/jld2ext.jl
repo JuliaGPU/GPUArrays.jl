@@ -17,7 +17,7 @@
                     # Verify the loaded array matches the original
                     @test y isa AT{ET, length(dims)}
                     @test size(y) == size(x)
-                    @test AT(x) ≈ y
+                    @test x == y
                 end
             end
         end
