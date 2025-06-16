@@ -160,7 +160,7 @@ function broadcasting(AT, eltypes)
             end
             ############
             # issue #598
-            @test compare(AT, rand(ET, ()), rand(ET, ())) do x,y
+            @test compare(AT, rand(ET, ()), rand(ET, ())) do x, y
                 map(+, x, y)
             end
         end
