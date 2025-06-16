@@ -10,6 +10,7 @@ using GPUArrays
 
 using KernelAbstractions
 using LinearAlgebra
+using JLD2
 using Random
 using Test
 
