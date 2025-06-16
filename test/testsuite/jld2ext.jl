@@ -1,6 +1,3 @@
-using JLD2
-using Test
-
 @testsuite "ext/jld2" (AT, eltypes) -> begin
     mktempdir() do dir
         for ET in eltypes
