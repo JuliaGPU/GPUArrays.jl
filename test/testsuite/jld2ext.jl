@@ -18,9 +18,9 @@ using Test
                     y = JLD2.load_object(file)
 
                     # Verify the loaded array matches the original
-                    @test y isa Array{ET, length(dims)}
+                    @test y isa AT{ET, length(dims)}
                     @test size(y) == size(x)
-                    @test Array(x) ≈ y
+                    @test AT(x) ≈ y
                 end
             end
         end
