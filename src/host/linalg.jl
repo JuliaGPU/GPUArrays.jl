@@ -762,9 +762,11 @@ function LinearAlgebra.kron(x::AbstractGPUVector{T1}, y::AbstractGPUVector{T2}) 
     return LinearAlgebra.kron!(z, x, y)
 end
 
-trans_adj_wrappers = ((T -> :(AbstractGPUMatrix{$T}), 'N', identity),
-               (T -> :(Transpose{$T, <:AbstractGPUMatrix{$T}}), 'T', A -> :(parent($A))),
-               (T -> :(Adjoint{$T, <:AbstractGPUMatrix{$T}}), 'C', A -> :(parent($A))))
+trans_adj_wrappers = (
+    (T -> :(AbstractGPUMatrix{$T}), 'N', identity),
+    (T -> :(Transpose{$T, <:AbstractGPUMatrix{$T}}), 'T', A -> :(parent($A))),
+    (T -> :(Adjoint{$T, <:AbstractGPUMatrix{$T}}), 'C', A -> :(parent($A))),
+)
 
 for (wrapa, transa, unwrapa) in trans_adj_wrappers, (wrapb, transb, unwrapb) in trans_adj_wrappers
     TypeA = wrapa(:(T1))
@@ -792,7 +794,7 @@ for (wrapa, transa, unwrapa) in trans_adj_wrappers, (wrapb, transb, unwrapb) in 
         end
     end
 
-    @eval function LinearAlgebra.kron!(C::$TypeC, A::$TypeA, B::$TypeB) where {T1,T2,T3}
+    @eval function LinearAlgebra.kron!(C::$TypeC, A::$TypeA, B::$TypeB) where {T1, T2, T3}
         @assert size(C, 1) == size(A, 1) * size(B, 1)
         @assert size(C, 2) == size(A, 2) * size(B, 2)
 
