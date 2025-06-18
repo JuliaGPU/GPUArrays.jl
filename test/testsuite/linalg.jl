@@ -313,8 +313,7 @@
 
     @testset "kron" begin
         for T in eltypes
-            @test compare(kron, AT, rand(T, 32), rand(T, 64))
-            for opa in (identity, transpose, adjoint), opb in (identity, transpose, adjoint)
+            for opa in (vec, identity, transpose, adjoint), opb in (vec, identity, transpose, adjoint)
                 @test compare(kron, AT, opa(rand(T, 32, 64)), opb(rand(T, 128, 16)))
             end
         end
