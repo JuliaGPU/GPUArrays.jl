@@ -82,10 +82,11 @@ end
 allequal(x) = true
 allequal(x, y, z...) = x == y && allequal(y, z...)
 
-function Base.map(f, xs::AnyGPUArray...)
+function Base.map(f, x1::AnyGPUArray, xrest::AnyGPUArray...)
+    xs = (x1, xrest...)
     # if argument sizes match, their shape needs to be preserved
     if allequal(size.(xs)...)
-         return f.(xs...)
+        return Broadcast.broadcast_preserving_zero_d(f, xs...)
     end
 
     # if not, treat them as iterators
