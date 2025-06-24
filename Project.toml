@@ -18,7 +18,7 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 [compat]
 Adapt = "4.0"
 GPUArraysCore = "= 0.2.0"
-KernelAbstractions = "0.9.28"
+KernelAbstractions = "0.9.28, 0.10.0"
 LLVM = "3.9, 4, 5, 6, 7, 8, 9"
 LinearAlgebra = "1"
 Printf = "1"
