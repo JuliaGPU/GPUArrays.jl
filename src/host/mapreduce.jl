@@ -185,7 +185,7 @@ Base.@propagate_inbounds _map_getindex(args::Tuple{}, I) = ()
 # Reduce an array across the grid. All elements to be processed can be addressed by the
 # product of the two iterators `Rreduce` and `Rother`, where the latter iterator will have
 # singleton entries for the dimensions that should be reduced (and vice versa).
-@kernel cpu=false function partial_mapreduce_device(f, op, neutral, maxitems, Rreduce, Rother, R, As...)
+@kernel cpu=false unsafe_indices=true function partial_mapreduce_device(f, op, neutral, maxitems, Rreduce, Rother, R, As...)
     # decompose the 1D hardware indices into separate ones for reduction (across items
     # and possibly groups if it doesn't fit) and other elements (remaining groups)
     localIdx_reduce = @index(Local, Linear)
@@ -250,11 +250,6 @@ function mapreducedim!(f::F, op::OP, R::AnyGPUArray{T}, A::AbstractArrayOrBroadc
     #       CartesianIndices object with UnitRanges that behave badly on the GPU.
     @assert length(Rall) == length(Rother) * length(Rreduce)
 
-    # allocate an additional, empty dimension to write the reduced value to.
-    # this does not affect the actual location in memory of the final values,
-    # but allows us to write a generalized kernel supporting partial reductions.
-    R′ = reshape(R, (size(R)..., 1))
-
     # how many items do we want?
     #
     # items in a group work together to reduce values across the reduction dimensions;
@@ -286,7 +281,7 @@ function mapreducedim!(f::F, op::OP, R::AnyGPUArray{T}, A::AbstractArrayOrBroadc
     # kernel_tt = Tuple{Core.Typeof.(kernel_args)...}
     # kernel = zefunction(partial_mapreduce_device, kernel_tt)
     # reduce_items = launch_configuration(kernel)
-    reduce_items = 512
+    reduce_items = compute_items(512)
     reduce_kernel = partial_mapreduce_device(get_backend(R), (reduce_items,))
 
     # how many groups should we launch?
@@ -306,7 +301,7 @@ function mapreducedim!(f::F, op::OP, R::AnyGPUArray{T}, A::AbstractArrayOrBroadc
     # perform the actual reduction
     if reduce_groups == 1
         # we can cover the dimensions to reduce using a single group
-        reduce_kernel(f, op, init, Val(items), Rreduce, Rother, R′, A; ndrange)
+        reduce_kernel(f, op, init, Val(items), Rreduce, Rother, R, A; ndrange)
     else
         # we need multiple steps to cover all values to reduce
         partial = similar(R, (size(R)..., reduce_groups))
@@ -316,7 +311,7 @@ function mapreducedim!(f::F, op::OP, R::AnyGPUArray{T}, A::AbstractArrayOrBroadc
         end
         reduce_kernel(f, op, init, Val(items), Rreduce, Rother, partial, A; ndrange)
 
-        GPUArrays.mapreducedim!(identity, op, R′, partial; init=init)
+        GPUArrays.mapreducedim!(identity, op, R, partial; init=init)
     end
 
     return R
