@@ -53,17 +53,20 @@ end
 
 # per-object state, with a flag to indicate whether the object has been freed.
 # this is to support multiple calls to `unsafe_free!` on the same object,
-# while only lowering the referene count of the underlying data once.
+# while only lowering the reference count of the underlying data once.
 mutable struct DataRef{D}
     rc::RefCounted{D}
     freed::Bool
+    cached::Bool
 end
 
-function DataRef(finalizer, data::D) where {D}
-    rc = RefCounted{D}(data, finalizer, Threads.Atomic{Int}(1))
-    DataRef{D}(rc, false)
+function DataRef(finalizer, ref::D) where {D}
+    rc = RefCounted{D}(ref, finalizer, Threads.Atomic{Int}(1))
+    DataRef{D}(rc, false, false)
 end
-DataRef(data; kwargs...) = DataRef(nothing, data; kwargs...)
+DataRef(ref; kwargs...) = DataRef(nothing, ref; kwargs...)
+
+Base.sizeof(ref::DataRef) = sizeof(ref.rc[])
 
 function Base.getindex(ref::DataRef)
     if ref.freed
@@ -77,10 +80,16 @@ function Base.copy(ref::DataRef{D}) where {D}
         throw(ArgumentError("Attempt to copy a freed reference."))
     end
     retain(ref.rc)
-    return DataRef{D}(ref.rc, false)
+    # copies of cached references are not managed by the cache, so
+    # we need to mark them as such to make sure their refcount can drop.
+    return DataRef{D}(ref.rc, false, false)
 end
 
-function unsafe_free!(ref::DataRef, args...)
+function unsafe_free!(ref::DataRef)
+    if ref.cached
+        # lifetimes of cached references are tied to the cache.
+        return
+    end
     if ref.freed
         # multiple frees *of the same object* are allowed.
         # we should only ever call `release` once per object, though,
@@ -88,7 +97,7 @@ function unsafe_free!(ref::DataRef, args...)
         return
     end
     ref.freed = true
-    release(ref.rc, args...)
+    release(ref.rc)
     return
 end
 

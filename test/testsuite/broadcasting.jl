@@ -143,6 +143,9 @@ function broadcasting(AT, eltypes)
             @test compare(AT, rand(ET, 2,2), rand(ET, 2)) do x,y
                 map!(+, x, y)
             end
+            @test compare(AT, rand(ET, 2), 1:2) do x, y
+                map!(+, x, y)
+            end
         end
 
         @testset "map $ET" begin
@@ -153,6 +156,11 @@ function broadcasting(AT, eltypes)
                 map(+, x, y)
             end
             @test compare(AT, rand(ET, 2,2), rand(ET, 2)) do x,y
+                map(+, x, y)
+            end
+            ############
+            # issue #598
+            @test compare(AT, rand(ET, ()), rand(ET, ())) do x, y
                 map(+, x, y)
             end
         end

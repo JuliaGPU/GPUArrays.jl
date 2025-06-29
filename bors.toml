@@ -1,6 +1,0 @@
-status = [
-  "ci/gitlab/%",
-  "continuous-integration/travis-ci/push"
-]
-delete_merged_branches = true
-timeout-sec = 7200

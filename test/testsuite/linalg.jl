@@ -85,6 +85,13 @@
                     B = zeros(T,n,n)
                     @test compare(copytrito!, AT, B, A, uplo)
                 end
+                @testset for T in eltypes, uplo in ('L', 'U')
+                    n = 16
+                    m = 32
+                    A = uplo == 'U' ? rand(T,m,n) : rand(T,n,m)
+                    B = zeros(T,n,n)
+                    @test compare(copytrito!, AT, B, A, uplo)
+                end
             end
         end
 
@@ -302,6 +309,14 @@
         A = zero(AT(rand(T, 2, 2)))
         @test iszero(A)
         @test isone(A) == false
+    end
+
+    @testset "kron" begin
+        for T in eltypes
+            for opa in (vec, identity, transpose, adjoint), opb in (vec, identity, transpose, adjoint)
+                @test compare(kron, AT, opa(rand(T, 32, 64)), opb(rand(T, 128, 16)))
+            end
+        end
     end
 end
 

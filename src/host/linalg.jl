@@ -111,8 +111,12 @@ if isdefined(LinearAlgebra, :copytrito!)
         LinearAlgebra.BLAS.chkuplo(uplo)
         m,n = size(A)
         m1,n1 = size(B)
-        (m1 < m || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least the same number of rows and columns than A of size ($m,$n)"))
         if uplo == 'U'
+            if n < m
+                (m1 < n || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least size ($n,$n)"))
+            else
+                (m1 < m || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least size ($m,$n)"))
+            end
             @kernel function U_kernel!(_A, _B)
                 I = @index(Global, Cartesian)
                 i, j = Tuple(I)
@@ -122,6 +126,11 @@ if isdefined(LinearAlgebra, :copytrito!)
             end
             U_kernel!(get_backend(B))(A, B; ndrange = size(A))
         else  # uplo == 'L'
+            if m < n
+                (m1 < m || n1 < m) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least size ($m,$m)"))
+            else
+                (m1 < m || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least size ($m,$n)"))
+            end
             @kernel function L_kernel!(_A, _B)
                 I = @index(Global, Cartesian)
                 i, j = Tuple(I)
@@ -274,7 +283,8 @@ function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
     m′, n′ = size(B, 1), size(B, 2)
     n == d || throw(DimensionMismatch("left hand side has $n columns but D is $d by $d"))
     (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
-    B .= A .* transpose(dd)
+    ddT = transpose(dd)
+    @. B = A * ddT
 
     B
 end
@@ -290,7 +300,8 @@ function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
     m′, n′ = size(B, 1), size(B, 2)
     n == d || throw(DimensionMismatch("left hand side has $n columns but D is $d by $d"))
     (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
-    B .= α * A .* transpose(dd) + β * B
+    ddT = transpose(dd)
+    @. B = α * A * ddT + β * B
 
     B
 end
@@ -724,4 +735,75 @@ function Base.isone(x::AbstractGPUMatrix{T}) where {T}
     GPUArrays.mapreducedim!(iszero, &, y, Broadcast.instantiate(bc); init=true)
 
     Array(y)[]
+end
+
+## Kronecker product
+
+@kernel function kron_kernel_vec!(z, @Const(x), @Const(y))
+    i, j = @index(Global, NTuple)
+
+    @inbounds z[(i - 1) * length(y) + j] = x[i] * y[j]
+end
+
+function LinearAlgebra.kron!(z::AbstractGPUVector{T1}, x::AbstractGPUVector{T2}, y::AbstractGPUVector{T3}) where {T1,T2,T3}
+    @assert length(z) == length(x) * length(y)
+
+    backend = KernelAbstractions.get_backend(z)
+    kernel = kron_kernel_vec!(backend)
+
+    kernel(z, x, y, ndrange=(length(x), length(y)))
+
+    return z
+end
+
+function LinearAlgebra.kron(x::AbstractGPUVector{T1}, y::AbstractGPUVector{T2}) where {T1,T2}
+    T = promote_type(T1, T2)
+    z = similar(x, T, length(x) * length(y))
+    return kron!(z, x, y)
+end
+
+@kernel function kron_kernel!(C, @Const(A), @Const(B))
+    ai, aj = @index(Global, NTuple)  # Indices in the result matrix
+
+    # lb1, lb2 = size(B)  # Dimensions of B
+    lb1 = size(B, 1)
+    lb2 = size(B, 2)
+
+    # Map global indices (ai, aj) to submatrices of the Kronecker product
+    i_a = fld1(ai, lb1)  # Corresponding row index in A
+    i_b = mod1(ai, lb1)  # Corresponding row index in B
+    j_a = fld1(aj, lb2)  # Corresponding col index in A
+    j_b = mod1(aj, lb2)  # Corresponding col index in B
+
+    @inbounds C[ai, aj] = A[i_a, j_a] * B[i_b, j_b]
+end
+
+trans_adj_wrappers = (
+    T -> :(AbstractGPUVecOrMat{$T}),
+    T -> :(Transpose{$T, <:AbstractGPUVecOrMat{$T}}),
+    T -> :(Adjoint{$T, <:AbstractGPUVecOrMat{$T}}),
+)
+
+for wrapa in trans_adj_wrappers, wrapb in trans_adj_wrappers
+    TypeA = wrapa(:T1)
+    TypeB = wrapb(:T2)
+    TypeC = :(AbstractGPUVecOrMat{T3})
+
+    @eval function LinearAlgebra.kron!(C::$TypeC, A::$TypeA, B::$TypeB) where {T1, T2, T3}
+        @assert size(C, 1) == size(A, 1) * size(B, 1)
+        @assert size(C, 2) == size(A, 2) * size(B, 2)
+
+        backend = KernelAbstractions.get_backend(C)
+        kernel = kron_kernel!(backend)
+
+        kernel(C, A, B, ndrange=(size(C, 1), size(C, 2)))
+
+        return C
+    end
+
+    @eval function LinearAlgebra.kron(A::$TypeA, B::$TypeB) where {T1, T2}
+        T = promote_type(T1, T2)
+        C = similar(A, T, size(A, 1) * size(B, 1), size(A, 2) * size(B, 2))
+        return kron!(C, A, B)
+    end
 end
