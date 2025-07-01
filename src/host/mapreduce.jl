@@ -15,6 +15,7 @@ neutral_element(op, T) =
              Please pass it as an explicit argument to `GPUArrays.mapreducedim!`,
              or register it globally by defining `GPUArrays.neutral_element(::typeof($op), T)`.""")
 neutral_element(::typeof(Base.:(|)), T) = zero(T)
+neutral_element(::typeof(Base.:(⊻)), T) = zero(T)
 neutral_element(::typeof(Base.:(+)), T) = zero(T)
 neutral_element(::typeof(Base.add_sum), T) = zero(T)
 neutral_element(::typeof(Base.:(&)), T) = one(T)
