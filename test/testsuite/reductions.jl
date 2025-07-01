@@ -66,6 +66,11 @@ end
                           (0,)=>[1]]
             @test compare(A->reduce(+, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
             @test compare(A->reduce(*, A; dims=dims, init=one(ET)), AT, rand(range, sz))
+            if ET <: Integer
+                @test compare(A->reduce(&, A; dims=dims, init=~zero(ET)), AT, rand(range, sz))
+                @test compare(A->reduce(|, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
+                @test compare(A->reduce(⊻, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
+            end
         end
     end
 end
