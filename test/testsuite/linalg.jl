@@ -283,8 +283,8 @@
         @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))
         @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
         if isfloattype(T)
-            @test compare(rmul!, AT, fill(T(NaN), a), Ref(false))
-            @test compare(lmul!, AT, Ref(false), fill(T(NaN), b))
+            @test compare(rmul!, AT, fill(NaN_T(T), a), Ref(false))
+            @test compare(lmul!, AT, Ref(false), fill(NaN_T(T), b))
         end
     end
 
@@ -292,8 +292,8 @@
         @test compare(axpby!, AT, Ref(rand(T)), rand(T,5), Ref(rand(T)), rand(T,5))
         @test compare(axpy!, AT, Ref(rand(T)), rand(T,5), rand(T,5))
         if isfloattype(T)
-            @test compare(axpby!, AT, Ref(false), fill(T(NaN), 5), Ref(false), fill(T(NaN), 5))
-            @test compare(axpy!, AT, Ref(false), fill(T(NaN), 5), rand(T, 5)) # explicitly test "strong zeroness"
+            @test compare(axpby!, AT, Ref(false), fill(NaN_T(T), 5), Ref(false), fill(NaN_T(T), 5))
+            @test compare(axpy!, AT, Ref(false), fill(NaN_T(T), 5), rand(T, 5))
         end
     end
 
@@ -303,15 +303,17 @@
 
     @testset "rotate!" for T in eltypes
         @test compare(rotate!, AT, rand(T,5), rand(T,5), Ref(rand(real(T))), Ref(rand(T)))
-        if isfloattype(T) && false # skip because the LinAlg.jl change is not released 
-            @test compare(rotate!, AT, fill(T(NaN), 5), fill(T(NaN), 5), Ref(false), Ref(false))
+        if isfloattype(T)
+            # skip compare until https://github.com/JuliaLang/LinearAlgebra.jl/pull/1323 is released and only check correct strong zero behaviour of AbstractGPUArray
+            # @test compare(rotate!, AT, fill(NaN_T(T), 5), fill(NaN_T(T), 5), Ref(false), Ref(false))
+            @test !out_has_NaNs(rotate!, AT, fill(NaN_T(T), 5), fill(NaN_T(T), 5), Ref(false), Ref(false))
         end
     end
 
     @testset "reflect!" for T in eltypes
         @test compare(reflect!, AT, rand(T,5), rand(T,5), Ref(rand(real(T))), Ref(rand(T)))
         if isfloattype(T)
-            @test compare(reflect!, AT, fill(T(NaN), 5), fill(T(NaN), 5), Ref(false), Ref(false))
+            @test compare(reflect!, AT, fill(NaN_T(T), 5), fill(NaN_T(T), 5), Ref(false), Ref(false))
         end
     end
 
@@ -344,10 +346,12 @@ end
         @test compare(*, AT, f(A), x)
         @test compare(mul!, AT, y, f(A), x)
         @test compare(mul!, AT, y, f(A), x, Ref(T(4)), Ref(T(5)))
-        #TODO: generic_matvecmul! (from LinearAlgebra.jl) does not respect the "strong zero" for Float16
-        if isfloattype(T) && !(T==Float16) && !(T == ComplexF16)
-            y_NaN, A_NaN, x_NaN = fill(T(NaN), 4), fill(T(NaN), 4, 4), fill(T(NaN), 4)
-            @test compare(mul!, AT, y_NaN, f(A_NaN), x_NaN, Ref(false), Ref(false))
+        if isfloattype(T)
+            y_NaN, A_NaN, x_NaN = fill(NaN_T(T), 4), fill(NaN_T(T), 4, 4), fill(NaN_T(T), 4)
+            if !(T==Float16) && !(T == ComplexF16) # skip Float16/ComplexF16 until https://github.com/JuliaLang/LinearAlgebra.jl/issues/1399 is fixed and only check correct strong zero behaviour of AbstractGPUArray
+                @test compare(mul!, AT, y_NaN, f(A_NaN), x_NaN, Ref(false), Ref(false))
+            end
+            @test !out_has_NaNs(mul!, AT, y_NaN, f(A_NaN), x_NaN, Ref(false), Ref(false))
         end
         @test typeof(AT(rand(T, 3, 3)) * AT(rand(T, 3))) <: AbstractVector
 
@@ -368,7 +372,7 @@ end
         @test compare(mul!, AT, C, f(A), g(B))
         @test compare(mul!, AT, C, f(A), g(B), Ref(T(4)), Ref(T(5)))
         if isfloattype(T)
-            A_NaN, B_NaN, C_NaN = fill(T(NaN), 4, 4), fill(T(NaN), 4, 4), fill(T(NaN), 4, 4)
+            A_NaN, B_NaN, C_NaN = fill(NaN_T(T), 4, 4), fill(NaN_T(T), 4, 4), fill(NaN_T(T), 4, 4)
             @test compare(mul!, AT, C_NaN, f(A_NaN), g(B_NaN), Ref(false), Ref(false))
         end
         @test typeof(AT(rand(T, 3, 3)) * AT(rand(T, 3, 3))) <: AbstractMatrix
