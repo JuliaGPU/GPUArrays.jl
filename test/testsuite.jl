@@ -46,7 +46,7 @@ function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
 end
 
 function compare(f, AT::Type{<:Array}, xs...; kwargs...)
-    # no need to actually run this tests: we have nothing to compoare against,
+    # no need to actually run this tests: we have nothing to compare against,
     # and we'll run it on a CPU array anyhow when comparing to a GPU array.
     #
     # this method exists so that we can at least run the test suite with Array,
@@ -54,6 +54,16 @@ function compare(f, AT::Type{<:Array}, xs...; kwargs...)
     return true
 end
 
+has_NaNs(a::AbstractArray) = isfloattype(eltype(a)) && any(isnan, collect(a))
+has_NaNs(as::NTuple) = any(a -> has_NaNs(a), as)
+
+out_has_NaNs(f, AT::Type{<:Array}, xs...) = false # we do not test stdlibs/LinAlg for NaNs (maybe they should?)
+function out_has_NaNs(f, AT::Type{<:AbstractGPUArray}, xs...)
+    arg_in = map(x -> isa(x, Base.RefValue) ? x[] : adapt(AT, x), xs)
+    arg_out = f(arg_in...)
+    return has_NaNs(arg_out)
+end
+   
 # element types that are supported by the array type
 supported_eltypes(AT, test) = supported_eltypes(AT)
 supported_eltypes(AT) = supported_eltypes()
@@ -67,6 +77,8 @@ isrealtype(T) = T <: Real
 iscomplextype(T) = T <: Complex
 isrealfloattype(T) = T <: AbstractFloat
 isfloattype(T) = T <: AbstractFloat || T <: Complex{<:AbstractFloat}
+NaN_T(T::Type{<:AbstractFloat}) = T(NaN)
+NaN_T(T::Type{<:Complex{<:AbstractFloat}}) = T(NaN, NaN)
 
 # list of tests
 const tests = Dict()

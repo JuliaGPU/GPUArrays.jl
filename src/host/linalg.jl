@@ -687,8 +687,8 @@ function LinearAlgebra.rotate!(x::AbstractGPUArray, y::AbstractGPUArray, c::Numb
         i = @index(Global, Linear)
         @inbounds xi = x[i]
         @inbounds yi = y[i]
-        @inbounds x[i] =       c  * xi + s * yi
-        @inbounds y[i] = -conj(s) * xi + c * yi
+        @inbounds x[i] = s*yi +      c *xi
+        @inbounds y[i] = c*yi - conj(s)*xi 
     end
     rotate_kernel!(get_backend(x))(x, y, c, s; ndrange = size(x))
     return x, y
