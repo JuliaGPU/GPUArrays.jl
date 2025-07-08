@@ -356,7 +356,7 @@ end
             @test compare(mul!, AT, rand(T, 2,2), rand(T, 2,1), f(rand(T, 2)))
         end
     end
-end β
+end
 
 @testsuite "linalg/mul!/matrix-matrix" (AT, eltypes)->begin
     @testset "$T gemm C := $f(A) * $g(B) * a + C * b" for f in (identity, transpose, adjoint), g in (identity, transpose, adjoint), T in eltypes
