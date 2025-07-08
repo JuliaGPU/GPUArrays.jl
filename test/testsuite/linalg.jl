@@ -347,11 +347,8 @@ end
         @test compare(mul!, AT, y, f(A), x)
         @test compare(mul!, AT, y, f(A), x, Ref(T(4)), Ref(T(5)))
         if isfloattype(T)
-            y_NaN, A_NaN, x_NaN = fill(NaN_T(T), 4), fill(NaN_T(T), 4, 4), fill(NaN_T(T), 4)
-            if !(T==Float16) && !(T == ComplexF16) # skip Float16/ComplexF16 until https://github.com/JuliaLang/LinearAlgebra.jl/issues/1399 is fixed and only check correct strong zero behaviour of AbstractGPUArray
-                @test compare(mul!, AT, y_NaN, f(A_NaN), x_NaN, Ref(false), Ref(false))
-            end
-            @test !out_has_NaNs(mul!, AT, y_NaN, f(A_NaN), x_NaN, Ref(false), Ref(false))
+            y_NaN, A_NaN, x_NaN = fill(NaN_T(T), 4), rand(T, 4, 4), rand(T, 4)
+            @test compare(mul!, AT, y_NaN, f(A_NaN), x_NaN, Ref(rand(T)), Ref(false))
         end
         @test typeof(AT(rand(T, 3, 3)) * AT(rand(T, 3))) <: AbstractVector
 
@@ -359,7 +356,7 @@ end
             @test compare(mul!, AT, rand(T, 2,2), rand(T, 2,1), f(rand(T, 2)))
         end
     end
-end
+end β
 
 @testsuite "linalg/mul!/matrix-matrix" (AT, eltypes)->begin
     @testset "$T gemm C := $f(A) * $g(B) * a + C * b" for f in (identity, transpose, adjoint), g in (identity, transpose, adjoint), T in eltypes
@@ -372,8 +369,8 @@ end
         @test compare(mul!, AT, C, f(A), g(B))
         @test compare(mul!, AT, C, f(A), g(B), Ref(T(4)), Ref(T(5)))
         if isfloattype(T)
-            A_NaN, B_NaN, C_NaN = fill(NaN_T(T), 4, 4), fill(NaN_T(T), 4, 4), fill(NaN_T(T), 4, 4)
-            @test compare(mul!, AT, C_NaN, f(A_NaN), g(B_NaN), Ref(false), Ref(false))
+            A_NaN, B_NaN, C_NaN = rand(T, 4, 4), rand(T, 4, 4), fill(NaN_T(T), 4, 4)
+            @test compare(mul!, AT, C_NaN, f(A_NaN), g(B_NaN), Ref(rand(T)), Ref(false))
         end
         @test typeof(AT(rand(T, 3, 3)) * AT(rand(T, 3, 3))) <: AbstractMatrix
     end
