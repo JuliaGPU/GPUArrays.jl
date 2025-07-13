@@ -392,34 +392,35 @@ end
     end
 end
 
-
-@testsuite "linalg/NaN&false" (AT, eltypes)->begin
+@testsuite "linalg/NaN_false" (AT, eltypes)->begin
     eltypes = filter(T -> isfloattype(T), eltypes) # only floats have NaN
-    @testset "rmul! / lmul!" for T in eltypes
-        y = invoke(rmul!, Tuple{AbstractGPUArray, Number}, adapt(AT, fill(NaN_T(T), 3)), false)
-        @test !any(isnan, collect(y))
-        y = invoke(lmul!, Tuple{Number, AbstractGPUArray}, false, adapt(AT, fill(NaN_T(T), 3)))
-        @test !any(isnan, collect(y))
-    end
+    if AT <: AbstractGPUArray
+        @testset "rmul! / lmul!" for T in eltypes
+            y = invoke(rmul!, Tuple{AbstractGPUArray, Number}, adapt(AT, fill(NaN_T(T), 3)), false)
+            @test !any(isnan, collect(y))
+            y = invoke(lmul!, Tuple{Number, AbstractGPUArray}, false, adapt(AT, fill(NaN_T(T), 3)))
+            @test !any(isnan, collect(y))
+        end
 
-    @testset "axp{b}y!" for T in eltypes
-        y = invoke(axpby!, Tuple{Number, AbstractGPUArray, Number, AbstractGPUArray}, false, adapt(AT, fill(NaN_T(T), 3)), false, adapt(AT, fill(NaN_T(T), 3)))
-        @test !any(isnan, collect(y))
-        y = invoke(axpy!, Tuple{Number, AbstractGPUArray, AbstractGPUArray}, false, adapt(AT, fill(NaN_T(T), 3)), adapt(AT, rand(3)))
-        @test !any(isnan, collect(y))
-    end
+        @testset "axp{b}y!" for T in eltypes
+            y = invoke(axpby!, Tuple{Number, AbstractGPUArray, Number, AbstractGPUArray}, false, adapt(AT, fill(NaN_T(T), 3)), false, adapt(AT, fill(NaN_T(T), 3)))
+            @test !any(isnan, collect(y))
+            y = invoke(axpy!, Tuple{Number, AbstractGPUArray, AbstractGPUArray}, false, adapt(AT, fill(NaN_T(T), 3)), adapt(AT, rand(T, 3)))
+            @test !any(isnan, collect(y))
+        end
 
-    @testset "rotate! / reflect!" for T in eltypes
-        x, y = invoke(rotate!, Tuple{AbstractGPUArray, AbstractGPUArray, Number, Number}, adapt(AT, fill(NaN_T(T), 3)), adapt(AT, fill(NaN_T(T), 3)), false, false)
-        @test !any(isnan, collect(x))
-        @test !any(isnan, collect(y))
-        x, y = invoke(reflect!, Tuple{AbstractGPUArray, AbstractGPUArray, Number, Number}, adapt(AT, fill(NaN_T(T), 3)), adapt(AT, fill(NaN_T(T), 3)), false, false)
-        @test !any(isnan, collect(x))
-        @test !any(isnan, collect(y))
-    end
+        @testset "rotate! / reflect!" for T in eltypes
+            x, y = invoke(rotate!, Tuple{AbstractGPUArray, AbstractGPUArray, Number, Number}, adapt(AT, fill(NaN_T(T), 3)), adapt(AT, fill(NaN_T(T), 3)), false, false)
+            @test !any(isnan, collect(x))
+            @test !any(isnan, collect(y))
+            x, y = invoke(reflect!, Tuple{AbstractGPUArray, AbstractGPUArray, Number, Number}, adapt(AT, fill(NaN_T(T), 3)), adapt(AT, fill(NaN_T(T), 3)), false, false)
+            @test !any(isnan, collect(x))
+            @test !any(isnan, collect(y))
+        end
 
-    @testset "generic_matmatmul!" for T in eltypes
-        y = invoke(GPUArrays.generic_matmatmul!, Tuple{AbstractArray, AbstractArray, AbstractArray, Number, Number}, adapt(AT, fill(NaN_T(T), 3, 3)), adapt(AT, fill(NaN_T(T), 3, 3)), adapt(AT, fill(NaN_T(T), 3, 3)), false, false)
-        @test !any(isnan, collect(y))
+        @testset "generic_matmatmul!" for T in eltypes
+            y = invoke(GPUArrays.generic_matmatmul!, Tuple{AbstractArray, AbstractArray, AbstractArray, Number, Number}, adapt(AT, fill(NaN_T(T), 3, 3)), adapt(AT, fill(NaN_T(T), 3, 3)), adapt(AT, fill(NaN_T(T), 3, 3)), false, false)
+            @test !any(isnan, collect(y))
+        end
     end
 end
