@@ -282,19 +282,11 @@
     @testset "lmul! and rmul!" for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in eltypes
         @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))
         @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
-        if isfloattype(T)
-            @test compare(rmul!, AT, fill(NaN_T(T), a), Ref(false))
-            @test compare(lmul!, AT, Ref(false), fill(NaN_T(T), b))
-        end
     end
 
     @testset "axp{b}y" for T in eltypes
         @test compare(axpby!, AT, Ref(rand(T)), rand(T,5), Ref(rand(T)), rand(T,5))
         @test compare(axpy!, AT, Ref(rand(T)), rand(T,5), rand(T,5))
-        if isfloattype(T)
-            @test compare(axpby!, AT, Ref(false), fill(NaN_T(T), 5), Ref(false), fill(NaN_T(T), 5))
-            @test compare(axpy!, AT, Ref(false), fill(NaN_T(T), 5), rand(T, 5))
-        end
     end
 
     @testset "dot" for T in eltypes
@@ -303,18 +295,10 @@
 
     @testset "rotate!" for T in eltypes
         @test compare(rotate!, AT, rand(T,5), rand(T,5), Ref(rand(real(T))), Ref(rand(T)))
-        if isfloattype(T)
-            # skip compare until https://github.com/JuliaLang/LinearAlgebra.jl/pull/1323 is released and only check correct strong zero behaviour of AbstractGPUArray
-            # @test compare(rotate!, AT, fill(NaN_T(T), 5), fill(NaN_T(T), 5), Ref(false), Ref(false))
-            @test !out_has_NaNs(rotate!, AT, fill(NaN_T(T), 5), fill(NaN_T(T), 5), Ref(false), Ref(false))
-        end
     end
 
     @testset "reflect!" for T in eltypes
         @test compare(reflect!, AT, rand(T,5), rand(T,5), Ref(rand(real(T))), Ref(rand(T)))
-        if isfloattype(T)
-            @test compare(reflect!, AT, fill(NaN_T(T), 5), fill(NaN_T(T), 5), Ref(false), Ref(false))
-        end
     end
 
     @testset "iszero and isone" for T in eltypes
@@ -346,10 +330,6 @@ end
         @test compare(*, AT, f(A), x)
         @test compare(mul!, AT, y, f(A), x)
         @test compare(mul!, AT, y, f(A), x, Ref(T(4)), Ref(T(5)))
-        if isfloattype(T)
-            y_NaN, A_NaN, x_NaN = fill(NaN_T(T), 4), rand(T, 4, 4), rand(T, 4)
-            @test compare(mul!, AT, y_NaN, f(A_NaN), x_NaN, Ref(rand(T)), Ref(false))
-        end
         @test typeof(AT(rand(T, 3, 3)) * AT(rand(T, 3))) <: AbstractVector
 
         if f !== identity
@@ -368,10 +348,6 @@ end
         @test compare(*, AT, f(A), g(B))
         @test compare(mul!, AT, C, f(A), g(B))
         @test compare(mul!, AT, C, f(A), g(B), Ref(T(4)), Ref(T(5)))
-        if isfloattype(T)
-            A_NaN, B_NaN, C_NaN = rand(T, 4, 4), rand(T, 4, 4), fill(NaN_T(T), 4, 4)
-            @test compare(mul!, AT, C_NaN, f(A_NaN), g(B_NaN), Ref(rand(T)), Ref(false))
-        end
         @test typeof(AT(rand(T, 3, 3)) * AT(rand(T, 3, 3))) <: AbstractMatrix
     end
 end
@@ -413,5 +389,37 @@ end
         mat = rand(range, sz)
         @test compare(opnorm, AT, mat, Ref(p))
         @test isrealfloattype(typeof(opnorm(AT(mat), p)))
+    end
+end
+
+
+@testsuite "linalg/NaN&false" (AT, eltypes)->begin
+    eltypes = filter(T -> isfloattype(T), eltypes) # only floats have NaN
+    @testset "rmul! / lmul!" for T in eltypes
+        y = invoke(rmul!, Tuple{AbstractGPUArray, Number}, adapt(AT, fill(NaN_T(T), 3)), false)
+        @test !any(isnan, collect(y))
+        y = invoke(lmul!, Tuple{Number, AbstractGPUArray}, false, adapt(AT, fill(NaN_T(T), 3)))
+        @test !any(isnan, collect(y))
+    end
+
+    @testset "axp{b}y!" for T in eltypes
+        y = invoke(axpby!, Tuple{Number, AbstractGPUArray, Number, AbstractGPUArray}, false, adapt(AT, fill(NaN_T(T), 3)), false, adapt(AT, fill(NaN_T(T), 3)))
+        @test !any(isnan, collect(y))
+        y = invoke(axpy!, Tuple{Number, AbstractGPUArray, AbstractGPUArray}, false, adapt(AT, fill(NaN_T(T), 3)), adapt(AT, rand(3)))
+        @test !any(isnan, collect(y))
+    end
+
+    @testset "rotate! / reflect!" for T in eltypes
+        x, y = invoke(rotate!, Tuple{AbstractGPUArray, AbstractGPUArray, Number, Number}, adapt(AT, fill(NaN_T(T), 3)), adapt(AT, fill(NaN_T(T), 3)), false, false)
+        @test !any(isnan, collect(x))
+        @test !any(isnan, collect(y))
+        x, y = invoke(reflect!, Tuple{AbstractGPUArray, AbstractGPUArray, Number, Number}, adapt(AT, fill(NaN_T(T), 3)), adapt(AT, fill(NaN_T(T), 3)), false, false)
+        @test !any(isnan, collect(x))
+        @test !any(isnan, collect(y))
+    end
+
+    @testset "generic_matmatmul!" for T in eltypes
+        y = invoke(GPUArrays.generic_matmatmul!, Tuple{AbstractArray, AbstractArray, AbstractArray, Number, Number}, adapt(AT, fill(NaN_T(T), 3, 3)), adapt(AT, fill(NaN_T(T), 3, 3)), adapt(AT, fill(NaN_T(T), 3, 3)), false, false)
+        @test !any(isnan, collect(y))
     end
 end
