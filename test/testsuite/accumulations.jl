@@ -1,4 +1,3 @@
-# @testsuite "accumulations" (AT, eltypes)->begin
 @testsuite "accumulations" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
@@ -53,6 +52,13 @@
                 init = rand(range)
                 @test compare(A->accumulate(+, A; init, dims), AT, rand(range, n1, n2, n3))
             end
+        end
+
+        # Larger containers to try and detect weird bugs
+        for n in (0, 1, 2, 3, 10, 10_000, 16384, 16384+1) # small, large, odd & even, pow2 and not
+            @test compare(x->accumulate(+, x), AT, rand(range, n))
+            @test compare(x->accumulate(+, x), AT, rand(range, n, 2))
+            @test compare(Base.Fix2((x,y)->accumulate(+, x; init=y), rand(range)), AT, rand(range, n))
         end
     end
 end
