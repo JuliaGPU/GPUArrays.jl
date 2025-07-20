@@ -60,6 +60,11 @@
             @test compare(x->accumulate(+, x), AT, rand(range, n, 2))
             @test compare(Base.Fix2((x,y)->accumulate(+, x; init=y), rand(range)), AT, rand(range, n))
         end
+
+        # in place
+        @test compare(x->(accumulate!(+, x, copy(x)); x), AT, rand(range, 2))
+
+        @test_throws ArgumentError("accumulate does not support the keyword arguments [:bad_kwarg]") accumulate(+, AT(rand(ET, 10)); bad_kwarg="bad")
     end
 end
 
