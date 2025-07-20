@@ -6,7 +6,7 @@ Base._accumulate!(op, output::AnyGPUArray, input::AnyGPUVector, dims::Nothing, i
 Base._accumulate!(op, output::AnyGPUArray, input::AnyGPUArray, dims::Integer, init::Nothing) =
     AK.accumulate!(op, output, input, get_backend(output); dims, init=AK.neutral_element(op, eltype(output)))
 
-Base._accumulate!(op, output::AnyGPUArray, input::MtlVector, dims::Nothing, init::Some) =
+Base._accumulate!(op, output::AnyGPUArray, input::AnyGPUVector, dims::Nothing, init::Some) =
     AK.accumulate!(op, output, input, get_backend(output); dims, init=something(init))
 
 Base._accumulate!(op, output::AnyGPUArray, input::AnyGPUArray, dims::Integer, init::Some) =
