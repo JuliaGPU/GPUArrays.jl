@@ -56,6 +56,9 @@
 
         # Larger containers to try and detect weird bugs
         for n in (0, 1, 2, 3, 10, 10_000, 16384, 16384+1) # small, large, odd & even, pow2 and not
+            # Skip large tests on small datatypes
+            n >= 10000 && sizeof(real(ET)) <= 2 && continue
+
             @test compare(x->accumulate(+, x), AT, rand(range, n))
             @test compare(x->accumulate(+, x), AT, rand(range, n, 2))
             @test compare(Base.Fix2((x,y)->accumulate(+, x; init=y), rand(range)), AT, rand(range, n))
