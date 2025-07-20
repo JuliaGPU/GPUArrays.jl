@@ -15,7 +15,7 @@ Base._accumulate!(op, output::AnyGPUArray, input::AnyGPUArray, dims::Integer, in
 Base.accumulate_pairwise!(op, result::AnyGPUVector, v::AnyGPUVector) = accumulate!(op, result, v)
 
 # default behavior unless dims are specified by the user
-function Base.accumulate(op, A::WrappedGPUArray;
+function Base.accumulate(op, A::AnyGPUArray;
                          dims::Union{Nothing,Integer}=nothing, kw...)
     nt = values(kw)
     if dims === nothing && !(A isa AbstractVector)
