@@ -27,15 +27,9 @@ neutral_element(::typeof(Base._extrema_rf), ::Type{<:NTuple{2,T}}) where {T} = t
 
 # resolve ambiguities
 Base.mapreduce(f, op, A::AnyGPUArray, As::AbstractArrayOrBroadcasted...;
-               dims=:, init=nothing) = _mapreduce(f, op, A, As...; dims=dims, init=init)
-            #    dims=:, init=nothing) = AK._mapreduce(f, op, A, As...; dims=dims, init=init)
+               dims=:, init=nothing) = _mapreduce(f, op, A, As...; dims, init)
 Base.mapreduce(f, op, A::Broadcast.Broadcasted{<:AbstractGPUArrayStyle}, As::AbstractArrayOrBroadcasted...;
-               dims=:, init=nothing) = _mapreduce(f, op, A, As...; dims=dims, init=init)
-            #    dims=:, init=nothing) = AK.mapreduce(f, op, #_mapreduce(f, op, A, As...; dims=dims, init=init)
-Base.mapreduce(f, op, A::AnyGPUArray;
-            dims=:, init=nothing) = AK.mapreduce(f, op, A; init, dims=dims isa Colon ? nothing : dims)
-Base.mapreduce(f, op, A::Broadcast.Broadcasted{<:AbstractGPUArrayStyle};
-            dims=:, init=nothing) = AK.mapreduce(f, op, A; init, dims=dims isa Colon ? nothing : dims)
+               dims=:, init=nothing) = _mapreduce(f, op, A, As...; dims, init)
 
 function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,N,D}
     # figure out the destination container type by looking at the initializer element,
@@ -72,9 +66,25 @@ function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,
     end
 
     # allocate an output container
+    block_size = 256 # Hard-code AK default to prevent mismatches
     sz = size(A)
     red = ntuple(i->(dims==Colon() || i in dims) ? 1 : sz[i], length(sz))
-    R = similar(A, ET, red)
+    R = if dims isa Colon
+        num_per_block = 2 * block_size
+        blocks = (prod(sz) + num_per_block - 1) ÷ num_per_block
+        similar(A, ET, 2 * blocks)
+    else
+        similar(A, ET, red)
+    end
+
+    # Use AcceleratedKernels if possible
+    if dims isa Colon || dims isa Integer
+        return AK.mapreduce(f, op, Base.materialize(A), get_backend(R);
+                            block_size, init,
+                            neutral=init,
+                            dims=dims isa Colon ? nothing : dims,
+                            temp = R)
+    end
 
     # perform the reduction
     if prod(sz) == 0
