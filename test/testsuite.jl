@@ -46,7 +46,7 @@ function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
 end
 
 function compare(f, AT::Type{<:Array}, xs...; kwargs...)
-    # no need to actually run this tests: we have nothing to compoare against,
+    # no need to actually run this tests: we have nothing to compare against,
     # and we'll run it on a CPU array anyhow when comparing to a GPU array.
     #
     # this method exists so that we can at least run the test suite with Array,
@@ -67,6 +67,8 @@ isrealtype(T) = T <: Real
 iscomplextype(T) = T <: Complex
 isrealfloattype(T) = T <: AbstractFloat
 isfloattype(T) = T <: AbstractFloat || T <: Complex{<:AbstractFloat}
+NaN_T(T::Type{<:AbstractFloat}) = T(NaN)
+NaN_T(T::Type{<:Complex{<:AbstractFloat}}) = T(NaN, NaN)
 
 # list of tests
 const tests = Dict()
