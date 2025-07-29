@@ -27,9 +27,9 @@ neutral_element(::typeof(Base._extrema_rf), ::Type{<:NTuple{2,T}}) where {T} = t
 
 # resolve ambiguities
 Base.mapreduce(f, op, A::AnyGPUArray, As::AbstractArrayOrBroadcasted...;
-               dims=:, init=nothing) = _mapreduce(f, op, A, As...; dims=dims, init=init)
+               dims=:, init=nothing) = _mapreduce(f, op, A, As...; dims, init)
 Base.mapreduce(f, op, A::Broadcast.Broadcasted{<:AbstractGPUArrayStyle}, As::AbstractArrayOrBroadcasted...;
-               dims=:, init=nothing) = _mapreduce(f, op, A, As...; dims=dims, init=init)
+               dims=:, init=nothing) = _mapreduce(f, op, A, As...; dims, init)
 
 function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,N,D}
     # figure out the destination container type by looking at the initializer element,
@@ -40,7 +40,7 @@ function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,
         (ET === Union{} || ET === Any) &&
             error("mapreduce cannot figure the output element type, please pass an explicit init value")
 
-        init = neutral_element(op, ET)
+        init = AK.neutral_element(op, ET)
     else
         ET = typeof(init)
     end
@@ -66,9 +66,25 @@ function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,
     end
 
     # allocate an output container
+    block_size = 256 # Hard-code AK default to prevent mismatches
     sz = size(A)
     red = ntuple(i->(dims==Colon() || i in dims) ? 1 : sz[i], length(sz))
-    R = similar(A, ET, red)
+    R = if dims isa Colon
+        num_per_block = 2 * block_size
+        blocks = (prod(sz) + num_per_block - 1) ÷ num_per_block
+        similar(A, ET, 2 * blocks)
+    else
+        similar(A, ET, red)
+    end
+
+    # Use AcceleratedKernels if possible
+    if dims isa Colon || dims isa Integer
+        return AK.mapreduce(f, op, Base.materialize(A), get_backend(R);
+                            block_size, init,
+                            neutral=init,
+                            dims=dims isa Colon ? nothing : dims,
+                            temp = R)
+    end
 
     # perform the reduction
     if prod(sz) == 0
@@ -85,14 +101,14 @@ function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,
     end
 end
 
-Base.any(A::AnyGPUArray{Bool}) = mapreduce(identity, |, A)
-Base.all(A::AnyGPUArray{Bool}) = mapreduce(identity, &, A)
+Base.any(A::AnyGPUArray{Bool}) = AK.any(identity, A)
+Base.all(A::AnyGPUArray{Bool}) = AK.all(identity, A)
 
-Base.any(f::Function, A::AnyGPUArray) = mapreduce(f, |, A)
-Base.all(f::Function, A::AnyGPUArray) = mapreduce(f, &, A)
+Base.any(f::Function, A::AnyGPUArray) = AK.any(f, A)
+Base.all(f::Function, A::AnyGPUArray) = AK.all(f, A)
 
 Base.count(pred::Function, A::AnyGPUArray; dims=:, init=0) =
-    mapreduce(pred, Base.add_sum, A; init=init, dims=dims)
+    AK.count(pred, A; init, dims=dims isa Colon ? nothing : dims)
 
 # avoid calling into `initarray!`
 for (fname, op) in [(:sum, :(Base.add_sum)), (:prod, :(Base.mul_prod)),
@@ -101,7 +117,7 @@ for (fname, op) in [(:sum, :(Base.add_sum)), (:prod, :(Base.mul_prod)),
     fname! = Symbol(fname, '!')
     @eval begin
         Base.$(fname!)(f::Function, r::AnyGPUArray, A::AnyGPUArray{T}) where T =
-            GPUArrays.mapreducedim!(f, $(op), r, A; init=neutral_element($(op), T))
+            GPUArrays.mapreducedim!(f, $(op), r, A; init=AK.neutral_element($(op), T))
     end
 end
 
