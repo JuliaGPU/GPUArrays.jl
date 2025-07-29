@@ -55,6 +55,16 @@ end
             @test compare(A->mapreduce(x->x+x, +, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
         end
     end
+    # Test more corner cases. Tests from AcceleraterKernels.jl
+    for dims in [1,2,3,4,[1,2],[1,3],[1,4],[2,3],[2,4],[3,4],[1,2,3],[1,2,4],[1,3,4],[2,3,4],[1,2,3,4]]
+        for isize in 0:3
+            for jsize in 0:3
+                for ksize in 0:3
+                    @test compare(A->mapreduce(x->x+x, +, A; init=zero(Int32), dims), AT, rand(Int32(1):Int32(10), isize, jsize, ksize))
+                end
+            end
+        end
+    end
 end
 
 @testsuite "reductions/reduce" (AT, eltypes)->begin
@@ -66,6 +76,21 @@ end
                           (0,)=>[1]]
             @test compare(A->reduce(+, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
             @test compare(A->reduce(*, A; dims=dims, init=one(ET)), AT, rand(range, sz))
+            if ET <: Integer
+                @test compare(A->reduce(&, A; dims=dims, init=~zero(ET)), AT, rand(range, sz))
+                @test compare(A->reduce(|, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
+                @test compare(A->reduce(⊻, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
+            end
+        end
+    end
+    # Test more corner cases. Tests from AcceleraterKernels.jl
+    for dims in [1,2,3,4,[1,2],[1,3],[1,4],[2,3],[2,4],[3,4],[1,2,3],[1,2,4],[1,3,4],[2,3,4],[1,2,3,4]]
+        for isize in 0:3
+            for jsize in 0:3
+                for ksize in 0:3
+                    @test compare(A->reduce(+, A; init=zero(Int32), dims), AT, rand(Int32(1):Int32(10), isize, jsize, ksize))
+                end
+            end
         end
     end
 end
