@@ -51,8 +51,8 @@ function Base.sortperm!(ix::AnyGPUArray, A::AnyGPUArray; initialized=false, dims
     return ix
 end
 
-function Base.sortperm(c::AnyGPUVector; kwargs...)
-    AK.merge_sortperm!(KA.allocate(get_backend(c), Int, length(c)), c; initialized=false, kwargs...)
+function Base.sortperm(c::AnyGPUVector; initialized=false, kwargs...)
+    AK.merge_sortperm!(KA.allocate(get_backend(c), Int, length(c)), c; kwargs...)
 end
 
 function Base.sortperm(c::AnyGPUArray; dims, kwargs...)
