@@ -1,5 +1,6 @@
 module GPUArrays
 
+using GPUToolbox
 using KernelAbstractions
 using Serialization
 using Random
@@ -15,7 +16,7 @@ using LLVM.Interop
 using Reexport
 @reexport using GPUArraysCore
 
-using KernelAbstractions
+import KernelAbstractions as KA
 import AcceleratedKernels as AK
 
 # device functionality
@@ -32,6 +33,7 @@ include("host/mapreduce.jl")
 include("host/linalg.jl")
 include("host/math.jl")
 include("host/random.jl")
+include("host/sorting.jl")
 include("host/quirks.jl")
 include("host/uniformscaling.jl")
 include("host/statistics.jl")
