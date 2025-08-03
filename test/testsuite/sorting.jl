@@ -1,6 +1,6 @@
 @testsuite "sorting/sort" (AT, eltypes)->begin
     # Fuzzy correctness testing
-    @testset "$ET" for ET in eltypes[eltypes .<: Real]
+    @testset "$ET" for ET in filter(x -> x <: Real, eltypes)
         for _ in 1:10
             num_elems = rand(1:100_000)
             @test compare((A)->Base.sort!(A), AT, rand(ET, num_elems))
@@ -16,7 +16,7 @@ end
 
 @testsuite "sorting/sortperm" (AT, eltypes)->begin
     # Fuzzy correctness testing
-    @testset "$ET" for ET in eltypes[eltypes .<: Real]
+    @testset "$ET" for ET in filter(x -> x <: Real, eltypes)
         for _ in 1:10
             num_elems = rand(1:100_000)
             @test compare((ix, A)->Base.sortperm!(ix, A), AT, zeros(Int32, num_elems), rand(ET, num_elems))
@@ -32,7 +32,7 @@ end
 
 @testsuite "sorting/partialsort" (AT, eltypes)->begin
     local N = 10000
-    @testset "$ET" for ET in eltypes[eltypes .<: Real]
+    @testset "$ET" for ET in filter(x -> x <: Real, eltypes)
         @test compare((A)->Base.partialsort!(A, 1), AT, rand(ET, N))
         @test compare((A)->Base.partialsort!(A, 1; rev=true), AT, rand(ET, N))
 
