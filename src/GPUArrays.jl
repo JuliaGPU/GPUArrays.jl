@@ -1,5 +1,6 @@
 module GPUArrays
 
+using GPUToolbox
 using KernelAbstractions
 using Serialization
 using Random

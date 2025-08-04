@@ -16,7 +16,7 @@ function _reverse(input::AnyGPUArray{T, N}, output::AnyGPUArray{T, N};
     nd_idx = CartesianIndices(input)
 
     ## COV_EXCL_START
-    @kernel unsafe_indices=true function kernel(input::AbstractArray{T, N}, output::AbstractArray{T, N}) where {T, N}
+    @kernel unsafe_indices=true function kernel(input, output)
         offset_in = @groupsize()[1] * (@index(Group, Linear) - 1i32)
         index_in = offset_in + @index(Local, Linear)
 
@@ -32,7 +32,7 @@ function _reverse(input::AnyGPUArray{T, N}, output::AnyGPUArray{T, N};
     nthreads = 256
     nblocks = cld(length(input), nthreads)
 
-    kernel(get_backend(input), nblocks)(input, output; ndrange=length(nblocks))
+    kernel(get_backend(input), nblocks)(input, output; ndrange=length(input))
 end
 
 # in-place version, swapping elements on half the number of threads
@@ -52,10 +52,9 @@ function _reverse!(data::AnyGPUArray{T, N}; dims=1:ndims(data)) where {T, N}
     nd_idx = CartesianIndices(reduced_size)
 
     ## COV_EXCL_START
-    @kernel unsafe_indices=true function kernel(data::AbstractArray{T, N}) where {T, N}
+    @kernel unsafe_indices=true function kernel(data)
         offset_in = @groupsize()[1] * (@index(Group, Linear) - 1i32)
-
-        index_in = offset_in + threadIdx().x
+        index_in = offset_in + @index(Local, Linear)
 
         @inbounds if index_in <= reduced_length
             idx = Tuple(nd_idx[index_in])
@@ -80,7 +79,7 @@ function _reverse!(data::AnyGPUArray{T, N}; dims=1:ndims(data)) where {T, N}
     nthreads = 256
     nblocks = cld(prod(reduced_size), nthreads)
 
-    kernel(get_backend(input), nblocks)(input, output; ndrange=length(nblocks))
+    kernel(get_backend(data), nblocks)(data; ndrange=length(data))
 end
 
 
