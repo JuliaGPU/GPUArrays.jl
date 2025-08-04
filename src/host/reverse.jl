@@ -16,7 +16,7 @@ function _reverse(input::AnyGPUArray{T, N}, output::AnyGPUArray{T, N};
     nd_idx = CartesianIndices(input)
 
     ## COV_EXCL_START
-    @kernel cpu=false unsafe_indices=true function kernel(input::AbstractArray{T, N}, output::AbstractArray{T, N}) where {T, N}
+    @kernel unsafe_indices=true function kernel(input::AbstractArray{T, N}, output::AbstractArray{T, N}) where {T, N}
         offset_in = @groupsize()[1] * (@index(Group, Linear) - 1i32)
         index_in = offset_in + @index(Local, Linear)
 
@@ -54,7 +54,7 @@ function _reverse!(data::AnyGPUArray{T, N}; dims=1:ndims(data)) where {T, N}
     nd_idx = CartesianIndices(reduced_size)
 
     ## COV_EXCL_START
-    @kernel cpu=false unsafe_indices=true function kernel(data::AbstractArray{T, N}) where {T, N}
+    @kernel unsafe_indices=true function kernel(data::AbstractArray{T, N}) where {T, N}
         offset_in = @groupsize()[1] * (@index(Group, Linear) - 1i32)
 
         index_in = offset_in + threadIdx().x
