@@ -128,16 +128,16 @@ end
 # 1-dimensional API
 
 # in-place
-Base.@propagate_inbounds function Base.reverse!(data::AnyGPUArray{T}, start::Integer,
+Base.@propagate_inbounds function Base.reverse!(data::AnyGPUVector{T}, start::Integer,
                                                 stop::Integer=length(data)) where {T}
     _reverse!(view(data, start:stop))
     return data
 end
 
-Base.reverse!(data::AnyGPUArray{T}) where {T} = @inbounds reverse!(data, 1, length(data))
+Base.reverse!(data::AnyGPUVector{T}) where {T} = @inbounds reverse!(data, 1, length(data))
 
 # out-of-place
-Base.@propagate_inbounds function Base.reverse(input::AnyGPUArray{T}, start::Integer,
+Base.@propagate_inbounds function Base.reverse(input::AnyGPUVector{T}, start::Integer,
                                                stop::Integer=length(input)) where {T}
     output = similar(input)
 
@@ -148,4 +148,4 @@ Base.@propagate_inbounds function Base.reverse(input::AnyGPUArray{T}, start::Int
     return output
 end
 
-Base.reverse(data::AnyGPUArray{T}) where {T} = @inbounds reverse(data, 1, length(data))
+Base.reverse(data::AnyGPUVector{T}) where {T} = @inbounds reverse(data, 1, length(data))
