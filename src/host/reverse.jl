@@ -26,8 +26,6 @@ function _reverse(input::AnyGPUArray{T, N}, output::AnyGPUArray{T, N};
             index_out =  lin_idx[idx...]
             output[index_out] = input[index_in]
         end
-
-        return
     end
     ## COV_EXCL_STOP
 
@@ -71,8 +69,6 @@ function _reverse!(data::AnyGPUArray{T, N}; dims=1:ndims(data)) where {T, N}
                 data[index_in] = temp
             end
         end
-
-        return
     end
     ## COV_EXCL_STOP
 
