@@ -30,9 +30,8 @@ function _reverse(input::AnyGPUArray{T, N}, output::AnyGPUArray{T, N};
     ## COV_EXCL_STOP
 
     nthreads = 256
-    nblocks = cld(length(input), nthreads)
 
-    kernel(get_backend(input), nblocks)(input, output; ndrange=length(input))
+    kernel(get_backend(input), nthreads)(input, output; ndrange=length(input))
 end
 
 # in-place version, swapping elements on half the number of threads
@@ -77,9 +76,8 @@ function _reverse!(data::AnyGPUArray{T, N}; dims=1:ndims(data)) where {T, N}
     # ignoring the threads that cross the mid-point
 
     nthreads = 256
-    nblocks = cld(prod(reduced_size), nthreads)
 
-    kernel(get_backend(data), nblocks)(data; ndrange=length(data))
+    kernel(get_backend(data), nthreads)(data; ndrange=length(data))
 end
 
 
