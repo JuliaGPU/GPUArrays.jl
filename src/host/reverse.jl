@@ -17,7 +17,7 @@ function _reverse(input::AnyGPUArray{T, N}, output::AnyGPUArray{T, N};
 
     ## COV_EXCL_START
     @kernel unsafe_indices=true function kernel(input, output)
-        offset_in = @groupsize()[1] * (@index(Group, Linear) - 1i32)
+        offset_in = Int32(@groupsize()[1]) * (@index(Group, Linear) - 1i32)
         index_in = offset_in + @index(Local, Linear)
 
         @inbounds if index_in <= length(input)
@@ -52,7 +52,7 @@ function _reverse!(data::AnyGPUArray{T, N}; dims=1:ndims(data)) where {T, N}
 
     ## COV_EXCL_START
     @kernel unsafe_indices=true function kernel(data)
-        offset_in = @groupsize()[1] * (@index(Group, Linear) - 1i32)
+        offset_in = Int32(@groupsize()[1]) * (@index(Group, Linear) - 1i32)
         index_in = offset_in + @index(Local, Linear)
 
         @inbounds if index_in <= reduced_length
