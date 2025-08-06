@@ -16,6 +16,7 @@ using Test
 
 using Adapt
 
+test_result(a, b; kwargs...) = a == b
 test_result(a::Number, b::Number; kwargs...) = ≈(a, b; kwargs...)
 test_result(a::Missing, b::Missing; kwargs...) = true
 test_result(a::Number, b::Missing; kwargs...) = false
