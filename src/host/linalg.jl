@@ -35,6 +35,8 @@ LinearAlgebra.transpose!(B::AnyGPUArray, A::AnyGPUArray) = transpose_f!(transpos
 LinearAlgebra.adjoint!(B::AnyGPUArray, A::AnyGPUArray) = transpose_f!(adjoint, B, A)
 function transpose_f!(f, B::AnyGPUMatrix{T}, A::AnyGPUMatrix{T}) where T
     axes(B,1) == axes(A,2) && axes(B,2) == axes(A,1) || throw(DimensionMismatch(string(f)))
+    # array with size zero dimension
+    axes(A,1) == 1:0 || axes(A, 2) == 1:0 && return B
     @kernel function transpose_kernel!(B, A)
         idx = @index(Global, Cartesian)
         @inbounds B[idx[2], idx[1]] = f(A[idx[1], idx[2]])
