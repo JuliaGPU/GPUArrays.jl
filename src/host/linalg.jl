@@ -14,6 +14,7 @@ function LinearAlgebra.transpose!(B::AbstractGPUMatrix, A::AbstractGPUVector)
 end
 function LinearAlgebra.adjoint!(B::AbstractGPUVector, A::AbstractGPUMatrix)
     axes(B,1) == axes(A,2) && axes(A,1) == 1:1 || throw(DimensionMismatch("adjoint"))
+    axes(A,1) == 1:0 || axes(A, 2) == 1:0 && return B
     @kernel function adjoint_kernel!(B, A)
         idx = @index(Global, Linear)
         @inbounds B[idx] = adjoint(A[1, idx])
@@ -23,6 +24,7 @@ function LinearAlgebra.adjoint!(B::AbstractGPUVector, A::AbstractGPUMatrix)
 end
 function LinearAlgebra.adjoint!(B::AbstractGPUMatrix, A::AbstractGPUVector)
     axes(B,2) == axes(A,1) && axes(B,1) == 1:1 || throw(DimensionMismatch("adjoint"))
+    axes(A,1) == 1:0 || axes(A, 2) == 1:0 && return B
     @kernel function adjoint_kernel!(B, A)
         idx = @index(Global, Linear)
         @inbounds B[1, idx] = adjoint(A[idx])
