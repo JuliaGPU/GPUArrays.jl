@@ -7,7 +7,7 @@
     cpu_rng = Random.default_rng()
 
     @testset "rand" begin  # uniform
-        for T in eltypes, d in (10, (10,10), (128,128))
+        for T in eltypes, d in (10, (10, 10), (128, 128))
             A = AT{T}(undef, d)
             B = copy(A)
             rand!(rng, A)
