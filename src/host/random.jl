@@ -97,8 +97,9 @@ function Random.randn!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
     @kernel function randn!(a, randstates)
         i = @index(Global, Linear)
         idx = 2*(i - 1) + 1
-        U1 = gpu_rand(T, i, randstates)
-        U2 = gpu_rand(T, i, randstates)
+        threadidx = (i-1)%length(randstates) + 1
+        U1 = gpu_rand(T, threadidx, randstates)
+        U2 = gpu_rand(T, threadidx, randstates)
         Z0 = sqrt(T(-2.0)*log(U1))*cos(T(2pi)*U2)
         Z1 = sqrt(T(-2.0)*log(U1))*sin(T(2pi)*U2)
         @inbounds a[idx] = Z0
