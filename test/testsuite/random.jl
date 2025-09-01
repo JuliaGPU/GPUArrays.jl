@@ -7,7 +7,7 @@
     cpu_rng = Random.default_rng()
 
     @testset "rand" begin  # uniform
-        for T in eltypes, d in (10, (10, 10), (128, 128))
+        for T in eltypes, d in (10, (10,10))
             A = AT{T}(undef, d)
             B = copy(A)
             rand!(rng, A)
@@ -44,7 +44,7 @@
     @testset "randn" begin  # normally-distributed
         # XXX: randn calls sqrt, and Base's sqrt(::Complex) performs
         #      checked type conversions that throw boxed numbers.
-        for T in filter(isrealfloattype, eltypes), d in (2, (2,2))
+        for T in filter(isrealfloattype, eltypes), d in (2, (2, 2), (128, 128))
             A = AT{T}(undef, d)
             B = copy(A)
             randn!(rng, A)
