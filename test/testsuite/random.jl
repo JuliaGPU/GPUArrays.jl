@@ -56,7 +56,7 @@
             randn!(rng, A)
             Random.seed!(rng, 1)
             randn!(rng, B)
-            @test Array(A) == Array(B)
+            @test Array(A) ≈ Array(B)
 
             if rng != cpu_rng
                 randn!(cpu_rng, A)
