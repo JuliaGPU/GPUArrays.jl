@@ -228,7 +228,7 @@ function findminmax(binop, A::AnyGPUArray; init, dims)
         (x, i), (y, j) = t1, t2
 
         binop(x, y) && return t2
-        x == y && return (x, min(i, j))
+        isequal(x, y) && return (x, min(i, j))
         return t1
     end
 
