@@ -1,5 +1,6 @@
 module GPUArrays
 
+using GPUToolbox
 using KernelAbstractions
 using Serialization
 using Random
@@ -16,6 +17,7 @@ using Reexport
 @reexport using GPUArraysCore
 
 using KernelAbstractions
+import AcceleratedKernels as AK
 
 # device functionality
 include("device/abstractarray.jl")
@@ -26,6 +28,7 @@ include("host/construction.jl")
 ## integrations and specialized methods
 include("host/base.jl")
 include("host/indexing.jl")
+include("host/reverse.jl")
 include("host/broadcast.jl")
 include("host/mapreduce.jl")
 include("host/linalg.jl")
