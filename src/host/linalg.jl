@@ -107,7 +107,7 @@ end
 ## copy a triangular part of a matrix to another matrix
 
 if isdefined(LinearAlgebra, :copytrito!)
-    function LinearAlgebra.copytrito!(B::AbstractGPUMatrix, A::AbstractGPUMatrix, uplo::AbstractChar)
+    function LinearAlgebra.copytrito!(B::AbstractGPUMatrix{T}, A::AbstractGPUMatrix{T}, uplo::AbstractChar) where {T}
         LinearAlgebra.BLAS.chkuplo(uplo)
         m,n = size(A)
         m1,n1 = size(B)
