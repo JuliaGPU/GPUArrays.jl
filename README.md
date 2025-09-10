@@ -18,7 +18,7 @@
 [gh-img]: https://github.com/JuliaGPU/GPUArrays.jl/actions/workflows/Test.yml/badge.svg?branch=master
 [gh-url]: https://github.com/JuliaGPU/GPUArrays.jl/actions/workflows/Test.yml
 
-[buildkite-img]: https://badge.buildkite.com/05f9b27c5ce6c3906566fb66cfc42d44586e16d88a805a0b7b.svg
+[buildkite-img]: https://badge.buildkite.com/05f9b27c5ce6c3906566fb66cfc42d44586e16d88a805a0b7b.svg?branch=master
 [buildkite-url]: https://buildkite.com/julialang/gpuarrays-dot-jl
 
 [pkgeval-img]: https://juliaci.github.io/NanosoldierReports/pkgeval_badges/G/GPUArrays.svg
