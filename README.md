@@ -4,7 +4,7 @@
 
 | **Documentation**                                                         | **Build Status**                                                                                   | **Coverage**                    |
 |:-------------------------------------------------------------------------:|:--------------------------------------------------------------------------------------------------:|:-------------------------------:|
-| [![][docs-stable-img]][docs-stable-url] [![][docs-dev-img]][docs-dev-url] | [![][gitlab-img]][gitlab-url] [![][travis-img]][travis-url] [![PkgEval][pkgeval-img]][pkgeval-url] | [![][codecov-img]][codecov-url] |
+| [![][docs-stable-img]][docs-stable-url] [![][docs-dev-img]][docs-dev-url] | [![][gh-img]][gh-url] [![][buildkite-img]][buildkite-url] [![PkgEval][pkgeval-img]][pkgeval-url] | [![][codecov-img]][codecov-url] |
 
 [docs-stable-img]: https://img.shields.io/badge/docs-stable-blue.svg
 [docs-stable-url]: http://JuliaGPU.github.io/GPUArrays.jl/stable/
@@ -15,8 +15,11 @@
 [gitlab-img]: https://gitlab.com/JuliaGPU/GPUArrays.jl/badges/master/pipeline.svg
 [gitlab-url]: https://gitlab.com/JuliaGPU/GPUArrays.jl/commits/master
 
-[travis-img]: https://api.travis-ci.com/JuliaGPU/GPUArrays.jl.svg?branch=master
-[travis-url]: https://travis-ci.com/JuliaGPU/GPUArrays.jl
+[gh-img]: https://github.com/JuliaGPU/GPUArrays.jl/actions/workflows/Test.yml/badge.svg?branch=master
+[gh-url]: https://github.com/JuliaGPU/GPUArrays.jl/actions/workflows/Test.yml
+
+[buildkite-img]: https://badge.buildkite.com/05f9b27c5ce6c3906566fb66cfc42d44586e16d88a805a0b7b.svg?branch=master
+[buildkite-url]: https://buildkite.com/julialang/gpuarrays-dot-jl
 
 [pkgeval-img]: https://juliaci.github.io/NanosoldierReports/pkgeval_badges/G/GPUArrays.svg
 [pkgeval-url]: https://juliaci.github.io/NanosoldierReports/pkgeval_badges/G/GPUArrays.html
