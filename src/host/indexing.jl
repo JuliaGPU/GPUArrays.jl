@@ -191,6 +191,7 @@ Base.getindex(ei::EachIndex, i::Int) = ei.indices[i]
 Base.IndexStyle(::Type{<:EachIndex}) = Base.IndexLinear()
 
 function Base.findfirst(f::Function, A::AnyGPUArray)
+    isempty(A) && return nothing
     indices = EachIndex(A)
     dummy_index = first(indices)
 
