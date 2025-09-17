@@ -2,6 +2,12 @@ using Distributed, Test, JLArrays
 
 include("testsuite.jl")
 
+# Disable Float16-related tests until JuliaGPU/KernelAbstractions#600 is resolved
+@static if isdefined(JLArrays.KernelAbstractions, :POCL)
+    TestSuite.supported_eltypes(::Type{<:JLArray}) =
+        setdiff(TestSuite.supported_eltypes(), [Float16, ComplexF16])
+end
+
 using Random
 
 if VERSION >= v"1.13.0-DEV.1044"
