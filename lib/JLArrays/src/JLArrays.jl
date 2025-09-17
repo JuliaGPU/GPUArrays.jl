@@ -13,7 +13,7 @@ using GPUArrays
 using Adapt
 
 import KernelAbstractions
-import KernelAbstractions: Adapt, StaticArrays, Backend, Kernel, StaticSize, DynamicSize, partition, blocks, workitems, launch_config
+import KernelAbstractions: Adapt, StaticArrays, Backend, Kernel, StaticSize, DynamicSize, partition, blocks, workitems, launch_config, POCL
 
 
 #
@@ -41,27 +41,6 @@ Adapt.adapt_structure(to::Adaptor, r::Base.RefValue) = JlRefValue(adapt(to, r[])
 
 # array type
 
-struct JLDeviceArray{T, N} <: AbstractDeviceArray{T, N}
-    data::Vector{UInt8}
-    offset::Int
-    dims::Dims{N}
-end
-
-Base.elsize(::Type{<:JLDeviceArray{T}}) where {T} = sizeof(T)
-
-Base.size(x::JLDeviceArray) = x.dims
-Base.sizeof(x::JLDeviceArray) = Base.elsize(x) * length(x)
-
-Base.unsafe_convert(::Type{Ptr{T}}, x::JLDeviceArray{T}) where {T} =
-    convert(Ptr{T}, pointer(x.data)) + x.offset*Base.elsize(x)
-
-# conversion of untyped data to a typed Array
-function typed_data(x::JLDeviceArray{T}) where {T}
-    unsafe_wrap(Array, pointer(x), x.dims)
-end
-
-@inline Base.getindex(A::JLDeviceArray, index::Integer) = getindex(typed_data(A), index)
-@inline Base.setindex!(A::JLDeviceArray, x, index::Integer) = setindex!(typed_data(A), x, index)
 
 
 #
@@ -335,8 +314,10 @@ end
 
 ## GPUArrays interfaces
 
-Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N} =
-  JLDeviceArray{T,N}(x.data[], x.offset, x.dims)
+function Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N}
+    arr = typed_data(x)
+    Adapt.adapt_storage(POCL.KernelAdaptor([pointer(arr)]), arr)
+end
 
 function GPUArrays.mapreducedim!(f, op, R::AnyJLArray, A::Union{AbstractArray,Broadcast.Broadcasted};
                                  init=nothing)
@@ -377,10 +358,8 @@ KernelAbstractions.allocate(::JLBackend, ::Type{T}, dims::Tuple) where T = JLArr
     return ndrange, workgroupsize, iterspace, dynamic
 end
 
-KernelAbstractions.isgpu(b::JLBackend) = false
-
 function convert_to_cpu(obj::Kernel{JLBackend, W, N, F}) where {W, N, F}
-    return Kernel{typeof(KernelAbstractions.CPU(; static = obj.backend.static)), W, N, F}(KernelAbstractions.CPU(; static = obj.backend.static), obj.f)
+    return Kernel{typeof(KernelAbstractions.POCLBackend()), W, N, F}(KernelAbstractions.POCLBackend(), obj.f)
 end
 
 function (obj::Kernel{JLBackend})(args...; ndrange=nothing, workgroupsize=nothing)
@@ -391,6 +370,6 @@ end
 
 Adapt.adapt_storage(::JLBackend, a::Array) = Adapt.adapt(JLArrays.JLArray, a)
 Adapt.adapt_storage(::JLBackend, a::JLArrays.JLArray) = a
-Adapt.adapt_storage(::KernelAbstractions.CPU, a::JLArrays.JLArray) = convert(Array, a)
+Adapt.adapt_storage(::KernelAbstractions.POCLBackend, a::JLArrays.JLArray) = convert(Array, a)
 
 end
