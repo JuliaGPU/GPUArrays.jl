@@ -417,7 +417,7 @@ else
     success = @static if VERSION < v"1.13.0-DEV.1044"
         !o_ts.anynonpass
     else
-        o_ts.anynonpass == 0x1
+        o_ts.anynonpass == 0x01
     end
 
     if success
