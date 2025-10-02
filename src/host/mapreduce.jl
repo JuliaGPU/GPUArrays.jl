@@ -24,6 +24,12 @@ neutral_element(::typeof(Base.mul_prod), T) = one(T)
 neutral_element(::typeof(Base.min), T) = typemax(T)
 neutral_element(::typeof(Base.max), T) = typemin(T)
 neutral_element(::typeof(Base._extrema_rf), ::Type{<:NTuple{2,T}}) where {T} = typemax(T), typemin(T)
+@static if isdefined(Base, :and_all) # VERSION >~ v"1.13-"
+    neutral_element(::typeof(Base.:(and_all)), T) = ~zero(T)
+end
+@static if isdefined(Base, :or_any) # VERSION >~ v"1.13-"
+    neutral_element(::typeof(Base.:(or_any)), T) = zero(T)
+end
 
 # resolve ambiguities
 Base.mapreduce(f, op, A::AnyGPUArray, As::AbstractArrayOrBroadcasted...;
