@@ -351,8 +351,8 @@ println("Testing finished in $elapsed")
 else
     # construct a testset to render the test results
     o_ts = Test.DefaultTestSet("Overall")
+    completed_tests = Set{String}()
     Test.@with_testset o_ts begin
-        completed_tests = Set{String}()
         for (testname, (resp,)) in results
             push!(completed_tests, testname)
             if isa(resp, Test.DefaultTestSet)
@@ -413,7 +413,14 @@ else
     end
     println()
     Test.print_test_results(o_ts, 1)
-    if !o_ts.anynonpass
+
+    success = @static if VERSION < v"1.13.0-DEV.1044"
+        !o_ts.anynonpass
+    else
+        o_ts.anynonpass == 0x1
+    end
+
+    if success
         println("    \033[32;1mSUCCESS\033[0m")
     else
         println("    \033[31;1mFAILURE\033[0m\n")

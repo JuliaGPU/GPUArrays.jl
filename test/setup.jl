@@ -4,15 +4,16 @@ include("testsuite.jl")
 
 using Random
 
+@static if VERSION >= v"1.13.0-DEV.1044"
+    using Base.ScopedValues
+end
 
 ## entry point
 
 function runtests(f, name)
-    old_print_setting = Test.TESTSET_PRINT_ENABLE[]
     @static if VERSION < v"1.13.0-DEV.1044"
+        old_print_setting = Test.TESTSET_PRINT_ENABLE[]
         Test.TESTSET_PRINT_ENABLE[] = false
-    else
-        Test.TESTSET_PRINT_ENABLE[] => false
     end
 
     try
@@ -34,7 +35,11 @@ function runtests(f, name)
                 $f()
             end
         end
-        data = Core.eval(mod, ex)
+        data = @static if VERSION < v"1.13.0-DEV.1044"
+            Core.eval(mod, ex)
+        else
+            @with Test.TESTSET_PRINT_ENABLE => false Core.eval(mod, ex)
+        end
         #data[1] is the testset
 
         # process results
@@ -62,8 +67,6 @@ function runtests(f, name)
     finally
         @static if VERSION < v"1.13.0-DEV.1044"
             Test.TESTSET_PRINT_ENABLE[] = old_print_setting
-        else
-            Test.TESTSET_PRINT_ENABLE[] => old_print_setting
         end
     end
 end
