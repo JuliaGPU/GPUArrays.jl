@@ -240,7 +240,7 @@ Base.convert(::Type{T}, x::T) where T <: JLArray = x
 
 ## broadcast
 
-using Base.Broadcast: BroadcastStyle, Broadcasted
+import Base.Broadcast: BroadcastStyle, Broadcasted
 
 struct JLArrayStyle{N} <: AbstractGPUArrayStyle{N} end
 JLArrayStyle{M}(::Val{N}) where {N,M} = JLArrayStyle{N}()
