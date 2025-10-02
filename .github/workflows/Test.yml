@@ -38,6 +38,35 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
           files: lcov.info
+  ka:
+    name: KA 0.10 Julia latest - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v2
+      - name: Develop subpackages
+        run: |
+          julia --project -e '
+            using Pkg
+            Pkg.develop([PackageSpec(; name=basename(path), path) for path in ARGS])
+            Pkg.add(url="https://github.com/JuliaGPU/KernelAbstractions.jl", rev="main")
+          ' lib/GPUArraysCore lib/JLArrays
+      - uses: julia-actions/julia-runtest@v1
+      - uses: julia-actions/julia-processcoverage@v1
+        with:
+          directories: src,lib
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          files: lcov.info
   opencl:
     name: OpenCL.jl
     runs-on: ubuntu-latest
