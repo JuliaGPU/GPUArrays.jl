@@ -388,7 +388,7 @@ KernelAbstractions.allocate(::JLBackend, ::Type{T}, dims::Tuple) where T = JLArr
     return ndrange, workgroupsize, iterspace, dynamic
 end
 
-@static if !isdefined(JLArrays.KernelAbstractions, :isgpu) # KA v0.9
+@static if isdefined(JLArrays.KernelAbstractions, :isgpu) # KA v0.9
     KernelAbstractions.isgpu(b::JLBackend) = false
 end
 
