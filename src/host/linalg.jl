@@ -244,7 +244,7 @@ function Base.:\(D::Diagonal{<:Any, <:AbstractGPUArray}, B::AbstractGPUVecOrMat)
     end
 end
 
-function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray}
+function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
                             A::Diagonal{<:Any, <:AbstractGPUArray},
                             B::Diagonal{<:Any, <:AbstractGPUArray})
     dc = C.diag
