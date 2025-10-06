@@ -24,7 +24,7 @@ JLD2Ext = "JLD2"
 [compat]
 Adapt = "4.0"
 GPUArraysCore = "= 0.2.0"
-JLD2 = "0.4, 0.5"
+JLD2 = "0.4, 0.5, 0.6"
 KernelAbstractions = "0.9.28"
 LLVM = "3.9, 4, 5, 6, 7, 8, 9"
 LinearAlgebra = "1"
