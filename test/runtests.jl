@@ -276,11 +276,11 @@ t1 = now()
 elapsed = canonicalize(Dates.CompoundPeriod(t1-t0))
 println("Testing finished in $elapsed")
 
+# construct a testset to render the test results
+completed_tests = Set{String}()
+o_ts = Test.DefaultTestSet("Overall")
 @static if VERSION < v"1.13.0-DEV.1044"
-    # construct a testset to render the test results
-    o_ts = Test.DefaultTestSet("Overall")
     Test.push_testset(o_ts)
-    completed_tests = Set{String}()
     for (testname, (resp,)) in results
         push!(completed_tests, testname)
         if isa(resp, Test.DefaultTestSet)
@@ -349,10 +349,7 @@ println("Testing finished in $elapsed")
         throw(Test.FallbackTestSetException("Test run finished with errors"))
     end
 else
-    # construct a testset to render the test results
-    o_ts = Test.DefaultTestSet("Overall")
     Test.@with_testset o_ts begin
-        completed_tests = Set{String}()
         for (testname, (resp,)) in results
             push!(completed_tests, testname)
             if isa(resp, Test.DefaultTestSet)
@@ -413,7 +410,14 @@ else
     end
     println()
     Test.print_test_results(o_ts, 1)
-    if !o_ts.anynonpass
+
+    success = @static if VERSION < v"1.13.0-DEV.1044"
+        !o_ts.anynonpass
+    else
+        o_ts.anynonpass == 0x01
+    end
+
+    if success
         println("    \033[32;1mSUCCESS\033[0m")
     else
         println("    \033[31;1mFAILURE\033[0m\n")
