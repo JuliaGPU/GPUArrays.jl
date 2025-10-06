@@ -244,6 +244,20 @@ function Base.:\(D::Diagonal{<:Any, <:AbstractGPUArray}, B::AbstractGPUVecOrMat)
     end
 end
 
+function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
+                            A::Diagonal{<:Any, <:AbstractGPUArray},
+                            B::Diagonal{<:Any, <:AbstractGPUArray})
+    dc = C.diag
+    da = A.diag
+    db = B.diag
+    d = length(dc)
+    length(da) == d || throw(DimensionMismatch("right hand side has $(length(da)) rows but output is $d by $d"))
+    length(db) == d || throw(DimensionMismatch("left hand side has $(length(db)) rows but output is $d by $d"))
+    @. dc = da * db
+
+    return C
+end
+
 function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
                             D::Diagonal{<:Any, <:AbstractGPUArray},
                             A::AbstractGPUVecOrMat)

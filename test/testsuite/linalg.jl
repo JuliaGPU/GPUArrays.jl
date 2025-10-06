@@ -243,6 +243,13 @@
                 mul!(X, B, D, α, β)
                 mul!(Y, collect(B), Diagonal(collect(d)), α, β)
                 @test collect(X) ≈ Y
+                a = AT(rand(elty, n))
+                b = AT(rand(elty, n))
+                C = Diagonal(d)
+                B = Diagonal(b)
+                A = Diagonal(a)
+                mul!(C, A, B)
+                @test collect(C.diag) ≈ collect(A.diag) .* collect(B.diag) 
             end
         end
 
