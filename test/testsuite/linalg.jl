@@ -250,6 +250,11 @@
                 A = Diagonal(a)
                 mul!(C, A, B)
                 @test collect(C.diag) ≈ collect(A.diag) .* collect(B.diag) 
+                a = AT(diagm(rand(elty, n)))
+                b = AT(diagm(rand(elty, n)))
+                C = Diagonal(d)
+                mul!(C, a, b)
+                @test collect(C) ≈ Diagonal(collect(a) * collect(b)) 
             end
         end
 
