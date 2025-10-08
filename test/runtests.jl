@@ -4,7 +4,7 @@ import GPUArrays
 include("testsuite.jl")
 
 const init_code = quote
-    using Test, JLArrays
+    using Test, JLArrays, SparseArrays
 
     include("testsuite.jl")
 
@@ -16,7 +16,11 @@ const init_code = quote
 end
 
 custom_tests = Dict{String, Expr}()
-for AT in (:JLArray, :Array), name in keys(TestSuite.tests)
+for AT in (:JLArray, :Array), name in filter(n->n != "sparse", keys(TestSuite.tests))
+    custom_tests["$(AT)/$name"] = :(TestSuite.tests[$name]($AT))
+end
+
+for AT in (:JLSparseMatrixCSR, :JLSparseMatrixCSC, :JLSparseVector, :SparseMatrixCSC, :SparseVector), name in ["sparse"]
     custom_tests["$(AT)/$name"] = :(TestSuite.tests[$name]($AT))
 end
 
