@@ -97,6 +97,7 @@ include("testsuite/math.jl")
 include("testsuite/random.jl")
 include("testsuite/uniformscaling.jl")
 include("testsuite/statistics.jl")
+include("testsuite/sparse.jl")
 include("testsuite/alloc_cache.jl")
 include("testsuite/jld2ext.jl")
 

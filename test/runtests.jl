@@ -1,5 +1,6 @@
 using Distributed
 using Dates
+using SparseArrays
 import REPL
 using Printf: @sprintf
 
@@ -47,7 +48,12 @@ include("setup.jl")     # make sure everything is precompiled
 # choose tests
 const tests = []
 const test_runners = Dict()
-for AT in (JLArray, Array), name in keys(TestSuite.tests)
+for AT in (JLArray, Array), name in filter(n->n != "sparse", keys(TestSuite.tests))
+    push!(tests, "$(AT)/$name")
+    test_runners["$(AT)/$name"] = ()->TestSuite.tests[name](AT)
+end
+
+for AT in ( JLSparseMatrixCSR, JLSparseMatrixCSC, JLSparseVector, SparseMatrixCSC, SparseVector), name in ["sparse"]
     push!(tests, "$(AT)/$name")
     test_runners["$(AT)/$name"] = ()->TestSuite.tests[name](AT)
 end
