@@ -282,7 +282,7 @@ end
 
 function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
                             D::Diagonal{<:Any, <:AbstractGPUArray},
-                            A::AbstractGPUVecOrMat)
+                            A::Union{AbstractGPUArray, Adjoint{T,<:AbstractGPUArray{T}}, Transpose{T,<:AbstractGPUArray{T}}}) where {T}
     dd = D.diag
     d = length(dd)
     m, n = size(A, 1), size(A, 2)
@@ -290,15 +290,14 @@ function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
     m == d || throw(DimensionMismatch("right hand side has $m rows but D is $d by $d"))
     (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
     @. B = dd * A
-
     B
 end
 
 function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
                             D::Diagonal{<:Any, <:AbstractGPUArray},
-                            A::AbstractGPUVecOrMat,
+                            A::Union{AbstractGPUArray, Adjoint{T,<:AbstractGPUArray{T}}, Transpose{T,<:AbstractGPUArray{T}}},
                             α::Number,
-                            β::Number)
+                            β::Number) where {T}
     dd = D.diag
     d = length(dd)
     m, n = size(A, 1), size(A, 2)

@@ -238,6 +238,9 @@
                 mul!(X, D, B)
                 mul!(Y, Diagonal(collect(d)), collect(B))
                 @test collect(X) ≈ Y
+                mul!(X, D, adjoint(B))
+                mul!(Y, Diagonal(collect(d)), collect(adjoint(B)))
+                @test collect(X) ≈ Y
                 mul!(X, D, B, α, β)
                 mul!(Y, Diagonal(collect(d)), collect(B), α, β)
                 @test collect(X) ≈ Y
