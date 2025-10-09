@@ -266,8 +266,8 @@ function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
 end
 
 function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
-                            A::AbstractGPUArray,
-                            B::AbstractGPUArray)
+                            A::Union{AbstractGPUArray, Adjoint{T,<:AbstractGPUArray{T}}, Transpose{T,<:AbstractGPUArray{T}}},
+                            B::Union{AbstractGPUArray, Adjoint{T,<:AbstractGPUArray{T}}, Transpose{T,<:AbstractGPUArray{T}}}) where {T}
     dc = C.diag
     d  = length(dc)
     m, n   = size(A, 1), size(A, 2)

@@ -259,6 +259,11 @@
                 C = Diagonal(d)
                 mul!(C, a, b)
                 @test collect(C) ≈ Diagonal(collect(a) * collect(b)) 
+                a = transpose(AT(diagm(rand(elty, n))))
+                b = adjoint(AT(diagm(rand(elty, n))))
+                C = Diagonal(d)
+                mul!(C, a, b)
+                @test collect(C) ≈ Diagonal(collect(a) * collect(b)) 
             end
         end
 
