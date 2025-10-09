@@ -59,7 +59,7 @@ function Base.copyto!(A::Array{T,N}, B::Transpose{T, <:AbstractGPUArray{T,N}}) w
 end
 
 function LinearAlgebra.tr(A::AbstractGPUMatrix)
-    checksquare(A)
+    LinearAlgebra.checksquare(A)
     sum(diag(A))
 end
 
