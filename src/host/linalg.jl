@@ -58,6 +58,13 @@ function Base.copyto!(A::Array{T,N}, B::Transpose{T, <:AbstractGPUArray{T,N}}) w
     copyto!(A, Transpose(Array(parent(B))))
 end
 
+## trace
+
+function LinearAlgebra.tr(A::AnyGPUMatrix)
+    LinearAlgebra.checksquare(A)
+    sum(diag(A))
+end
+
 ## copy upper triangle to lower and vice versa
 
 function LinearAlgebra.copytri!(A::AbstractGPUMatrix, uplo::AbstractChar, conjugate::Bool=false)
