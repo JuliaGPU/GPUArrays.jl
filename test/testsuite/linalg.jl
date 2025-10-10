@@ -238,6 +238,9 @@
                 mul!(X, D, B)
                 mul!(Y, Diagonal(collect(d)), collect(B))
                 @test collect(X) ≈ Y
+                mul!(X, D, adjoint(B))
+                mul!(Y, Diagonal(collect(d)), collect(adjoint(B)))
+                @test collect(X) ≈ Y
                 mul!(X, D, B, α, β)
                 mul!(Y, Diagonal(collect(d)), collect(B), α, β)
                 @test collect(X) ≈ Y
@@ -256,6 +259,11 @@
                 @test collect(C.diag) ≈ collect(A.diag) .* collect(B.diag) 
                 a = AT(diagm(rand(elty, n)))
                 b = AT(diagm(rand(elty, n)))
+                C = Diagonal(d)
+                mul!(C, a, b)
+                @test collect(C) ≈ Diagonal(collect(a) * collect(b)) 
+                a = transpose(AT(diagm(rand(elty, n))))
+                b = adjoint(AT(diagm(rand(elty, n))))
                 C = Diagonal(d)
                 mul!(C, a, b)
                 @test collect(C) ≈ Diagonal(collect(a) * collect(b)) 
