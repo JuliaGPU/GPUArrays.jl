@@ -394,7 +394,7 @@ function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::Abstrac
     C
 end
 
-@static if VERSION < v"1.12.0-"
+@static if !isdefined(LinearAlgebra, Symbol("@stable_muladdmul"))
 function LinearAlgebra.generic_matvecmul!(C::AbstractGPUVector, tA::AbstractChar, A::AbstractGPUMatrix, B::AbstractGPUVector, _add::MulAddMul = MulAddMul())
     generic_matmatmul!(C, wrap(A, tA), B, _add)
 end
