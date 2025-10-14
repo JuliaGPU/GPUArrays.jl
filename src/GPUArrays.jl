@@ -16,6 +16,7 @@ using Reexport
 @reexport using GPUArraysCore
 
 using KernelAbstractions
+import AcceleratedKernels as AK
 
 # device functionality
 include("device/abstractarray.jl")
@@ -27,6 +28,7 @@ include("host/construction.jl")
 include("host/base.jl")
 include("host/indexing.jl")
 include("host/broadcast.jl")
+include("host/accumulate.jl")
 include("host/mapreduce.jl")
 include("host/linalg.jl")
 include("host/math.jl")
