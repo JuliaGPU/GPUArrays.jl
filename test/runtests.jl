@@ -1,4 +1,5 @@
-using ParallelTestRunner
+using ParallelTestRunner: runtests
+import GPUArrays
 
 include("testsuite.jl")
 
@@ -19,11 +20,11 @@ for AT in (:JLArray, :Array), name in keys(TestSuite.tests)
     custom_tests["$(AT)/$name"] = :(TestSuite.tests[$name]($AT))
 end
 
-function testfilter(test)
+function test_filter(test)
     if startswith(test, "testsuite")
         return false
     end
     return true
 end
 
-runtests(ARGS; init_code, custom_tests, testfilter)
+runtests(GPUArrays, ARGS; init_code, custom_tests, test_filter)
