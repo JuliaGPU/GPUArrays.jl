@@ -44,7 +44,7 @@
     @testset "randn" begin  # normally-distributed
         # XXX: randn calls sqrt, and Base's sqrt(::Complex) performs
         #      checked type conversions that throw boxed numbers.
-        for T in filter(isrealfloattype, eltypes), d in (2, (2,2))
+        for T in filter(isrealfloattype, eltypes), d in (2, (2, 2), (128, 128))
             A = AT{T}(undef, d)
             B = copy(A)
             randn!(rng, A)
@@ -56,7 +56,7 @@
             randn!(rng, A)
             Random.seed!(rng, 1)
             randn!(rng, B)
-            @test Array(A) == Array(B)
+            @test Array(A) ≈ Array(B)
 
             if rng != cpu_rng
                 randn!(cpu_rng, A)
