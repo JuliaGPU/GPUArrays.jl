@@ -34,6 +34,13 @@ _sparse_array_type(sa::SparseMatrixCSC)    = SparseMatrixCSC
 function _sparse_array_type(sa::AbstractGPUSparseArray) end
 function _dense_array_type(sa::AbstractGPUSparseArray) end
 
+### INDEXING
+Base.getindex(A::AbstractGPUSparseVector, ::Colon)          = copy(A)
+Base.getindex(A::AbstractGPUSparseMatrix, ::Colon, ::Colon) = copy(A)
+Base.getindex(A::AbstractGPUSparseMatrix, i, ::Colon)       = getindex(A, i, 1:size(A, 2))
+Base.getindex(A::AbstractGPUSparseMatrix, ::Colon, i)       = getindex(A, 1:size(A, 1), i)
+Base.getindex(A::AbstractGPUSparseMatrix, I::Tuple{Integer,Integer}) = getindex(A, I[1], I[2])
+
 ### BROADCAST
 
 # broadcast container type promotion for combinations of sparse arrays and other types
