@@ -6,11 +6,14 @@
 
 module JLArrays
 
-export JLArray, JLVector, JLMatrix, jl, JLBackend
+export JLArray, JLVector, JLMatrix, jl, JLBackend, JLSparseVector, JLSparseMatrixCSC, JLSparseMatrixCSR
 
 using GPUArrays
 
 using Adapt
+using SparseArrays, LinearAlgebra
+
+import GPUArrays: _dense_array_type
 
 import KernelAbstractions
 import KernelAbstractions: Adapt, StaticArrays, Backend, Kernel, StaticSize, DynamicSize, partition, blocks, workitems, launch_config
@@ -115,7 +118,102 @@ mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
     end
 end
 
+mutable struct JLSparseVector{Tv, Ti} <: GPUArrays.AbstractGPUSparseVector{Tv, Ti}
+    iPtr::JLArray{Ti, 1}
+    nzVal::JLArray{Tv, 1}
+    len::Int
+    nnz::Ti
+
+    function JLSparseVector{Tv, Ti}(iPtr::JLArray{<:Integer, 1}, nzVal::JLArray{Tv, 1},
+                                    len::Integer) where {Tv, Ti <: Integer}
+        new{Tv, Ti}(iPtr, nzVal, len, length(nzVal))
+    end
+end
+SparseArrays.SparseVector(x::JLSparseVector) = SparseVector(length(x), Array(x.iPtr), Array(x.nzVal))
+SparseArrays.nnz(x::JLSparseVector)          = x.nnz 
+SparseArrays.nonzeroinds(x::JLSparseVector)  = x.iPtr
+SparseArrays.nonzeros(x::JLSparseVector)     = x.nzVal
+
+mutable struct JLSparseMatrixCSC{Tv, Ti} <: GPUArrays.AbstractGPUSparseMatrixCSC{Tv, Ti}
+    colPtr::JLArray{Ti, 1}
+    rowVal::JLArray{Ti, 1}
+    nzVal::JLArray{Tv, 1}
+    dims::NTuple{2,Int}
+    nnz::Ti
+
+    function JLSparseMatrixCSC{Tv, Ti}(colPtr::JLArray{<:Integer, 1}, rowVal::JLArray{<:Integer, 1},
+                                       nzVal::JLArray{Tv, 1}, dims::NTuple{2,<:Integer}) where {Tv, Ti <: Integer}
+        new{Tv, Ti}(colPtr, rowVal, nzVal, dims, length(nzVal))
+    end
+end
+function JLSparseMatrixCSC(colPtr::JLArray{Ti, 1}, rowVal::JLArray{Ti, 1}, nzVal::JLArray{Tv, 1}, dims::NTuple{2,<:Integer}) where {Tv, Ti <: Integer}
+    return JLSparseMatrixCSC{Tv, Ti}(colPtr, rowVal, nzVal, dims)
+end
+SparseArrays.SparseMatrixCSC(x::JLSparseMatrixCSC) = SparseMatrixCSC(size(x)..., Array(x.colPtr), Array(x.rowVal), Array(x.nzVal))
+
+JLSparseMatrixCSC(A::JLSparseMatrixCSC) = A
+
+function Base.getindex(A::JLSparseMatrixCSC{Tv, Ti}, i::Integer, j::Integer) where {Tv, Ti}
+    r1 = Int(@inbounds A.colPtr[j])
+    r2 = Int(@inbounds A.colPtr[j+1]-1)
+    (r1 > r2) && return zero(Tv)
+    r1 = searchsortedfirst(view(A.rowVal, r1:r2), i) + r1 - 1
+    ((r1 > r2) || (A.rowVal[r1] != i)) ? zero(Tv) : A.nzVal[r1]
+end
+
+mutable struct JLSparseMatrixCSR{Tv, Ti} <: GPUArrays.AbstractGPUSparseMatrixCSR{Tv, Ti}
+    rowPtr::JLArray{Ti, 1}
+    colVal::JLArray{Ti, 1}
+    nzVal::JLArray{Tv, 1}
+    dims::NTuple{2,Int}
+    nnz::Ti
+
+    function JLSparseMatrixCSR{Tv, Ti}(rowPtr::JLArray{<:Integer, 1}, colVal::JLArray{<:Integer, 1},
+                                       nzVal::JLArray{Tv, 1}, dims::NTuple{2,<:Integer}) where {Tv, Ti<:Integer}
+        new{Tv, Ti}(rowPtr, colVal, nzVal, dims, length(nzVal))
+    end
+end
+function JLSparseMatrixCSR(rowPtr::JLArray{Ti, 1}, colVal::JLArray{Ti, 1}, nzVal::JLArray{Tv, 1}, dims::NTuple{2,<:Integer}) where {Tv, Ti <: Integer}
+    return JLSparseMatrixCSR{Tv, Ti}(rowPtr, colVal, nzVal, dims)
+end
+function SparseArrays.SparseMatrixCSC(x::JLSparseMatrixCSR) 
+    x_transpose = SparseMatrixCSC(size(x, 2), size(x, 1), Array(x.rowPtr), Array(x.colVal), Array(x.nzVal))
+    return SparseMatrixCSC(transpose(x_transpose))
+end
+
+JLSparseMatrixCSR(A::JLSparseMatrixCSR) = A
+
+function Base.getindex(A::JLSparseMatrixCSR{Tv, Ti}, i0::Integer, i1::Integer) where {Tv, Ti}
+    c1 = Int(A.rowPtr[i0])
+    c2 = Int(A.rowPtr[i0+1]-1)
+    (c1 > c2) && return zero(Tv)
+    c1 = searchsortedfirst(A.colVal, i1, c1, c2, Base.Order.Forward)
+    (c1 > c2 || A.colVal[c1] != i1) && return zero(Tv)
+    nonzeros(A)[c1]
+end
+
 GPUArrays.storage(a::JLArray) = a.data
+GPUArrays._dense_array_type(a::JLArray{T, N}) where {T, N} = JLArray{T, N}
+GPUArrays._dense_array_type(::Type{JLArray{T, N}}) where {T, N} = JLArray{T, N}
+GPUArrays._dense_vector_type(a::JLArray{T, N}) where {T, N} = JLArray{T, 1}
+GPUArrays._dense_vector_type(::Type{JLArray{T, N}}) where {T, N} = JLArray{T, 1}
+
+GPUArrays._sparse_array_type(sa::JLSparseMatrixCSC) = JLSparseMatrixCSC
+GPUArrays._sparse_array_type(::Type{<:JLSparseMatrixCSC}) = JLSparseMatrixCSC
+GPUArrays._sparse_array_type(sa::JLSparseMatrixCSR) = JLSparseMatrixCSR
+GPUArrays._sparse_array_type(::Type{<:JLSparseMatrixCSR}) = JLSparseMatrixCSR
+GPUArrays._sparse_array_type(sa::JLSparseVector) = JLSparseVector
+GPUArrays._sparse_array_type(::Type{<:JLSparseVector}) = JLSparseVector
+
+GPUArrays._dense_array_type(sa::JLSparseVector) = JLArray 
+GPUArrays._dense_array_type(::Type{<:JLSparseVector}) = JLArray 
+GPUArrays._dense_array_type(sa::JLSparseMatrixCSC) = JLArray 
+GPUArrays._dense_array_type(::Type{<:JLSparseMatrixCSC}) = JLArray 
+GPUArrays._dense_array_type(sa::JLSparseMatrixCSR) = JLArray 
+GPUArrays._dense_array_type(::Type{<:JLSparseMatrixCSR}) = JLArray 
+
+GPUArrays._csc_type(sa::JLSparseMatrixCSR) = JLSparseMatrixCSC
+GPUArrays._csr_type(sa::JLSparseMatrixCSC) = JLSparseMatrixCSR
 
 # conversion of untyped data to a typed Array
 function typed_data(x::JLArray{T}) where {T}
@@ -216,6 +314,47 @@ end
 JLArray{T}(xs::AbstractArray{S,N}) where {T,N,S} = JLArray{T,N}(xs)
 (::Type{JLArray{T,N} where T})(x::AbstractArray{S,N}) where {S,N} = JLArray{S,N}(x)
 JLArray(A::AbstractArray{T,N}) where {T,N} = JLArray{T,N}(A)
+
+function JLSparseVector(xs::SparseVector{Tv, Ti}) where {Ti, Tv}
+    iPtr  = JLVector{Ti}(undef, length(xs.nzind))
+    nzVal = JLVector{Tv}(undef, length(xs.nzval))
+    copyto!(iPtr, convert(Vector{Ti}, xs.nzind))
+    copyto!(nzVal, convert(Vector{Tv}, xs.nzval))
+    return JLSparseVector{Tv, Ti}(iPtr, nzVal, length(xs),)
+end
+Base.length(x::JLSparseVector) = x.len
+Base.size(x::JLSparseVector) = (x.len,)
+
+function JLSparseMatrixCSC(xs::SparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
+    colPtr = JLVector{Ti}(undef, length(xs.colptr))
+    rowVal = JLVector{Ti}(undef, length(xs.rowval))
+    nzVal  = JLVector{Tv}(undef, length(xs.nzval))
+    copyto!(colPtr, convert(Vector{Ti}, xs.colptr))
+    copyto!(rowVal, convert(Vector{Ti}, xs.rowval))
+    copyto!(nzVal,  convert(Vector{Tv}, xs.nzval))
+    return JLSparseMatrixCSC{Tv, Ti}(colPtr, rowVal, nzVal, (xs.m, xs.n))
+end
+Base.length(x::JLSparseMatrixCSC) = prod(x.dims)
+Base.size(x::JLSparseMatrixCSC) = x.dims
+
+function JLSparseMatrixCSR(xs::SparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
+    csr_xs = SparseMatrixCSC(transpose(xs))
+    rowPtr = JLVector{Ti}(undef, length(csr_xs.colptr))
+    colVal = JLVector{Ti}(undef, length(csr_xs.rowval))
+    nzVal  = JLVector{Tv}(undef, length(csr_xs.nzval))
+    copyto!(rowPtr, convert(Vector{Ti}, csr_xs.colptr))
+    copyto!(colVal, convert(Vector{Ti}, csr_xs.rowval))
+    copyto!(nzVal,  convert(Vector{Tv}, csr_xs.nzval))
+    return JLSparseMatrixCSR{Tv, Ti}(rowPtr, colVal, nzVal, (xs.m, xs.n))
+end
+function JLSparseMatrixCSR(xs::JLSparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
+    return JLSparseMatrixCSR(SparseMatrixCSC(xs))
+end
+function JLSparseMatrixCSC(xs::JLSparseMatrixCSR{Tv, Ti}) where {Ti, Tv}
+    return JLSparseMatrixCSC(SparseMatrixCSC(xs))
+end
+Base.length(x::JLSparseMatrixCSR) = prod(x.dims)
+Base.size(x::JLSparseMatrixCSR) = x.dims
 
 # idempotency
 JLArray{T,N}(xs::JLArray{T,N}) where {T,N} = xs
@@ -358,9 +497,17 @@ function GPUArrays.mapreducedim!(f, op, R::AnyJLArray, A::Union{AbstractArray,Br
     R
 end
 
+Adapt.adapt_structure(to::Adaptor, x::JLSparseMatrixCSC{Tv,Ti}) where {Tv,Ti} =
+GPUSparseDeviceMatrixCSC{Tv,Ti,JLDeviceArray{Ti, 1}, JLDeviceArray{Tv, 1}}(adapt(to, x.colPtr), adapt(to, x.rowVal), adapt(to, x.nzVal), x.dims, x.nnz)
+Adapt.adapt_structure(to::Adaptor, x::JLSparseMatrixCSR{Tv,Ti}) where {Tv,Ti} =
+GPUSparseDeviceMatrixCSR{Tv,Ti,JLDeviceArray{Ti, 1}, JLDeviceArray{Tv, 1}}(adapt(to, x.rowPtr), adapt(to, x.colVal), adapt(to, x.nzVal), x.dims, x.nnz)
+Adapt.adapt_structure(to::Adaptor, x::JLSparseVector{Tv,Ti}) where {Tv,Ti} =
+GPUSparseDeviceVector{Tv,Ti,JLDeviceArray{Ti, 1}, JLDeviceArray{Tv, 1}}(adapt(to, x.iPtr), adapt(to, x.nzVal), x.len, x.nnz)
+
 ## KernelAbstractions interface
 
 KernelAbstractions.get_backend(a::JLA) where JLA <: JLArray = JLBackend()
+KernelAbstractions.get_backend(a::JLA) where JLA <: Union{JLSparseMatrixCSC, JLSparseMatrixCSR, JLSparseVector} = JLBackend()
 
 function KernelAbstractions.mkcontext(kernel::Kernel{JLBackend}, I, _ndrange, iterspace, ::Dynamic) where Dynamic
     return KernelAbstractions.CompilerMetadata{KernelAbstractions.ndrange(kernel), Dynamic}(I, _ndrange, iterspace)
