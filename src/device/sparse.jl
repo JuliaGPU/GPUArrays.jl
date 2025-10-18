@@ -15,7 +15,7 @@ export GPUSparseDeviceVector, GPUSparseDeviceMatrixCSC, GPUSparseDeviceMatrixCSR
 abstract type AbstractGPUSparseDeviceMatrix{Tv, Ti} <: AbstractSparseMatrix{Tv, Ti} end
 
 
-struct GPUSparseDeviceVector{Tv,Ti,Vi,Vv} <: AbstractSparseVector{Tv,Ti}
+struct GPUSparseDeviceVector{Tv,Ti,Vi,Vv, A} <: AbstractSparseVector{Tv,Ti}
     iPtr::Vi
     nzVal::Vv
     len::Int
@@ -28,7 +28,7 @@ SparseArrays.nnz(g::GPUSparseDeviceVector) = g.nnz
 SparseArrays.nonzeroinds(g::GPUSparseDeviceVector) = g.iPtr
 SparseArrays.nonzeros(g::GPUSparseDeviceVector) = g.nzVal
 
-struct GPUSparseDeviceMatrixCSC{Tv,Ti,Vi,Vv} <: AbstractGPUSparseDeviceMatrix{Tv, Ti}
+struct GPUSparseDeviceMatrixCSC{Tv,Ti,Vi,Vv,A} <: AbstractGPUSparseDeviceMatrix{Tv, Ti}
     colPtr::Vi
     rowVal::Vi
     nzVal::Vv
@@ -40,12 +40,22 @@ SparseArrays.rowvals(g::GPUSparseDeviceMatrixCSC) = g.rowVal
 SparseArrays.getcolptr(g::GPUSparseDeviceMatrixCSC) = g.colPtr
 SparseArrays.nzrange(g::GPUSparseDeviceMatrixCSC, col::Integer) = SparseArrays.getcolptr(g)[col]:(SparseArrays.getcolptr(g)[col+1]-1)
 
-struct GPUSparseDeviceMatrixCSR{Tv,Ti,Vi,Vv} <: AbstractGPUSparseDeviceMatrix{Tv,Ti}
+struct GPUSparseDeviceMatrixCSR{Tv,Ti,Vi,Vv,A} <: AbstractGPUSparseDeviceMatrix{Tv,Ti}
     rowPtr::Vi
     colVal::Vi
     nzVal::Vv
     dims::NTuple{2, Int}
     nnz::Ti
+end
+
+@inline function _getindex(arg::Union{GPUSparseDeviceMatrixCSR{Tv},
+                                      GPUSparseDeviceMatrixCSC{Tv},
+                                      GPUSparseDeviceVector{Tv}}, I, ptr)::Tv where {Tv}
+    if ptr == 0
+        return zero(Tv)
+    else
+        return @inbounds arg.nzVal[ptr]::Tv
+    end
 end
 
 struct GPUSparseDeviceMatrixBSR{Tv,Ti,Vi,Vv} <: AbstractGPUSparseDeviceMatrix{Tv,Ti}
@@ -58,7 +68,7 @@ struct GPUSparseDeviceMatrixBSR{Tv,Ti,Vi,Vv} <: AbstractGPUSparseDeviceMatrix{Tv
     nnz::Ti
 end
 
-struct GPUSparseDeviceMatrixCOO{Tv,Ti,Vi,Vv} <: AbstractGPUSparseDeviceMatrix{Tv,Ti}
+struct GPUSparseDeviceMatrixCOO{Tv,Ti,Vi,Vv, A} <: AbstractGPUSparseDeviceMatrix{Tv,Ti}
     rowInd::Vi
     colInd::Vi
     nzVal::Vv

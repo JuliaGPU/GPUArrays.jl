@@ -325,7 +325,7 @@ function _getindex(arg::Union{<:GPUSparseDeviceMatrixCSR,GPUSparseDeviceMatrixCS
         @inbounds arg.nzVal[ptr]
     end
 end
-@inline function _getindex(arg::AbstractDeviceArray{Tv}, I, ptr)::Tv where {Tv}
+@inline function _getindex(arg::DenseArray{Tv}, I, ptr)::Tv where {Tv}
     return @inbounds arg[I]::Tv
 end
 @inline _getindex(arg, I, ptr) = Broadcast._broadcast_getindex(arg, I)
@@ -453,7 +453,7 @@ end
 end
 @kernel function sparse_to_dense_broadcast_kernel(T::Type{<:Union{AbstractGPUSparseMatrixCSR{Tv, Ti},
                                                                   AbstractGPUSparseMatrixCSC{Tv, Ti}}},
-                                                  f, output::AbstractDeviceArray, args...) where {Tv, Ti}
+                                                  f, output::AbstractArray, args...) where {Tv, Ti}
     # every thread processes an entire row
     leading_dim = @index(Global, Linear)
     leading_dim_size = T <: AbstractGPUSparseMatrixCSR ? size(output, 1) : size(output, 2)
@@ -477,7 +477,7 @@ end
 end
 
 @kernel function sparse_to_dense_broadcast_kernel(::Type{<:AbstractGPUSparseVector}, f::F,
-                                                  output::AbstractDeviceArray{Tv},
+                                                  output::AbstractArray{Tv},
                                                   offsets::AbstractVector{Pair{Ti, NTuple{N, Ti}}},
                                                   args...) where {Tv, F, N, Ti}
     # every thread processes an entire row
@@ -666,7 +666,7 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
     return output
 end
 ## COV_EXCL_START
-@kernel function csr_reduce_kernel(f::F, op::OP, neutral, zeros_preserved::Bool, output::AbstractDeviceArray, args...) where {F, OP}
+@kernel function csr_reduce_kernel(f::F, op::OP, neutral, zeros_preserved::Bool, output::DenseArray, args...) where {F, OP}
     # every thread processes an entire row
     row = @index(Global, Linear)
     if row ≤ size(output, 1)
@@ -700,7 +700,7 @@ end
     end
 end
 
-@kernel function csc_reduce_kernel(f::F, op::OP, neutral, zeros_preserved::Bool, output::AbstractDeviceArray, args...) where {F, OP}
+@kernel function csc_reduce_kernel(f::F, op::OP, neutral, zeros_preserved::Bool, output::DenseArray, args...) where {F, OP}
     # every thread processes an entire column
     col = @index(Global, Linear) 
     if col ≤ size(output, 2)
