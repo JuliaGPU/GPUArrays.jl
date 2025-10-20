@@ -1,4 +1,4 @@
-@testsuite "linalg" (AT, eltypes)->begin
+@testsuite "linalg/core " (AT, eltypes)->begin
     @testset "adjoint and transpose" begin
         @test compare(adjoint, AT, rand(Float32, 32, 32))
         @test compare(adjoint!, AT, rand(Float32, 32, 32), rand(Float32, 32, 32))
@@ -372,7 +372,7 @@
     end
 
     @testset "kron" begin
-        for T in eltypes
+        @testset "$T" for T in eltypes
             for opa in (vec, identity, transpose, adjoint), opb in (vec, identity, transpose, adjoint)
                 @test compare(kron, AT, opa(rand(T, 32, 64)), opb(rand(T, 128, 16)))
             end
