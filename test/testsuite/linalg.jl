@@ -22,12 +22,14 @@
         @test compare(x -> permutedims(x, (2, 1)), AT, rand(Float32, 2, 3))
         @test compare(x -> permutedims(x, (2, 1, 3)), AT, rand(Float32, 4, 5, 6))
         @test compare(x -> permutedims(x, (3, 1, 2)), AT, rand(Float32, 4, 5, 6))
-        @test compare(x -> permutedims(x, [2,1,4,3]), AT, randn(ComplexF32,3,4,5,1))
-        # test UInt64 version to make sure it works properly when array length is larger than typemax of UInt32.
-        AT <: GPUArrays.AbstractGPUArray && @test let
-            x = randn(ComplexF32,3,4,5,1)
-            y = permutedims(x, (2,1,4,3))
-            Array(GPUArrays._permutedims!(UInt64, AT(zero(y)), AT(x), (2,1,4,3))) ≈ y
+        if ComplexF32 in eltypes
+            @test compare(x -> permutedims(x, [2,1,4,3]), AT, randn(ComplexF32,3,4,5,1))
+            # test UInt64 version to make sure it works properly when array length is larger than typemax of UInt32.
+            AT <: GPUArrays.AbstractGPUArray && @test let
+                x = randn(ComplexF32,3,4,5,1)
+                y = permutedims(x, (2,1,4,3))
+                Array(GPUArrays._permutedims!(UInt64, AT(zero(y)), AT(x), (2,1,4,3))) ≈ y
+            end
         end
         # high dimensional tensor
         @test compare(x -> permutedims(x, 18:-1:1), AT, rand(Float32, 4, [2 for _ = 2:18]...))
@@ -70,12 +72,12 @@
     @testset "triangular" begin
         @testset "copytri!" begin
             @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64), uplo in ('U', 'L'), conjugate in (true, false)
-                n = 128
-                areal = randn(n,n)/2
-                aimg  = randn(n,n)/2
                 if !(eltya in eltypes)
                     continue
                 end
+                n = 128
+                areal = randn(n,n)/2
+                aimg  = randn(n,n)/2
                 a = convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
                 @test compare(x -> LinearAlgebra.copytri!(x, uplo, conjugate), AT, a)
             end
@@ -146,6 +148,9 @@
 
         @testset "mul! + Triangular" begin
             @testset "trimatmul! ($TR x $T, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
+                if !(T in eltypes)
+                    continue
+                end
                 n = 128
                 A = AT(rand(T, n,n))
                 b = AT(rand(T, n))
@@ -164,6 +169,9 @@
             end
 
             @testset "mattrimul ($TR x $T, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
+                if !(T in eltypes)
+                    continue
+                end
                 n = 128
                 A = AT(rand(T, n,n))
                 B = AT(rand(T, n, n))
@@ -227,6 +235,9 @@
 
         @testset "mul! + Diagonal" begin
             @testset "$elty" for elty in (Float32, ComplexF32)
+                if !(elty in eltypes)
+                    continue
+                end
                 n = 128
                 d = AT(rand(elty, n))
                 D = Diagonal(d)
