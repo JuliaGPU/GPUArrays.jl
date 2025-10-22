@@ -226,7 +226,7 @@
         end
 
         @testset "mul! + Diagonal" begin
-            for elty in (Float32, ComplexF32)
+            @testset "$elty" for elty in (Float32, ComplexF32)
                 n = 128
                 d = AT(rand(elty, n))
                 D = Diagonal(d)
@@ -304,6 +304,42 @@
     end
 
     @testset "mul! + UniformScaling" begin
+        @testset "elty" for elty in (Float32, ComplexF32)
+            n = 128
+            s = rand(elty)
+            I_s = UniformScaling(s)
+
+            # Test vector operations
+            a = AT(rand(elty, n))
+            b = AT(rand(elty, n))
+            b_copy = copy(b)
+
+            # Test mul!(a, I*s, b) - should compute a = s * b
+            mul!(a, I_s, b)
+            @test collect(a) ≈ s .* collect(b_copy)
+
+            # Test mul!(a, b, s) - should compute a = b * s
+            a = AT(rand(elty, n))
+            mul!(a, b, s)
+            @test collect(a) ≈ collect(b_copy) .* s
+
+            # Test matrix operations
+            A = AT(rand(elty, n, n))
+            B = AT(rand(elty, n, n))
+            B_copy = copy(B)
+
+            # Test mul!(A, I*s, B)
+            mul!(A, I_s, B)
+            @test collect(A) ≈ s .* collect(B_copy)
+
+            # Test mul!(A, B, s)
+            A = AT(rand(elty, n, n))
+            mul!(A, B, s)
+            @test collect(A) ≈ collect(B_copy) .* s
+        end
+    end
+
+    @testset "mul! + UniformScaling" begin
         for elty in (Float32, ComplexF32)
             n = 128
             s = rand(elty)
@@ -339,43 +375,53 @@
         end
     end
 
-    @testset "lmul! and rmul!" for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in eltypes
-        @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))
-        @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
+    @testset "lmul! and rmul!" begin
+        @testset "$T ($a,$b)" for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in eltypes
+            @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))
+            @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
+        end
     end
 
-    @testset "axp{b}y" for T in eltypes
-        @test compare(axpby!, AT, Ref(rand(T)), rand(T,5), Ref(rand(T)), rand(T,5))
-        @test compare(axpy!, AT, Ref(rand(T)), rand(T,5), rand(T,5))
+    @testset "axp{b}y" begin
+        @testset "$T" for T in eltypes
+            @test compare(axpby!, AT, Ref(rand(T)), rand(T,5), Ref(rand(T)), rand(T,5))
+            @test compare(axpy!, AT, Ref(rand(T)), rand(T,5), rand(T,5))
+        end
     end
 
-    @testset "dot" for T in eltypes
-        @test compare(dot, AT, rand(T,5), rand(T, 5))
+    @testset "dot" begin
+        @testset "$T" for T in eltypes
+            @test compare(dot, AT, rand(T,5), rand(T, 5))
+        end
     end
 
-    @testset "rotate!" for T in eltypes
-        @test compare(rotate!, AT, rand(T,5), rand(T,5), Ref(rand(real(T))), Ref(rand(T)))
+    @testset "rotate!" begin
+        @testset "$T" for T in eltypes
+            @test compare(rotate!, AT, rand(T,5), rand(T,5), Ref(rand(real(T))), Ref(rand(T)))
+        end
     end
 
-    @testset "reflect!" for T in eltypes
-        @test compare(reflect!, AT, rand(T,5), rand(T,5), Ref(rand(real(T))), Ref(rand(T)))
+    @testset "reflect!" begin
+        @testset "$T" for T in eltypes
+            @test compare(reflect!, AT, rand(T,5), rand(T,5), Ref(rand(real(T))), Ref(rand(T)))
+        end
     end
 
-    @testset "iszero and isone" for T in eltypes
-        A = one(AT(rand(T, 2, 2)))
-        @test isone(A)
-        @test iszero(A) == false
+    @testset "iszero and isone" begin
+        @testset "$T" for T in eltypes
+            A = one(AT(rand(T, 2, 2)))
+            @test isone(A)
+            @test iszero(A) == false
 
-        A = zero(AT(rand(T, 2, 2)))
-        @test iszero(A)
-        @test isone(A) == false
+            A = zero(AT(rand(T, 2, 2)))
+            @test iszero(A)
+            @test isone(A) == false
+        end
     end
 
     @testset "kron" begin
-        @testset "$T" for T in eltypes
-            for opa in (vec, identity, transpose, adjoint), opb in (vec, identity, transpose, adjoint)
-                @test compare(kron, AT, opa(rand(T, 32, 64)), opb(rand(T, 128, 16)))
-            end
+        @testset "$T, $opa, $opb" for T in eltypes, opa in (vec, identity, transpose, adjoint), opb in (vec, identity, transpose, adjoint)
+            @test compare(kron, AT, opa(rand(T, 32, 64)), opb(rand(T, 128, 16)))
         end
     end
 end
