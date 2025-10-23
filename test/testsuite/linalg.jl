@@ -256,17 +256,17 @@
                 B = Diagonal(b)
                 A = Diagonal(a)
                 mul!(C, A, B)
-                @test collect(C.diag) ≈ collect(A.diag) .* collect(B.diag) 
+                @test collect(C.diag) ≈ collect(A.diag) .* collect(B.diag)
                 a = AT(diagm(rand(elty, n)))
                 b = AT(diagm(rand(elty, n)))
                 C = Diagonal(d)
                 mul!(C, a, b)
-                @test collect(C) ≈ Diagonal(collect(a) * collect(b)) 
+                @test collect(C) ≈ Diagonal(collect(a) * collect(b))
                 a = transpose(AT(diagm(rand(elty, n))))
                 b = adjoint(AT(diagm(rand(elty, n))))
                 C = Diagonal(d)
                 mul!(C, a, b)
-                @test collect(C) ≈ Diagonal(collect(a) * collect(b)) 
+                @test collect(C) ≈ Diagonal(collect(a) * collect(b))
             end
         end
 
@@ -300,6 +300,42 @@
                                             d in -2:2
             A = randn(Float32, 10, 10)
             @test f(A, d) == Array(f!(AT(A), d))
+        end
+    end
+
+    @testset "mul! + UniformScaling" begin
+        for elty in (Float32, ComplexF32)
+            n = 128
+            s = rand(elty)
+            I_s = UniformScaling(s)
+
+            # Test vector operations
+            a = AT(rand(elty, n))
+            b = AT(rand(elty, n))
+            b_copy = copy(b)
+
+            # Test mul!(a, I*s, b) - should compute a = s * b
+            mul!(a, I_s, b)
+            @test collect(a) ≈ s .* collect(b_copy)
+
+            # Test mul!(a, b, s) - should compute a = b * s
+            a = AT(rand(elty, n))
+            mul!(a, b, s)
+            @test collect(a) ≈ collect(b_copy) .* s
+
+            # Test matrix operations
+            A = AT(rand(elty, n, n))
+            B = AT(rand(elty, n, n))
+            B_copy = copy(B)
+
+            # Test mul!(A, I*s, B)
+            mul!(A, I_s, B)
+            @test collect(A) ≈ s .* collect(B_copy)
+
+            # Test mul!(A, B, s)
+            A = AT(rand(elty, n, n))
+            mul!(A, B, s)
+            @test collect(A) ≈ collect(B_copy) .* s
         end
     end
 

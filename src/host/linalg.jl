@@ -417,6 +417,21 @@ end
     function LinearAlgebra.generic_matmatmul_wrapper!(C::AbstractGPUMatrix{T}, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat{T}, B::AbstractGPUVecOrMat{T}, alpha::Number, beta::Number, val::LinearAlgebra.BlasFlag.SyrkHerkGemm) where {T}
         LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
     end
+    # Julia 1.12 introduced generic_mul! for scalar * array operations
+    function LinearAlgebra.generic_mul!(C::AbstractGPUVecOrMat, X::AbstractGPUVecOrMat, s::Number, alpha::Number, beta::Number)
+        if length(C) != length(X)
+            throw(DimensionMismatch(lazy"first array has length $(length(C)) which does not match the length of the second, $(length(X))."))
+        end
+        @. C = X * s * alpha + C * beta
+        return C
+    end
+    function LinearAlgebra.generic_mul!(C::AbstractGPUVecOrMat, s::Number, X::AbstractGPUVecOrMat, alpha::Number, beta::Number)
+        if length(C) != length(X)
+            throw(DimensionMismatch(lazy"first array has length $(length(C)) which does not match the length of the second, $(length(X))."))
+        end
+        @. C = s * X * alpha + C * beta
+        return C
+    end
 end
 
 function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix{T}, B::AbstractGPUVecOrMat{S}) where {T,S,R}
@@ -730,7 +745,7 @@ function LinearAlgebra.rotate!(x::AbstractGPUArray, y::AbstractGPUArray, c::Numb
         @inbounds xi = x[i]
         @inbounds yi = y[i]
         @inbounds x[i] = s*yi +      c *xi
-        @inbounds y[i] = c*yi - conj(s)*xi 
+        @inbounds y[i] = c*yi - conj(s)*xi
     end
     rotate_kernel!(get_backend(x))(x, y, c, s; ndrange = size(x))
     return x, y
