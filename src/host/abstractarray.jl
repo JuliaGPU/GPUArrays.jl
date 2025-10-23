@@ -324,7 +324,7 @@ end
 
 Base.copy(x::AbstractGPUArray) = error("Not implemented") # COV_EXCL_LINE
 
-Base.deepcopy(x::AbstractGPUArray) = copy(x)
+Base.deepcopy_internal(x::AbstractGPUArray, ::IdDict) = copy(x)
 
 
 # filtering
