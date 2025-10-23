@@ -315,43 +315,10 @@
     end
 
     @testset "mul! + UniformScaling" begin
-        @testset "elty" for elty in (Float32, ComplexF32)
-            n = 128
-            s = rand(elty)
-            I_s = UniformScaling(s)
-
-            # Test vector operations
-            a = AT(rand(elty, n))
-            b = AT(rand(elty, n))
-            b_copy = copy(b)
-
-            # Test mul!(a, I*s, b) - should compute a = s * b
-            mul!(a, I_s, b)
-            @test collect(a) ≈ s .* collect(b_copy)
-
-            # Test mul!(a, b, s) - should compute a = b * s
-            a = AT(rand(elty, n))
-            mul!(a, b, s)
-            @test collect(a) ≈ collect(b_copy) .* s
-
-            # Test matrix operations
-            A = AT(rand(elty, n, n))
-            B = AT(rand(elty, n, n))
-            B_copy = copy(B)
-
-            # Test mul!(A, I*s, B)
-            mul!(A, I_s, B)
-            @test collect(A) ≈ s .* collect(B_copy)
-
-            # Test mul!(A, B, s)
-            A = AT(rand(elty, n, n))
-            mul!(A, B, s)
-            @test collect(A) ≈ collect(B_copy) .* s
-        end
-    end
-
-    @testset "mul! + UniformScaling" begin
-        for elty in (Float32, ComplexF32)
+        @testset "$elty" for elty in (Float32, ComplexF32)
+            if !(elty in eltypes)
+                continue
+            end
             n = 128
             s = rand(elty)
             I_s = UniformScaling(s)
