@@ -307,12 +307,12 @@
             @test_throws SingularException ldiv!(D, B)
         end
 
-        @testset "$f! with diagonal $d" for (f, f!) in ((triu, triu!), (tril, tril!)),
+        @testset "$f with diagonal $d" for f in (triu, triu!, tril, tril!),
                                             d in -2:2
-            A = AT(randn(Float32, 10, 10))
+            A = randn(Float32, 10, 10)
             @test compare(f, AT, A)
 
-            A_empty = AT(randn(Float32, 0, 0))
+            A_empty = randn(Float32, 0, 0)
             @test compare(f, AT, A_empty)
         end
     end
