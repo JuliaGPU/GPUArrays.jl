@@ -165,7 +165,7 @@ for T in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriang
 end
 
 function LinearAlgebra.tril!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
-    if isempty(A) return A end
+    isempty(A) && return A
     @kernel function tril_kernel!(_A, _d)
         I = @index(Global, Cartesian)
         i, j = Tuple(I)
@@ -178,7 +178,7 @@ function LinearAlgebra.tril!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
 end
 
 function LinearAlgebra.triu!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
-    if isempty(A) return A end
+    isempty(A) && return A
     @kernel function triu_kernel!(_A, _d)
         I = @index(Global, Cartesian)
         i, j = Tuple(I)

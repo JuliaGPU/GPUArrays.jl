@@ -189,12 +189,11 @@
         end
 
         @testset "empty" begin
-            x = Matrix{T}(I, (0, 3))
-
-            x1 = AT{T, 2}(I, (0, 3))
+            x = Matrix{Float32}(I, (0, 3))
+            x1 = AT{Float32, 2}(I, (0, 3))
 
             @test Array(x1) ≈ x
-
+            
             copyto!(x1, I)
             @test Array(x1) ≈ x
         end

@@ -37,7 +37,7 @@ end
 function (T::Type{<: AnyGPUArray{U}})(s::UniformScaling, dims::Dims{2}) where {U}
     res = similar(T, dims)
     fill!(res, zero(U))
-    if isempty(res) return res end
+    isempty(res) && return res
     kernel = identity_kernel(get_backend(res))
     kernel(res, size(res, 1), s.λ; ndrange=minimum(dims))
     return res
@@ -49,7 +49,7 @@ end
 
 function Base.copyto!(A::AbstractGPUMatrix{T}, s::UniformScaling) where T
     fill!(A, zero(T))
-    if iszero(minimum(size(A))) return A end
+    isempty(A) && return A
     kernel = identity_kernel(get_backend(A))
     kernel(A, size(A, 1), s.λ; ndrange=minimum(size(A)))
     return A
