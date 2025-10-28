@@ -37,7 +37,7 @@ end
 function (T::Type{<: AnyGPUArray{U}})(s::UniformScaling, dims::Dims{2}) where {U}
     res = similar(T, dims)
     fill!(res, zero(U))
-    if iszero(minimum(dims)) return res end
+    if isempty(res) return res end
     kernel = identity_kernel(get_backend(res))
     kernel(res, size(res, 1), s.λ; ndrange=minimum(dims))
     return res
