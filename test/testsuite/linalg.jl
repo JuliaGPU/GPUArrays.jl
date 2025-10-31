@@ -310,10 +310,10 @@
         @testset "$f with diagonal $d" for f in (triu, triu!, tril, tril!),
                                             d in -2:2
             A = randn(Float32, 10, 10)
-            @test compare(f, AT, A)
+            @test compare(f, AT, A, d)
 
             A_empty = randn(Float32, 0, 0)
-            @test compare(f, AT, A_empty)
+            @test compare(f, AT, A_empty, d)
         end
     end
 
