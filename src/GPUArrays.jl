@@ -2,6 +2,7 @@ module GPUArrays
 
 using GPUToolbox
 using KernelAbstractions
+import KernelAbstractions.KernelIntrinsics as KI
 using Serialization
 using Random
 using LinearAlgebra
