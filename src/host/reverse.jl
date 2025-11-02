@@ -26,9 +26,12 @@ function _reverse(input::AnyGPUArray{T, N}, output::AnyGPUArray{T, N};
             index_out = lin_idx[idx...]
             output[index_out] = input[index_in]
         end
+        return
     end
     ## COV_EXCL_STOP
-    kernel = KI.KIKernel(get_backend(input), rev_kernel, input, output)
+
+    backend = get_backend(input)
+    kernel = KI.KIKernel(backend, rev_kernel, input, output)
     nthreads = KI.kernel_max_work_group_size(backend, kernel; max_work_items=length(input))
     ngroups = cld(length(input), nthreads)
 
@@ -68,6 +71,7 @@ function _reverse!(data::AnyGPUArray{T, N}; dims=1:ndims(data)) where {T, N}
                 data[index_in] = temp
             end
         end
+        return
     end
     ## COV_EXCL_STOP
 
@@ -76,12 +80,12 @@ function _reverse!(data::AnyGPUArray{T, N}; dims=1:ndims(data)) where {T, N}
     # Only the middle row in case of an odd array dimension could cause trouble, but this is prevented by
     # ignoring the threads that cross the mid-point
 
-
-    kernel = KI.KIKernel(get_backend(data), rev_kernel!, data)
+    backend = get_backend(data)
+    kernel = KI.KIKernel(backend, rev_kernel!, data)
     nthreads = KI.kernel_max_work_group_size(backend, kernel; max_work_items=reduced_length)
     ngroups = cld(reduced_length, nthreads)
 
-    kernel(input, output; numworkgroups=ngroups, workgroupsize=nthreads)
+    kernel(data; numworkgroups=ngroups, workgroupsize=nthreads)
 end
 
 
@@ -98,7 +102,10 @@ function Base.reverse!(data::AnyGPUArray{T, N}; dims=:) where {T, N}
         throw(ArgumentError("dimension $dims is not 1 ≤ $dims ≤ $(ndims(data))"))
     end
 
-    _reverse!(data; dims=dims)
+    # no reverse operation needed at all otherwise.
+    if !(all(size(data)[[dims...]].==1) || isempty(data))
+        _reverse!(data; dims=dims)
+    end
 
     return data
 end
@@ -115,7 +122,7 @@ function Base.reverse(input::AnyGPUArray{T, N}; dims=:) where {T, N}
         throw(ArgumentError("dimension $dims is not 1 ≤ $dims ≤ $(ndims(input))"))
     end
 
-    if all(size(input)[[dims...]].==1)
+    if all(size(input)[[dims...]].==1) || isempty(input)
         # no reverse operation needed at all in this case.
         return copy(input)
     else
@@ -131,7 +138,8 @@ end
 # in-place
 Base.@propagate_inbounds function Base.reverse!(data::AnyGPUVector{T}, start::Integer,
                                                 stop::Integer=length(data)) where {T}
-    _reverse!(view(data, start:stop))
+    # only reverse if there are more than 2 elements to reverse
+    (stop-start > 1) && _reverse!(view(data, start:stop))
     return data
 end
 
@@ -140,6 +148,9 @@ Base.reverse!(data::AnyGPUVector{T}) where {T} = @inbounds reverse!(data, 1, len
 # out-of-place
 Base.@propagate_inbounds function Base.reverse(input::AnyGPUVector{T}, start::Integer,
                                                stop::Integer=length(input)) where {T}
+    # Copy array in one kernel if no work is to be done
+    (stop-start > 1) || return copy(input)
+
     output = similar(input)
 
     start > 1 && copyto!(output, 1, input, 1, start-1)

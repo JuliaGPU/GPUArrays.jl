@@ -384,18 +384,24 @@ end
     @testset "reverse" begin
       # 1-d out-of-place
       @test compare(x->reverse(x), AT, rand(Float32, 1000))
+      @test compare(x->reverse(x), AT, rand(Float32, 0))
+      @test compare(x->reverse(x), AT, rand(Float32, 1))
       @test compare(x->reverse(x, 10), AT, rand(Float32, 1000))
       @test compare(x->reverse(x, 10, 90), AT, rand(Float32, 1000))
+      @test compare(x->reverse(x, 3, 3), AT, Float32[1,2,3,4,5])
 
       # 1-d in-place
       @test compare(x->reverse!(x), AT, rand(Float32, 1000))
+      @test compare(x->reverse!(x), AT, rand(Float32, 0))
+      @test compare(x->reverse!(x), AT, rand(Float32, 1))
       @test compare(x->reverse!(x, 10), AT, rand(Float32, 1000))
       @test compare(x->reverse!(x, 10, 90), AT, rand(Float32, 1000))
+      @test compare(x->reverse!(x, 3, 3), AT, Float32[1,2,3,4,5])
 
       # n-d out-of-place
       for shape in ([1, 2, 4, 3], [4, 2], [5], [0], [1], [2^5, 2^5, 2^5]),
           dim in 1:length(shape)
-          @testset "Shape: $shape, Dim: $dim"
+          @testset "Shape: $shape, Dim: $dim" begin
               @test compare(x->reverse(x; dims=dim), AT, rand(Float32, shape...))
 
               cpu = rand(Float32, shape...)
@@ -408,7 +414,7 @@ end
       # supports multidimensional reverse
       for shape in ([1,1,1,1], [1, 2, 4, 3], [2^5, 2^5, 2^5]),
           dim in ((1,2),(2,3),(1,3),:)
-          @testset "Shape: $shape, Dim: $dim"
+          @testset "Shape: $shape, Dim: $dim" begin
               @test compare(x->reverse(x; dims=dim), AT, rand(Float32, shape...))
 
               cpu = rand(Float32, shape...)
