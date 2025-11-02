@@ -31,7 +31,7 @@ function _reverse(input::AnyGPUArray{T, N}, output::AnyGPUArray{T, N};
 
     nthreads = 256
 
-    kernel(get_backend(input))(input, output; ndrange=length(input), nthreads)
+    kernel(get_backend(input))(input, output; ndrange=length(input), workgroupsize=nthreads)
 end
 
 # in-place version, swapping elements on half the number of threads
@@ -77,7 +77,7 @@ function _reverse!(data::AnyGPUArray{T, N}; dims=1:ndims(data)) where {T, N}
 
     nthreads = 256
 
-    kernel(get_backend(data))(data; ndrange=length(data), nthreads)
+    kernel(get_backend(data))(data; ndrange=length(data), workgroupsize=nthreads)
 end
 
 
