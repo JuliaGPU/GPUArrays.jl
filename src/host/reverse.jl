@@ -16,7 +16,7 @@ function _reverse(input::AnyGPUArray{T, N}, output::AnyGPUArray{T, N};
     nd_idx = CartesianIndices(input)
 
     ## COV_EXCL_START
-    @kernel unsafe_indices=true function kernel(input, output)
+    function rev_kernel(input, output)
         offset_in = Int32(KI.get_local_size().x) * (KI.get_group_id().x - 1i32)
         index_in = offset_in + KI.get_local_id().x
 
@@ -28,10 +28,11 @@ function _reverse(input::AnyGPUArray{T, N}, output::AnyGPUArray{T, N};
         end
     end
     ## COV_EXCL_STOP
+    kernel = KI.KIKernel(get_backend(input), rev_kernel, input, output)
+    nthreads = KI.kernel_max_work_group_size(backend, kernel; max_work_items=length(input))
+    ngroups = cld(length(input), nthreads)
 
-    nthreads = 256
-
-    kernel(get_backend(input))(input, output; ndrange=length(input), workgroupsize=nthreads)
+    kernel(input, output; numworkgroups=ngroups, workgroupsize=nthreads)
 end
 
 # in-place version, swapping elements on half the number of threads
@@ -51,7 +52,7 @@ function _reverse!(data::AnyGPUArray{T, N}; dims=1:ndims(data)) where {T, N}
     nd_idx = CartesianIndices(reduced_size)
 
     ## COV_EXCL_START
-    @kernel unsafe_indices=true function kernel(data)
+    function rev_kernel!(data)
         offset_in = Int32(KI.get_local_size().x) * (KI.get_group_id().x - 1i32)
         index_in = offset_in + KI.get_local_id().x
 
@@ -75,9 +76,12 @@ function _reverse!(data::AnyGPUArray{T, N}; dims=1:ndims(data)) where {T, N}
     # Only the middle row in case of an odd array dimension could cause trouble, but this is prevented by
     # ignoring the threads that cross the mid-point
 
-    nthreads = 256
 
-    kernel(get_backend(data))(data; ndrange=length(data), workgroupsize=nthreads)
+    kernel = KI.KIKernel(get_backend(data), rev_kernel!, data)
+    nthreads = KI.kernel_max_work_group_size(backend, kernel; max_work_items=reduced_length)
+    ngroups = cld(reduced_length, nthreads)
+
+    kernel(input, output; numworkgroups=ngroups, workgroupsize=nthreads)
 end
 
 
