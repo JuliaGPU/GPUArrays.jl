@@ -373,7 +373,7 @@ function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::Abstrac
         throw(DimensionMismatch("result C has dimensions $(size(C)), needs $((size(A,1),size(B,2)))"))
     end
     if isempty(A) || isempty(B)
-        return fill!(C, zero(R))
+        return rmul!(C, add.beta)
     end
 
     @kernel function matmatmul_kernel!(C, A, B)
