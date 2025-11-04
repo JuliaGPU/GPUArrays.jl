@@ -31,7 +31,7 @@ function _reverse(input::AnyGPUArray{T, N}, output::AnyGPUArray{T, N};
     ## COV_EXCL_STOP
 
     backend = get_backend(input)
-    kernel = KI.KIKernel(backend, rev_kernel, input, output)
+    kernel = KI.@kikernel backend launch=false rev_kernel(input, output)
     nthreads = KI.kernel_max_work_group_size(backend, kernel; max_work_items=length(input))
     ngroups = cld(length(input), nthreads)
 
@@ -81,7 +81,7 @@ function _reverse!(data::AnyGPUArray{T, N}; dims=1:ndims(data)) where {T, N}
     # ignoring the threads that cross the mid-point
 
     backend = get_backend(data)
-    kernel = KI.KIKernel(backend, rev_kernel!, data)
+    kernel = KI.@kikernel backend launch=false rev_kernel!(data)
     nthreads = KI.kernel_max_work_group_size(backend, kernel; max_work_items=reduced_length)
     ngroups = cld(reduced_length, nthreads)
 
