@@ -19,6 +19,7 @@ using KernelAbstractions
 
 # device functionality
 include("device/abstractarray.jl")
+include("device/sparse.jl")
 
 # host abstractions
 include("host/abstractarray.jl")
@@ -34,6 +35,7 @@ include("host/random.jl")
 include("host/quirks.jl")
 include("host/uniformscaling.jl")
 include("host/statistics.jl")
+include("host/sparse.jl")
 include("host/alloc_cache.jl")
 
 

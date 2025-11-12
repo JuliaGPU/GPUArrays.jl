@@ -4,9 +4,12 @@ import GPUArrays
 include("testsuite.jl")
 
 const init_code = quote
-    using Test, JLArrays
+    using Test, JLArrays, SparseArrays
 
     include("testsuite.jl")
+
+    TestSuite.sparse_types(::Type{<:JLArray}) = (JLSparseVector, JLSparseMatrixCSC, JLSparseMatrixCSR)
+    TestSuite.sparse_types(::Type{<:Array})   = (SparseVector, SparseMatrixCSC)
 
     # Disable Float16-related tests until JuliaGPU/KernelAbstractions#600 is resolved
     if isdefined(JLArrays.KernelAbstractions, :POCL)
