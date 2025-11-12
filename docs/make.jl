@@ -1,8 +1,8 @@
-using Documenter, GPUArrays
+using Documenter, GPUArrays, GPUArraysCore, JLArrays
 
 function main()
     makedocs(
-        modules = [GPUArrays],
+        modules = [GPUArrays, GPUArraysCore, JLArrays],
         format = Documenter.HTML(
             # Use clean URLs on CI
             prettyurls = get(ENV, "CI", nothing) == "true",
@@ -19,7 +19,7 @@ function main()
         warnonly = [:missing_docs],
     )
 
-    deploydocs(
+    return deploydocs(
         repo = "github.com/JuliaGPU/GPUArrays.jl.git"
     )
 end
