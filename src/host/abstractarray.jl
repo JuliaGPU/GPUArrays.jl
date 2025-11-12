@@ -54,6 +54,27 @@ end
 # per-object state, with a flag to indicate whether the object has been freed.
 # this is to support multiple calls to `unsafe_free!` on the same object,
 # while only lowering the reference count of the underlying data once.
+
+"""
+    DataRef
+
+A helper class to manage the storage of an array.
+
+There's multiple reasons we don't just put the data directly in a `GPUArray` struct:
+- to share data between multiple arrays, e.g., to create views;
+- to be able to early-free data and release GC pressure.
+
+To support this, wrap the data in a `DataRef` instead, and use it with the following methods:
+- `ref[]`: get the data;
+- `copy(ref)`: create a new reference, increasing the reference count;
+- `unsafe_free!(ref)`: decrease the reference count, and free the data if it reaches 0.
+
+The contained `RefCounted` struct should not be used directly.
+
+The flag `freed` is here to indicate whether the object has been freed.
+This is to support multiple calls to `unsafe_free!` on the same object,
+while only lowering the reference count of the underlying data once.
+"""
 mutable struct DataRef{D}
     rc::RefCounted{D}
     freed::Bool

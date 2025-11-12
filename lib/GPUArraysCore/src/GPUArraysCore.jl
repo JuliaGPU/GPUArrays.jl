@@ -18,21 +18,64 @@ for device-side objects.
 """
 abstract type AbstractGPUArray{T, N} <: DenseArray{T, N} end
 
+"""
+    AbstractGPUVector{T}
+
+Shortcut for `AbstractGPUArray{T, 1}`.
+"""
 const AbstractGPUVector{T} = AbstractGPUArray{T, 1}
+
+"""
+    AbstractGPUMatrixT}
+
+Shortcut for `AbstractGPUArray{T, 2}`.
+"""
 const AbstractGPUMatrix{T} = AbstractGPUArray{T, 2}
+
+"""
+    AbstractGPUVecOrMat{T}
+
+Shortcut for `Union{AbstractGPUArray{T, 1}, AbstractGPUArray{T, 2}}`.
+"""
 const AbstractGPUVecOrMat{T} = Union{AbstractGPUArray{T, 1}, AbstractGPUArray{T, 2}}
 
 # convenience aliases for working with wrapped arrays
+
+"""
+    WrappedGPUArray{T, N}
+
+Convenience alias for working with wrapped arrays from [Adapt.jl](https://github.com/JuliaGPU/Adapt.jl).
+"""
 const WrappedGPUArray{T,N} = WrappedArray{T,N,AbstractGPUArray,AbstractGPUArray{T,N}}
+
+"""
+    AnyGPUArray{T, N}
+
+Shortcut for `Union{AbstractGPUArray{T,N}, WrappedGPUArray{T,N}}`.
+"""
 const AnyGPUArray{T,N} = Union{AbstractGPUArray{T,N}, WrappedGPUArray{T,N}}
+
+"""
+    AnyGPUVector{T}
+
+Shortcut for `AnyGPUArray{T, 1}`.
+"""
 const AnyGPUVector{T} = AnyGPUArray{T, 1}
+
+"""
+    AnyGPUMatrix{T}
+
+Shortcut for `AnyGPUArray{T, 2}`.
+"""
 const AnyGPUMatrix{T} = AnyGPUArray{T, 2}
 
 
 ## broadcasting
 
 """
-Abstract supertype for GPU array styles. The `N` parameter is the dimensionality.
+    AbstractGPUArrayStyle{N} <: Base.Broadcast.AbstractArrayStyle{N}
+
+Abstract supertype for GPU array broadcasting styles. The `N` parameter is the dimensionality.
 
 Downstream implementations should provide a concrete array style type that inherits from
 this supertype.

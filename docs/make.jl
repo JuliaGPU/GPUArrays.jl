@@ -11,13 +11,9 @@ function main()
         ),
         sitename = "GPUArrays.jl",
         pages = [
-            "Home"          => "index.md",
-            "Interface"     => "interface.md",
-            "Functionality" => [
-                "functionality/host.md",
-                "functionality/device.md",
-            ],
-            "Test suite"    => "testsuite.md",
+            "Home" => "index.md",
+            "interface.md",
+            "api.md",
         ],
         doctest = true,
         warnonly = [:missing_docs],
