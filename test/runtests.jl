@@ -1,4 +1,4 @@
-using ParallelTestRunner: runtests
+using ParallelTestRunner: runtests, parse_args
 import GPUArrays
 
 include("testsuite.jl")
@@ -18,16 +18,11 @@ const init_code = quote
     end
 end
 
-custom_tests = Dict{String, Expr}()
+args = parse_args(ARGS)
+
+testsuite = Dict{String, Expr}()
 for AT in (:JLArray, :Array), name in keys(TestSuite.tests)
-    custom_tests["$(AT)/$name"] = :(TestSuite.tests[$name]($AT))
+    testsuite["$(AT)/$name"] = :(TestSuite.tests[$name]($AT))
 end
 
-function test_filter(test)
-    if startswith(test, "testsuite")
-        return false
-    end
-    return true
-end
-
-runtests(GPUArrays, ARGS; init_code, custom_tests, test_filter)
+runtests(GPUArrays, ARGS; init_code, testsuite)
