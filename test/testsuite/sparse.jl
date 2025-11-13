@@ -342,7 +342,7 @@ function linalg(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
     for ET in eltypes
         # sprandn doesn't work nicely with these...
-        if !isa(ET, Union{Complex{Int16}, Complex{Int32}, Complex{Int64}})
+        if !(ET <: Union{Complex{Int16}, Complex{Int32}, Complex{Int64}})
             @testset "Sparse matrix($ET) linear algebra" begin
                 m = 10
                 A  = sprandn(ET, m, m, 0.2)
