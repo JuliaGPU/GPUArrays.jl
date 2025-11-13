@@ -10,6 +10,7 @@
             matrix_construction(sparse_AT, eltypes)
             broadcasting_matrix(sparse_AT, eltypes)
             mapreduce_matrix(sparse_AT, eltypes)
+            linalg(sparse_AT, eltypes)
        end
     end
 end
@@ -333,6 +334,27 @@ function mapreduce_matrix(AT, eltypes)
             y  = mapreduce(abs, max, x)
             dy = mapreduce(abs, max, dx)
             @test y ≈ dy
+        end
+    end
+end
+
+function linalg(AT, eltypes)
+    dense_AT = GPUArrays.dense_array_type(AT)
+    for ET in eltypes
+        @testset "SparseMatrix($ET)" begin
+            m = 10
+            A  = sprand(ET, m, m, 0.2)
+            B  = sprand(ET, m, m, 0.3)
+            ZA = spzeros(ET, m, m)
+            C  = I(div(m, 2))
+            dA = AT(A)
+            dB = AT(B)
+            dZA = AT(ZA)
+            @testset "opnorm and norm" begin
+                @test opnorm(A, Inf) ≈ opnorm(dA, Inf)
+                @test opnorm(A, 1)   ≈ opnorm(dA, 1)
+                @test_throws ArgumentError opnorm(dA, 2)
+            end
         end
     end
 end
