@@ -75,7 +75,7 @@ function LinearAlgebra.opnorm(A::AbstractGPUSparseMatrixCSR, p::Real=2)
     end
 end
 
-LinearAlgebra.opnorm(A::AbstractGPUSparseMatrixCSC, p::Real=2) = opnorm(_csr_type(A)(A), p)
+LinearAlgebra.opnorm(A::AbstractGPUSparseMatrixCSC, p::Real=2) = opnorm(csr_type(A)(A), p)
 
 function LinearAlgebra.norm(A::AbstractGPUSparseMatrix{T}, p::Real=2) where T
     if p == Inf
