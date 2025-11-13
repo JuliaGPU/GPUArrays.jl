@@ -341,10 +341,10 @@ end
 function linalg(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
     for ET in eltypes
-        @testset "SparseMatrix($ET)" begin
+        @testset "Sparse matrix($ET) linear algebra" begin
             m = 10
-            A  = sprand(ET, m, m, 0.2)
-            B  = sprand(ET, m, m, 0.3)
+            A  = sprandn(ET, m, m, 0.2)
+            B  = sprandn(ET, m, m, 0.3)
             ZA = spzeros(ET, m, m)
             C  = I(div(m, 2))
             dA = AT(A)
