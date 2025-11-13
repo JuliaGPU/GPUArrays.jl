@@ -600,7 +600,7 @@ KernelAbstractions.allocate(::JLBackend, ::Type{T}, dims::Tuple) where T = JLArr
     end
 
     if KernelAbstractions.workgroupsize(kernel) <: DynamicSize && workgroupsize === nothing
-        workgroupsize = (1024,) # Vectorization, 4x unrolling, minimal grain size
+        workgroupsize = (MAXTHREADS,) # Vectorization, 4x unrolling, minimal grain size
     end
     iterspace, dynamic = partition(kernel, ndrange, workgroupsize)
     # partition checked that the ndrange's agreed
@@ -626,6 +626,7 @@ else
 end
 
 function (obj::Kernel{JLBackend})(args...; ndrange=nothing, workgroupsize=nothing)
+    ndrange, workgroupsize, _, _ = launch_config(obj, ndrange, workgroupsize)
     device_args = jlconvert.(args)
     new_obj = convert_to_cpu(obj)
     new_obj(device_args...; ndrange, workgroupsize)

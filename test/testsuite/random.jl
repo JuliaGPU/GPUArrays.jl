@@ -6,20 +6,25 @@
     end
     cpu_rng = Random.default_rng()
 
+    SEEDING_BROKEN = (rng != cpu_rng) && !contains(string(AT), "JLArray")
+
     @testset "rand" begin  # uniform
-        for T in eltypes, d in (10, (10,10))
+        @testset "$d $T" for T in eltypes, d in (10, (10, 10), (1024, 1024))
             A = AT{T}(undef, d)
             B = copy(A)
             rand!(rng, A)
             rand!(rng, B)
             @test Array(A) != Array(B)
 
+            A = AT(rand(T, d))
+            B = AT(rand(T, d))
+
             Random.seed!(rng)
             Random.seed!(rng, 1)
             rand!(rng, A)
             Random.seed!(rng, 1)
             rand!(rng, B)
-            @test all(Array(A) .== Array(B))
+            @test Array(A) == Array(B) broken=SEEDING_BROKEN && (prod(d) > length(rng.state))
 
             if rng != cpu_rng
                 rand!(cpu_rng, A)
@@ -44,19 +49,22 @@
     @testset "randn" begin  # normally-distributed
         # XXX: randn calls sqrt, and Base's sqrt(::Complex) performs
         #      checked type conversions that throw boxed numbers.
-        for T in filter(isrealfloattype, eltypes), d in (2, (2,2))
+        @testset "$d $T" for T in filter(isrealfloattype, eltypes), d in (2, (2, 2), (1024, 1024))
             A = AT{T}(undef, d)
             B = copy(A)
             randn!(rng, A)
             randn!(rng, B)
             @test Array(A) != Array(B)
 
+            A = AT(rand(T, d))
+            B = AT(rand(T, d))
+
             Random.seed!(rng)
             Random.seed!(rng, 1)
             randn!(rng, A)
             Random.seed!(rng, 1)
             randn!(rng, B)
-            @test Array(A) == Array(B)
+            @test Array(A) == Array(B) broken=SEEDING_BROKEN && (prod(d) > (2 * length(rng.state)))
 
             if rng != cpu_rng
                 randn!(cpu_rng, A)
