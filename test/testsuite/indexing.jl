@@ -170,6 +170,10 @@ end
         let x = rand(Float32, 10, 10)
             @test findfirst(>(0.5f0), x) == findfirst(>(0.5f0), AT(x))
         end
+
+        # emtpy
+        @test compare(findfirst, AT, Bool[])
+        @test compare(x->findfirst(>(0.5f0), x), AT, Float32[])
     end
 
     @testset "findmax & findmin" begin

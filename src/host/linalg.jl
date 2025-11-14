@@ -62,6 +62,13 @@ function Base.copyto!(A::Array{T,N}, B::Transpose{T, <:AbstractGPUArray{T,N}}) w
     copyto!(A, Transpose(Array(parent(B))))
 end
 
+## trace
+
+function LinearAlgebra.tr(A::AnyGPUMatrix)
+    LinearAlgebra.checksquare(A)
+    sum(diag(A))
+end
+
 ## copy upper triangle to lower and vice versa
 
 function LinearAlgebra.copytri!(A::AbstractGPUMatrix, uplo::AbstractChar, conjugate::Bool=false)
@@ -262,9 +269,24 @@ function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
     return C
 end
 
+function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
+                            A::Union{AbstractGPUArray, Adjoint{T,<:AbstractGPUArray{T}}, Transpose{T,<:AbstractGPUArray{T}}},
+                            B::Union{AbstractGPUArray, Adjoint{T,<:AbstractGPUArray{T}}, Transpose{T,<:AbstractGPUArray{T}}}) where {T}
+    dc = C.diag
+    d  = length(dc)
+    m, n   = size(A, 1), size(A, 2)
+    m′, n′ = size(B, 1), size(B, 2)
+    m == d  || throw(DimensionMismatch("left hand side has $m rows but output is $d by $d"))
+    n′ == d || throw(DimensionMismatch("right hand side has $n′ cols but output is $d by $d"))
+    C_ = A * B
+    isdiag(C_) || throw(ErrorException("output matrix must be diagonal"))
+    dc .= diag(C_)
+    return C
+end
+
 function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
                             D::Diagonal{<:Any, <:AbstractGPUArray},
-                            A::AbstractGPUVecOrMat)
+                            A::Union{AbstractGPUArray, Adjoint{T,<:AbstractGPUArray{T}}, Transpose{T,<:AbstractGPUArray{T}}}) where {T}
     dd = D.diag
     d = length(dd)
     m, n = size(A, 1), size(A, 2)
@@ -272,15 +294,14 @@ function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
     m == d || throw(DimensionMismatch("right hand side has $m rows but D is $d by $d"))
     (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
     @. B = dd * A
-
     B
 end
 
 function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
                             D::Diagonal{<:Any, <:AbstractGPUArray},
-                            A::AbstractGPUVecOrMat,
+                            A::Union{AbstractGPUArray, Adjoint{T,<:AbstractGPUArray{T}}, Transpose{T,<:AbstractGPUArray{T}}},
                             α::Number,
-                            β::Number)
+                            β::Number) where {T}
     dd = D.diag
     d = length(dd)
     m, n = size(A, 1), size(A, 2)
@@ -377,7 +398,7 @@ function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::Abstrac
     C
 end
 
-@static if VERSION < v"1.12.0-"
+@static if !isdefined(LinearAlgebra, Symbol("@stable_muladdmul")) # @stable_muladdmul was added in 1.12
 function LinearAlgebra.generic_matvecmul!(C::AbstractGPUVector, tA::AbstractChar, A::AbstractGPUMatrix, B::AbstractGPUVector, _add::MulAddMul = MulAddMul())
     generic_matmatmul!(C, wrap(A, tA), B, _add)
 end
@@ -399,6 +420,21 @@ end
     using LinearAlgebra: generic_matmatmul_wrapper!, BlasFlag
     function LinearAlgebra.generic_matmatmul_wrapper!(C::AbstractGPUMatrix{T}, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat{T}, B::AbstractGPUVecOrMat{T}, alpha::Number, beta::Number, val::LinearAlgebra.BlasFlag.SyrkHerkGemm) where {T}
         LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+    end
+    # Julia 1.12 introduced generic_mul! for scalar * array operations
+    function LinearAlgebra.generic_mul!(C::AbstractGPUVecOrMat, X::AbstractGPUVecOrMat, s::Number, alpha::Number, beta::Number)
+        if length(C) != length(X)
+            throw(DimensionMismatch(lazy"first array has length $(length(C)) which does not match the length of the second, $(length(X))."))
+        end
+        @. C = X * s * alpha + C * beta
+        return C
+    end
+    function LinearAlgebra.generic_mul!(C::AbstractGPUVecOrMat, s::Number, X::AbstractGPUVecOrMat, alpha::Number, beta::Number)
+        if length(C) != length(X)
+            throw(DimensionMismatch(lazy"first array has length $(length(C)) which does not match the length of the second, $(length(X))."))
+        end
+        @. C = s * X * alpha + C * beta
+        return C
     end
 end
 
@@ -713,7 +749,7 @@ function LinearAlgebra.rotate!(x::AbstractGPUArray, y::AbstractGPUArray, c::Numb
         @inbounds xi = x[i]
         @inbounds yi = y[i]
         @inbounds x[i] = s*yi +      c *xi
-        @inbounds y[i] = c*yi - conj(s)*xi 
+        @inbounds y[i] = c*yi - conj(s)*xi
     end
     rotate_kernel!(get_backend(x))(x, y, c, s; ndrange = size(x))
     return x, y

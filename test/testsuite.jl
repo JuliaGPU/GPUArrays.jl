@@ -16,6 +16,7 @@ using Test
 
 using Adapt
 
+test_result(a, b; kwargs...) = a == b
 test_result(a::Number, b::Number; kwargs...) = ≈(a, b; kwargs...)
 test_result(a::Missing, b::Missing; kwargs...) = true
 test_result(a::Number, b::Missing; kwargs...) = false
@@ -62,6 +63,10 @@ supported_eltypes() = (Int16, Int32, Int64,
                        ComplexF16, ComplexF32, ComplexF64,
                        Complex{Int16}, Complex{Int32}, Complex{Int64})
 
+# derived sparse types that are supported by the array type
+
+sparse_types(::Type{AT}) where {AT} = ()
+
 # some convenience predicates for filtering test eltypes
 isrealtype(T) = T <: Real
 iscomplextype(T) = T <: Complex
@@ -96,6 +101,7 @@ include("testsuite/math.jl")
 include("testsuite/random.jl")
 include("testsuite/uniformscaling.jl")
 include("testsuite/statistics.jl")
+include("testsuite/sparse.jl")
 include("testsuite/alloc_cache.jl")
 include("testsuite/jld2ext.jl")
 

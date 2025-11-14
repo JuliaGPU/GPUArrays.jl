@@ -1,4 +1,4 @@
-@testsuite "linalg" (AT, eltypes)->begin
+@testsuite "linalg/core " (AT, eltypes)->begin
     @testset "adjoint and transpose" begin
         @test compare(adjoint, AT, rand(Float32, 32, 32))
         @test compare(adjoint!, AT, rand(Float32, 32, 32), rand(Float32, 32, 32))
@@ -18,16 +18,22 @@
         @test compare(transpose!, AT, Array{Float32}(undef, 128, 32), rand(Float32, 32, 128))
     end
 
+    @testset "tr" begin
+        @test compare(tr, AT, rand(Float32, 32, 32))
+    end
+
     @testset "permutedims" begin
         @test compare(x -> permutedims(x, (2, 1)), AT, rand(Float32, 2, 3))
         @test compare(x -> permutedims(x, (2, 1, 3)), AT, rand(Float32, 4, 5, 6))
         @test compare(x -> permutedims(x, (3, 1, 2)), AT, rand(Float32, 4, 5, 6))
-        @test compare(x -> permutedims(x, [2,1,4,3]), AT, randn(ComplexF32,3,4,5,1))
-        # test UInt64 version to make sure it works properly when array length is larger than typemax of UInt32.
-        AT <: GPUArrays.AbstractGPUArray && @test let
-            x = randn(ComplexF32,3,4,5,1)
-            y = permutedims(x, (2,1,4,3))
-            Array(GPUArrays._permutedims!(UInt64, AT(zero(y)), AT(x), (2,1,4,3))) ≈ y
+        if ComplexF32 in eltypes
+            @test compare(x -> permutedims(x, [2,1,4,3]), AT, randn(ComplexF32,3,4,5,1))
+            # test UInt64 version to make sure it works properly when array length is larger than typemax of UInt32.
+            AT <: GPUArrays.AbstractGPUArray && @test let
+                x = randn(ComplexF32,3,4,5,1)
+                y = permutedims(x, (2,1,4,3))
+                Array(GPUArrays._permutedims!(UInt64, AT(zero(y)), AT(x), (2,1,4,3))) ≈ y
+            end
         end
         # high dimensional tensor
         @test compare(x -> permutedims(x, 18:-1:1), AT, rand(Float32, 4, [2 for _ = 2:18]...))
@@ -70,12 +76,12 @@
     @testset "triangular" begin
         @testset "copytri!" begin
             @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64), uplo in ('U', 'L'), conjugate in (true, false)
-                n = 128
-                areal = randn(n,n)/2
-                aimg  = randn(n,n)/2
                 if !(eltya in eltypes)
                     continue
                 end
+                n = 128
+                areal = randn(n,n)/2
+                aimg  = randn(n,n)/2
                 a = convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
                 @test compare(x -> LinearAlgebra.copytri!(x, uplo, conjugate), AT, a)
             end
@@ -146,6 +152,9 @@
 
         @testset "mul! + Triangular" begin
             @testset "trimatmul! ($TR x $T, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
+                if !(T in eltypes)
+                    continue
+                end
                 n = 128
                 A = AT(rand(T, n,n))
                 b = AT(rand(T, n))
@@ -164,6 +173,9 @@
             end
 
             @testset "mattrimul ($TR x $T, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
+                if !(T in eltypes)
+                    continue
+                end
                 n = 128
                 A = AT(rand(T, n,n))
                 B = AT(rand(T, n, n))
@@ -226,7 +238,10 @@
         end
 
         @testset "mul! + Diagonal" begin
-            for elty in (Float32, ComplexF32)
+            @testset "$elty" for elty in (Float32, ComplexF32)
+                if !(elty in eltypes)
+                    continue
+                end
                 n = 128
                 d = AT(rand(elty, n))
                 D = Diagonal(d)
@@ -237,6 +252,9 @@
                 β = rand(elty)
                 mul!(X, D, B)
                 mul!(Y, Diagonal(collect(d)), collect(B))
+                @test collect(X) ≈ Y
+                mul!(X, D, adjoint(B))
+                mul!(Y, Diagonal(collect(d)), collect(adjoint(B)))
                 @test collect(X) ≈ Y
                 mul!(X, D, B, α, β)
                 mul!(Y, Diagonal(collect(d)), collect(B), α, β)
@@ -253,7 +271,17 @@
                 B = Diagonal(b)
                 A = Diagonal(a)
                 mul!(C, A, B)
-                @test collect(C.diag) ≈ collect(A.diag) .* collect(B.diag) 
+                @test collect(C.diag) ≈ collect(A.diag) .* collect(B.diag)
+                a = AT(diagm(rand(elty, n)))
+                b = AT(diagm(rand(elty, n)))
+                C = Diagonal(d)
+                mul!(C, a, b)
+                @test collect(C) ≈ Diagonal(collect(a) * collect(b))
+                a = transpose(AT(diagm(rand(elty, n))))
+                b = adjoint(AT(diagm(rand(elty, n))))
+                C = Diagonal(d)
+                mul!(C, a, b)
+                @test collect(C) ≈ Diagonal(collect(a) * collect(b))
             end
         end
 
@@ -290,43 +318,92 @@
         end
     end
 
-    @testset "lmul! and rmul!" for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in eltypes
-        @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))
-        @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
+    @testset "mul! + UniformScaling" begin
+        @testset "$elty" for elty in (Float32, ComplexF32)
+            if !(elty in eltypes)
+                continue
+            end
+            n = 128
+            s = rand(elty)
+            I_s = UniformScaling(s)
+
+            # Test vector operations
+            a = AT(rand(elty, n))
+            b = AT(rand(elty, n))
+            b_copy = copy(b)
+
+            # Test mul!(a, I*s, b) - should compute a = s * b
+            mul!(a, I_s, b)
+            @test collect(a) ≈ s .* collect(b_copy)
+
+            # Test mul!(a, b, s) - should compute a = b * s
+            a = AT(rand(elty, n))
+            mul!(a, b, s)
+            @test collect(a) ≈ collect(b_copy) .* s
+
+            # Test matrix operations
+            A = AT(rand(elty, n, n))
+            B = AT(rand(elty, n, n))
+            B_copy = copy(B)
+
+            # Test mul!(A, I*s, B)
+            mul!(A, I_s, B)
+            @test collect(A) ≈ s .* collect(B_copy)
+
+            # Test mul!(A, B, s)
+            A = AT(rand(elty, n, n))
+            mul!(A, B, s)
+            @test collect(A) ≈ collect(B_copy) .* s
+        end
     end
 
-    @testset "axp{b}y" for T in eltypes
-        @test compare(axpby!, AT, Ref(rand(T)), rand(T,5), Ref(rand(T)), rand(T,5))
-        @test compare(axpy!, AT, Ref(rand(T)), rand(T,5), rand(T,5))
+    @testset "lmul! and rmul!" begin
+        @testset "$T ($a,$b)" for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in eltypes
+            @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))
+            @test compare(lmul!, AT, Ref(rand(T)), rand(T, b))
+        end
     end
 
-    @testset "dot" for T in eltypes
-        @test compare(dot, AT, rand(T,5), rand(T, 5))
+    @testset "axp{b}y" begin
+        @testset "$T" for T in eltypes
+            @test compare(axpby!, AT, Ref(rand(T)), rand(T,5), Ref(rand(T)), rand(T,5))
+            @test compare(axpy!, AT, Ref(rand(T)), rand(T,5), rand(T,5))
+        end
     end
 
-    @testset "rotate!" for T in eltypes
-        @test compare(rotate!, AT, rand(T,5), rand(T,5), Ref(rand(real(T))), Ref(rand(T)))
+    @testset "dot" begin
+        @testset "$T" for T in eltypes
+            @test compare(dot, AT, rand(T,5), rand(T, 5))
+        end
     end
 
-    @testset "reflect!" for T in eltypes
-        @test compare(reflect!, AT, rand(T,5), rand(T,5), Ref(rand(real(T))), Ref(rand(T)))
+    @testset "rotate!" begin
+        @testset "$T" for T in eltypes
+            @test compare(rotate!, AT, rand(T,5), rand(T,5), Ref(rand(real(T))), Ref(rand(T)))
+        end
     end
 
-    @testset "iszero and isone" for T in eltypes
-        A = one(AT(rand(T, 2, 2)))
-        @test isone(A)
-        @test iszero(A) == false
+    @testset "reflect!" begin
+        @testset "$T" for T in eltypes
+            @test compare(reflect!, AT, rand(T,5), rand(T,5), Ref(rand(real(T))), Ref(rand(T)))
+        end
+    end
 
-        A = zero(AT(rand(T, 2, 2)))
-        @test iszero(A)
-        @test isone(A) == false
+    @testset "iszero and isone" begin
+        @testset "$T" for T in eltypes
+            A = one(AT(rand(T, 2, 2)))
+            @test isone(A)
+            @test iszero(A) == false
+
+            A = zero(AT(rand(T, 2, 2)))
+            @test iszero(A)
+            @test isone(A) == false
+        end
     end
 
     @testset "kron" begin
-        for T in eltypes
-            for opa in (vec, identity, transpose, adjoint), opb in (vec, identity, transpose, adjoint)
-                @test compare(kron, AT, opa(rand(T, 32, 64)), opb(rand(T, 128, 16)))
-            end
+        @testset "$T, $opa, $opb" for T in eltypes, opa in (vec, identity, transpose, adjoint), opb in (vec, identity, transpose, adjoint)
+            @test compare(kron, AT, opa(rand(T, 32, 64)), opb(rand(T, 128, 16)))
         end
     end
 end
