@@ -49,7 +49,7 @@ GPU sparse arrays.
 For **host-side** types, your custom sparse types should implement:
 
 - `dense_array_type` - the corresponding dense array type. For example, for a `CuSparseVector` or `CuSparseMatrixCXX`, the `dense_array_type` is `CuArray`
-- `sparse_array_type` - the **untyped** sparse array type corresponding to a given parametrized type. A `CuSparseVector{Tv, Ti}` would have a `sparse_array_type` of `CuVector` -- note the lack of type parameters!
+- `sparse_array_type` - the **untyped** sparse array type corresponding to a given parametrized type. A `CuSparseVector{Tv, Ti}` would have a `sparse_array_type` of `CuSparseVector` -- note the lack of type parameters!
 - `csc_type(::Type{T})` - the compressed sparse column type for your backend. A `CuSparseMatrixCSR` would have a `csc_type` of `CuSparseMatrixCSC`. 
 - `csr_type(::Type{T})` - the compressed sparse row type for your backend. A `CuSparseMatrixCSC` would have a `csr_type` of `CuSparseMatrixCSR`. 
 - `coo_type(::Type{T})` - the coordinate sparse matrix type for your backend. A `CuSparseMatrixCSC` would have a `coo_type` of `CuSparseMatrixCOO`.
@@ -90,4 +90,3 @@ You'll also need to inform `GPUArrays.jl` and `GPUCompiler.jl` how to adapt your
 ```julia
 KA.get_backend(::MySparseVector) = MyBackend()
 ```  
-``` 
