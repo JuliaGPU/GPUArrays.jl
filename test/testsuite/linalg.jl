@@ -124,8 +124,8 @@
                 gpu_b = AT{Float32}(undef, 128, 128) |> TR
 
                 gpu_c = copyto!(gpu_b, gpu_a)
-                @test all(Array(gpu_b) .== Array(gpu_a))
-                @test all(Array(gpu_c) .== Array(gpu_a))
+                @test all(TR(Array(parent(gpu_b))) .== TR(Array(parent(gpu_a))))
+                @test all(TR(Array(parent(gpu_c))) .== TR(Array(parent(gpu_a))))
                 @test gpu_c isa TR
             end
         end
