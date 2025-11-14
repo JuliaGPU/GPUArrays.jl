@@ -1,3 +1,0 @@
-# `AbstractDeviceArray`
-
-TODO: describe functionality

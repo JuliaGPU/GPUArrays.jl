@@ -1,5 +1,13 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
+GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
+JLArrays = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
 
 [compact]
 Documenter = "1.8"
+
+[sources]
+GPUArrays = {path = ".."}
+GPUArraysCore = {path = "../lib/GPUArraysCore"}
+JLArrays = {path = "../lib/JLArrays"}
