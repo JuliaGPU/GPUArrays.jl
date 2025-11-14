@@ -83,7 +83,11 @@ function hasfieldcount(@nospecialize(dt))
     return true
 end
 
-# for finding specific element types, e.g., when Float64 is unsupported
+"""
+    contains_eltype(T, typ)
+
+For finding specific element type `T` inside `typ`, e.g., when `Float64` is unsupported.
+"""
 function contains_eltype(T, typ)
     if T === typ
       return true
@@ -99,15 +103,19 @@ function contains_eltype(T, typ)
     return false
 end
 
-# Types that are allocated inline include:
-# 1. plain bitstypes (`Int`, `(Float16, Float32)`, plain immutable structs, etc).
-#    these are simply stored contiguously in the buffer.
-# 2. structs of unions (`struct Foo; x::Union{Int, Float32}; end`)
-#    these are stored with a selector at the end (handled by Julia).
-# 3. bitstype unions (`Union{Int, Float32}`, etc)
-#    these are stored contiguously and require a selector array (handled by us)
-#
-# This function explains why a type is not allocated inline.
+"""
+    explain_allocatedinline(@nospecialize(T)[, depth; maxdepth])
+
+This function explains why a type is not allocated inline.
+
+Types that are allocated inline include:
+1. plain bitstypes (`Int`, `(Float16, Float32)`, plain immutable structs, etc).
+   these are simply stored contiguously in the buffer.
+2. structs of unions (`struct Foo; x::Union{Int, Float32}; end`)
+   these are stored with a selector at the end (handled by Julia).
+3. bitstype unions (`Union{Int, Float32}`, etc)
+   these are stored contiguously and require a selector array (handled by us)
+"""
 function explain_allocatedinline(@nospecialize(T), depth=0; maxdepth=10)
     depth > maxdepth && return ""
 
