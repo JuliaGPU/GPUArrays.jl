@@ -25,11 +25,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: julia-actions/setup-julia@v2
+        timeout-minutes: 10
         with:
           version: ${{ matrix.version }}
       - uses: julia-actions/cache@v2
         timeout-minutes: 5
       - name: Develop subpackages
+        timeout-minutes: 5
         run: |
           julia --project -e "
             using Pkg
