@@ -169,27 +169,29 @@ for T in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriang
 end
 
 function LinearAlgebra.tril!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
-  @kernel function tril_kernel!(_A, _d)
-    I = @index(Global, Cartesian)
-    i, j = Tuple(I)
-    if i < j - _d
-      @inbounds _A[i, j] = zero(T)
+    isempty(A) && return A
+    @kernel function tril_kernel!(_A, _d)
+        I = @index(Global, Cartesian)
+        i, j = Tuple(I)
+        if i < j - _d
+            @inbounds _A[i, j] = zero(T)
+        end
     end
-  end
-  tril_kernel!(get_backend(A))(A, d; ndrange = size(A))
-  return A
+    tril_kernel!(get_backend(A))(A, d; ndrange = size(A))
+    return A
 end
 
 function LinearAlgebra.triu!(A::AbstractGPUMatrix{T}, d::Integer = 0) where T
-  @kernel function triu_kernel!(_A, _d)
-    I = @index(Global, Cartesian)
-    i, j = Tuple(I)
-    if j < i + _d
-      @inbounds _A[i, j] = zero(T)
+    isempty(A) && return A
+    @kernel function triu_kernel!(_A, _d)
+        I = @index(Global, Cartesian)
+        i, j = Tuple(I)
+        if j < i + _d
+            @inbounds _A[i, j] = zero(T)
+        end
     end
-  end
-  triu_kernel!(get_backend(A))(A, d; ndrange = size(A))
-  return A
+    triu_kernel!(get_backend(A))(A, d; ndrange = size(A))
+    return A
 end
 
 # check if upper triangular starting from the kth superdiagonal.

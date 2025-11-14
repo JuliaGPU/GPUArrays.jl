@@ -188,6 +188,16 @@
             @test Array(x1) ≈ x
         end
 
+        @testset "empty" begin
+            x = Matrix{Float32}(I, (0, 3))
+            x1 = AT{Float32, 2}(I, (0, 3))
+
+            @test Array(x1) ≈ x
+            
+            copyto!(x1, I)
+            @test Array(x1) ≈ x
+        end
+
         @testset "JuliaGPU/GPUArrays.jl#439" begin
             x = AT{Float32}(I, 500, 300)
             y = Array{Float32}(I, 500, 300)
