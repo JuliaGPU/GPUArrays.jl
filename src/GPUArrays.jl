@@ -16,6 +16,7 @@ using Reexport
 @reexport using GPUArraysCore
 
 using KernelAbstractions
+import AcceleratedKernels as AK
 
 # device functionality
 include("device/abstractarray.jl")
