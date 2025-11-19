@@ -67,7 +67,8 @@ steps:
                 println("--- :julia: Installing AMDGPU.jl")
                 withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
                         "JULIA_PKG_DEVDIR" => devdir) do
-                  Pkg.develop("AMDGPU")
+                  # Pkg.develop("AMDGPU")
+                  Pkg.add(url="https://github.com/JuliaGPU/AMDGPU.jl", rev="lr/gpuarrays")
                   Pkg.activate(package)
 
                   try
@@ -82,7 +83,7 @@ steps:
                 end
 
                 println("+++ :julia: Running tests")
-                Pkg.test(; test_args=["gpuarrays"], coverage=true)'
+                Pkg.test(; coverage=true)'
     agents:
       queue: "juliagpu"
       rocm: "*"
