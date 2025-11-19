@@ -45,7 +45,7 @@ steps:
     soft_fail:
       - exit_status: 3
 
-- label: "AMDGPU.jl"
+  - label: "AMDGPU.jl"
     plugins:
       - JuliaCI/julia#v1:
           version: "1.10"
