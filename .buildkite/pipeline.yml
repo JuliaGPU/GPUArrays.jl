@@ -57,7 +57,7 @@ steps:
                 gpuarrays = pwd()
                 gpuarrayscore = joinpath(gpuarrays, "lib", "GPUArraysCore")
                 devdir = mktempdir()
-                package = joinpath(devdir, "AMDPU")
+                package = joinpath(devdir, "AMDGPU")
 
                 println("--- :julia: Installing TestEnv")
                 Pkg.activate(; temp=true)
