@@ -82,7 +82,7 @@ steps:
                 end
 
                 println("+++ :julia: Running tests")
-                Pkg.test(; test_args=["gpuarrays"], coverage=true)
+                Pkg.test(; test_args=["gpuarrays"], coverage=true)'
     agents:
       queue: "juliagpu"
       rocm: "*"
