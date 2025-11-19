@@ -322,7 +322,7 @@
     end
 
     @testset "diagm" begin
-        @testset "$elty" for elty in (Float32, Float64)
+        @testset "$elty" for elty in (Float32, ComplexF32)
             m = 128
             A = AT(rand(elty, m))
             B = AT(rand(elty, m - 1))
