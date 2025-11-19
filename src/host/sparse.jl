@@ -242,9 +242,12 @@ function Base.getindex(A::AbstractGPUSparseMatrixCSC{T}, i0::Integer, i1::Intege
     r1 = Int(SparseArrays.getcolptr(A)[i1])
     r2 = Int(SparseArrays.getcolptr(A)[i1+1]-1)
     (r1 > r2) && return zero(T)
-    r1 = searchsortedfirst(SparseArrays.rowvals(A), i0, r1, r2, Base.Order.Forward)
-    (r1 > r2 || SparseArrays.rowvals(A)[r1] != i0) && return zero(T)
-    SparseArrays.nonzeros(A)[r1]
+    r0 = findfirst(i0, view(SparseArrays.rowvals(A), r1, r2))
+    if isnothing(r0)
+        return zero(T)
+    else
+        return SparseArrays.nonzeros(A)[something(r0) + r1 - 1]
+    end
 end
 
 ## copying between sparse GPU arrays
