@@ -321,6 +321,24 @@
         end
     end
 
+    @testset "diagm" begin
+        @testset "$elty" for elty in (Float32, Float64)
+            m = 128
+            A = AT(rand(elty, m))
+            B = AT(rand(elty, m - 1))
+            diagA = diagm(A)
+            diagB = diagm(1 => B)
+            @test eltype(diagA) == elty
+            @test eltype(diagB) == elty
+            @test size(diagA) == (m, m)
+            @test size(diagB) == (m, m)
+            diagind_A = diagind(diagA, 0)
+            diagind_B = diagind(diagB, 1)
+            @test collect(diagA[diagind_A]) == collect(A)
+            @test collect(diagB[diagind_B]) == collect(B)
+        end
+    end
+
     @testset "mul! + UniformScaling" begin
         @testset "$elty" for elty in (Float32, ComplexF32)
             if !(elty in eltypes)
