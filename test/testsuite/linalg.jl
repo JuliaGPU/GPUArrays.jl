@@ -1,4 +1,4 @@
-@testsuite "linalg/core" (AT, eltypes)->begin
+@testsuite "linalg/core" (AT, eltypes) -> begin
     @testset "adjoint and transpose" begin
         @test compare(adjoint, AT, rand(Float32, 32, 32))
         @test compare(adjoint!, AT, rand(Float32, 32, 32), rand(Float32, 32, 32))
