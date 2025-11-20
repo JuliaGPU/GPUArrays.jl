@@ -45,6 +45,53 @@ steps:
     soft_fail:
       - exit_status: 3
 
+  - label: "AMDGPU.jl"
+    plugins:
+      - JuliaCI/julia#v1:
+          version: "1.10"
+      - JuliaCI/julia-coverage#v1:
+          codecov: true
+    command: |
+      julia -e 'using Pkg
+
+                gpuarrays = pwd()
+                gpuarrayscore = joinpath(gpuarrays, "lib", "GPUArraysCore")
+                devdir = mktempdir()
+                package = joinpath(devdir, "AMDGPU")
+
+                println("--- :julia: Installing TestEnv")
+                Pkg.activate(; temp=true)
+                Pkg.add("TestEnv")
+                using TestEnv
+
+                println("--- :julia: Installing AMDGPU.jl")
+                withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
+                        "JULIA_PKG_DEVDIR" => devdir) do
+                  Pkg.develop("AMDGPU")
+                  Pkg.activate(package)
+
+                  try
+                    Pkg.develop([PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore)])
+                    TestEnv.activate()
+                  catch err
+                    @error "Could not install AMDGPU.jl" exception=(err,catch_backtrace())
+                    exit(3)
+                  finally
+                    Pkg.activate(package)
+                  end
+                end
+
+                println("+++ :julia: Running tests")
+                Pkg.test(; coverage=true)'
+    agents:
+      queue: "juliagpu"
+      rocm: "*"
+      rocmgpu: "*"
+    if: build.message !~ /\[skip tests\]/
+    timeout_in_minutes: 120
+    soft_fail:
+      - exit_status: 3
+
   - label: "oneAPI.jl"
     plugins:
       - JuliaCI/julia#v1:
