@@ -130,6 +130,10 @@
             @test A isa AT{T,2}
             @test Array(A) == one(rand(T, 2, 2))
 
+            A = one(AT(rand(T, 0, 0)))
+            @test A isa AT{T,2}
+            @test Array(A) == one(rand(T, 0, 0))
+
             A = oneunit(AT(rand(T, 2, 2)))
             @test A isa AT{T,2}
             @test Array(A) == oneunit(rand(T, 2, 2))
@@ -193,7 +197,7 @@
             x1 = AT{Float32, 2}(I, (0, 3))
 
             @test Array(x1) ≈ x
-            
+
             copyto!(x1, I)
             @test Array(x1) ≈ x
         end

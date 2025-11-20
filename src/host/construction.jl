@@ -59,6 +59,8 @@ function _one(unit::T, x::AbstractGPUMatrix) where {T}
     m,n = size(x)
     m==n || throw(DimensionMismatch("multiplicative identity defined only for square matrices"))
     I = similar(x, T)
+    isempty(I) && return I
+
     fill!(I, zero(T))
     kernel = identity_kernel(get_backend(I))
     kernel(I, m, unit; ndrange=m)
