@@ -164,6 +164,7 @@ if isdefined(LinearAlgebra, :copytrito!)
             else
                 (m1 < m || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least size ($m,$n)"))
             end
+            length(A) == 0 && return B
             @kernel function U_kernel!(_A, _B)
                 I = @index(Global, Cartesian)
                 i, j = Tuple(I)
@@ -178,6 +179,7 @@ if isdefined(LinearAlgebra, :copytrito!)
             else
                 (m1 < m || n1 < n) && throw(DimensionMismatch("B of size ($m1,$n1) should have at least size ($m,$n)"))
             end
+            length(A) == 0 && return B
             @kernel function L_kernel!(_A, _B)
                 I = @index(Global, Cartesian)
                 i, j = Tuple(I)
