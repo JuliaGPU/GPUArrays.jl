@@ -43,9 +43,10 @@ steps:
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 120
     matrix:
-      julia:
-        - "1.10"
-        - "1.12"
+      setup:
+        julia:
+          - "1.10"
+          - "1.12"
     soft_fail:
       - exit_status: 3
 
@@ -94,9 +95,10 @@ steps:
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 120
     matrix:
-      julia:
-        - "1.10"
-        - "1.12"
+      setup:
+        julia:
+          - "1.10"
+          - "1.12"
     soft_fail:
       - exit_status: 3
 
@@ -145,9 +147,10 @@ steps:
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
     matrix:
-      julia:
-        - "1.10"
-        - "1.12"
+      setup:
+        julia:
+          - "1.10"
+          - "1.12"
     soft_fail:
       - exit_status: 3
 
@@ -196,9 +199,10 @@ steps:
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
     matrix:
-      julia:
-        - "1.10"
-        - "1.12"
+      setup:
+        julia:
+          - "1.10"
+          - "1.12"
     soft_fail:
       - exit_status: 3
 
