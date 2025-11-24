@@ -1,8 +1,8 @@
 steps:
-  - label: "CUDA.jl"
+  - label: "CUDA.jl -- Julia {{matrix.julia}}"
     plugins:
       - JuliaCI/julia#v1:
-          version: "1.10"
+          version: "{{matrix.julia}}"
       - JuliaCI/julia-coverage#v1:
           codecov: true
     command: |
@@ -42,13 +42,17 @@ steps:
       cuda: "*"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 120
+    matrix:
+      julia:
+        - "1.10"
+        - "1.12"
     soft_fail:
       - exit_status: 3
 
-  - label: "AMDGPU.jl"
+  - label: "AMDGPU.jl -- Julia {{matrix.julia}}"
     plugins:
       - JuliaCI/julia#v1:
-          version: "1.10"
+          version: "{{matrix.julia}}"
       - JuliaCI/julia-coverage#v1:
           codecov: true
     command: |
@@ -89,13 +93,17 @@ steps:
       rocmgpu: "*"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 120
+    matrix:
+      julia:
+        - "1.10"
+        - "1.12"
     soft_fail:
       - exit_status: 3
 
-  - label: "oneAPI.jl"
+  - label: "oneAPI.jl -- Julia {{matrix.julia}}"
     plugins:
       - JuliaCI/julia#v1:
-          version: "1.10"
+          version: "{{matrix.julia}}"
       - JuliaCI/julia-coverage#v1:
           codecov: true
     command: |
@@ -136,13 +144,17 @@ steps:
       intel: "*"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
+    matrix:
+      julia:
+        - "1.10"
+        - "1.12"
     soft_fail:
       - exit_status: 3
 
-  - label: "Metal.jl"
+  - label: "Metal.jl -- Julia {{matrix.julia}}"
     plugins:
       - JuliaCI/julia#v1:
-          version: "1.10"
+          version: "{{matrix.julia}}"
       - JuliaCI/julia-coverage#v1:
           codecov: true
     command: |
@@ -183,6 +195,10 @@ steps:
       arch: "aarch64"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
+    matrix:
+      julia:
+        - "1.10"
+        - "1.12"
     soft_fail:
       - exit_status: 3
 
