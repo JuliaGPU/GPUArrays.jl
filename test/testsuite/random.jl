@@ -24,7 +24,8 @@
             rand!(rng, A)
             Random.seed!(rng, 1)
             rand!(rng, B)
-            @test Array(A) == Array(B) broken=SEEDING_BROKEN && (prod(d) > length(rng.state))
+
+            @test Array(A) == Array(B) skip=SEEDING_BROKEN && (prod(d) > length(rng.state))
 
             if rng != cpu_rng
                 rand!(cpu_rng, A)
@@ -64,7 +65,7 @@
             randn!(rng, A)
             Random.seed!(rng, 1)
             randn!(rng, B)
-            @test Array(A) == Array(B) broken=SEEDING_BROKEN && (prod(d) > (2 * length(rng.state)))
+            @test Array(A) == Array(B) skip=SEEDING_BROKEN && (prod(d) > (2 * length(rng.state)))
 
             if rng != cpu_rng
                 randn!(cpu_rng, A)
