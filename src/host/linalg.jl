@@ -310,6 +310,21 @@ function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
 end
 
 function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
+                            A::Diagonal{<:Any, <:AbstractGPUArray},
+                            B::Diagonal{<:Any, <:AbstractGPUArray}, 
+                            α::Number,
+                            β::Number)
+    dc = C.diag
+    da = A.diag
+    db = B.diag
+    d = length(dc)
+    length(da) == d || throw(DimensionMismatch("right hand side has $(length(da)) rows but output is $d by $d"))
+    length(db) == d || throw(DimensionMismatch("left hand side has $(length(db)) rows but output is $d by $d"))
+    @. dc = α * da * db + β * dc
+
+    return C
+end
+function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
                             A::Union{AbstractGPUArray, Adjoint{T,<:AbstractGPUArray{T}}, Transpose{T,<:AbstractGPUArray{T}}},
                             B::Union{AbstractGPUArray, Adjoint{T,<:AbstractGPUArray{T}}, Transpose{T,<:AbstractGPUArray{T}}}) where {T}
     dc = C.diag
@@ -319,6 +334,23 @@ function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
     m == d  || throw(DimensionMismatch("left hand side has $m rows but output is $d by $d"))
     n′ == d || throw(DimensionMismatch("right hand side has $n′ cols but output is $d by $d"))
     C_ = A * B
+    isdiag(C_) || throw(ErrorException("output matrix must be diagonal"))
+    dc .= diag(C_)
+    return C
+end
+
+function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
+                            A::Union{AbstractGPUArray, Adjoint{T,<:AbstractGPUArray{T}}, Transpose{T,<:AbstractGPUArray{T}}},
+                            B::Union{AbstractGPUArray, Adjoint{T,<:AbstractGPUArray{T}}, Transpose{T,<:AbstractGPUArray{T}}},
+                            α::Number,
+                            β::Number) where {T}
+    dc = C.diag
+    d  = length(dc)
+    m, n   = size(A, 1), size(A, 2)
+    m′, n′ = size(B, 1), size(B, 2)
+    m == d  || throw(DimensionMismatch("left hand side has $m rows but output is $d by $d"))
+    n′ == d || throw(DimensionMismatch("right hand side has $n′ cols but output is $d by $d"))
+    @. C_ = α * A * B + β * C
     isdiag(C_) || throw(ErrorException("output matrix must be diagonal"))
     dc .= diag(C_)
     return C
@@ -354,8 +386,8 @@ function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
 end
 
 function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
-                            A::AbstractGPUVecOrMat,
-                            D::Diagonal{<:Any, <:AbstractGPUArray})
+                            A::Union{AbstractGPUArray, Adjoint{T,<:AbstractGPUArray{T}}, Transpose{T,<:AbstractGPUArray{T}}},
+                            D::Diagonal{<:Any, <:AbstractGPUArray}) where {T}
     dd = D.diag
     d = length(dd)
     m, n = size(A, 1), size(A, 2)
@@ -369,10 +401,10 @@ function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
 end
 
 function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
-                            A::AbstractGPUVecOrMat,
+                            A::Union{AbstractGPUArray, Adjoint{T,<:AbstractGPUArray{T}}, Transpose{T,<:AbstractGPUArray{T}}},
                             D::Diagonal{<:Any, <:AbstractGPUArray},
                             α::Number,
-                            β::Number)
+                            β::Number) where {T}
     dd = D.diag
     d = length(dd)
     m, n = size(A, 1), size(A, 2)

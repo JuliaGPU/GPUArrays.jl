@@ -380,16 +380,22 @@ end
             A = Diagonal(a)
             mul!(C, A, B)
             @test collect(C.diag) ≈ collect(A.diag) .* collect(B.diag)
+            mul!(C, A, B, α, β)
+            @test collect(C.diag) ≈ α * collect(A.diag) .* collect(B.diag) .+ β * collect(C.diag)
             a = AT(diagm(rand(elty, n)))
             b = AT(diagm(rand(elty, n)))
             C = Diagonal(d)
             mul!(C, a, b)
             @test collect(C) ≈ Diagonal(collect(a) * collect(b))
+            mul!(C, a, b, α, β)
+            @test collect(C) ≈ Diagonal(α * collect(a) * collect(b) + β * collect(C))
             a = transpose(AT(diagm(rand(elty, n))))
             b = adjoint(AT(diagm(rand(elty, n))))
             C = Diagonal(d)
             mul!(C, a, b)
             @test collect(C) ≈ Diagonal(collect(a) * collect(b))
+            mul!(C, a, b, α, β)
+            @test collect(C) ≈ Diagonal(α * collect(a) * collect(b)) + β * collect(C)
         end
     end
 
