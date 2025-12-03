@@ -188,139 +188,6 @@
         end
     end
 
-    @testset "diagonal" begin
-        @testset "Array + Diagonal" begin
-            n = 128
-            A = AT(rand(Float32, (n,n)))
-            d = AT(rand(Float32, n))
-            D = Diagonal(d)
-            B = A + D
-            @test collect(B) ≈ collect(A) + collect(D)
-        end
-
-        @testset "copy diagonal" begin
-            a = AT(rand(Float32, 10))
-            D = Diagonal(a)
-            C = copy(D)
-            @test C isa Diagonal
-            @test C.diag isa AT
-            @test collect(D) == collect(C)
-        end
-
-        @testset "cholesky + Diagonal" begin
-            n = 128
-            # Add one in order prevent failures due to random numbers being zero
-            d = AT(zeros(Float32, n) .+ one(Float32))
-            D = Diagonal(d)
-            F = collect(D)
-            @test collect(cholesky(D).U) ≈ collect(cholesky(F).U)
-            @test collect(cholesky(D).L) ≈ collect(cholesky(F).L)
-
-            d = AT([1f0, 2f0, -1f0, 0f0])
-            D = Diagonal(d)
-            @test cholesky(D, check = false).info == 3
-        end
-
-        @testset "\\ + Diagonal" begin
-            n = 128
-            d = AT(rand(Float32, n))
-            D = Diagonal(d)
-            b = AT(rand(Float32, n))
-            B = AT(rand(Float32, n, n))
-            @test collect(D \ b) ≈ Diagonal(collect(d)) \ collect(b)
-            @test collect(D \ B) ≈ Diagonal(collect(d)) \ collect(B)
-
-            d = ones(Float32, n)
-            d[rand(1:n)] = 0
-            d = AT(d)
-            D = Diagonal(d)
-            @test_throws SingularException D \ B
-        end
-
-        @testset "mul! + Diagonal" begin
-            @testset "$elty" for elty in (Float32, ComplexF32)
-                if !(elty in eltypes)
-                    continue
-                end
-                n = 128
-                d = AT(rand(elty, n))
-                D = Diagonal(d)
-                B = AT(rand(elty, n, n))
-                X = AT(zeros(elty, n, n))
-                Y = zeros(elty, n, n)
-                α = rand(elty)
-                β = rand(elty)
-                mul!(X, D, B)
-                mul!(Y, Diagonal(collect(d)), collect(B))
-                @test collect(X) ≈ Y
-                mul!(X, D, adjoint(B))
-                mul!(Y, Diagonal(collect(d)), collect(adjoint(B)))
-                @test collect(X) ≈ Y
-                mul!(X, D, B, α, β)
-                mul!(Y, Diagonal(collect(d)), collect(B), α, β)
-                @test collect(X) ≈ Y
-                mul!(X, B, D)
-                mul!(Y, collect(B), Diagonal(collect(d)))
-                @test collect(X) ≈ Y
-                mul!(X, B, D, α, β)
-                mul!(Y, collect(B), Diagonal(collect(d)), α, β)
-                @test collect(X) ≈ Y
-                a = AT(rand(elty, n))
-                b = AT(rand(elty, n))
-                C = Diagonal(d)
-                B = Diagonal(b)
-                A = Diagonal(a)
-                mul!(C, A, B)
-                @test collect(C.diag) ≈ collect(A.diag) .* collect(B.diag)
-                a = AT(diagm(rand(elty, n)))
-                b = AT(diagm(rand(elty, n)))
-                C = Diagonal(d)
-                mul!(C, a, b)
-                @test collect(C) ≈ Diagonal(collect(a) * collect(b))
-                a = transpose(AT(diagm(rand(elty, n))))
-                b = adjoint(AT(diagm(rand(elty, n))))
-                C = Diagonal(d)
-                mul!(C, a, b)
-                @test collect(C) ≈ Diagonal(collect(a) * collect(b))
-            end
-        end
-
-        @testset "ldiv! + Diagonal" begin
-            n = 128
-            d = AT(rand(Float32, n))
-            D = Diagonal(d)
-            b = AT(rand(Float32, n))
-            B = AT(rand(Float32, n, n))
-            X = AT(zeros(Float32, n, n))
-            Y = zeros(Float32, n, n)
-            ldiv!(X, D, B)
-            ldiv!(Y, Diagonal(collect(d)), collect(B))
-            @test collect(X) ≈ Y
-            ldiv!(D, B)
-            @test collect(B) ≈ collect(X)
-
-            d = ones(Float32, n)
-            d[rand(1:n)] = 0
-            d = AT(d)
-            D = Diagonal(d)
-            B = AT(rand(Float32, n, n))
-
-            @test_throws SingularException ldiv!(X, D, B)
-
-            # two-argument version throws SingularException
-            @test_throws SingularException ldiv!(D, B)
-        end
-
-        @testset "$f with diagonal $d" for f in (triu, triu!, tril, tril!),
-                                            d in -2:2
-            A = randn(Float32, 10, 10)
-            @test compare(f, AT, A, d)
-
-            A_empty = randn(Float32, 0, 0)
-            @test compare(f, AT, A_empty, d)
-        end
-    end
-
     @testset "diagm" begin
         @testset "$elty" for elty in (Float32, ComplexF32)
             m = 128
@@ -421,11 +288,144 @@
             @test isone(A) == false
         end
     end
+end
 
-    @testset "kron" begin
-        @testset "$T, $opa, $opb" for T in eltypes, opa in (vec, identity, transpose, adjoint), opb in (vec, identity, transpose, adjoint)
-            @test compare(kron, AT, opa(rand(T, 32, 64)), opb(rand(T, 128, 16)))
+@testsuite "linalg/kron" (AT, eltypes) -> begin
+    @testset "$T, $opa, $opb" for T in eltypes, opa in (vec, identity, transpose, adjoint), opb in (vec, identity, transpose, adjoint)
+        @test compare(kron, AT, opa(rand(T, 32, 64)), opb(rand(T, 128, 16)))
+    end
+end
+
+@testsuite "linalg/diagonal" (AT, eltypes) -> begin
+    @testset "Array + Diagonal" begin
+        n = 128
+        A = AT(rand(Float32, (n,n)))
+        d = AT(rand(Float32, n))
+        D = Diagonal(d)
+        B = A + D
+        @test collect(B) ≈ collect(A) + collect(D)
+    end
+
+    @testset "copy diagonal" begin
+        a = AT(rand(Float32, 10))
+        D = Diagonal(a)
+        C = copy(D)
+        @test C isa Diagonal
+        @test C.diag isa AT
+        @test collect(D) == collect(C)
+    end
+
+    @testset "cholesky + Diagonal" begin
+        n = 128
+        # Add one in order prevent failures due to random numbers being zero
+        d = AT(zeros(Float32, n) .+ one(Float32))
+        D = Diagonal(d)
+        F = collect(D)
+        @test collect(cholesky(D).U) ≈ collect(cholesky(F).U)
+        @test collect(cholesky(D).L) ≈ collect(cholesky(F).L)
+
+        d = AT([1f0, 2f0, -1f0, 0f0])
+        D = Diagonal(d)
+        @test cholesky(D, check = false).info == 3
+    end
+
+    @testset "\\ + Diagonal" begin
+        n = 128
+        d = AT(rand(Float32, n))
+        D = Diagonal(d)
+        b = AT(rand(Float32, n))
+        B = AT(rand(Float32, n, n))
+        @test collect(D \ b) ≈ Diagonal(collect(d)) \ collect(b)
+        @test collect(D \ B) ≈ Diagonal(collect(d)) \ collect(B)
+
+        d = ones(Float32, n)
+        d[rand(1:n)] = 0
+        d = AT(d)
+        D = Diagonal(d)
+        @test_throws SingularException D \ B
+    end
+
+    @testset "mul! + Diagonal" begin
+        @testset "$elty" for elty in (Float32, ComplexF32)
+            if !(elty in eltypes)
+                continue
+            end
+            n = 128
+            d = AT(rand(elty, n))
+            D = Diagonal(d)
+            B = AT(rand(elty, n, n))
+            X = AT(zeros(elty, n, n))
+            Y = zeros(elty, n, n)
+            α = rand(elty)
+            β = rand(elty)
+            mul!(X, D, B)
+            mul!(Y, Diagonal(collect(d)), collect(B))
+            @test collect(X) ≈ Y
+            mul!(X, D, adjoint(B))
+            mul!(Y, Diagonal(collect(d)), collect(adjoint(B)))
+            @test collect(X) ≈ Y
+            mul!(X, D, B, α, β)
+            mul!(Y, Diagonal(collect(d)), collect(B), α, β)
+            @test collect(X) ≈ Y
+            mul!(X, B, D)
+            mul!(Y, collect(B), Diagonal(collect(d)))
+            @test collect(X) ≈ Y
+            mul!(X, B, D, α, β)
+            mul!(Y, collect(B), Diagonal(collect(d)), α, β)
+            @test collect(X) ≈ Y
+            a = AT(rand(elty, n))
+            b = AT(rand(elty, n))
+            C = Diagonal(d)
+            B = Diagonal(b)
+            A = Diagonal(a)
+            mul!(C, A, B)
+            @test collect(C.diag) ≈ collect(A.diag) .* collect(B.diag)
+            a = AT(diagm(rand(elty, n)))
+            b = AT(diagm(rand(elty, n)))
+            C = Diagonal(d)
+            mul!(C, a, b)
+            @test collect(C) ≈ Diagonal(collect(a) * collect(b))
+            a = transpose(AT(diagm(rand(elty, n))))
+            b = adjoint(AT(diagm(rand(elty, n))))
+            C = Diagonal(d)
+            mul!(C, a, b)
+            @test collect(C) ≈ Diagonal(collect(a) * collect(b))
         end
+    end
+
+    @testset "ldiv! + Diagonal" begin
+        n = 128
+        d = AT(rand(Float32, n))
+        D = Diagonal(d)
+        b = AT(rand(Float32, n))
+        B = AT(rand(Float32, n, n))
+        X = AT(zeros(Float32, n, n))
+        Y = zeros(Float32, n, n)
+        ldiv!(X, D, B)
+        ldiv!(Y, Diagonal(collect(d)), collect(B))
+        @test collect(X) ≈ Y
+        ldiv!(D, B)
+        @test collect(B) ≈ collect(X)
+
+        d = ones(Float32, n)
+        d[rand(1:n)] = 0
+        d = AT(d)
+        D = Diagonal(d)
+        B = AT(rand(Float32, n, n))
+
+        @test_throws SingularException ldiv!(X, D, B)
+
+        # two-argument version throws SingularException
+        @test_throws SingularException ldiv!(D, B)
+    end
+
+    @testset "$f with diagonal $d" for f in (triu, triu!, tril, tril!),
+                                        d in -2:2
+        A = randn(Float32, 10, 10)
+        @test compare(f, AT, A, d)
+
+        A_empty = randn(Float32, 0, 0)
+        @test compare(f, AT, A_empty, d)
     end
 end
 
