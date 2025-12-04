@@ -311,7 +311,7 @@ end
 
 function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
                             A::Diagonal{<:Any, <:AbstractGPUArray},
-                            B::Diagonal{<:Any, <:AbstractGPUArray}, 
+                            B::Diagonal{<:Any, <:AbstractGPUArray},
                             α::Number,
                             β::Number)
     dc = C.diag
@@ -350,7 +350,7 @@ function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
     m′, n′ = size(B, 1), size(B, 2)
     m == d  || throw(DimensionMismatch("left hand side has $m rows but output is $d by $d"))
     n′ == d || throw(DimensionMismatch("right hand side has $n′ cols but output is $d by $d"))
-    @. C_ = α * A * B + β * C
+    C_ = @. α * A * B + β * C
     isdiag(C_) || throw(ErrorException("output matrix must be diagonal"))
     dc .= diag(C_)
     return C
