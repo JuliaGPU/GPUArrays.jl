@@ -345,6 +345,7 @@ end
         @test_throws SingularException D \ B
     end
 
+    #TODO: Refactor
     @testset "mul! + Diagonal" begin
         @testset "$elty" for elty in (Float32, ComplexF32)
             if !(elty in eltypes)
@@ -380,16 +381,25 @@ end
             A = Diagonal(a)
             mul!(C, A, B)
             @test collect(C.diag) ≈ collect(A.diag) .* collect(B.diag)
+            C_diag = collect(C.diag)
+            mul!(C, A, B, α, β)
+            @test collect(C.diag) ≈ α * collect(A.diag) .* collect(B.diag) .+ β * C_diag
             a = AT(diagm(rand(elty, n)))
             b = AT(diagm(rand(elty, n)))
             C = Diagonal(d)
             mul!(C, a, b)
             @test collect(C) ≈ Diagonal(collect(a) * collect(b))
+            C_coll = collect(C)
+            mul!(C, a, b, α, β)
+            @test collect(C) ≈ Diagonal(α * collect(a) * collect(b) + β * C_coll)
             a = transpose(AT(diagm(rand(elty, n))))
             b = adjoint(AT(diagm(rand(elty, n))))
             C = Diagonal(d)
             mul!(C, a, b)
             @test collect(C) ≈ Diagonal(collect(a) * collect(b))
+            C_coll = collect(C)
+            mul!(C, a, b, α, β)
+            @test collect(C) ≈ Diagonal(α * collect(a) * collect(b)) + β * C_coll
         end
     end
 
