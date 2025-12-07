@@ -342,8 +342,10 @@ Base.elsize(::Type{<:JLArray{T}}) where {T} = sizeof(T)
 Base.size(x::JLArray) = x.dims
 Base.sizeof(x::JLArray) = Base.elsize(x) * length(x)
 
-Base.unsafe_convert(::Type{Ptr{T}}, x::JLArray{T}) where {T} =
-    convert(Ptr{T}, pointer(x.data[])) + x.offset*Base.elsize(x)
+function Base.unsafe_convert(::Type{Ptr{T}}, x::JLArray{T}) where {T}
+    error("Illegal conversion of a JLArray to a Ptr")
+    #convert(Ptr{T}, pointer(x.data[])) + x.offset*Base.elsize(x)
+end
 
 
 ## interop with Julia arrays
