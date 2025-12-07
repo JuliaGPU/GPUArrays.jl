@@ -339,11 +339,12 @@ end
         @test_throws BoundsError view(x, :, :, 1:10)
       end
 
-      @test compare(x -> selectdim(x, 3, 1), AT, rand(Float32, 2, 2, 2))
-      let x = AT(rand(Float32, 5, 4, 3))
-        @test typeof(view(x, :, :, 1:2)) == typeof(view(x, :, :, Base.Slice(Base.OneTo(2))))
-        @test typeof(view(x, :, :, 1)) == typeof(view(x, :, Base.Slice(Base.OneTo(4)), 1))
-        @test typeof(selectdim(x, 3, 1)) == typeof(view(x, :, :, 1))
+      @testset "selectdim" begin
+        @test compare(x -> selectdim(x, 3, 1), AT, rand(Float32, 2, 2, 2))
+        let x = AT(rand(Float32, 5, 4, 3))
+          @test typeof(selectdim(x, 3, 1)) == typeof(view(x, :, :, 1))         
+          @test typeof(selectdim(x, 2, 1)) == typeof(view(x, :, 1, :))
+        end
       end
 
       # bug in parentindices conversion
