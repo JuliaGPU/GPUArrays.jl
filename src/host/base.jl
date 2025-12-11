@@ -278,9 +278,11 @@ struct NonContiguous end
 GPUIndexStyle() = Contiguous()
 GPUIndexStyle(I...) = NonContiguous()
 GPUIndexStyle(::Union{Base.ScalarIndex, CartesianIndex}...) = Contiguous()
-GPUIndexStyle(i1::Colon, ::Union{Base.ScalarIndex, CartesianIndex}...) = Contiguous()
-GPUIndexStyle(i1::AbstractUnitRange, ::Union{Base.ScalarIndex, CartesianIndex}...) = Contiguous()
-GPUIndexStyle(i1::Colon, I...) = GPUIndexStyle(I...)
+GPUIndexStyle(::Colon, ::Union{Base.ScalarIndex, CartesianIndex}...) = Contiguous()
+GPUIndexStyle(::Base.Slice, ::Union{Base.ScalarIndex, CartesianIndex}...) = Contiguous()
+GPUIndexStyle(::AbstractUnitRange, ::Union{Base.ScalarIndex, CartesianIndex}...) = Contiguous()
+GPUIndexStyle(::Colon, I...) = GPUIndexStyle(I...)
+GPUIndexStyle(::Base.Slice, I...) = GPUIndexStyle(I...)
 
 viewlength() = ()
 @inline viewlength(::Real, I...) = viewlength(I...) # skip scalar
