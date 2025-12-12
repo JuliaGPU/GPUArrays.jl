@@ -219,7 +219,37 @@ function Base.findfirst(f::Function, A::AnyGPUArray)
     end
 end
 
+function Base.findlast(f::Function, A::AnyGPUArray)
+    isempty(A) && return nothing
+    indices = EachIndex(A)
+    dummy_index = first(indices)
+
+    # given two pairs of (istrue, index), return the one with the largest index
+    function reduction(t1, t2)
+        (x, i), (y, j) = t1, t2
+        if i < j
+            t1, t2 = t2, t1
+            (x, i), (y, j) = t1, t2
+        end
+        x && return t1
+        y && return t2
+        return (false, dummy_index)
+    end
+
+    res = mapreduce((x, y)->(f(x), y), reduction, A, indices;
+                    init = (false, dummy_index))
+    if res[1]
+        # out of consistency with Base.findarray, return a CartesianIndex
+        # when the input is a multidimensional array
+        ndims(A) == 1 && return res[2]
+        return CartesianIndices(A)[res[2]]
+    else
+        return nothing
+    end
+end
+
 Base.findfirst(A::AnyGPUArray{Bool}) = findfirst(identity, A)
+Base.findlast(A::AnyGPUArray{Bool})  = findlast(identity, A)
 
 function findminmax(binop, A::AnyGPUArray; init, dims)
     indices = EachIndex(A)
