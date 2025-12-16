@@ -171,9 +171,29 @@ end
             @test findfirst(>(0.5f0), x) == findfirst(>(0.5f0), AT(x))
         end
 
-        # emtpy
+        # empty
         @test compare(findfirst, AT, Bool[])
         @test compare(x->findfirst(>(0.5f0), x), AT, Float32[])
+    end
+    @testset "findlast" begin
+        # 1D
+        @test compare(findlast, AT, rand(Bool, 100))
+        @test compare(x->findlast(>(0.5f0), x), AT, rand(Float32, 100))
+        let x = fill(false, 10)
+            @test findlast(x) == findlast(AT(x))
+        end
+
+        # ND
+        let x = rand(Bool, 10, 10)
+            @test findlast(x) == findlast(AT(x))
+        end
+        let x = rand(Float32, 10, 10)
+            @test findlast(>(0.5f0), x) == findlast(>(0.5f0), AT(x))
+        end
+
+        # empty
+        @test compare(findlast, AT, Bool[])
+        @test compare(x->findlast(>(0.5f0), x), AT, Float32[])
     end
 
     @testset "findmax & findmin" begin
