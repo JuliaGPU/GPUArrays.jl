@@ -210,7 +210,7 @@ for (find_f, op, dummy_f) in ((:(Base.findfirst), :>, :first), (:(Base.findlast)
             dummy_index = $dummy_f(indices)
 
             # given two pairs of (istrue, index), return the one with the smallest index
-            res = mapreduce((x, y)->(f(x), y), Base.Fix1(findfirstlast_reduction, ($op, dummy_index)), A, indices;
+            res = mapreduce((x, y)->(f(x), y), (a, b)->findfirstlast_reduction(($op, dummy_index), a, b), A, indices;
                             init = (false, dummy_index))
             if res[1]
                 # out of consistency with Base.findarray, return a CartesianIndex
