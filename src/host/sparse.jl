@@ -36,6 +36,11 @@ Base.Array(x::AbstractGPUSparseMatrixCSR) = collect(SparseMatrixCSC(x))
 Base.Array(x::AbstractGPUSparseMatrixBSR) = collect(SparseMatrixCSC(x))
 Base.Array(x::AbstractGPUSparseMatrixCOO) = collect(SparseMatrixCSC(x))
 
+# iszero that avoids scalar indexing by using GPU-compatible reduction
+# nnz(A) == 0 means no stored elements, so it's definitely zero
+# all(iszero, nonzeros(A)) uses GPU reduction to check stored values
+Base.iszero(A::AbstractGPUSparseArray) = SparseArrays.nnz(A) == 0 || all(iszero, SparseArrays.nonzeros(A))
+
 SparseArrays.SparseVector(x::AbstractGPUSparseVector) = SparseVector(length(x), Array(SparseArrays.nonzeroinds(x)), Array(SparseArrays.nonzeros(x)))
 SparseArrays.SparseMatrixCSC(x::AbstractGPUSparseMatrixCSC) = SparseMatrixCSC(size(x)..., Array(SparseArrays.getcolptr(x)), Array(SparseArrays.rowvals(x)), Array(SparseArrays.nonzeros(x)))
 
