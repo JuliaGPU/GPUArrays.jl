@@ -5,12 +5,14 @@
             vector(sparse_AT, eltypes)
             vector_construction(sparse_AT, eltypes)
             broadcasting_vector(sparse_AT, eltypes)
+            iszero_vector(sparse_AT, eltypes)
         elseif sparse_AT <: AbstractSparseMatrix
             matrix(sparse_AT, eltypes)
             matrix_construction(sparse_AT, eltypes)
             broadcasting_matrix(sparse_AT, eltypes)
             mapreduce_matrix(sparse_AT, eltypes)
             linalg(sparse_AT, eltypes)
+            iszero_matrix(sparse_AT, eltypes)
        end
     end
 end
@@ -358,6 +360,65 @@ function linalg(AT, eltypes)
                     @test_throws ArgumentError opnorm(dA, 2)
                 end
             end
+        end
+    end
+end
+
+function iszero_vector(AT, eltypes)
+    for ET in eltypes
+        @testset "iszero SparseVector($ET)" begin
+            m = 25
+
+            # Test non-zero sparse vector
+            x = sprand(ET, m, 0.5)
+            while iszero(x)
+                x = sprand(ET, m, 0.5)
+            end
+            d_x = AT(x)
+            @test iszero(d_x) == iszero(x)
+            @test iszero(d_x) == false
+
+            # Test zero sparse vector (no stored elements)
+            z = spzeros(ET, m)
+            d_z = AT(z)
+            @test iszero(d_z) == iszero(z)
+            @test iszero(d_z) == true
+
+            # Test sparse vector with stored zeros (e.g., after operations)
+            # Create a sparse vector then multiply by zero
+            x_zeros = x .* zero(ET)
+            d_x_zeros = d_x .* zero(ET)
+            @test iszero(d_x_zeros) == iszero(x_zeros)
+            @test iszero(d_x_zeros) == true
+        end
+    end
+end
+
+function iszero_matrix(AT, eltypes)
+    for ET in eltypes
+        @testset "iszero SparseMatrix($ET)" begin
+            m, n = 10, 10
+
+            # Test non-zero sparse matrix
+            A = sprand(ET, m, n, 0.5)
+            while iszero(A)
+                A = sprand(ET, m, n, 0.5)
+            end
+            dA = AT(A)
+            @test iszero(dA) == iszero(A)
+            @test iszero(dA) == false
+
+            # Test zero sparse matrix (no stored elements)
+            ZA = spzeros(ET, m, n)
+            dZA = AT(ZA)
+            @test iszero(dZA) == iszero(ZA)
+            @test iszero(dZA) == true
+
+            # Test sparse matrix with stored zeros
+            A_zeros = A .* zero(ET)
+            dA_zeros = dA .* zero(ET)
+            @test iszero(dA_zeros) == iszero(A_zeros)
+            @test iszero(dA_zeros) == true
         end
     end
 end
