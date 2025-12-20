@@ -34,6 +34,15 @@ end
 
 const MAXTHREADS = 256
 
+"""
+    JLBackend <: KernelAbstractions.GPU
+
+Backend object associated with JLArrays for [KernelAbstractions.jl](https://github.com/JuliaGPU/KernelAbstractions.jl).
+
+# Fields
+
+- `static::Bool=false`
+"""
 struct JLBackend <: KernelAbstractions.GPU
     static::Bool
     JLBackend(;static::Bool=false) = new(static)
@@ -89,6 +98,13 @@ function check_eltype(T)
   end
 end
 
+"""
+    JLArray{T, N}
+
+CPU-located array type that emulates the behavior of GPU arrays.
+
+Useful for testing GPU-oriented code when no actual GPU is available.
+"""
 mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
     data::DataRef{Vector{UInt8}}
 
@@ -123,6 +139,18 @@ mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
     end
 end
 
+"""
+    JLSparseVector{Tv, Ti}
+
+Sparse vector backed by `JLVector`s, similar to `SparseArrays.SparseVector`.
+
+# Fields
+
+- `iPtr::JLVector{Ti, 1}`: indices of non-zero coefficients
+- `nzVal::JLVector{Tv, 1}`: values of non-zero coefficients
+- `len::Int`: size of the vector
+- `nnz::Ti`: number of non-zero coefficients
+"""
 mutable struct JLSparseVector{Tv, Ti} <: GPUArrays.AbstractGPUSparseVector{Tv, Ti}
     iPtr::JLArray{Ti, 1}
     nzVal::JLArray{Tv, 1}
@@ -138,6 +166,19 @@ SparseArrays.nnz(x::JLSparseVector)          = x.nnz
 SparseArrays.nonzeroinds(x::JLSparseVector)  = x.iPtr
 SparseArrays.nonzeros(x::JLSparseVector)     = x.nzVal
 
+"""
+    JLSparseMatrixCSC{Tv, Ti}
+
+Sparse matrix in Compressed Sparse Column format, backed by `JLVector`s (similar to `SparseArrays.SparseMatrixCSC`).
+
+# Fields
+
+- `colPtr::JLArray{Ti, 1}`: column `j` maps to indices `colPtr[j]:(colPtr[j+1]-1)` in `rowVal` and `nzVal`
+- `rowVal::JLArray{Ti, 1}`: row indices for non-zero coefficients
+- `nzVal::JLArray{Tv, 1}`: values of non-zero coefficients
+- `dims::NTuple{2,Int}`: size of the matrix
+- `nnz::Ti`: number of non-zero coefficients
+"""
 mutable struct JLSparseMatrixCSC{Tv, Ti} <: GPUArrays.AbstractGPUSparseMatrixCSC{Tv, Ti}
     colPtr::JLArray{Ti, 1}
     rowVal::JLArray{Ti, 1}
@@ -166,6 +207,19 @@ function Base.getindex(A::JLSparseMatrixCSC{Tv, Ti}, i::Integer, j::Integer) whe
     ((r1 > r2) || (A.rowVal[r1] != i)) ? zero(Tv) : A.nzVal[r1]
 end
 
+"""
+    JLSparseMatrixCSR{Tv, Ti}
+
+Sparse matrix in Compressed Sparse Row format, backed by `JLVector`s (similar to the transpose of a `SparseArrays.SparseMatrixCSC`).
+
+# Fields
+
+- `rowPtr::JLArray{Ti, 1}`: row `i` maps to indices `rowPtr[i]:(rowPtr[i+1]-1)` in `colVal` and `nzVal`
+- `colVal::JLArray{Ti, 1}`: col indices for non-zero coefficients
+- `nzVal::JLArray{Tv, 1}`: values of non-zero coefficients
+- `dims::NTuple{2,Int}`: size of the matrix
+- `nnz::Ti`: number of non-zero coefficients
+"""
 mutable struct JLSparseMatrixCSR{Tv, Ti} <: GPUArrays.AbstractGPUSparseMatrixCSR{Tv, Ti}
     rowPtr::JLArray{Ti, 1}
     colVal::JLArray{Ti, 1}
@@ -273,8 +327,25 @@ end
 
 ## convenience constructors
 
+"""
+    JLVector{T}
+
+Shortcut for `JLArray{T,1}`.
+"""
 const JLVector{T} = JLArray{T,1}
+
+"""
+    JLMatrix{T}
+
+Shortcut for `JLArray{T,2}`.
+"""
 const JLMatrix{T} = JLArray{T,2}
+
+"""
+    JLVecOrMat{T}
+
+Shortcut for `Union{JLVector{T},JLMatrix{T}}`.
+"""
 const JLVecOrMat{T} = Union{JLVector{T},JLMatrix{T}}
 
 # type and dimensionality specified
@@ -309,18 +380,65 @@ export DenseJLArray, DenseJLVector, DenseJLMatrix, DenseJLVecOrMat,
        AnyJLArray, AnyJLVector, AnyJLMatrix, AnyJLVecOrMat
 
 # dense arrays: stored contiguously in memory
+"""
+    DenseJLArray
+
+Supertype for `JLArray`s stored contiguously in memory.
+"""
 DenseJLArray{T,N} = JLArray{T,N}
+
+"""
+    DenseJLVector{T}
+
+Shortcut for `DenseJLArray{T,1}`.
+"""
 DenseJLVector{T} = DenseJLArray{T,1}
+
+"""
+    DenseJLMatrix{T}
+
+Shortcut for `DenseJLArray{T,2}`.
+"""
 DenseJLMatrix{T} = DenseJLArray{T,2}
+
+"""
+    DenseJLVecOrMat{T}
+
+Shortcut for `Union{DenseJLVector{T}, DenseJLMatrix{T}}`.
+"""
 DenseJLVecOrMat{T} = Union{DenseJLVector{T}, DenseJLMatrix{T}}
 
 # strided arrays
 StridedSubJLArray{T,N,I<:Tuple{Vararg{Union{Base.RangeIndex, Base.ReshapedUnitRange,
                                             Base.AbstractCartesianIndex}}}} =
   SubArray{T,N,<:JLArray,I}
+
+"""
+    StridedJLArray{T,N}
+
+Supertype for (views of) `JLArray`s in a strided fashion.
+"""
 StridedJLArray{T,N} = Union{JLArray{T,N}, StridedSubJLArray{T,N}}
+
+"""
+    StridedJLVector{T}
+
+Shortcut for `StridedJLArray{T,1}`.
+"""
 StridedJLVector{T} = StridedJLArray{T,1}
+
+"""
+    StridedJLMatrix{T}
+
+Shortcut for `StridedJLArray{T,2}`.
+"""
 StridedJLMatrix{T} = StridedJLArray{T,2}
+
+"""
+    StridedJLVecOrMat{T}
+
+Shortcut for `Union{StridedJLVector{T}, StridedJLMatrix{T}}`.
+"""
 StridedJLVecOrMat{T} = Union{StridedJLVector{T}, StridedJLMatrix{T}}
 
 Base.pointer(x::StridedJLArray{T}) where {T} = Base.unsafe_convert(Ptr{T}, x)
@@ -328,10 +446,32 @@ Base.pointer(x::StridedJLArray{T}) where {T} = Base.unsafe_convert(Ptr{T}, x)
     Base.unsafe_convert(Ptr{T}, x) + Base._memory_offset(x, i)
 end
 
-# anything that's (secretly) backed by a JLArray
+"""
+    AnyJLArray{T,N}
+
+Supertype for anything that is (secretly) backed by a `JLArray`.
+"""
 AnyJLArray{T,N} = Union{JLArray{T,N}, WrappedArray{T,N,JLArray,JLArray{T,N}}}
+
+"""
+    AnyJLVector{T}
+
+Shortcut for `AnyJLArray{T,1}`.
+"""
 AnyJLVector{T} = AnyJLArray{T,1}
+
+"""
+    AnyJLMatrix{T}
+
+Shortcut for `AnyJLArray{T,2}`.
+"""
 AnyJLMatrix{T} = AnyJLArray{T,2}
+
+"""
+    AnyJLVecOrMat{T}
+
+Shortcut for `Union{AnyJLVector{T}, AnyJLMatrix{T}}`.
+"""
 AnyJLVecOrMat{T} = Union{AnyJLVector{T}, AnyJLMatrix{T}}
 
 
@@ -436,6 +576,12 @@ end
 JLArray{T,N}(xs::JLArray{T,N}) where {T,N} = xs
 
 # adapt for the GPU
+
+"""
+    jl(x)
+
+Adapt an object `x` to the `JLArray` backend.
+"""
 jl(xs) = adapt(JLArray, xs)
 ## don't convert isbits types since they are already considered GPU-compatible
 Adapt.adapt_storage(::Type{JLArray}, xs::AbstractArray) =
