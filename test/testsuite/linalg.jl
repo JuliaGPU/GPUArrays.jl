@@ -437,6 +437,21 @@ end
         A_empty = randn(Float32, 0, 0)
         @test compare(f, AT, A_empty, d)
     end
+
+    @testset "rmul!/lmul! with diagonal and number" begin
+        n = 32
+        h_d = rand(Float32, n)
+        h_D = Diagonal(h_d)
+        d = AT(h_d)
+        D = Diagonal(d)
+        a = rand(Float32)
+        rmul!(D, a)
+        rmul!(h_D, a)
+        @test collect(D) ≈ h_D
+        lmul!(a, D)
+        lmul!(a, h_D)
+        @test collect(D) ≈ h_D
+    end
 end
 
 @testsuite "linalg/mul!/vector-matrix" (AT, eltypes)->begin
