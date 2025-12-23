@@ -683,6 +683,7 @@ function generic_rmul!(X::AbstractArray, s::Number)
 end
 
 LinearAlgebra.rmul!(A::AbstractGPUArray, b::Number) = generic_rmul!(A, b)
+LinearAlgebra.rmul!(A::Diagonal{T, <:AbstractGPUArray}, b::Number) where {T} = A .* b
 
 function generic_lmul!(s::Number, X::AbstractArray)
     @kernel function lmul_kernel!(X, s)
@@ -694,6 +695,7 @@ function generic_lmul!(s::Number, X::AbstractArray)
 end
 
 LinearAlgebra.lmul!(a::Number, B::AbstractGPUArray) = generic_lmul!(a, B)
+LinearAlgebra.lmul!(a::Number, B::Diagonal{T, <:AbstractGPUArray}) where {T} = a .* B
 
 
 ## permutedims
