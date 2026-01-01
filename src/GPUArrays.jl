@@ -16,6 +16,7 @@ using Reexport
 @reexport using GPUArraysCore
 
 using KernelAbstractions
+import KernelAbstractions.KernelIntrinsics as KI
 
 # device functionality
 include("device/abstractarray.jl")
