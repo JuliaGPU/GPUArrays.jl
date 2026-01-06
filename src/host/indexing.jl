@@ -226,7 +226,7 @@ end
 Base.findfirst(A::AnyGPUArray{Bool}) = findfirst(identity, A)
 Base.findlast(A::AnyGPUArray{Bool})  = findlast(identity, A)
 
-function findminmax(binop, A::AnyGPUArray; init, dims)
+function findminmax(binop, f, A::AnyGPUArray; init, dims)
     indices = EachIndex(A)
     dummy_index = firstindex(A)
 
@@ -237,15 +237,17 @@ function findminmax(binop, A::AnyGPUArray; init, dims)
         isequal(x, y) && return (x, min(i, j))
         return t1
     end
+    
+    fA = f.(A)
 
     if dims == Colon()
-        res = mapreduce(tuple, reduction, A, indices; init = (init, dummy_index))
+        res = mapreduce(tuple, reduction, fA, indices; init = (init, dummy_index))
 
         # out of consistency with Base.findarray, return a CartesianIndex
         # when the input is a multidimensional array
         return (res[1], ndims(A) == 1 ? res[2] : CartesianIndices(A)[res[2]])
     else
-        res = mapreduce(tuple, reduction, A, indices;
+        res = mapreduce(tuple, reduction, fA, indices;
                         init = (init, dummy_index), dims=dims)
         vals = map(x->x[1], res)
         inds = map(x->ndims(A) == 1 ? x[2] : CartesianIndices(A)[x[2]], res)
@@ -253,5 +255,7 @@ function findminmax(binop, A::AnyGPUArray; init, dims)
     end
 end
 
-Base.findmax(a::AnyGPUArray; dims=:) = findminmax(Base.isless, a; init=typemin(eltype(a)), dims)
-Base.findmin(a::AnyGPUArray; dims=:) = findminmax(Base.isgreater, a; init=typemax(eltype(a)), dims)
+Base.findmax(a::AnyGPUArray; dims=:) = findminmax(Base.isless, identity, a; init=typemin(eltype(a)), dims)
+Base.findmin(a::AnyGPUArray; dims=:) = findminmax(Base.isgreater, identity, a; init=typemax(eltype(a)), dims)
+Base.findmax(f::Function, a::AnyGPUArray; dims=:) = findminmax(Base.isless, f, a; init=typemin(eltype(a)), dims)
+Base.findmin(f::Function, a::AnyGPUArray; dims=:) = findminmax(Base.isgreater, f, a; init=typemax(eltype(a)), dims)
