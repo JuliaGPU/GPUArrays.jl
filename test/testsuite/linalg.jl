@@ -484,6 +484,15 @@ end
         @test compare(mul!, AT, C, f(A), g(B), Ref(T(4)), Ref(T(5)))
         @test typeof(AT(rand(T, 3, 3)) * AT(rand(T, 3, 3))) <: AbstractMatrix
     end
+    @testset "$(complex(T)), $(complex(T)), $T gemm C := A * B * a + C * b" for T in filter(T-><:(T, Real) && <:(T, AbstractFloat), eltypes)
+        Tc = complex(T)
+        A, B, C = rand(Tc, 4, 4), rand(T, 4, 4), rand(Tc, 4, 4)
+
+        @test compare(*, AT, A, B)
+        @test compare(mul!, AT, C, A, B)
+        @test compare(mul!, AT, C, A, B, Ref(T(4)), Ref(T(5)))
+        @test typeof(AT(rand(Tc, 3, 3)) * AT(rand(T, 3, 3))) <: AbstractMatrix
+    end
 end
 
 @testsuite "linalg/norm" (AT, eltypes)->begin
