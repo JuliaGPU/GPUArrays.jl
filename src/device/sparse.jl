@@ -12,9 +12,25 @@ using SparseArrays
 export GPUSparseDeviceVector, GPUSparseDeviceMatrixCSC, GPUSparseDeviceMatrixCSR,
        GPUSparseDeviceMatrixBSR, GPUSparseDeviceMatrixCOO
 
+"""
+    AbstractGPUSparseDeviceMatrix{Tv, Ti}
+
+Supertype for GPU sparse matrices with value type `Tv` and index type `Ti`.
+"""
 abstract type AbstractGPUSparseDeviceMatrix{Tv, Ti} <: AbstractSparseMatrix{Tv, Ti} end
 
+"""
+    GPUSparseDeviceVector{Tv,Ti,Vi,Vv}
 
+Sparse vector with generic backing, similar to `SparseArrays.SparseVector`.
+
+# Fields
+
+- `iPtr::Vi`: indices of non-zero coefficients
+- `nzVal::Vv`: values of non-zero coefficients
+- `len::Int`: size of the vector
+- `nnz::Ti`: number of non-zero coefficients
+"""
 struct GPUSparseDeviceVector{Tv,Ti,Vi,Vv, A} <: AbstractSparseVector{Tv,Ti}
     iPtr::Vi
     nzVal::Vv
@@ -28,6 +44,19 @@ SparseArrays.nnz(g::GPUSparseDeviceVector) = g.nnz
 SparseArrays.nonzeroinds(g::GPUSparseDeviceVector) = g.iPtr
 SparseArrays.nonzeros(g::GPUSparseDeviceVector) = g.nzVal
 
+"""
+    GPUSparseDeviceMatrixCSC{Tv,Ti,Vi,Vv}
+
+Sparse matrix in Compressed Sparse Column format with generic backing.
+
+# Fields
+
+- `colPtr::Vi`: column `j` maps to indices `colPtr[j]:(colPtr[j+1]-1)` in `rowVal` and `nzVal`
+- `rowVal::Vi`: row indices for non-zero coefficients
+- `nzVal::Vv`: values of non-zero coefficients
+- `dims::NTuple{2,Int}`: size of the matrix
+- `nnz::Ti`: number of non-zero coefficients
+"""
 struct GPUSparseDeviceMatrixCSC{Tv,Ti,Vi,Vv,A} <: AbstractGPUSparseDeviceMatrix{Tv, Ti}
     colPtr::Vi
     rowVal::Vi
@@ -66,6 +95,19 @@ function SparseArrays.nnz(x::GPUSparseDeviceColumnView)
     return length(SparseArrays.nzrange(A, colidx))
 end
 
+"""
+    GPUSparseDeviceMatrixCSR{Tv,Ti,Vi,Vv}
+
+Sparse matrix in Compressed Sparse Row format with generic backing.
+
+# Fields
+
+- `rowPtr::Vi`: row `i` maps to indices `rowPtr[i]:(rowPtr[i+1]-1)` in `colVal` and `nzVal`
+- `colVal::Vi`: column indices for non-zero coefficients
+- `nzVal::Vv`: values of non-zero coefficients
+- `dims::NTuple{2,Int}`: size of the matrix
+- `nnz::Ti`: number of non-zero coefficients
+"""
 struct GPUSparseDeviceMatrixCSR{Tv,Ti,Vi,Vv,A} <: AbstractGPUSparseDeviceMatrix{Tv,Ti}
     rowPtr::Vi
     colVal::Vi
@@ -84,16 +126,44 @@ end
     end
 end
 
+"""
+    GPUSparseDeviceMatrixBSR{Tv,Ti,Vi,Vv}
+
+Sparse matrix in Block Compressed Sparse Row format with generic backing.
+
+# Fields
+
+- `rowPtr::Vi`: row `i` maps to indices `rowPtr[i]:(rowPtr[i+1]-1)` in `colVal` and `nzVal`
+- `colVal::Vi`: column indices for the top-left corners of the blocks
+- `nzVal::Vv`: values of non-zero coefficients
+- `dims::NTuple{2,Int}`: size of the matrix
+- `blockDim::Ti`: number of rows = number of columns in a block
+- `dir::Char`
+- `nnz::Ti`: number of non-zero coefficients
+"""
 struct GPUSparseDeviceMatrixBSR{Tv,Ti,Vi,Vv,A} <: AbstractGPUSparseDeviceMatrix{Tv,Ti}
     rowPtr::Vi
     colVal::Vi
     nzVal::Vv
     dims::NTuple{2,Int}
-    blockDim::Ti
-    dir::Char
+    blockDim::Ti  # TODO: rectangular blocks?
+    dir::Char  # TODO: document
     nnz::Ti
 end
 
+"""
+    GPUSparseDeviceMatrixCOO{Tv,Ti,Vi,Vv}
+
+Sparse matrix in COOrdinate format with generic backing.
+
+# Fields
+
+- `rowInd::Vi`: row indices for non-zero coefficients
+- `colInd::Vi`: column indices for non-zero coefficients
+- `nzVal::Vv`: values of non-zero coefficients
+- `dims::NTuple{2,Int}`: size of the matrix
+- `nnz::Ti`: number of non-zero coefficients
+"""
 struct GPUSparseDeviceMatrixCOO{Tv,Ti,Vi,Vv, A} <: AbstractGPUSparseDeviceMatrix{Tv,Ti}
     rowInd::Vi
     colInd::Vi
