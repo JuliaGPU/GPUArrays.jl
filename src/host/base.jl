@@ -1,6 +1,48 @@
 # common Base functionality
 import Base: _RepeatInnerOuter
 
+@kernel function issorted_kernel!(
+        data,
+        violations,
+        lt,
+        by,
+        ::Val{REV},
+    ) where {REV}
+    i = @index(Global)
+    if i <= length(violations)
+        @inbounds begin
+            a = data[i]
+            b = data[i + 1]
+            violations[i] = REV ? lt(by(a), by(b)) : lt(by(b), by(a))
+        end
+    end
+end
+
+function Base.issorted(A::AbstractGPUArray; lt::Function = isless, by::Function = identity, rev::Bool = false, order = Base.Order.ForwardOrdering())
+    if order isa Base.Order.ReverseOrdering
+        rev = !rev
+    elseif !(order isa Base.Order.ForwardOrdering)
+        throw(ArgumentError("custom orderings are not supported on GPU"))
+    end
+
+    n = length(A)
+    n ≤ 1 && return true
+
+    violations = similar(A, Bool, n - 1)
+    backend = get_backend(A)
+
+    issorted_kernel!(backend)(
+        A,
+        violations,
+        lt,
+        by,
+        Val(rev);
+        ndrange = n - 1,
+    )
+
+    return !any(Array(violations))
+end
+
 # Handle `out = repeat(x; inner)` by parallelizing over `out` array This can benchmark
 # faster if repeating elements along the first axis (i.e. `inner=(n, ones...)`), as data
 # access can be contiguous on write.
