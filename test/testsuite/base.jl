@@ -48,13 +48,13 @@ end
 
         # order keyword normalization
         @test compare(
-            x -> issorted(x; order = Base.Order.ReverseOrdering()),
+            x -> issorted(x; order = Base.Order.Reverse),
             AT,
             [3, 2, 1],
         )
 
         @test compare(
-            x -> !issorted(x; order = Base.Order.ReverseOrdering()),
+            x -> !issorted(x; order = Base.Order.Reverse),
             AT,
             [1, 2, 3],
         )

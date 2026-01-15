@@ -4,29 +4,30 @@ import Base: _RepeatInnerOuter
 @kernel function issorted_kernel!(
         data,
         violations,
-        lt,
-        by,
-        ::Val{REV},
-    ) where {REV}
+        ord,
+    )
     i = @index(Global)
     if i <= length(violations)
         @inbounds begin
             a = data[i]
             b = data[i + 1]
-            violations[i] = REV ? lt(by(a), by(b)) : lt(by(b), by(a))
+            violations[i] = Base.Order.lt(ord, b, a)
         end
     end
 end
 
-function Base.issorted(A::AbstractGPUArray; lt::Function = isless, by::Function = identity, rev::Bool = false, order = Base.Order.ForwardOrdering())
-    if order isa Base.Order.ReverseOrdering
+function Base.issorted(A::AbstractGPUArray; lt::Function = isless, by::Function = identity, rev::Bool = false, order = Base.Order.Forward)
+    if order === Base.Order.Reverse
         rev = !rev
-    elseif !(order isa Base.Order.ForwardOrdering)
+        order = Base.Order.Forward
+    elseif order !== Base.Order.Forward
         throw(ArgumentError("custom orderings are not supported on GPU"))
     end
 
     n = length(A)
     n ≤ 1 && return true
+
+    ord = Base.Order.ord(lt, by, rev, order)
 
     violations = similar(A, Bool, n - 1)
     backend = get_backend(A)
@@ -34,9 +35,7 @@ function Base.issorted(A::AbstractGPUArray; lt::Function = isless, by::Function 
     issorted_kernel!(backend)(
         A,
         violations,
-        lt,
-        by,
-        Val(rev);
+        ord,
         ndrange = n - 1,
     )
 
