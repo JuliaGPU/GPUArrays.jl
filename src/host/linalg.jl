@@ -107,13 +107,13 @@ end
 
 ## copy upper triangle to lower and vice versa
 
-function LinearAlgebra.copytri!(A::AbstractGPUMatrix, uplo::AbstractChar, conjugate::Bool=false, diag::Bool=false)
+function LinearAlgebra.copytri!(A::AbstractGPUMatrix, uplo::AbstractChar, conjugate::Bool = false, diag::Bool = false)
   n = LinearAlgebra.checksquare(A)
   if uplo == 'U' && conjugate
       @kernel function U_conj!(_A)
         I = @index(Global, Cartesian)
         i, j = Tuple(I)
-        if j+diag > i
+            if j + diag > i
           @inbounds _A[j,i] = conj(_A[i,j])
         end
       end
@@ -122,7 +122,7 @@ function LinearAlgebra.copytri!(A::AbstractGPUMatrix, uplo::AbstractChar, conjug
       @kernel function U_noconj!(_A)
         I = @index(Global, Cartesian)
         i, j = Tuple(I)
-        if j+diag > i
+            if j + diag > i
           @inbounds _A[j,i] = _A[i,j]
         end
       end
@@ -131,7 +131,7 @@ function LinearAlgebra.copytri!(A::AbstractGPUMatrix, uplo::AbstractChar, conjug
       @kernel function L_conj!(_A)
         I = @index(Global, Cartesian)
         i, j = Tuple(I)
-        if j+diag
+            if j + diag
           @inbounds _A[i,j] = conj(_A[j,i])
         end
       end
@@ -140,7 +140,7 @@ function LinearAlgebra.copytri!(A::AbstractGPUMatrix, uplo::AbstractChar, conjug
       @kernel function L_noconj!(_A)
         I = @index(Global, Cartesian)
         i, j = Tuple(I)
-        if j+diag > i
+            if j + diag > i
           @inbounds _A[i,j] = _A[j,i]
         end
       end
