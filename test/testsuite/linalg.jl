@@ -75,15 +75,29 @@
 
     @testset "triangular" begin
         @testset "copytri!" begin
-            @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64), uplo in ('U', 'L'), conjugate in (true, false), diag in (true, false)
-                if !(eltya in eltypes)
-                    continue
+            if VERSION >= v"1.13-a"
+                @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64), uplo in ('U', 'L'), conjugate in (true, false), diag in (true, false)
+                    if !(eltya in eltypes)
+                        continue
+                    end
+                    n = 128
+                    areal = randn(n,n)/2
+                    aimg  = randn(n,n)/2
+                    a = convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
+                    @test compare(x -> LinearAlgebra.copytri!(x, uplo, conjugate, diag), AT, a)
                 end
-                n = 128
-                areal = randn(n,n)/2
-                aimg  = randn(n,n)/2
-                a = convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
-                @test compare(x -> LinearAlgebra.copytri!(x, uplo, conjugate, diag), AT, a)
+            else
+                # Julia <=1.12 does not have a `diag` argument
+                @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64), uplo in ('U', 'L'), conjugate in (true, false)
+                    if !(eltya in eltypes)
+                        continue
+                    end
+                    n = 128
+                    areal = randn(n,n)/2
+                    aimg  = randn(n,n)/2
+                    a = convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
+                    @test compare(x -> LinearAlgebra.copytri!(x, uplo, conjugate), AT, a)
+                end
             end
         end
 
