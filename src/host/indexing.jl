@@ -167,8 +167,14 @@ end
 function Base._unsafe_setindex!(::IndexStyle, A::WrappedGPUArray, x, Is::Vararg{Union{Real,AbstractArray}, N}) where N
     return vectorized_setindex!(A, x, Base.ensure_indexable(Is)...)
 end
-# And allow one more `ReshapedArray` wrapper to handle the `_maybe_reshape` optimization.
-function Base._unsafe_setindex!(::IndexStyle, A::Base.ReshapedArray{<:Any, <:Any, <:WrappedGPUArray}, x, Is::Vararg{Union{Real,AbstractArray}, N}) where N
+
+#Implementation for ReshapedArrays using Cartesian indexing to resolve dispatch ties.
+function Base._unsafe_setindex!(::Base.IndexCartesian, A::Base.ReshapedArray{T, N, <:WrappedGPUArray}, x, Is::Vararg{Union{Real, AbstractArray}, M}) where {T, N, M}
+    return vectorized_setindex!(A, x, Base.ensure_indexable(Is)...)
+end
+
+#Implementation for ReshapedArrays using Linear indexing to resolve dispatch ties.
+function Base._unsafe_setindex!(::Base.IndexLinear, A::Base.ReshapedArray{T, N, <:WrappedGPUArray}, x, Is::Vararg{Union{Real, AbstractArray}, M}) where {T, N, M}
     return vectorized_setindex!(A, x, Base.ensure_indexable(Is)...)
 end
 
