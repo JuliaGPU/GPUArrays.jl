@@ -89,4 +89,4 @@ You'll also need to inform `GPUArrays.jl` and `GPUCompiler.jl` how to adapt your
 
 ```julia
 KA.get_backend(::MySparseVector) = MyBackend()
-```  
+```
