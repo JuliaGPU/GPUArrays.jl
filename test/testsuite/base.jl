@@ -29,6 +29,50 @@ end
         end
     end
 
+    @testset "issorted" begin
+        # basic sorted / unsorted
+        @test compare(issorted, AT, [1, 2, 3, 4])
+        @test compare(x -> !issorted(x), AT, [1, 3, 2, 4])
+
+        # reverse ordering
+        @test compare(x -> issorted(x; rev = true), AT, [4, 3, 2, 1])
+        @test compare(x -> !issorted(x; rev = true), AT, [1, 2, 3])
+
+        # custom lt
+        @test compare(x -> issorted(x; lt = >), AT, [3, 2, 1])
+        @test compare(x -> !issorted(x; lt = >), AT, [1, 2, 3])
+
+        # by = abs
+        @test compare(x -> issorted(x; by = abs), AT, [-1, -2, -3])
+        @test compare(x -> !issorted(x; by = abs), AT, [-1, -3, -2])
+
+        # order keyword normalization
+        @test compare(
+            x -> issorted(x; order = Base.Order.Reverse),
+            AT,
+            [3, 2, 1],
+        )
+
+        @test compare(
+            x -> !issorted(x; order = Base.Order.Reverse),
+            AT,
+            [1, 2, 3],
+        )
+
+        # edge cases
+        @test compare(issorted, AT, Int[])
+        @test compare(issorted, AT, [42])
+
+        # unsupported custom orderings
+        AT <: AbstractGPUArray && @testset "unsupported orderings" begin
+            x = AT([1, 2, 3])
+            @test_throws ArgumentError issorted(
+                x;
+                order = Base.Order.By(identity),
+            )
+        end
+    end
+
     @testset "copy!" begin
         for (dst, src,) in (
                             (rand(Float32, (10,)),   rand(Float32, (10,))),   # vectors
