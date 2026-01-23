@@ -13,7 +13,7 @@ using GPUArrays
 using Adapt
 using SparseArrays, LinearAlgebra
 
-import GPUArrays: dense_array_type
+import GPUArrays: dense_array_type, GPUSparseMatrixCSC, GPUSparseMatrixCSR
 
 import KernelAbstractions
 import KernelAbstractions: Adapt, StaticArrays, Backend, Kernel, StaticSize, DynamicSize, partition, blocks, workitems, launch_config
@@ -150,6 +150,9 @@ mutable struct JLSparseMatrixCSC{Tv, Ti} <: GPUArrays.AbstractGPUSparseMatrixCSC
         new{Tv, Ti}(colPtr, rowVal, nzVal, dims, length(nzVal))
     end
 end
+function GPUSparseMatrixCSC(colPtr::JLArray{Ti, 1}, rowVal::JLArray{Ti, 1}, nzVal::JLArray{Tv, 1}, dims::NTuple{2,<:Integer}) where {Tv, Ti <: Integer}
+    return JLSparseMatrixCSC(colPtr, rowVal, nzVal, dims)
+end
 function JLSparseMatrixCSC(colPtr::JLArray{Ti, 1}, rowVal::JLArray{Ti, 1}, nzVal::JLArray{Tv, 1}, dims::NTuple{2,<:Integer}) where {Tv, Ti <: Integer}
     return JLSparseMatrixCSC{Tv, Ti}(colPtr, rowVal, nzVal, dims)
 end
@@ -180,6 +183,9 @@ mutable struct JLSparseMatrixCSR{Tv, Ti} <: GPUArrays.AbstractGPUSparseMatrixCSR
 end
 function JLSparseMatrixCSR(rowPtr::JLArray{Ti, 1}, colVal::JLArray{Ti, 1}, nzVal::JLArray{Tv, 1}, dims::NTuple{2,<:Integer}) where {Tv, Ti <: Integer}
     return JLSparseMatrixCSR{Tv, Ti}(rowPtr, colVal, nzVal, dims)
+end
+function GPUSparseMatrixCSR(rowPtr::JLArray{Ti, 1}, colVal::JLArray{Ti, 1}, nzVal::JLArray{Tv, 1}, dims::NTuple{2,<:Integer}) where {Tv, Ti <: Integer}
+    return JLSparseMatrixCSR(rowPtr, colVal, nzVal, dims)
 end
 function SparseArrays.SparseMatrixCSC(x::JLSparseMatrixCSR) 
     x_transpose = SparseMatrixCSC(size(x, 2), size(x, 1), Array(x.rowPtr), Array(x.colVal), Array(x.nzVal))
