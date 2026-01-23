@@ -1,6 +1,6 @@
 using LinearAlgebra
 using LinearAlgebra: BlasFloat
-export GPUSparseMatrix, GPUSparseMatrixCSC, GPUSparseMatrixCSR, GPUSparseMatrixCOO
+export GPUSparseMatrix, GPUSparseMatrixCSC, GPUSparseMatrixCSR, GPUSparseMatrixCOO, GPUSparseMatrixBSR
 
 abstract type AbstractGPUSparseArray{Tv, Ti, N} <: AbstractSparseArray{Tv, Ti, N} end
 const AbstractGPUSparseVector{Tv, Ti} = AbstractGPUSparseArray{Tv, Ti, 1}
@@ -15,6 +15,7 @@ GPUSparseMatrix(I::AbstractGPUVector, J::AbstractGPUVector, V::AbstractGPUVector
 GPUSparseMatrixCOO(I::AbstractGPUVector, J::AbstractGPUVector, V::AbstractGPUVector, args...; kwargs...) = sparse(I, J, V, args...; kwargs...)
 function GPUSparseMatrixCSC end
 function GPUSparseMatrixCSR end
+function GPUSparseMatrixBSR end
 
 
 const AbstractGPUSparseVecOrMat = Union{AbstractGPUSparseVector,AbstractGPUSparseMatrix}
