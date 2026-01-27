@@ -107,7 +107,10 @@ end
 
 ## copy upper triangle to lower and vice versa
 
-if VERSION >= v"1.13-a"
+# `v"1.13-"` is the smallest possible 1.13 version number. It comes
+# before all alpha, beta, and rc prereleases. (A plain `v"1.13"` would
+# come after all prereleases.)
+if VERSION >= v"1.13-"
 
     function LinearAlgebra.copytri!(A::AbstractGPUMatrix, uplo::AbstractChar, conjugate::Bool = false, diag::Bool = false)
         n = LinearAlgebra.checksquare(A)

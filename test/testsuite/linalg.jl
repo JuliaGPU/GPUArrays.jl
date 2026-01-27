@@ -75,7 +75,10 @@
 
     @testset "triangular" begin
         @testset "copytri!" begin
-            if VERSION >= v"1.13-a"
+            # `v"1.13-"` is the smallest possible 1.13 version number.
+            # It comes before all alpha, beta, and rc prereleases. (A
+            # plain `v"1.13"` would come after all prereleases.)
+            if VERSION >= v"1.13-"
                 @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64), uplo in ('U', 'L'), conjugate in (true, false), diag in (true, false)
                     if !(eltya in eltypes)
                         continue
