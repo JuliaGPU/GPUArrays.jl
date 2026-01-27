@@ -75,15 +75,32 @@
 
     @testset "triangular" begin
         @testset "copytri!" begin
-            @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64), uplo in ('U', 'L'), conjugate in (true, false)
-                if !(eltya in eltypes)
-                    continue
+            # `v"1.13-"` is the smallest possible 1.13 version number.
+            # It comes before all alpha, beta, and rc prereleases. (A
+            # plain `v"1.13"` would come after all prereleases.)
+            if VERSION >= v"1.13-"
+                @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64), uplo in ('U', 'L'), conjugate in (true, false), diag in (true, false)
+                    if !(eltya in eltypes)
+                        continue
+                    end
+                    n = 128
+                    areal = randn(n,n)/2
+                    aimg  = randn(n,n)/2
+                    a = convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
+                    @test compare(x -> LinearAlgebra.copytri!(x, uplo, conjugate, diag), AT, a)
                 end
-                n = 128
-                areal = randn(n,n)/2
-                aimg  = randn(n,n)/2
-                a = convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
-                @test compare(x -> LinearAlgebra.copytri!(x, uplo, conjugate), AT, a)
+            else
+                # Julia <=1.12 does not have a `diag` argument
+                @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64), uplo in ('U', 'L'), conjugate in (true, false)
+                    if !(eltya in eltypes)
+                        continue
+                    end
+                    n = 128
+                    areal = randn(n,n)/2
+                    aimg  = randn(n,n)/2
+                    a = convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
+                    @test compare(x -> LinearAlgebra.copytri!(x, uplo, conjugate), AT, a)
+                end
             end
         end
 
