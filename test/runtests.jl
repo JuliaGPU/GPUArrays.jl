@@ -1,9 +1,12 @@
+using Pkg
+Pkg.add(url="https://github.com/christiangnrd/ParallelTestRunner.jl", rev="total_time")
+
 using ParallelTestRunner: runtests, parse_args
 import GPUArrays
 
 include("testsuite.jl")
 
-const init_code = quote
+const init_worker_code = quote
     using Test, JLArrays, SparseArrays
 
     include("testsuite.jl")
@@ -18,6 +21,12 @@ const init_code = quote
     end
 end
 
+const init_code = quote
+    using Test, JLArrays, SparseArrays
+
+    import Main: TestSuite
+end
+
 args = parse_args(ARGS)
 
 testsuite = Dict{String, Expr}()
@@ -25,4 +34,4 @@ for AT in (:JLArray, :Array), name in keys(TestSuite.tests)
     testsuite["$(AT)/$name"] = :(TestSuite.tests[$name]($AT))
 end
 
-runtests(GPUArrays, ARGS; init_code, testsuite)
+runtests(GPUArrays, ARGS; init_code, init_worker_code, testsuite)
