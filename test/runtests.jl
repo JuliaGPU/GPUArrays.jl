@@ -1,6 +1,3 @@
-using Pkg
-Pkg.add(url="https://github.com/christiangnrd/ParallelTestRunner.jl", rev="total_time")
-
 using ParallelTestRunner: runtests, parse_args
 import GPUArrays
 
