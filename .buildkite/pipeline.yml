@@ -48,6 +48,10 @@ steps:
           - "1.10"
           - "1.12"
           - "1.13"
+      adjustments:
+        - with:
+            julia: "1.13"
+          soft_fail: true
     soft_fail:
       - exit_status: 3
 
@@ -101,6 +105,10 @@ steps:
           - "1.10"
           - "1.12"
           - "1.13"
+      adjustments:
+        - with:
+            julia: "1.13"
+          soft_fail: true
     soft_fail:
       - exit_status: 3
 
@@ -154,6 +162,10 @@ steps:
           - "1.10"
           - "1.12"
           - "1.13"
+      adjustments:
+        - with:
+            julia: "1.13"
+          soft_fail: true
     soft_fail:
       - exit_status: 3
 

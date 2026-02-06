@@ -42,11 +42,6 @@ jobs:
         run: |
           # Run tests in verbose mode
           TEST_ARGS=(--verbose)
-          if [[ ${{ runner.os }} == "macOS" ]]; then
-              # Encourage ParallelTestRunner to use two jobs on macOS, rather
-              # than the single one it'd use by default.
-              TEST_ARGS+=(--jobs=2)
-          fi
           echo "runtest_test_args=${TEST_ARGS[@]}" >> "${GITHUB_ENV}"
       - uses: julia-actions/julia-runtest@v1
         continue-on-error: ${{ matrix.version == 'nightly' }}
@@ -81,7 +76,6 @@ jobs:
             Pkg.add(url="https://github.com/JuliaGPU/KernelAbstractions.jl", rev="main")
           ' lib/GPUArraysCore lib/JLArrays
       - uses: julia-actions/julia-runtest@v1
-        continue-on-error: true
       - uses: julia-actions/julia-processcoverage@v1
         with:
           directories: src,lib
