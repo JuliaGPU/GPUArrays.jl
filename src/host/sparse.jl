@@ -670,7 +670,6 @@ end
     if leading_dim ≤ leading_dim_size
         iter = @inbounds iter_type(T, Ti)(leading_dim, args...)
 
-
         output_ptrs  = output isa GPUSparseDeviceMatrixCSR ? output.rowPtr : output.colPtr
         output_ivals = output isa GPUSparseDeviceMatrixCSR ? output.colVal : output.rowVal
         # fetch the row offset, and write it to the output
@@ -691,7 +690,6 @@ end
                 ptr = @inbounds ptrs[i]
                 _getindex(arg, I, ptr)
             end
-
             @inbounds output_ivals[output_ptr] = sub_leading_dim
             @inbounds output.nzVal[output_ptr] = f(vals...)
             output_ptr += one(Ti)
@@ -903,7 +901,13 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
     if output isa AbstractGPUSparseArray
         args   = (bc.f, output, offsets, bc.args...)
         kernel = sparse_to_sparse_broadcast_kernel(get_backend(bc.args[first(sparse_args)]))
-        ndrange = output.nnz
+        ndrange = if sparse_typ <: AbstractGPUSparseVector
+                    output.nnz
+                  elseif sparse_typ <: AbstractGPUSparseMatrixCSC
+                    size(output, 2)
+                  else
+                     size(output, 1)
+                  end
     else
         args   = sparse_typ <: AbstractGPUSparseVector ? (sparse_typ, bc.f, output, offsets, bc.args...) :
                                                          (sparse_typ, bc.f, output, bc.args...)
