@@ -285,7 +285,7 @@ function broadcasting_matrix(AT, eltypes)
             @test z == SparseMatrixCSC(dz)
 
             # create a matrix with nnz < leading_dim
-            x = spdiagm(m, n, (m + 2)=>rand(ET, m - 2))
+            x = spdiagm(m, m, (m + 2)=>rand(ET, m - 2))
             dx = AT(x)
             y = ET(0.1) * x
             dy = ET(0.1) * dx
