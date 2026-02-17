@@ -283,6 +283,13 @@ function broadcasting_matrix(AT, eltypes)
             dz = dx .* dy .* dw
             @test dz isa AT{ET}
             @test z == SparseMatrixCSC(dz)
+
+            # create a matrix with nnz < leading_dim
+            x = spdiagm(m + 2, rand(ET, m - 2))
+            dx = AT(x)
+            y = ET(0.1) * x
+            dy = ET(0.1) * dx
+            @test y == SparseMatrixCSC(dy)
         end
     end
 end
