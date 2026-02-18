@@ -9,6 +9,7 @@
         elseif sparse_AT <: AbstractSparseMatrix
             matrix(sparse_AT, eltypes)
             matrix_construction(sparse_AT, eltypes)
+            direct_vector_construction(sparse_AT, eltypes)
             broadcasting_matrix(sparse_AT, eltypes)
             mapreduce_matrix(sparse_AT, eltypes)
             linalg(sparse_AT, eltypes)
@@ -149,6 +150,64 @@ function matrix_construction(AT, eltypes)
         @test similar(d_x, (3, 4)) isa AT{ET}
         @test size(similar(d_x, (3, 4))) == (3, 4)
     end
+end
+
+# Helper function to derive direct matrix formats:
+# Create colptr, rowval, nzval for m x n matrix with 3 values per column
+function csc_vectors(m::Int, n::Int, ::Type{ET}; I::Type{<:Integer}=Int32) where {ET}
+    # Fixed, deterministic 3 nnz per column; random nz values
+    colptr = Vector{I}(undef, n + 1)
+    rowval = Vector{I}()
+    nzval  = Vector{ET}()
+
+    colptr[1] = I(1)
+    nnz_acc = 0
+    for j in 1:n
+        # Magic numbers
+        rows_j = sort(unique(mod.(j .+ (1, 7, 13), m) .+ 1))
+        append!(rowval, I.(rows_j))
+        append!(nzval, rand(ET, length(rows_j)))
+        nnz_acc += length(rows_j)
+        colptr[j + 1] = I(nnz_acc + 1)
+    end
+    return colptr, rowval, nzval
+end
+function csr_vectors(m::Int, n::Int, ::Type{ET}; I::Type{<:Integer}=Int32) where {ET}
+    # Build CSC for (n, m), then interpret as CSR for (m, n)
+    colptr_nm, rowval_nm, nzval_nm = csc_vectors(n, m, ET; I=I)
+    rowptr = colptr_nm
+    colind = rowval_nm
+    nzval  = nzval_nm
+    return rowptr, colind, nzval
+end
+# Construct appropriate sparse arrays
+function construct_sparse_matrix(AT::Type{<:GPUArrays.AbstractGPUSparseMatrixCSC}, ::Type{ET}, m::Int, n::Int; I::Type{<:Integer}=Int32) where {ET}
+    colptr, rowval, nzval = csc_vectors(m, n, ET; I=I)
+    dense_AT = GPUArrays.dense_array_type(AT)
+    d_colptr = dense_AT(colptr)
+    d_rowval = dense_AT(rowval)
+    d_nzval  = dense_AT(nzval)
+    return GPUSparseMatrixCSC(d_colptr, d_rowval, d_nzval, (m, n))
+end
+function construct_sparse_matrix(AT::Type{<:GPUArrays.AbstractGPUSparseMatrixCSR}, ::Type{ET}, m::Int, n::Int; I::Type{<:Integer}=Int32) where {ET}
+    rowptr, colind, nzval = csr_vectors(m, n, ET; I=I)
+    dense_AT = GPUArrays.dense_array_type(AT)
+    d_rowptr = dense_AT(rowptr)
+    d_colind = dense_AT(colind)
+    d_nzval  = dense_AT(nzval)
+    return GPUSparseMatrixCSR(d_rowptr, d_colind, d_nzval, (m, n))
+end
+function direct_vector_construction(AT::Type{<:GPUArrays.AbstractGPUSparseMatrix}, eltypes)
+    for ET in eltypes
+        m = 25
+        n = 35
+        x = construct_sparse_matrix(AT, ET, m, n)
+        @test x isa AT{ET}
+        @test size(x) == (m, n)
+    end
+end
+function direct_vector_construction(AT, eltypes)
+    # NOP
 end
 
 function broadcasting_vector(AT, eltypes)
