@@ -3,8 +3,10 @@ uuid = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
 version = "11.4.1"
 
 [deps]
+AcceleratedKernels = "6a4ca0a5-0e36-4168-a932-d9be78d558f1"
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
+GPUToolbox = "096a3bc2-3ced-46d0-87f4-dd12716f4bfc"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 LLVM = "929cbde3-209d-540e-8aea-75f648917ca0"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -23,8 +25,10 @@ JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 JLD2Ext = "JLD2"
 
 [compat]
+AcceleratedKernels = "0.4.3"
 Adapt = "4.0"
 GPUArraysCore = "= 0.2.0"
+GPUToolbox = "0.2, 0.3, 1"
 JLD2 = "0.4, 0.5, 0.6"
 KernelAbstractions = "0.9.28, 0.10"
 LLVM = "3.9, 4, 5, 6, 7, 8, 9"
