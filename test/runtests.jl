@@ -31,4 +31,4 @@ for AT in (:JLArray, :Array), name in keys(TestSuite.tests)
     testsuite["$(AT)/$name"] = :(TestSuite.tests[$name]($AT))
 end
 
-runtests(GPUArrays, ARGS; init_code, init_worker_code, testsuite)
+runtests(GPUArrays, args; init_code, init_worker_code, testsuite)
