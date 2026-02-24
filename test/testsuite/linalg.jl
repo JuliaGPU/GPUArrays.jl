@@ -567,3 +567,41 @@ end
         end
     end
 end
+
+@testsuite "linalg/kron_diagonal" (AT, eltypes) -> begin
+    for T in filter(T -> T == Float32 || T == Float64, eltypes)
+        n, m = 16, 8
+        a, b = rand(T, n), rand(T, m)
+
+        # Diagonal*Diagonal
+        R = kron(Diagonal(adapt(AT, a)), Diagonal(adapt(AT, b)))
+        @test R isa Diagonal
+        @test Array(R.diag) ≈ kron(a, b)
+
+        # Diagonal*Dense
+        B = rand(T, m, m)
+        R2 = kron(Diagonal(adapt(AT, a)), adapt(AT, B))
+        @test Array(R2) ≈ kron(Matrix(Diagonal(a)), B)
+
+        # Dense*Diagonal
+        A = rand(T, n, n)
+        R3 = kron(adapt(AT, A), Diagonal(adapt(AT, b)))
+        @test Array(R3) ≈ kron(A, Matrix(Diagonal(b)))
+
+        # kron! Diagonal*Diagonal
+        C1 = Diagonal(adapt(AT, zeros(T, n * m)))
+        kron!(C1, Diagonal(adapt(AT, a)), Diagonal(adapt(AT, b)))
+        @test C1 isa Diagonal
+        @test Array(C1.diag) ≈ kron(a, b)
+
+        # kron! Diagonal*Dense
+        C2 = adapt(AT, zeros(T, n * m, n * m))
+        kron!(C2, Diagonal(adapt(AT, a)), adapt(AT, B))
+        @test Array(C2) ≈ kron(Matrix(Diagonal(a)), B)
+
+        # kron! Dense*Diagonal
+        C3 = adapt(AT, zeros(T, n * m, n * m))
+        kron!(C3, adapt(AT, A), Diagonal(adapt(AT, b)))
+        @test Array(C3) ≈ kron(A, Matrix(Diagonal(b)))
+    end
+end

@@ -952,3 +952,57 @@ for wrapa in trans_adj_wrappers, wrapb in trans_adj_wrappers
         return kron!(C, A, B)
     end
 end
+
+@kernel function kron_diag_dense_kernel!(C, @Const(a), @Const(B))
+    ci, cj = @index(Global, NTuple)
+    mb = size(B, 1)
+    nb = size(B, 2)
+    i = fld1(ci, mb)
+    bi = mod1(ci, mb)
+    j = fld1(cj, nb)
+    bj = mod1(cj, nb)
+    @inbounds C[ci, cj] = (i == j) ? a[i] * B[bi, bj] : zero(eltype(C))
+end
+
+@kernel function kron_dense_diag_kernel!(C, @Const(A), @Const(b))
+    ci, cj = @index(Global, NTuple)
+    nb = length(b)
+    i = fld1(ci, nb)
+    bi = mod1(ci, nb)
+    j = fld1(cj, nb)
+    bj = mod1(cj, nb)
+    @inbounds C[ci, cj] = (bi == bj) ? A[i, j] * b[bi] : zero(eltype(C))
+end
+
+function LinearAlgebra.kron!(C::AbstractGPUMatrix, A::Diagonal{T1, <:AbstractGPUVector}, B::AbstractGPUMatrix{T2}) where {T1, T2}
+    size(C) == (length(A.diag) * size(B, 1), length(A.diag) * size(B, 2)) || throw(DimensionMismatch())
+    backend = KernelAbstractions.get_backend(C)
+    kron_diag_dense_kernel!(backend)(C, A.diag, B, ndrange = size(C))
+    return C
+end
+
+function LinearAlgebra.kron(A::Diagonal{T1, <:AbstractGPUVector}, B::AbstractGPUMatrix{T2}) where {T1, T2}
+    T = promote_type(T1, T2)
+    return kron!(similar(B, T, length(A.diag) * size(B, 1), length(A.diag) * size(B, 2)), A, B)
+end
+
+function LinearAlgebra.kron!(C::AbstractGPUMatrix, A::AbstractGPUMatrix{T1}, B::Diagonal{T2, <:AbstractGPUVector}) where {T1, T2}
+    size(C) == (size(A, 1) * length(B.diag), size(A, 2) * length(B.diag)) || throw(DimensionMismatch())
+    backend = KernelAbstractions.get_backend(C)
+    kron_dense_diag_kernel!(backend)(C, A, B.diag, ndrange = size(C))
+    return C
+end
+
+function LinearAlgebra.kron(A::AbstractGPUMatrix{T1}, B::Diagonal{T2, <:AbstractGPUVector}) where {T1, T2}
+    T = promote_type(T1, T2)
+    return kron!(similar(A, T, size(A, 1) * length(B.diag), size(A, 2) * length(B.diag)), A, B)
+end
+
+function LinearAlgebra.kron!(C::Diagonal{<:Any, <:AbstractGPUVector}, A::Diagonal{T1, <:AbstractGPUVector}, B::Diagonal{T2, <:AbstractGPUVector}) where {T1, T2}
+    kron!(C.diag, A.diag, B.diag)
+    return C
+end
+
+function LinearAlgebra.kron(A::Diagonal{T1, <:AbstractGPUVector}, B::Diagonal{T2, <:AbstractGPUVector}) where {T1, T2}
+    Diagonal(kron(A.diag, B.diag))
+end
