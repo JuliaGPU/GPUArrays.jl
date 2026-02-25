@@ -29,12 +29,12 @@ Statistics._mean(f, A::AbstractGPUArray, ::Colon) = sum(f, A) / length(A)
 function Statistics._mean(A::AbstractGPUArray, dims)
     T = float(eltype(A))
     λ = convert(T, inv(_mean_denom(A, dims)))
-    sum(Base.Fix1(*,λ), A; dims)
+    sum(A; dims) .* λ
 end
 function Statistics._mean(f, A::AbstractGPUArray, dims)
     T = float(eltype(A))
     λ = convert(T, inv(_mean_denom(A, dims)))
-    sum(Base.Fix1(*,λ) ∘ f, A; dims)
+    sum(f, A; dims) .* λ
 end
 
 function Statistics.covzm(x::AbstractGPUMatrix, vardim::Int=1; corrected::Bool=true)
