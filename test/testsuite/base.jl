@@ -434,6 +434,61 @@ end
       gA = reshape(AT(A),4)
     end
 
+    @testset "reverse" begin
+      # 1-d out-of-place
+      @test compare(x->reverse(x), AT, rand(Float32, 1000))
+      @test compare(x->reverse(x), AT, rand(Float32, 0))
+      @test compare(x->reverse(x), AT, rand(Float32, 1))
+      @test compare(x->reverse(x, 10), AT, rand(Float32, 1000))
+      @test compare(x->reverse(x, 10, 90), AT, rand(Float32, 1000))
+      @test compare(x->reverse(x, 3, 3), AT, Float32[1,2,3,4,5])
+
+      # 1-d in-place
+      @test compare(x->reverse!(x), AT, rand(Float32, 1000))
+      @test compare(x->reverse!(x), AT, rand(Float32, 0))
+      @test compare(x->reverse!(x), AT, rand(Float32, 1))
+      @test compare(x->reverse!(x, 10), AT, rand(Float32, 1000))
+      @test compare(x->reverse!(x, 10, 90), AT, rand(Float32, 1000))
+      @test compare(x->reverse!(x, 3, 3), AT, Float32[1,2,3,4,5])
+
+      # n-d out-of-place
+      for shape in ([1, 2, 4, 3], [4, 2], [5], [0], [1], [2^5, 2^5, 2^5]),
+          dim in 1:length(shape)
+          @testset "Shape: $shape, Dim: $dim" begin
+              @test compare(x->reverse(x; dims=dim), AT, rand(Float32, shape...))
+
+              cpu = rand(Float32, shape...)
+              gpu = AT(cpu)
+              reverse!(gpu; dims=dim)
+              @test Array(gpu) == reverse(cpu; dims=dim)
+          end
+      end
+
+      # supports multidimensional reverse
+      for shape in ([1,1,1,1], [1, 2, 4, 3], [2^5, 2^5, 2^5]),
+          dim in ((1,2),(2,3),(1,3),:)
+          @testset "Shape: $shape, Dim: $dim" begin
+              @test compare(x->reverse(x; dims=dim), AT, rand(Float32, shape...))
+
+              cpu = rand(Float32, shape...)
+              gpu = AT(cpu)
+              reverse!(gpu; dims=dim)
+              @test Array(gpu) == reverse(cpu; dims=dim)
+          end
+      end
+
+      # wrapped array
+      @test compare(x->reverse(x), AT, reshape(rand(Float32, 2,2), 4))
+
+      # error throwing
+      cpu = rand(Float32, 1,2,3,4)
+      gpu = AT(cpu)
+      @test_throws ArgumentError reverse!(gpu, dims=5)
+      @test_throws ArgumentError reverse!(gpu, dims=0)
+      @test_throws ArgumentError reverse(gpu, dims=5)
+      @test_throws ArgumentError reverse(gpu, dims=0)
+  end
+
     @testset "reinterpret" begin
       A = Int32[-1,-2,-3]
       dA = AT(A)

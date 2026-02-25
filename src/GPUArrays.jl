@@ -1,6 +1,8 @@
 module GPUArrays
 
+using GPUToolbox
 using KernelAbstractions
+import KernelAbstractions.KernelIntrinsics as KI
 using Serialization
 using Random
 using LinearAlgebra
@@ -27,6 +29,7 @@ include("host/construction.jl")
 ## integrations and specialized methods
 include("host/base.jl")
 include("host/indexing.jl")
+include("host/reverse.jl")
 include("host/broadcast.jl")
 include("host/mapreduce.jl")
 include("host/linalg.jl")
