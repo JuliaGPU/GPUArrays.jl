@@ -14,12 +14,22 @@ function Base.fill!(A::AnyGPUArray{T}, x) where T
 
     @kernel function fill_kernel!(a, val)
         idx = @index(Global, Linear)
-        @inbounds a[idx] = val
+        stride = prod(@ndrange())
+        while idx <= length(a)
+            @inbounds a[idx] = val
+            idx += stride
+        end
     end
 
     # ndims check for 0D support
     kernel = fill_kernel!(get_backend(A))
-    kernel(A, x; ndrange = length(A))
+
+    # Calculate ndrange to ensure that a total grid size >typemax(UInt32) is never
+    # chosen. Grid stride to accomodate grid size limitations on AMD and Metal backends
+    len = length(A)
+    ndrange = cld(len, cld(len, typemax(UInt32) - 1024))
+
+    kernel(A, x; ndrange)
     A
 end
 
