@@ -47,6 +47,9 @@ end
 @inline function _copyto!(dest::AbstractArray, bc::Broadcasted)
     axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     isempty(dest) && return dest
+    if eltype(dest) <: BrokenBroadcast
+        throw(ArgumentError("Broadcast operation resulting in $(eltype(eltype(dest))) is not GPU compatible"))
+    end
     bc = Broadcast.preprocess(dest, bc)
 
     @kernel function broadcast_kernel_linear(dest, bc)
@@ -69,10 +72,6 @@ end
 
     # ndims check for 0D support
     broadcast_kernel(dest, bc; ndrange = ndims(dest) > 0 ? size(dest) : (1,))
-    if eltype(dest) <: BrokenBroadcast
-        throw(ArgumentError("Broadcast operation resulting in $(eltype(eltype(dest))) is not GPU compatible"))
-    end
-
     return dest
 end
 
