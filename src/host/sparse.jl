@@ -11,7 +11,7 @@ abstract type AbstractGPUSparseMatrixCSR{Tv, Ti} <: AbstractGPUSparseArray{Tv, T
 abstract type AbstractGPUSparseMatrixCOO{Tv, Ti} <: AbstractGPUSparseArray{Tv, Ti, 2} end
 abstract type AbstractGPUSparseMatrixBSR{Tv, Ti} <: AbstractGPUSparseArray{Tv, Ti, 2} end
 
-GPUSparseMatrixCOO(I::AbstractGPUVector, J::AbstractGPUVector, V::AbstractGPUVector, args...; kwargs...) = sparse(I, J, V, args...; kwargs...)
+function GPUSparseMatrixCOO end
 function GPUSparseMatrixCSC end
 function GPUSparseMatrixCSR end
 function GPUSparseMatrixBSR end 
