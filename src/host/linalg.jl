@@ -107,48 +107,48 @@ end
 
 ## copy upper triangle to lower and vice versa
 
-function LinearAlgebra.copytri!(A::AbstractGPUMatrix, uplo::AbstractChar, conjugate::Bool=false)
-  n = LinearAlgebra.checksquare(A)
-  if uplo == 'U' && conjugate
-      @kernel function U_conj!(_A)
-        I = @index(Global, Cartesian)
-        i, j = Tuple(I)
-        if j > i
-          @inbounds _A[j,i] = conj(_A[i,j])
+function LinearAlgebra.copytri!(A::AbstractGPUMatrix, uplo::AbstractChar, conjugate::Bool = false, diag::Bool = false)
+    n = LinearAlgebra.checksquare(A)
+    if uplo == 'U' && conjugate
+        @kernel function U_conj!(_A)
+            I = @index(Global, Cartesian)
+            i, j = Tuple(I)
+            if j + diag > i
+                @inbounds _A[j,i] = conj(_A[i,j])
+          end
         end
-      end
-      U_conj!(get_backend(A))(A; ndrange = size(A))
-  elseif uplo == 'U' && !conjugate
-      @kernel function U_noconj!(_A)
-        I = @index(Global, Cartesian)
-        i, j = Tuple(I)
-        if j > i
-          @inbounds _A[j,i] = _A[i,j]
+        U_conj!(get_backend(A))(A; ndrange = size(A))
+    elseif uplo == 'U' && !conjugate
+        @kernel function U_noconj!(_A)
+            I = @index(Global, Cartesian)
+            i, j = Tuple(I)
+            if j + diag > i
+                @inbounds _A[j,i] = _A[i,j]
+          end
         end
-      end
-      U_noconj!(get_backend(A))(A; ndrange = size(A))
-  elseif uplo == 'L' && conjugate
-      @kernel function L_conj!(_A)
-        I = @index(Global, Cartesian)
-        i, j = Tuple(I)
-        if j > i
-          @inbounds _A[i,j] = conj(_A[j,i])
+        U_noconj!(get_backend(A))(A; ndrange = size(A))
+    elseif uplo == 'L' && conjugate
+        @kernel function L_conj!(_A)
+            I = @index(Global, Cartesian)
+            i, j = Tuple(I)
+            if j + diag > i
+                @inbounds _A[i,j] = conj(_A[j,i])
+            end
         end
-      end
-      L_conj!(get_backend(A))(A; ndrange = size(A))
-  elseif uplo == 'L' && !conjugate
-      @kernel function L_noconj!(_A)
-        I = @index(Global, Cartesian)
-        i, j = Tuple(I)
-        if j > i
-          @inbounds _A[i,j] = _A[j,i]
+        L_conj!(get_backend(A))(A; ndrange = size(A))
+    elseif uplo == 'L' && !conjugate
+        @kernel function L_noconj!(_A)
+            I = @index(Global, Cartesian)
+            i, j = Tuple(I)
+            if j + diag > i
+                @inbounds _A[i,j] = _A[j,i]
+            end
         end
-      end
-      L_noconj!(get_backend(A))(A; ndrange = size(A))
-  else
-      throw(ArgumentError("uplo argument must be 'U' (upper) or 'L' (lower), got $uplo"))
-  end
-  A
+        L_noconj!(get_backend(A))(A; ndrange = size(A))
+    else
+        throw(ArgumentError("uplo argument must be 'U' (upper) or 'L' (lower), got $uplo"))
+    end
+    A
 end
 
 ## copy a triangular part of a matrix to another matrix
