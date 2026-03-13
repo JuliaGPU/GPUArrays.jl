@@ -11,11 +11,57 @@ abstract type AbstractGPUSparseMatrixCSR{Tv, Ti} <: AbstractGPUSparseArray{Tv, T
 abstract type AbstractGPUSparseMatrixCOO{Tv, Ti} <: AbstractGPUSparseArray{Tv, Ti, 2} end
 abstract type AbstractGPUSparseMatrixBSR{Tv, Ti} <: AbstractGPUSparseArray{Tv, Ti, 2} end
 
-GPUSparseMatrix(I::AbstractGPUVector, J::AbstractGPUVector, V::AbstractGPUVector, args...; kwargs...) = GPUSparseMatrixCOO(I, J, V, args...; kwargs...)
 GPUSparseMatrixCOO(I::AbstractGPUVector, J::AbstractGPUVector, V::AbstractGPUVector, args...; kwargs...) = sparse(I, J, V, args...; kwargs...)
 function GPUSparseMatrixCSC end
 function GPUSparseMatrixCSR end
-function GPUSparseMatrixBSR end
+function GPUSparseMatrixBSR end 
+
+function compute_sparse_pointers(indices::AbstractGPUVector{T}, n::Integer) where T
+    ptr = similar(indices, T, n + 1)
+    fill!(ptr, zero(T))
+
+    @kernel function count_indices(@Const(indices), ptr)
+        idx = @index(Global, Linear)
+        if idx == 1
+            ptr[idx] = one(T)
+        end
+        Atomix.@atomic ptr[indices[idx] + 1] += one(T)
+    end
+    
+    backend = get_backend(indices)
+    kernel! = count_indices(backend)
+    kernel!(indices, ptr, ndrange=length(indices))
+    return cumsum(ptr)
+end
+
+function GPUSparseMatrix(I::AbstractGPUVector, J::AbstractGPUVector, V::AbstractGPUVector, dims::NTuple{2, <:Integer}; format = default_sparse_format(I))
+	m, n = dims
+    if format == :coo
+		GPUSparseMatrix(Val(:coo), I, J, V, dims)
+    elseif format == :csc
+        # Create composite key for sorting
+        key = J .* (m + 1) .+ I
+        perm = sortperm(key)
+        
+        ptr = compute_sparse_pointers(J[perm], n)
+        return GPUSparseMatrix(Val(:csc), ptr, I[perm], V[perm], dims)
+    elseif format == :csr
+        # Create composite key for sorting
+        key = I .* (n + 1) .+ J
+        perm = sortperm(key)
+        
+        ptr = compute_sparse_pointers(I[perm], m)
+        return GPUSparseMatrix(Val(:csr), ptr, J[perm], V[perm], dims)
+    else
+        throw(ArgumentError("Conversion to sparse format $format is not implemented"))
+	end
+end
+
+
+GPUSparseMatrix(::Val{:coo}, I, J, V, dims) = GPUSparseMatrixCOO(I, J, V, dims)
+GPUSparseMatrix(::Val{:csc}, colPtr, rowVal, nzVal, dims) = GPUSparseMatrixCSC(colPtr, rowVal, nzVal, dims)
+GPUSparseMatrix(::Val{:csr}, rowPtr, colVal, nzVal, dims) = GPUSparseMatrixCSR(rowPtr, colVal, nzVal, dims)
+#GPUSparseMatrix(::Val{:bsr}, ...) = GPUSparseMatrixBSR(...)
 
 
 const AbstractGPUSparseVecOrMat = Union{AbstractGPUSparseVector,AbstractGPUSparseMatrix}
