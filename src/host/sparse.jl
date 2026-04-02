@@ -55,12 +55,12 @@ dense_array_type(a::AbstractArray)     = dense_array_type(typeof(a))
 sparse_array_type(a::AbstractArray)    = sparse_array_type(typeof(a))
 dense_vector_type(a::AbstractArray)    = dense_vector_type(typeof(a))
 
-dense_array_type(::Type{SparseVector}) = SparseVector
-sparse_array_type(::Type{SparseVector}) = SparseVector
+dense_array_type(::Type{<:SparseVector}) = SparseVector
+sparse_array_type(::Type{<:SparseVector}) = SparseVector
 dense_vector_type(::Type{<:AbstractSparseArray}) = Vector
 dense_vector_type(::Type{<:AbstractArray})       = Vector
-dense_array_type(::Type{SparseMatrixCSC}) = SparseMatrixCSC
-sparse_array_type(::Type{SparseMatrixCSC})    = SparseMatrixCSC
+dense_array_type(::Type{<:SparseMatrixCSC}) = SparseMatrixCSC
+sparse_array_type(::Type{<:SparseMatrixCSC})    = SparseMatrixCSC
 
 function sparse_array_type(sa::AbstractGPUSparseArray) end
 function dense_array_type(sa::AbstractGPUSparseArray) end
