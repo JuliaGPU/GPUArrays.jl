@@ -51,16 +51,16 @@ Base.similar(Mat::M) where {M<:AbstractGPUSparseMatrixCSC} = M(copy(SparseArrays
 Base.similar(Vec::V, T::Type) where {Tv, Ti, V<:AbstractGPUSparseVector{Tv, Ti}} = sparse_array_type(V){T, Ti}(copy(SparseArrays.nonzeroinds(Vec)), similar(SparseArrays.nonzeros(Vec), T), length(Vec))
 Base.similar(Mat::M, T::Type) where {M<:AbstractGPUSparseMatrixCSC} = sparse_array_type(M)(copy(SparseArrays.getcolptr(Mat)), copy(SparseArrays.rowvals(Mat)), similar(SparseArrays.nonzeros(Mat), T), size(Mat))
 
-dense_array_type(sa::SparseVector)     = SparseVector
-dense_array_type(::Type{SparseVector}) = SparseVector
-sparse_array_type(sa::SparseVector) = SparseVector
-dense_vector_type(sa::AbstractSparseArray) = Vector
-dense_vector_type(sa::AbstractArray)       = Vector
+dense_array_type(a::AbstractArray)     = dense_array_type(typeof(a))
+sparse_array_type(a::AbstractArray)    = sparse_array_type(typeof(a))
+dense_vector_type(a::AbstractArray)    = dense_vector_type(typeof(a))
+
+dense_array_type(::Type{<:SparseVector}) = SparseVector
+sparse_array_type(::Type{<:SparseVector}) = SparseVector
 dense_vector_type(::Type{<:AbstractSparseArray}) = Vector
 dense_vector_type(::Type{<:AbstractArray})       = Vector
-dense_array_type(sa::SparseMatrixCSC)     = SparseMatrixCSC
-dense_array_type(::Type{SparseMatrixCSC}) = SparseMatrixCSC
-sparse_array_type(sa::SparseMatrixCSC)    = SparseMatrixCSC
+dense_array_type(::Type{<:SparseMatrixCSC}) = SparseMatrixCSC
+sparse_array_type(::Type{<:SparseMatrixCSC})    = SparseMatrixCSC
 
 function sparse_array_type(sa::AbstractGPUSparseArray) end
 function dense_array_type(sa::AbstractGPUSparseArray) end
