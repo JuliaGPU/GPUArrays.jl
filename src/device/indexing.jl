@@ -83,4 +83,22 @@ end
     return nzVal[jj]
 end
 
-# TODO: Support BSR format
+## Adapted from CUDA.jl/blob/lib/cusparse/src/array.jl#L500
+@propagate_inbounds function Base.getindex(
+    A::GPUSparseDeviceMatrixBSR{Tv,Ti},
+    i::Integer,
+    j::Integer,
+) where {Tv,Ti}
+    @boundscheck checkbounds(A, i, j)
+    rowPtr, colVal, nzVal = A.rowPtr, A.colVal, A.nzVal
+
+    i_block, i_idx = fldmod1(i, A.blockDim)
+    j_block, j_idx = fldmod1(j, A.blockDim)
+    block_idx = (i_idx-1) * A.blockDim + j_idx - 1
+    c1 = convert(Ti, rowPtr[i_block])
+    c1 = convert(Ti, rowPtr[i_block+1]-1)
+    (c1 > c2) && return zero(Tv)
+    c1 = searchsortedfirst(colVal, j_block, c1, c2, Base.Order.Forward)
+    (c1 > c2 || colVal[c1] != j_block) && return zero(Tv)
+    nzVal[c1+block_idx]
+end
