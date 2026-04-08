@@ -4,9 +4,9 @@ using Base: @propagate_inbounds
 
 Base.IndexStyle(::Type{GPUSparseDeviceVector}) = Base.IndexLinear()
 
-# Scalar indexing
-## Adapted from SparseArrays.AbstractSparseVector
+# Implementing only scalar indexing. Non-scalar indexing would allocate in device code
 
+## Adapted from SparseArrays.AbstractSparseVector
 @propagate_inbounds function Base.getindex(
     v::GPUSparseDeviceVector{Tv,Ti},
     i::Integer,
@@ -20,9 +20,55 @@ Base.IndexStyle(::Type{GPUSparseDeviceVector}) = Base.IndexLinear()
     (ii <= m && nzind[ii] == i) ? nzval[ii] : zero(Tv)
 end
 
-# TODO: Logical indexing
+# Logical getindex
+@propagate_inbounds function Base.getindex(
+    v::GPUSparseDeviceVector,
+    I::AbstractVector{Bool},
+)
+    isone(count(I)) ? v[findfirst(I)] :
+    error(
+        "Logical index contains more than one true value. Device arrays only support scalar indexing.",
+    )
+end
 
-# Indexing by colon not implemented. Non-scalar indexing would allocate in device code
+@propagate_inbounds function Base.getindex(
+    A::AbstractGPUSparseDeviceMatrix,
+    i::Integer,
+    J::AbstractVector{Bool},
+)
+    isone(count(J)) ? A[i, findfirst(J)] :
+    error(
+        "Logical index contains more than one true value. Device arrays only support scalar indexing.",
+    )
+end
+
+@propagate_inbounds function Base.getindex(
+    A::AbstractGPUSparseDeviceMatrix,
+    I::AbstractVector{Bool},
+    j::Integer,
+)
+    isone(count(I)) ? A[findfirst(I), j] :
+    error(
+        "Logical index contains more than one true value. Device arrays only support scalar indexing.",
+    )
+end
+
+@propagate_inbounds function Base.getindex(
+    A::AbstractGPUSparseDeviceMatrix,
+    I::AbstractVector{Bool},
+    J::AbstractVector{Bool},
+)
+    if (isone(count(I)) && isone(count(J)))
+        A[findfirst(I), findfirst(J)]
+    else
+        failing_len, failing_idx = findmax((count(I), count(J)))
+        error(
+            "Logical index $(failing_idx == 1 ? "I" : "J") contains $(failing_len) true " *
+            "values. Device arrays only support scalar indexing.",
+        )
+    end
+end
+
 @propagate_inbounds Base.getindex(
     A::AbstractGPUSparseDeviceMatrix,
     I::Tuple{Integer,Integer},
