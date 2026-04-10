@@ -424,44 +424,49 @@ end
 
       # mixed AbstractUnitRange indices: contiguity must be determined at
       # runtime since the type `UnitRange` doesn't encode length (#2653).
-      @testset "mixed range contiguity" begin
-        A = AT(rand(Float32, 5, 4))
-        B = AT(rand(Float32, 5, 4, 3))
+      # GPU-only: the "contiguous view collapses to AT" behavior is provided by
+      # GPUArrays' `unsafe_contiguous_view`; `Base.view` on a plain `Array`
+      # always returns a `SubArray`.
+      if AT <: AbstractGPUArray
+        @testset "mixed range contiguity" begin
+          A = AT(rand(Float32, 5, 4))
+          B = AT(rand(Float32, 5, 4, 3))
 
-        # contiguous cases: should collapse to the array type itself
-        @test view(A, 1:1, 1:1) isa AT
-        @test view(A, 1:2, 1:1) isa AT
-        @test view(A, 1:5, 1:2) isa AT
-        @test view(A, 1:5, 2:3) isa AT
-        @test view(B, 1:1, 1:1, 1:1) isa AT
-        @test view(B, 1:5, 1:4, 1:1) isa AT
-        @test view(B, 1:5, 2:3, 1:1) isa AT
-        @test view(B, 1:5, 2:3, 2:2) isa AT
-        @test view(B, 1:5, 2:3, 2)   isa AT
-        @test view(B, 1:5, 1:4, 2:3) isa AT
+          # contiguous cases: should collapse to the array type itself
+          @test view(A, 1:1, 1:1) isa AT
+          @test view(A, 1:2, 1:1) isa AT
+          @test view(A, 1:5, 1:2) isa AT
+          @test view(A, 1:5, 2:3) isa AT
+          @test view(B, 1:1, 1:1, 1:1) isa AT
+          @test view(B, 1:5, 1:4, 1:1) isa AT
+          @test view(B, 1:5, 2:3, 1:1) isa AT
+          @test view(B, 1:5, 2:3, 2:2) isa AT
+          @test view(B, 1:5, 2:3, 2)   isa AT
+          @test view(B, 1:5, 1:4, 2:3) isa AT
 
-        # non-contiguous cases: must stay as SubArray
-        @test view(A, 1:2, 1:2)      isa SubArray
-        @test view(A, 1:1, 2:3)      isa SubArray
-        @test view(B, 1:5, 1:1, 1:2) isa SubArray
-        @test view(B, 1:5, 1:2, 1:2) isa SubArray
-        @test view(B, 1:2, 1:2, 1:1) isa SubArray
+          # non-contiguous cases: must stay as SubArray
+          @test view(A, 1:2, 1:2)      isa SubArray
+          @test view(A, 1:1, 2:3)      isa SubArray
+          @test view(B, 1:5, 1:1, 1:2) isa SubArray
+          @test view(B, 1:5, 1:2, 1:2) isa SubArray
+          @test view(B, 1:2, 1:2, 1:1) isa SubArray
 
-        # values must match in all cases
-        Acpu = Array(A); Bcpu = Array(B)
-        for idx in [(1:1,1:1), (1:4,1:2), (1:5,2:3), (1:2,1:2), (1:1,2:3)]
-            @test Array(view(A, idx...)) == view(Acpu, idx...)
-        end
-        for idx in [(1:5,2:3,1:1), (1:5,2:3,2), (1:5,1:4,2:3),
-                    (1:5,1:1,1:2), (1:5,1:2,1:2), (1:2,1:2,1:1)]
-            @test Array(view(B, idx...)) == view(Bcpu, idx...)
-        end
+          # values must match in all cases
+          Acpu = Array(A); Bcpu = Array(B)
+          for idx in [(1:1,1:1), (1:4,1:2), (1:5,2:3), (1:2,1:2), (1:1,2:3)]
+              @test Array(view(A, idx...)) == view(Acpu, idx...)
+          end
+          for idx in [(1:5,2:3,1:1), (1:5,2:3,2), (1:5,1:4,2:3),
+                      (1:5,1:1,1:2), (1:5,1:2,1:2), (1:2,1:2,1:1)]
+              @test Array(view(B, idx...)) == view(Bcpu, idx...)
+          end
 
-        # reshape of a 1-element view (original report in #2653)
-        let C = AT(rand(ComplexF32, 4, 5))
-            v = @view C[1:1, 1:1]
-            @test v isa AT
-            @test reshape(v, (1, 1)) isa AT
+          # reshape of a 1-element view (original report in #2653)
+          let C = AT(rand(ComplexF32, 4, 5))
+              v = @view C[1:1, 1:1]
+              @test v isa AT
+              @test reshape(v, (1, 1)) isa AT
+          end
         end
       end
     end
