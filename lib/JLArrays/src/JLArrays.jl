@@ -65,7 +65,7 @@ Adapt.adapt_structure(to::Adaptor, r::Base.RefValue) = JlRefValue(adapt(to, r[])
     Base.sizeof(x::JLDeviceArray) = Base.elsize(x) * length(x)
 
     Base.unsafe_convert(::Type{Ptr{T}}, x::JLDeviceArray{T}) where {T} =
-        convert(Ptr{T}, pointer(x.data)) + x.offset*Base.elsize(x)
+        convert(Ptr{T}, pointer(x.data)) + x.offset
 
     # conversion of untyped data to a typed Array
     function typed_data(x::JLDeviceArray{T}) where {T}
@@ -92,7 +92,7 @@ end
 mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
     data::DataRef{Vector{UInt8}}
 
-    offset::Int        # offset of the data in the buffer, in number of elements
+    offset::Int        # offset of the data in the buffer, in bytes
 
     dims::Dims{N}
 
@@ -266,7 +266,7 @@ end
 
 function GPUArrays.derive(::Type{T}, a::JLArray, dims::Dims{N}, offset::Int) where {T,N}
     ref = copy(a.data)
-    offset = (a.offset * Base.elsize(a)) ÷ sizeof(T) + offset
+    offset = a.offset + offset * sizeof(T)
     JLArray{T,N}(ref, dims; offset)
 end
 
@@ -343,7 +343,7 @@ Base.size(x::JLArray) = x.dims
 Base.sizeof(x::JLArray) = Base.elsize(x) * length(x)
 
 Base.unsafe_convert(::Type{Ptr{T}}, x::JLArray{T}) where {T} =
-    convert(Ptr{T}, pointer(x.data[])) + x.offset*Base.elsize(x)
+    convert(Ptr{T}, pointer(x.data[])) + x.offset
 
 
 ## interop with Julia arrays

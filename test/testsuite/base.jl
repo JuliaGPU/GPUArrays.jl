@@ -442,6 +442,13 @@ end
 
       @test collect(reinterpret(Int32, AT(fill(1f0))))[] == reinterpret(Int32, 1f0)
 
+      @testset "reinterpret of view with non-aligned offset" begin
+        a = AT(Int32[1,2,3,4,5,6,7,8,9])
+        v = view(a, 2:7)  # offset of 1 Int32 = 4 bytes
+        r = reinterpret(Int64, v)  # Int64 = 8 bytes; 4 is not a multiple of 8
+        @test Array(r) == reinterpret(Int64, @view Array(a)[2:7])
+      end
+
       @testset "reinterpret(reshape)" begin
         a = AT(ComplexF32[1.0f0+2.0f0*im, 2.0f0im, 3.0f0im])
         b = reinterpret(reshape, Float32, a)
