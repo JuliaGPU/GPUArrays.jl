@@ -533,6 +533,15 @@ end
         @test compare(opnorm, AT, mat, Ref(p))
         @test isrealfloattype(typeof(opnorm(AT(mat), p)))
     end
+    @testset "normalize($T)" for T in eltypes
+        if !in(float(real(T)), eltypes)
+            continue
+        end
+        range = real(T) <: Integer ? (T.(1:10)) : T
+        arr = rand(range, 10)
+        @test compare(normalize, AT, arr)
+        @test compare(normalize, AT, arr, Ref(1))
+    end
 end
 
 @testsuite "linalg/NaN_false" (AT, eltypes)->begin
