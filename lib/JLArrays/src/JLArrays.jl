@@ -542,11 +542,7 @@ using Random
 const GLOBAL_RNG = Ref{Union{Nothing,GPUArrays.RNG}}(nothing)
 function GPUArrays.default_rng(::Type{<:JLArray})
     if GLOBAL_RNG[] === nothing
-        N = MAXTHREADS
-        state = JLArray{NTuple{4, UInt32}}(undef, N)
-        rng = GPUArrays.RNG(state)
-        Random.seed!(rng)
-        GLOBAL_RNG[] = rng
+        GLOBAL_RNG[] = GPUArrays.RNG()
     end
     GLOBAL_RNG[]
 end
