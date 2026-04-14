@@ -65,7 +65,8 @@ steps:
           version: "{{matrix.julia}}"
       - JuliaCI/julia-coverage#v1:
           codecov: true
-    command: |
+    commands: |
+      unset LD_LIBRARY_PATH
       julia -e 'using Pkg
 
                 gpuarrays = pwd()
