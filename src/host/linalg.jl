@@ -802,6 +802,21 @@ function _normtypes(::Type{T}) where {T}
     return result_type, sum_type, promote_
 end
 
+## normalize
+
+# Avoid `first(a)` scalar indexing in LinearAlgebra.normalize (JuliaGPU/CUDA.jl#3097)
+function LinearAlgebra.normalize(a::AbstractGPUArray, p::Real=2)
+    nrm = norm(a, p)
+    if !isempty(a)
+        T = typeof(zero(eltype(a))/nrm)
+        aa = LinearAlgebra.copymutable_oftype(a, T)
+        return LinearAlgebra.__normalize!(aa, nrm)
+    else
+        T = typeof(zero(eltype(a))/nrm)
+        return T[]
+    end
+end
+
 ## opnorm
 
 function LinearAlgebra.opnorm1(A::AnyGPUArray{T,2}) where {T}
