@@ -1,4 +1,64 @@
 steps:
+  # Julia 1.10 doesn't support [sources] in Project.toml,
+  # so we need to manually dev CUDA.jl's workspace packages.
+  - label: "CUDA.jl -- Julia 1.10"
+    plugins:
+      - JuliaCI/julia#v1:
+          version: "1.10"
+      - JuliaCI/julia-coverage#v1:
+          codecov: true
+    commands: |
+      unset LD_LIBRARY_PATH
+      julia -e 'using Pkg
+
+                gpuarrays = pwd()
+                gpuarrayscore = joinpath(gpuarrays, "lib", "GPUArraysCore")
+                devdir = mktempdir()
+                package = joinpath(devdir, "CUDA")
+
+                println("--- :julia: Installing TestEnv")
+                Pkg.activate(; temp=true)
+                Pkg.add("TestEnv")
+                using TestEnv
+
+                println("--- :julia: Installing CUDA.jl")
+                withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
+                        "JULIA_PKG_DEVDIR" => devdir) do
+                  Pkg.develop("CUDA")
+                  Pkg.activate(package)
+
+                  try
+                    Pkg.develop([
+                      PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore),
+                      PackageSpec(path=joinpath(package, "CUDACore")),
+                      PackageSpec(path=joinpath(package, "CUDATools")),
+                      PackageSpec(path=joinpath(package, "lib", "cupti")),
+                      PackageSpec(path=joinpath(package, "lib", "nvml")),
+                      PackageSpec(path=joinpath(package, "lib", "cublas")),
+                      PackageSpec(path=joinpath(package, "lib", "cusparse")),
+                      PackageSpec(path=joinpath(package, "lib", "cusolver")),
+                      PackageSpec(path=joinpath(package, "lib", "cufft")),
+                      PackageSpec(path=joinpath(package, "lib", "curand")),
+                    ])
+                    TestEnv.activate()
+                  catch err
+                    @error "Could not install CUDA.jl" exception=(err,catch_backtrace())
+                    exit(3)
+                  finally
+                    Pkg.activate(package)
+                  end
+                end
+
+                println("+++ :julia: Running tests")
+                Pkg.test(; coverage=true)'
+    agents:
+      queue: "juliagpu"
+      cuda: "*"
+    if: build.message !~ /\[skip tests\]/
+    timeout_in_minutes: 120
+    soft_fail:
+      - exit_status: 3
+
   - label: "CUDA.jl -- Julia {{matrix.julia}}"
     plugins:
       - JuliaCI/julia#v1:
@@ -45,13 +105,8 @@ steps:
     matrix:
       setup:
         julia:
-          - "1.10"
+          - "1.11"
           - "1.12"
-          - "1.13"
-      adjustments:
-        - with:
-            julia: "1.13"
-          soft_fail: true
     soft_fail:
       - exit_status: 3
 
@@ -103,12 +158,8 @@ steps:
       setup:
         julia:
           - "1.10"
+          - "1.11"
           - "1.12"
-          - "1.13"
-      adjustments:
-        - with:
-            julia: "1.13"
-          soft_fail: true
     soft_fail:
       - exit_status: 3
 
@@ -160,12 +211,8 @@ steps:
       setup:
         julia:
           - "1.10"
+          - "1.11"
           - "1.12"
-          - "1.13"
-      adjustments:
-        - with:
-            julia: "1.13"
-          soft_fail: true
     soft_fail:
       - exit_status: 3
 
@@ -217,6 +264,7 @@ steps:
       setup:
         julia:
           - "1.10"
+          - "1.11"
           - "1.12"
           - "1.13"
     soft_fail:
