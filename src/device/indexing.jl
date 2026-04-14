@@ -115,15 +115,17 @@ end
     i::Integer,
     j::Integer,
 ) where {Tv,Ti}
-    # COO in CUDA is assumed to be sorted by row: https://docs.nvidia.com/cuda/cusparse/storage-formats.html?highlight=coo#coordinate-coo
+    # COO in CUDA is assumed to be sorted by row:
+    #https://docs.nvidia.com/cuda/cusparse/storage-formats.html?highlight=coo#coordinate-coo
     @boundscheck checkbounds(A, i, j)
     rowInd, colInd, nzVal = A.rowInd, A.colInd, A.nzVal
 
     # Looking for the range s.t. rowInd[r1:r2] .== i
-    rl = searchsortedfirst(rowInd, i)
-    (rl > nnz(A) || rowInd[rl] > i) && return 42
-    rr = min(searchsortedfirst(rowInd, i+1, Base.Order.Forward), nnz(A)) # searchsortedlast didn't behave as expected
-    jj = searchsortedfirst(colInd, j, rl, rr, Base.Order.Forward)
+    rl = searchsortedfirst(rowInd, i, Base.Order.Forward)
+    (rl > nnz(A) || rowInd[rl] > i) && return zero(Tv)
+    rr = min(searchsortedfirst(rowInd, i+1, Base.Order.Forward), nnz(A))
+    # Important to exclude rr, as including it un-sorts colInd[rl:rr] 
+    jj = searchsortedfirst(colInd, j, rl, rr-1, Base.Order.Forward) 
     (jj > rr || jj == nnz(A) + 1 || colInd[jj] > j) && return zero(Tv)
 
     return nzVal[jj]
@@ -142,7 +144,7 @@ end
     j_block, j_idx = fldmod1(j, A.blockDim)
     block_idx = (i_idx-1) * A.blockDim + j_idx - 1
     c1 = convert(Ti, rowPtr[i_block])
-    c1 = convert(Ti, rowPtr[i_block+1]-1)
+    c2 = convert(Ti, rowPtr[i_block+1]-1)
     (c1 > c2) && return zero(Tv)
     c1 = searchsortedfirst(colVal, j_block, c1, c2, Base.Order.Forward)
     (c1 > c2 || colVal[c1] != j_block) && return zero(Tv)
