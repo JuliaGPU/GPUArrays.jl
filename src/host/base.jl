@@ -313,6 +313,7 @@ end
 ## views
 
 struct Contiguous end
+struct MaybeContiguous end
 struct NonContiguous end
 
 # NOTE: this covers more cases than the I<:... in Base.FastContiguousSubArray
@@ -324,6 +325,18 @@ GPUIndexStyle(::Base.Slice, ::Union{Base.ScalarIndex, CartesianIndex}...) = Cont
 GPUIndexStyle(::AbstractUnitRange, ::Union{Base.ScalarIndex, CartesianIndex}...) = Contiguous()
 GPUIndexStyle(::Colon, I...) = GPUIndexStyle(I...)
 GPUIndexStyle(::Base.Slice, I...) = GPUIndexStyle(I...)
+# Two or more adjacent AbstractUnitRange indices can't be classified statically;
+# whether the view is contiguous depends on the lengths of the ranges (e.g.
+# `view(A, 1:1, 1:1)` is contiguous, but `view(A, 1:2, 1:2)` is not). Defer
+# those cases to a runtime stride check.
+GPUIndexStyle(::AbstractUnitRange, ::AbstractUnitRange,
+              ::Vararg{Union{AbstractUnitRange, Base.ScalarIndex, CartesianIndex}}) =
+    MaybeContiguous()
+# Disambiguate the above from the recursive `Base.Slice` rule: a leading Slice
+# covers a full dimension and should be stripped, regardless of what follows.
+GPUIndexStyle(::Base.Slice, i2::AbstractUnitRange,
+              I::Vararg{Union{AbstractUnitRange, Base.ScalarIndex, CartesianIndex}}) =
+    GPUIndexStyle(i2, I...)
 
 viewlength() = ()
 @inline viewlength(::Real, I...) = viewlength(I...) # skip scalar
@@ -360,4 +373,37 @@ end
 
 @inline function unsafe_view(A, I, ::NonContiguous)
     Base.unsafe_view(Base._maybe_reshape_parent(A, Base.index_ndims(I...)), I...)
+end
+
+@inline function unsafe_view(A, I, ::MaybeContiguous)
+    P = Base._maybe_reshape_parent(A, Base.index_ndims(I...))
+    if iscontiguous_indices(P, I)
+        unsafe_contiguous_view(P, I, viewlength(I...))
+    else
+        Base.unsafe_view(P, I...)
+    end
+end
+
+# Determine at runtime whether the view `I` into `A` covers a contiguous
+# stretch of memory. Length-1 range indices (and scalars) don't affect the
+# traversal stride; each longer range index must sit at the expected parent
+# stride and advances it by its length.
+@inline iscontiguous_indices(A, I::Tuple) = _iscontiguous_indices(strides(A), I, 1, 1)
+@inline _iscontiguous_indices(::Tuple, ::Tuple{}, dim::Int, expected::Int) = true
+@inline function _iscontiguous_indices(st::Tuple, I::Tuple, dim::Int, expected::Int)
+    idx = I[1]
+    rest = Base.tail(I)
+    if idx isa AbstractUnitRange
+        len = Base.length(idx)
+        if len == 1
+            _iscontiguous_indices(st, rest, dim+1, expected)
+        else
+            @inbounds st[dim] == expected || return false
+            @inbounds _iscontiguous_indices(st, rest, dim+1, st[dim] * len)
+        end
+    elseif idx isa CartesianIndex
+        _iscontiguous_indices(st, rest, dim+length(idx), expected)
+    else # Base.ScalarIndex
+        _iscontiguous_indices(st, rest, dim+1, expected)
+    end
 end
