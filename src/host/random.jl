@@ -57,22 +57,65 @@ end
 end
 
 
-## Box-Muller transform using @fastmath log + sincospi
+## Fast sincospi for Box-Muller
+#
+# Base.sincospi(::Float32) widens to Float64 internally (via `sinpi_kernel_wide`,
+# see base/special/trig.jl:744), which breaks Metal — it has no Float64 support
+# at all — and wastes cycles on other backends that must emulate FP64.
+#
+# Vendored from PhiloxRNG.jl (MIT): a minimax polynomial that stays entirely
+# in Float32 and consumes the Philox UInt32 output directly. Bottom 3 bits
+# select one of 8 octants (swap/negate), upper 29 bits give the reduced
+# argument (+0.5-biased so y ≠ 0).
+#
+# Float64 keeps using Base.sincospi: backends that support FP64 all have
+# intrinsics, and the polynomial alternative is ~8× slower on consumer GPUs
+# with low FP64 throughput.
 
-# Each backend provides optimized intrinsics via @device_override:
-# CUDA: __nv_fast_logf, __nv_sincospif, etc.
+const _SP_F32 = (3.1415927f0, -5.167708f0, 2.5497673f0, -0.58907866f0)
+const _CP_F32 = (1.0f0, -4.934788f0, 4.057578f0, -1.3061346f0)
+
+@inline function _fast_sincospi(::Type{Float32}, u::UInt32)
+    oct = (u % Int32) & Int32(7)
+    y = fma(Float32(u & ~UInt32(7)), Float32(2)^(-34), Float32(2)^(-32))
+    sp = y * evalpoly(y * y, _SP_F32)
+    cp = evalpoly(y * y, _CP_F32)
+    swap    = !iszero(oct & Int32(1))
+    sin_neg = !iszero(oct & Int32(2))
+    cos_neg = !iszero(oct & Int32(4))
+    s_raw = ifelse(swap, cp, sp)
+    c_raw = ifelse(swap, sp, cp)
+    (ifelse(sin_neg, -s_raw, s_raw), ifelse(cos_neg, -c_raw, c_raw))
+end
+
+
+## Box-Muller transform
 
 using Base.FastMath
 
-@inline function boxmuller(::Type{T}, u1::T, u2::T) where T <: AbstractFloat
-    r = sqrt(T(-2) * FastMath.log_fast(u1))
+# ≤32-bit float output: polynomial sincospi on the raw UInt32, log through
+# FastMath (Base.log(::Float32) also widens to Float64 — fixed in a follow-up).
+@inline function boxmuller(::Type{F}, u1::UInt32, u2::UInt32) where F <: Union{Float16,Float32}
+    r = sqrt(-2f0 * FastMath.log_fast(u01(Float32, u2)))
+    s, c = _fast_sincospi(Float32, u1)
+    (F(r * s), F(r * c))
+end
+
+# Float64: Base.sincospi has FP64 intrinsics on the backends that support it.
+@inline function boxmuller(::Type{Float64}, u1::Float64, u2::Float64)
+    r = sqrt(-2.0 * FastMath.log_fast(u1))
     s, c = sincospi(2 * u2)
     (r * s, r * c)
 end
 
 # For complex normals each component has variance 1/2, so the radius is
-# sqrt(-log(U)) rather than sqrt(-2*log(U)).
-@inline function boxmuller(::Type{Complex{T}}, u1::T, u2::T) where T <: AbstractFloat
+# sqrt(-log(U)) rather than sqrt(-2·log(U)).
+@inline function boxmuller(::Type{Complex{F}}, u1::UInt32, u2::UInt32) where F <: Union{Float16,Float32}
+    r = sqrt(-FastMath.log_fast(u01(Float32, u2)))
+    s, c = _fast_sincospi(Float32, u1)
+    complex(F(r * s), F(r * c))
+end
+@inline function boxmuller(::Type{Complex{Float64}}, u1::Float64, u2::Float64)
     r = sqrt(FastMath.neg_float_fast(FastMath.log_fast(u1)))
     s, c = sincospi(2 * u2)
     complex(r * s, r * c)
@@ -261,10 +304,13 @@ end
 #    output.
 
 # Convert Philox UInt32 outputs to N normally-distributed values of type T.
+# ≤32-bit float targets pass UInt32s to boxmuller directly (the polynomial
+# sincospi extracts bits itself; log still goes through u01 for now). 64-bit
+# targets assemble UInt64s and convert to Float64 on the way in.
 for T in (Float16, Float32)
     @eval @inline function philox_to_normals(::Type{$T}, a1, a2, a3, a4)
-        n1, n2 = boxmuller($T, $T(u01(Float32, a1)), $T(u01(Float32, a2)))
-        n3, n4 = boxmuller($T, $T(u01(Float32, a3)), $T(u01(Float32, a4)))
+        n1, n2 = boxmuller($T, a1, a2)
+        n3, n4 = boxmuller($T, a3, a4)
         (n1, n2, n3, n4)
     end
 end
@@ -273,15 +319,13 @@ end
         u01(Float64, UInt64(a1) | UInt64(a2) << 32),
         u01(Float64, UInt64(a3) | UInt64(a4) << 32))
 end
-@inline function philox_to_normals(::Type{Complex{Float32}}, a1, a2, a3, a4)
-    (boxmuller(Complex{Float32}, u01(Float32, a1), u01(Float32, a2)),
-     boxmuller(Complex{Float32}, u01(Float32, a3), u01(Float32, a4)))
-end
-@inline function philox_to_normals(::Type{Complex{Float64}}, a1, a2, a3, a4)
+@inline philox_to_normals(::Type{Complex{Float32}}, a1, a2, a3, a4) =
+    (boxmuller(Complex{Float32}, a1, a2),
+     boxmuller(Complex{Float32}, a3, a4))
+@inline philox_to_normals(::Type{Complex{Float64}}, a1, a2, a3, a4) =
     (boxmuller(Complex{Float64},
         u01(Float64, UInt64(a1) | UInt64(a2) << 32),
         u01(Float64, UInt64(a3) | UInt64(a4) << 32)),)
-end
 
 @kernel function randn_batched_kernel!(@Const(seed), @Const(counter), A::AbstractArray{T}) where T
     gid = @index(Global, Linear)
