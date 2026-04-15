@@ -63,10 +63,18 @@ end
 
 using Base.FastMath
 
-@inline function boxmuller(::Type{T}, u1::T, u2::T) where T
+@inline function boxmuller(::Type{T}, u1::T, u2::T) where T <: AbstractFloat
     r = sqrt(T(-2) * FastMath.log_fast(u1))
     s, c = sincospi(2 * u2)
     (r * s, r * c)
+end
+
+# For complex normals each component has variance 1/2, so the radius is
+# sqrt(-log(U)) rather than sqrt(-2*log(U)).
+@inline function boxmuller(::Type{Complex{T}}, u1::T, u2::T) where T <: AbstractFloat
+    r = sqrt(FastMath.neg_float_fast(FastMath.log_fast(u1)))
+    s, c = sincospi(2 * u2)
+    complex(r * s, r * c)
 end
 
 
@@ -257,14 +265,6 @@ end
 # over the element type, with `philox_to_normals` producing N values per call
 # (matching `vals_per_call(T)`).
 
-# Box-Muller for complex: sqrt(-log(U)) not sqrt(-2*log(U)), so each component
-# has variance 1/2.
-@inline function boxmuller_complex(::Type{T}, u1::T, u2::T) where T
-    r = sqrt(FastMath.neg_float_fast(FastMath.log_fast(u1)))
-    s, c = sincospi(2 * u2)
-    complex(r * s, r * c)
-end
-
 # Convert Philox UInt32 outputs to N normally-distributed values of type T.
 for T in (Float16, Float32)
     @eval @inline function philox_to_normals(::Type{$T}, a1, a2, a3, a4)
@@ -279,11 +279,11 @@ end
         u01(Float64, UInt64(a3) | UInt64(a4) << 32))
 end
 @inline function philox_to_normals(::Type{Complex{Float32}}, a1, a2, a3, a4)
-    (boxmuller_complex(Float32, u01(Float32, a1), u01(Float32, a2)),
-     boxmuller_complex(Float32, u01(Float32, a3), u01(Float32, a4)))
+    (boxmuller(Complex{Float32}, u01(Float32, a1), u01(Float32, a2)),
+     boxmuller(Complex{Float32}, u01(Float32, a3), u01(Float32, a4)))
 end
 @inline function philox_to_normals(::Type{Complex{Float64}}, a1, a2, a3, a4)
-    (boxmuller_complex(Float64,
+    (boxmuller(Complex{Float64},
         u01(Float64, UInt64(a1) | UInt64(a2) << 32),
         u01(Float64, UInt64(a3) | UInt64(a4) << 32)),)
 end
