@@ -72,14 +72,14 @@ end
 # intrinsics, and the polynomial alternative is ~8× slower on consumer GPUs
 # with low FP64 throughput.
 
-const _SP_F32 = (3.1415927f0, -5.167708f0, 2.5497673f0, -0.58907866f0)
-const _CP_F32 = (1.0f0, -4.934788f0, 4.057578f0, -1.3061346f0)
+const SP_F32 = (3.1415927f0, -5.167708f0, 2.5497673f0, -0.58907866f0)
+const CP_F32 = (1.0f0, -4.934788f0, 4.057578f0, -1.3061346f0)
 
-@inline function _fast_sincospi(::Type{Float32}, u::UInt32)
+@inline function fast_sincospi(::Type{Float32}, u::UInt32)
     oct = (u % Int32) & Int32(7)
     y = fma(Float32(u & ~UInt32(7)), Float32(2)^(-34), Float32(2)^(-32))
-    sp = y * evalpoly(y * y, _SP_F32)
-    cp = evalpoly(y * y, _CP_F32)
+    sp = y * evalpoly(y * y, SP_F32)
+    cp = evalpoly(y * y, CP_F32)
     swap    = !iszero(oct & Int32(1))
     sin_neg = !iszero(oct & Int32(2))
     cos_neg = !iszero(oct & Int32(4))
@@ -100,22 +100,22 @@ end
 #
 # Same Float64-path reasoning as the sincospi block above.
 
-const _SQRT_HALF_I32 = reinterpret(Int32, Float32(sqrt(0.5)))
-const _LOG_ODD_F32   = (reinterpret(Float32, Int32(0x3f2aaaaa)),
+const SQRT_HALF_I32 = reinterpret(Int32, Float32(sqrt(0.5)))
+const LOG_ODD_F32   = (reinterpret(Float32, Int32(0x3f2aaaaa)),
                         reinterpret(Float32, Int32(0x3e91e9ee)))
-const _LOG_EVEN_F32  = (reinterpret(Float32, Int32(0x3eccce13)),
+const LOG_EVEN_F32  = (reinterpret(Float32, Int32(0x3eccce13)),
                         reinterpret(Float32, Int32(0x3e789e26)))
 
-@inline function _fast_log(::Type{Float32}, u::UInt32)
+@inline function fast_log(::Type{Float32}, u::UInt32)
     x = fma(Float32(u), Float32(2)^(-32), Float32(2)^(-33))
-    ix = reinterpret(Int32, x) - _SQRT_HALF_I32
+    ix = reinterpret(Int32, x) - SQRT_HALF_I32
     k = ix >> Int32(23)
-    f_std = reinterpret(Float32, (ix & Int32(0x007fffff)) + _SQRT_HALF_I32) - 1.0f0
+    f_std = reinterpret(Float32, (ix & Int32(0x007fffff)) + SQRT_HALF_I32) - 1.0f0
     f_comp = -fma(Float32(~u), Float32(2)^(-32), Float32(2)^(-33))
     f = ifelse(k == Int32(0), f_comp, f_std)
     s = f / (2.0f0 + f)
     z = s * s; w = z * z
-    R = z * evalpoly(w, _LOG_ODD_F32) + w * evalpoly(w, _LOG_EVEN_F32)
+    R = z * evalpoly(w, LOG_ODD_F32) + w * evalpoly(w, LOG_EVEN_F32)
     hfsq = 0.5f0 * f * f
     Float32(k) * reinterpret(Float32, Int32(0x3f317180)) -
         ((hfsq - (s * (hfsq + R) +
@@ -130,8 +130,8 @@ using Base.FastMath
 # ≤32-bit float output: both log and sincospi go through the Float32
 # polynomials above.
 @inline function boxmuller(::Type{F}, u1::UInt32, u2::UInt32) where F <: Union{Float16,Float32}
-    r = sqrt(-2f0 * _fast_log(Float32, u2))
-    s, c = _fast_sincospi(Float32, u1)
+    r = sqrt(-2f0 * fast_log(Float32, u2))
+    s, c = fast_sincospi(Float32, u1)
     (F(r * s), F(r * c))
 end
 
@@ -146,8 +146,8 @@ end
 # For complex normals each component has variance 1/2, so the radius is
 # sqrt(-log(U)) rather than sqrt(-2·log(U)).
 @inline function boxmuller(::Type{Complex{F}}, u1::UInt32, u2::UInt32) where F <: Union{Float16,Float32}
-    r = sqrt(-_fast_log(Float32, u2))
-    s, c = _fast_sincospi(Float32, u1)
+    r = sqrt(-fast_log(Float32, u2))
+    s, c = fast_sincospi(Float32, u1)
     complex(F(r * s), F(r * c))
 end
 @inline function boxmuller(::Type{Complex{Float64}}, u1::Float64, u2::Float64)
