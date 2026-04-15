@@ -69,24 +69,27 @@ end
 ## RNG type
 
 mutable struct RNG <: AbstractRNG
-    seed::UInt32
+    seed::UInt64
     counter::UInt32
 end
 
-RNG() = RNG(rand(Random.RandomDevice(), UInt32), UInt32(0))
-RNG(seed::Integer) = RNG(seed % UInt32, UInt32(0))
+RNG() = RNG(rand(Random.RandomDevice(), UInt64), UInt32(0))
+RNG(seed::Integer) = RNG(seed % UInt64, UInt32(0))
 
 # return an instance of GPUArrays.RNG suitable for the requested array type
 default_rng(::Type{<:AnyGPUArray}) = error("Not implemented") # COV_EXCL_LINE
 
-Random.seed!(rng::RNG) = (rng.seed = rand(Random.RandomDevice(), UInt32); rng.counter = 0; rng)
-Random.seed!(rng::RNG, seed::Integer) = (rng.seed = seed % UInt32; rng.counter = 0; rng)
+Random.seed!(rng::RNG) = (rng.seed = rand(Random.RandomDevice(), UInt64); rng.counter = 0; rng)
+Random.seed!(rng::RNG, seed::Integer) = (rng.seed = seed % UInt64; rng.counter = 0; rng)
 
 function advance_counter!(rng::RNG)
     rng.counter += one(UInt32)
-    rng.counter == 0 && (rng.seed += one(UInt32))
+    rng.counter == 0 && (rng.seed += one(UInt64))
     rng
 end
+
+# Split the 64-bit seed into the two 32-bit lanes of the Philox key.
+@inline philox_key(seed::UInt64) = (seed % UInt32, (seed >> 32) % UInt32)
 
 
 ## Specialized rand! kernels for common types
@@ -135,14 +138,14 @@ vals_per_call(::Type{Complex{T}}) where T = sizeof(T) <= 4 ? 2 : 1
     if idx <= len
         vals = philox_to_vals(T, philox4x32_10(
             (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            (seed, UInt32(0)))...)
+            philox_key(seed))...)
         for j in 1:N
             @inbounds A[idx - N + j] = vals[j]
         end
     elseif idx - N < len
         vals = philox_to_vals(T, philox4x32_10(
             (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            (seed, UInt32(0)))...)
+            philox_key(seed))...)
         for j in 1:min(N, len - idx + N)
             @inbounds A[idx - N + j] = vals[j]
         end
@@ -174,7 +177,7 @@ end
 # it. This avoids mutable struct heap allocation on GPU.
 
 struct ElementRNG <: AbstractRNG
-    seed::UInt32
+    seed::UInt64
     counter::UInt32
     gid::UInt32
     subctr_ptr::Ptr{UInt32}
@@ -187,7 +190,7 @@ end
     unsafe_store!(rng.subctr_ptr, sc)
     a1, a2, _, _ = philox4x32_10(
         (rng.gid, sc, rng.counter, UInt32(0)),
-        (rng.seed, UInt32(0)))
+        philox_key(rng.seed))
     UInt64(a1) | UInt64(a2) << 32
 end
 
@@ -261,7 +264,7 @@ end
     if idx <= len
         a1, a2, a3, a4 = philox4x32_10(
             (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            (seed, UInt32(0)))
+            philox_key(seed))
         n1, n2 = boxmuller(T, T(u01(Float32, a1)), T(u01(Float32, a2)))
         n3, n4 = boxmuller(T, T(u01(Float32, a3)), T(u01(Float32, a4)))
         @inbounds A[idx - 3] = n1
@@ -271,7 +274,7 @@ end
     elseif idx - 3 <= len
         a1, a2, a3, a4 = philox4x32_10(
             (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            (seed, UInt32(0)))
+            philox_key(seed))
         n1, n2 = boxmuller(T, T(u01(Float32, a1)), T(u01(Float32, a2)))
         n3, n4 = boxmuller(T, T(u01(Float32, a3)), T(u01(Float32, a4)))
         vals = (n1, n2, n3, n4)
@@ -288,7 +291,7 @@ end
     if idx <= len
         a1, a2, a3, a4 = philox4x32_10(
             (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            (seed, UInt32(0)))
+            philox_key(seed))
         n1, n2 = boxmuller(T,
             T(u01(Float64, UInt64(a1) | UInt64(a2) << 32)),
             T(u01(Float64, UInt64(a3) | UInt64(a4) << 32)))
@@ -297,7 +300,7 @@ end
     elseif idx - 1 <= len
         a1, a2, a3, a4 = philox4x32_10(
             (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            (seed, UInt32(0)))
+            philox_key(seed))
         n1, _ = boxmuller(T,
             T(u01(Float64, UInt64(a1) | UInt64(a2) << 32)),
             T(u01(Float64, UInt64(a3) | UInt64(a4) << 32)))
@@ -312,13 +315,13 @@ end
     if idx <= len
         a1, a2, a3, a4 = philox4x32_10(
             (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            (seed, UInt32(0)))
+            philox_key(seed))
         @inbounds A[idx - 1] = boxmuller_complex(T, T(u01(Float32, a1)), T(u01(Float32, a2)))
         @inbounds A[idx]     = boxmuller_complex(T, T(u01(Float32, a3)), T(u01(Float32, a4)))
     elseif idx - 1 <= len
         a1, a2, _, _ = philox4x32_10(
             (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            (seed, UInt32(0)))
+            philox_key(seed))
         @inbounds A[len] = boxmuller_complex(T, T(u01(Float32, a1)), T(u01(Float32, a2)))
     end
 end
@@ -328,7 +331,7 @@ end
     if gid <= length(A)
         a1, a2, a3, a4 = philox4x32_10(
             (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            (seed, UInt32(0)))
+            philox_key(seed))
         U1 = T(u01(Float64, UInt64(a1) | UInt64(a2) << 32))
         U2 = T(u01(Float64, UInt64(a3) | UInt64(a4) << 32))
         @inbounds A[gid] = boxmuller_complex(T, U1, U2)

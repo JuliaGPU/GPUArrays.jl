@@ -8,5 +8,5 @@ end
 
 function Random.seed!(rng::RNG, seed::Vector{UInt32})
     Base.depwarn("seed!(rng::RNG, seed::Vector{UInt32}) is deprecated, use seed!(rng, seed::Integer) instead", :seed!)
-    Random.seed!(rng, isempty(seed) ? rand(Random.RandomDevice(), UInt32) : first(seed))
+    Random.seed!(rng, isempty(seed) ? rand(Random.RandomDevice(), UInt64) : first(seed))
 end
