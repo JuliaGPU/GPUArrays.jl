@@ -48,7 +48,11 @@ end
 end
 
 @inline function u01(::Type{Float64}, u::UInt64)
-    fma(Float64(u), Float64(2)^(-64), Float64(2)^(-65))
+    # Bit-pattern construction avoids the expensive Float64(::UInt64) conversion
+    # and fma on consumer GPUs (where FP64 throughput is as low as 1:64). The
+    # low bit of the mantissa is forced set so the result is strictly in (0, 1),
+    # which is required by Box-Muller's log(u).
+    reinterpret(Float64, ((u >> 12) | 0x1) | 0x3ff0000000000000) - 1.0
 end
 
 
