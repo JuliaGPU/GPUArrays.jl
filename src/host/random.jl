@@ -451,13 +451,13 @@ end
 
 function Random.rand!(rng::RNG{AT}, A::AbstractArray{T}) where {AT, T}
     isempty(A) && return A
-    B = AT{T}(undef, size(A))
+    B = similar(AT{T}, size(A))
     Random.rand!(rng, B)
     copyto!(A, B)
 end
 function Random.randn!(rng::RNG{AT}, A::AbstractArray{T}) where {AT, T}
     isempty(A) && return A
-    B = AT{T}(undef, size(A))
+    B = similar(AT{T}, size(A))
     Random.randn!(rng, B)
     copyto!(A, B)
 end
@@ -466,10 +466,10 @@ end
 ## Out-of-place rand / randn — construct an AT array and fill it.
 
 Random.rand(rng::RNG{AT}, ::Type{T}, dims::Dims) where {AT, T} =
-    Random.rand!(rng, AT{T}(undef, dims))
+    Random.rand!(rng, similar(AT{T}, dims))
 Random.randn(rng::RNG{AT}, ::Type{T}, dims::Dims) where {AT, T<:Union{AbstractFloat,
                                                                        Complex{<:AbstractFloat}}} =
-    Random.randn!(rng, AT{T}(undef, dims))
+    Random.randn!(rng, similar(AT{T}, dims))
 
 # untyped: default to Float32 (matches CUDA convention; better fit than Float64
 # on consumer GPUs)
