@@ -41,7 +41,8 @@ end
 end
 
 
-## Float conversions: unsigned integer → uniform float in (0, 1]
+## Float conversions: unsigned integer → uniform float, strictly positive
+## (Float32 can round up to exactly 1.0; Float64 stays strictly below 1.0.)
 
 @inline function u01(::Type{Float32}, u::UInt32)
     fma(Float32(u), Float32(2)^(-32), Float32(2)^(-33))
@@ -107,10 +108,10 @@ end
 ## Specialized rand! kernels for common types
 
 # Each Philox4x32 call produces 4 UInt32 outputs. Specialized kernels batch
-# multiple values per work item to use all 4 outputs efficiently.
-# Types that consume 1 UInt32 each get 4 values per call; types that need
-# 2 UInt32s (UInt64/Float64) get 2 values per call; complex types that need
-# 4 UInt32s get 1 value per call.
+# multiple values per work item to use all 4 outputs efficiently:
+# - ≤4-byte types (including Float16): 4 values per call
+# - 8-byte types (Int64/UInt64/Float64/Complex{Float32}): 2 values per call
+# - 16-byte types (Int128/UInt128/Complex{Float64}):     1 value per call
 
 # Convert Philox UInt32 outputs to N values of type T
 @inline philox_to_vals(::Type{Float16}, a1, a2, a3, a4) =
@@ -186,12 +187,13 @@ end
 
 ## Generic rand! fallback via ElementRNG
 
-# For types without specialized kernels (Float16, integers, Bool, UInt128, etc.),
-# an immutable ElementRNG wraps a Philox4x32 call as an AbstractRNG. Julia's Random
-# stdlib then handles all type conversions automatically via `rand(rng, T)`.
+# For Number types outside BatchedRandTypes (BigFloat, FixedPointNumbers,
+# user-defined types, ...), an immutable ElementRNG wraps a Philox4x32 call as
+# an AbstractRNG, and Julia's Random stdlib handles the type conversion via
+# `rand(rng, T)`.
 #
-# State (subcounter) lives in a stack-allocated Ref; the struct holds a pointer to
-# it. This avoids mutable struct heap allocation on GPU.
+# State (subcounter) lives in a stack-allocated Ref; the struct holds a pointer
+# to it. This avoids mutable struct heap allocation on GPU.
 
 struct ElementRNG <: AbstractRNG
     seed::UInt64
@@ -244,26 +246,23 @@ function Random.rand!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
 end
 
 
-## randn! kernel
+## Specialized randn! kernel for common float types
 
-# Unlike rand!, randn! can't use the generic ElementRNG approach:
+# Float16/32/64 and their complex variants go through a batched kernel mirroring
+# rand_batched_kernel!, rather than the generic ElementRNG path further down:
 #
-# 1. Random's default `randn` uses the Ziggurat algorithm with table lookups
-#    (`ki`, `wi`, `fi` arrays) that aren't accessible on GPU without device
-#    overlays (which are backend-specific, not available in KernelAbstractions).
+# 1. Random's `randn(rng, ::Float{16,32,64})` uses the Ziggurat algorithm with
+#    global table lookups (`ki`, `wi`, `fi`), which aren't device-accessible
+#    from a KernelAbstractions kernel.
 #
-# 2. The generic fallback `randn(rng, T::AbstractFloat)` uses Marsaglia's polar
-#    Box-Muller variant with a rejection loop (`while true ... 0 < s < 1`),
-#    which causes severe warp divergence on GPU (~2x slower).
+# 2. The polar Box-Muller fallback reachable for other AbstractFloat types has
+#    a rejection loop (`while true ... 0 < s < 1`), causing warp divergence
+#    (~2x slower).
 #
 # 3. Direct (non-rejection) Box-Muller naturally produces value *pairs* from
-#    sincospi. Batching these (4 Float32 / 2 Float64 per Philox call) is key
-#    to staying memory-bandwidth-bound; a 1-per-work-item generic kernel
-#    discards half the output.
-#
-# Instead, reuse the batched kernel structure from rand!: one kernel parametric
-# over the element type, with `philox_to_normals` producing N values per call
-# (matching `vals_per_call(T)`).
+#    sincospi. Batching these (4 Float32 / 2 Float64 per Philox call) keeps us
+#    memory-bandwidth-bound; a 1-per-work-item kernel would discard half the
+#    output.
 
 # Convert Philox UInt32 outputs to N normally-distributed values of type T.
 for T in (Float16, Float32)
