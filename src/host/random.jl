@@ -323,3 +323,35 @@ function Random.randn!(rng::RNG, A::AnyGPUArray{T}) where T <: BatchedRandnTypes
 end
 
 
+## Generic randn! fallback via ElementRNG
+#
+# For AbstractFloats outside BatchedRandnTypes (BFloat16, user-defined float
+# types, etc.) we route through Random's `randn(rng, T)`. The reachable methods
+# from there are:
+#
+# - `randn(rng, ::BitFloatType)` (Float16/32/64) — ziggurat, uses global `wi`
+#   /`ki`/`fi` tables that aren't device-accessible. Never reached here because
+#   those types dispatch to the batched kernel above.
+# - `randn(rng, ::Type{Complex{T}})` — recurses into `randn(rng, T)`.
+# - `randn(rng, ::Type{T}) where T<:AbstractFloat` — Marsaglia polar Box-Muller
+#   rejection loop. GPU-safe (only calls `rand(rng, T)`) but warp-divergent.
+
+@kernel function randn_generic_kernel!(@Const(seed), @Const(counter), A::AbstractArray{T}) where T
+    gid = @index(Global, Linear)
+    if gid <= length(A)
+        subctr = Ref{UInt32}(0)
+        rng = ElementRNG(seed, counter, gid % UInt32,
+                          Base.unsafe_convert(Ptr{UInt32}, subctr))
+        @inbounds A[gid] = randn(rng, T)
+    end
+end
+
+function Random.randn!(rng::RNG, A::AnyGPUArray{T}) where T <: Union{AbstractFloat,
+                                                                     Complex{<:AbstractFloat}}
+    isempty(A) && return A
+    randn_generic_kernel!(get_backend(A))(rng.seed, rng.counter, A; ndrange=length(A))
+    advance_counter!(rng)
+    A
+end
+
+
