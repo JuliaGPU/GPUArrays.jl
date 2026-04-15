@@ -122,6 +122,10 @@ for T in (UInt64, Int64)
         ((UInt64(a1) | UInt64(a2) << 32) % $T,
          (UInt64(a3) | UInt64(a4) << 32) % $T)
 end
+for T in (UInt128, Int128)
+    @eval @inline philox_to_vals(::Type{$T}, a1, a2, a3, a4) =
+        ((UInt128(a1) | UInt128(a2) << 32 | UInt128(a3) << 64 | UInt128(a4) << 96) % $T,)
+end
 @inline philox_to_vals(::Type{Complex{Float32}}, a1, a2, a3, a4) =
     (complex(u01(Float32, a1), u01(Float32, a2)),
      complex(u01(Float32, a3), u01(Float32, a4)))
@@ -159,7 +163,8 @@ end
 # Types with specialized batched kernels
 const BatchedRandTypes = Union{
     Float16, Float32, Float64, Complex{Float32}, Complex{Float64},
-    Bool, Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32, UInt64}
+    Bool, Int8, Int16, Int32, Int64, Int128,
+    UInt8, UInt16, UInt32, UInt64, UInt128}
 
 function Random.rand!(rng::RNG, A::AnyGPUArray{T}) where T <: BatchedRandTypes
     isempty(A) && return A
