@@ -221,13 +221,6 @@ end
 @inline Random.rand(rng::ElementRNG, ::Random.SamplerType{T}) where T <: Union{Bool,Base.BitInteger} =
     rand(rng, Random.SamplerType{UInt64}()) % T
 
-# @inline overrides for Random stdlib entry points that aren't inlined by default.
-# Without these, the dispatch chain stays opaque and the Ref won't be optimized.
-@inline Random.rand(rng::ElementRNG, ::Type{T}) where {T} =
-    rand(rng, Random.Sampler(typeof(rng), T, Val(1)))
-@inline Random.rand(rng::ElementRNG, ::Random.SamplerType{Complex{T}}) where {T<:Real} =
-    complex(rand(rng, T), rand(rng, T))
-
 
 ## Generic rand! fallback via ElementRNG
 
