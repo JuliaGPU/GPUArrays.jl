@@ -1,8 +1,7 @@
 # integration with Random stdlib
 
-
 ## Philox4x32-10 counter-based RNG
-#
+
 # Stateless: (counter, key) → 4 UInt32 outputs. Each unique counter gives independent
 # random values with no shared memory or global state needed.
 #
@@ -54,7 +53,7 @@ end
 
 
 ## Box-Muller transform using @fastmath log + sincospi
-#
+
 # Each backend provides optimized intrinsics via @device_override:
 # CUDA: __nv_fast_logf, __nv_sincospif, etc.
 
@@ -84,15 +83,14 @@ Random.seed!(rng::RNG) = (rng.seed = rand(Random.RandomDevice(), UInt32); rng.co
 Random.seed!(rng::RNG, seed::Integer) = (rng.seed = seed % UInt32; rng.counter = 0; rng)
 
 function advance_counter!(rng::RNG)
-    new_counter = Int64(rng.counter) + 1
-    overflow, remainder = fldmod(new_counter, typemax(UInt32))
-    rng.seed += overflow % UInt32
-    rng.counter = remainder % UInt32
+    rng.counter += one(UInt32)
+    rng.counter == 0 && (rng.seed += one(UInt32))
+    rng
 end
 
 
 ## Specialized rand! kernels for common types
-#
+
 # Each Philox4x32 call produces 4 UInt32 outputs. Specialized kernels batch
 # multiple values per work item to use all 4 outputs efficiently.
 # Types that consume 1 UInt32 each get 4 values per call; types that need
@@ -167,7 +165,7 @@ end
 
 
 ## Generic rand! fallback via ElementRNG
-#
+
 # For types without specialized kernels (Float16, integers, Bool, UInt128, etc.),
 # an immutable ElementRNG wraps a Philox4x32 call as an AbstractRNG. Julia's Random
 # stdlib then handles all type conversions automatically via `rand(rng, T)`.
@@ -227,7 +225,7 @@ end
 
 
 ## randn! kernels
-#
+
 # Unlike rand!, randn! uses specialized batched kernels instead of the generic
 # ElementRNG approach. This is because:
 #
@@ -358,6 +356,9 @@ function Random.randn!(rng::RNG, A::AnyGPUArray{Complex{T}}) where T <: Abstract
     advance_counter!(rng)
     A
 end
+
+
+## host API
 
 # allow use of CPU RNGs without scalar iteration
 Random.rand!(rng::AbstractRNG, A::AnyGPUArray) =
