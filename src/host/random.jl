@@ -404,11 +404,24 @@ end
 # from there are:
 #
 # - `randn(rng, ::BitFloatType)` (Float16/32/64) — ziggurat, uses global `wi`
-#   /`ki`/`fi` tables that aren't device-accessible. Never reached here because
-#   those types dispatch to the batched kernel above.
+#   /`ki`/`fi` tables that aren't device-accessible. Overridden below to use
+#   our Box-Muller directly. The direct dispatch for these types goes through
+#   the batched kernel above, but `randn(rng, Complex{Float16})` recurses into
+#   `randn(rng, Float16)` which hits this path.
 # - `randn(rng, ::Type{Complex{T}})` — recurses into `randn(rng, T)`.
 # - `randn(rng, ::Type{T}) where T<:AbstractFloat` — Marsaglia polar Box-Muller
 #   rejection loop. GPU-safe (only calls `rand(rng, T)`) but warp-divergent.
+
+# Bypass Base's ziggurat-based randn(rng, Float{16,32,64}) — its `wi`/`ki`/`fi`
+# tables aren't device-accessible, and on Metal the Float64 tables can't even
+# be loaded. Reached via Base's Complex recursion when the element type is
+# e.g. Complex{Float16}.
+@inline Random.randn(rng::ElementRNG, ::Type{Float16}) =
+    first(boxmuller(Float16, rand(rng, UInt32), rand(rng, UInt32)))
+@inline Random.randn(rng::ElementRNG, ::Type{Float32}) =
+    first(boxmuller(Float32, rand(rng, UInt32), rand(rng, UInt32)))
+@inline Random.randn(rng::ElementRNG, ::Type{Float64}) =
+    first(boxmuller(Float64, u01(Float64, rand(rng, UInt64)), u01(Float64, rand(rng, UInt64))))
 
 @kernel function randn_generic_kernel!(@Const(seed), @Const(counter), A::AbstractArray{T}) where T
     gid = @index(Global, Linear)
