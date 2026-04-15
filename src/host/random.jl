@@ -6,6 +6,7 @@
 # random values with no shared memory or global state needed.
 #
 # Reference: Salmon et al., "Parallel Random Numbers: As Easy as 1, 2, 3" (2011)
+# Based on: PhiloxRNG.jl by Nathan Zimmerberg
 
 const PHILOX_M4x32_0 = 0xD2511F53
 const PHILOX_M4x32_1 = 0xCD9E8D57
