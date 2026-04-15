@@ -231,10 +231,9 @@ function Random.rand!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
 end
 
 
-## randn! kernels
+## randn! kernel
 
-# Unlike rand!, randn! uses specialized batched kernels instead of the generic
-# ElementRNG approach. This is because:
+# Unlike rand!, randn! can't use the generic ElementRNG approach:
 #
 # 1. Random's default `randn` uses the Ziggurat algorithm with table lookups
 #    (`ki`, `wi`, `fi` arrays) that aren't accessible on GPU without device
@@ -249,117 +248,71 @@ end
 #    to staying memory-bandwidth-bound; a 1-per-work-item generic kernel
 #    discards half the output.
 #
-# Box-Muller: each Philox call produces 2 normal values from 2 uniform values.
-# For <=32-bit floats: 4 values per call (2 Box-Muller pairs from 4 UInt32).
-# For >32-bit floats: 2 values per call (1 Box-Muller pair from 2 UInt64).
+# Instead, reuse the batched kernel structure from rand!: one kernel parametric
+# over the element type, with `philox_to_normals` producing N values per call
+# (matching `vals_per_call(T)`).
 
-# Box-Muller for complex: sqrt(-log(U)) not sqrt(-2*log(U)),
-# so each component has variance 1/2
+# Box-Muller for complex: sqrt(-log(U)) not sqrt(-2*log(U)), so each component
+# has variance 1/2.
 @inline function boxmuller_complex(::Type{T}, u1::T, u2::T) where T
     r = sqrt(FastMath.neg_float_fast(FastMath.log_fast(u1)))
     s, c = sincospi(2 * u2)
     complex(r * s, r * c)
 end
 
-@kernel function randn_small_kernel!(@Const(seed), @Const(counter), A::AbstractArray{T}) where T
+# Convert Philox UInt32 outputs to N normally-distributed values of type T.
+for T in (Float16, Float32)
+    @eval @inline function philox_to_normals(::Type{$T}, a1, a2, a3, a4)
+        n1, n2 = boxmuller($T, $T(u01(Float32, a1)), $T(u01(Float32, a2)))
+        n3, n4 = boxmuller($T, $T(u01(Float32, a3)), $T(u01(Float32, a4)))
+        (n1, n2, n3, n4)
+    end
+end
+@inline function philox_to_normals(::Type{Float64}, a1, a2, a3, a4)
+    boxmuller(Float64,
+        u01(Float64, UInt64(a1) | UInt64(a2) << 32),
+        u01(Float64, UInt64(a3) | UInt64(a4) << 32))
+end
+@inline function philox_to_normals(::Type{Complex{Float32}}, a1, a2, a3, a4)
+    (boxmuller_complex(Float32, u01(Float32, a1), u01(Float32, a2)),
+     boxmuller_complex(Float32, u01(Float32, a3), u01(Float32, a4)))
+end
+@inline function philox_to_normals(::Type{Complex{Float64}}, a1, a2, a3, a4)
+    (boxmuller_complex(Float64,
+        u01(Float64, UInt64(a1) | UInt64(a2) << 32),
+        u01(Float64, UInt64(a3) | UInt64(a4) << 32)),)
+end
+
+@kernel function randn_batched_kernel!(@Const(seed), @Const(counter), A::AbstractArray{T}) where T
     gid = @index(Global, Linear)
-    idx = 4 * gid
+    N = vals_per_call(T)
+    idx = N * gid
     len = length(A)
     if idx <= len
-        a1, a2, a3, a4 = philox4x32_10(
+        vals = philox_to_normals(T, philox4x32_10(
             (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            philox_key(seed))
-        n1, n2 = boxmuller(T, T(u01(Float32, a1)), T(u01(Float32, a2)))
-        n3, n4 = boxmuller(T, T(u01(Float32, a3)), T(u01(Float32, a4)))
-        @inbounds A[idx - 3] = n1
-        @inbounds A[idx - 2] = n2
-        @inbounds A[idx - 1] = n3
-        @inbounds A[idx]     = n4
-    elseif idx - 3 <= len
-        a1, a2, a3, a4 = philox4x32_10(
+            philox_key(seed))...)
+        for j in 1:N
+            @inbounds A[idx - N + j] = vals[j]
+        end
+    elseif idx - N < len
+        vals = philox_to_normals(T, philox4x32_10(
             (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            philox_key(seed))
-        n1, n2 = boxmuller(T, T(u01(Float32, a1)), T(u01(Float32, a2)))
-        n3, n4 = boxmuller(T, T(u01(Float32, a3)), T(u01(Float32, a4)))
-        vals = (n1, n2, n3, n4)
-        for j in 1:min(4, len - idx + 4)
-            @inbounds A[idx - 4 + j] = vals[j]
+            philox_key(seed))...)
+        for j in 1:min(N, len - idx + N)
+            @inbounds A[idx - N + j] = vals[j]
         end
     end
 end
 
-@kernel function randn_large_kernel!(@Const(seed), @Const(counter), A::AbstractArray{T}) where T
-    gid = @index(Global, Linear)
-    idx = 2 * gid
-    len = length(A)
-    if idx <= len
-        a1, a2, a3, a4 = philox4x32_10(
-            (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            philox_key(seed))
-        n1, n2 = boxmuller(T,
-            T(u01(Float64, UInt64(a1) | UInt64(a2) << 32)),
-            T(u01(Float64, UInt64(a3) | UInt64(a4) << 32)))
-        @inbounds A[idx - 1] = n1
-        @inbounds A[idx]     = n2
-    elseif idx - 1 <= len
-        a1, a2, a3, a4 = philox4x32_10(
-            (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            philox_key(seed))
-        n1, _ = boxmuller(T,
-            T(u01(Float64, UInt64(a1) | UInt64(a2) << 32)),
-            T(u01(Float64, UInt64(a3) | UInt64(a4) << 32)))
-        @inbounds A[len] = n1
-    end
-end
+const BatchedRandnTypes = Union{Float16, Float32, Float64,
+                                Complex{Float32}, Complex{Float64}}
 
-@kernel function randn_complex_small_kernel!(@Const(seed), @Const(counter), A::AbstractArray{Complex{T}}) where T
-    gid = @index(Global, Linear)
-    idx = 2 * gid
-    len = length(A)
-    if idx <= len
-        a1, a2, a3, a4 = philox4x32_10(
-            (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            philox_key(seed))
-        @inbounds A[idx - 1] = boxmuller_complex(T, T(u01(Float32, a1)), T(u01(Float32, a2)))
-        @inbounds A[idx]     = boxmuller_complex(T, T(u01(Float32, a3)), T(u01(Float32, a4)))
-    elseif idx - 1 <= len
-        a1, a2, _, _ = philox4x32_10(
-            (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            philox_key(seed))
-        @inbounds A[len] = boxmuller_complex(T, T(u01(Float32, a1)), T(u01(Float32, a2)))
-    end
-end
-
-@kernel function randn_complex_large_kernel!(@Const(seed), @Const(counter), A::AbstractArray{Complex{T}}) where T
-    gid = @index(Global, Linear)
-    if gid <= length(A)
-        a1, a2, a3, a4 = philox4x32_10(
-            (gid % UInt32, UInt32(0), counter, UInt32(0)),
-            philox_key(seed))
-        U1 = T(u01(Float64, UInt64(a1) | UInt64(a2) << 32))
-        U2 = T(u01(Float64, UInt64(a3) | UInt64(a4) << 32))
-        @inbounds A[gid] = boxmuller_complex(T, U1, U2)
-    end
-end
-
-function Random.randn!(rng::RNG, A::AnyGPUArray{T}) where T <: AbstractFloat
+function Random.randn!(rng::RNG, A::AnyGPUArray{T}) where T <: BatchedRandnTypes
     isempty(A) && return A
-    if sizeof(T) <= 4
-        randn_small_kernel!(get_backend(A))(rng.seed, rng.counter, A; ndrange=cld(length(A), 4))
-    else
-        randn_large_kernel!(get_backend(A))(rng.seed, rng.counter, A; ndrange=cld(length(A), 2))
-    end
-    advance_counter!(rng)
-    A
-end
-
-function Random.randn!(rng::RNG, A::AnyGPUArray{Complex{T}}) where T <: AbstractFloat
-    isempty(A) && return A
-    if sizeof(T) <= 4
-        randn_complex_small_kernel!(get_backend(A))(rng.seed, rng.counter, A; ndrange=cld(length(A), 2))
-    else
-        randn_complex_large_kernel!(get_backend(A))(rng.seed, rng.counter, A; ndrange=length(A))
-    end
+    N = vals_per_call(T)
+    randn_batched_kernel!(get_backend(A))(rng.seed, rng.counter, A;
+                                          ndrange=cld(length(A), N))
     advance_counter!(rng)
     A
 end
