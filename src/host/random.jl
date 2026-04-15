@@ -323,10 +323,3 @@ function Random.randn!(rng::RNG, A::AnyGPUArray{T}) where T <: BatchedRandnTypes
 end
 
 
-## host API
-
-# allow use of CPU RNGs without scalar iteration
-Random.rand!(rng::AbstractRNG, A::AnyGPUArray) =
-    copyto!(A, rand(rng, eltype(A), size(A)...))
-Random.randn!(rng::AbstractRNG, A::AnyGPUArray) =
-    copyto!(A, randn(rng, eltype(A), size(A)...))

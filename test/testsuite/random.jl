@@ -4,7 +4,6 @@
     else
         Random.default_rng()
     end
-    cpu_rng = Random.default_rng()
 
     @testset "rand" begin  # uniform
         @testset "$T $d" for T in eltypes, d in (2, (2,2), (2,2,2), 3, (3,3))
@@ -13,10 +12,6 @@
             rand!(rng, A)
             rand!(rng, B)
             @test Array(A) != Array(B)
-
-            if rng != cpu_rng
-                rand!(cpu_rng, A)
-            end
         end
 
         # empty arrays
@@ -42,10 +37,6 @@
             randn!(rng, A)
             randn!(rng, B)
             @test Array(A) != Array(B)
-
-            if rng != cpu_rng
-                randn!(cpu_rng, A)
-            end
         end
 
         # complex randn
@@ -67,7 +58,7 @@
     end
 
     @testset "seeding" begin
-        if rng != cpu_rng
+        if AT <: AbstractGPUArray
             # seeding should produce reproducible results
             for T in (Float32, Float64)
                 if T in eltypes
