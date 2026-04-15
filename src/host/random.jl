@@ -89,19 +89,54 @@ const _CP_F32 = (1.0f0, -4.934788f0, 4.057578f0, -1.3061346f0)
 end
 
 
+## Fast log for Box-Muller
+#
+# Base.log(::Float32) widens to Float64 internally (see base/special/log.jl:242
+# `Float64(2f0*f)/(2.0+f)`), same Metal / FP64-emulation problem as sincospi.
+#
+# Vendored from PhiloxRNG.jl (MIT), ported from fdlibm's e_logf.c: a Float32
+# minimax polynomial. Takes the raw Philox UInt32 output; the u01 conversion
+# is folded into the first fma so there's no intermediate float.
+#
+# Same Float64-path reasoning as the sincospi block above.
+
+const _SQRT_HALF_I32 = reinterpret(Int32, Float32(sqrt(0.5)))
+const _LOG_ODD_F32   = (reinterpret(Float32, Int32(0x3f2aaaaa)),
+                        reinterpret(Float32, Int32(0x3e91e9ee)))
+const _LOG_EVEN_F32  = (reinterpret(Float32, Int32(0x3eccce13)),
+                        reinterpret(Float32, Int32(0x3e789e26)))
+
+@inline function _fast_log(::Type{Float32}, u::UInt32)
+    x = fma(Float32(u), Float32(2)^(-32), Float32(2)^(-33))
+    ix = reinterpret(Int32, x) - _SQRT_HALF_I32
+    k = ix >> Int32(23)
+    f_std = reinterpret(Float32, (ix & Int32(0x007fffff)) + _SQRT_HALF_I32) - 1.0f0
+    f_comp = -fma(Float32(~u), Float32(2)^(-32), Float32(2)^(-33))
+    f = ifelse(k == Int32(0), f_comp, f_std)
+    s = f / (2.0f0 + f)
+    z = s * s; w = z * z
+    R = z * evalpoly(w, _LOG_ODD_F32) + w * evalpoly(w, _LOG_EVEN_F32)
+    hfsq = 0.5f0 * f * f
+    Float32(k) * reinterpret(Float32, Int32(0x3f317180)) -
+        ((hfsq - (s * (hfsq + R) +
+          Float32(k) * reinterpret(Float32, Int32(0x3717f7d1)))) - f)
+end
+
+
 ## Box-Muller transform
 
 using Base.FastMath
 
-# ≤32-bit float output: polynomial sincospi on the raw UInt32, log through
-# FastMath (Base.log(::Float32) also widens to Float64 — fixed in a follow-up).
+# ≤32-bit float output: both log and sincospi go through the Float32
+# polynomials above.
 @inline function boxmuller(::Type{F}, u1::UInt32, u2::UInt32) where F <: Union{Float16,Float32}
-    r = sqrt(-2f0 * FastMath.log_fast(u01(Float32, u2)))
+    r = sqrt(-2f0 * _fast_log(Float32, u2))
     s, c = _fast_sincospi(Float32, u1)
     (F(r * s), F(r * c))
 end
 
-# Float64: Base.sincospi has FP64 intrinsics on the backends that support it.
+# Float64: Base.log_fast / Base.sincospi have FP64 intrinsics on the backends
+# that support it.
 @inline function boxmuller(::Type{Float64}, u1::Float64, u2::Float64)
     r = sqrt(-2.0 * FastMath.log_fast(u1))
     s, c = sincospi(2 * u2)
@@ -111,7 +146,7 @@ end
 # For complex normals each component has variance 1/2, so the radius is
 # sqrt(-log(U)) rather than sqrt(-2·log(U)).
 @inline function boxmuller(::Type{Complex{F}}, u1::UInt32, u2::UInt32) where F <: Union{Float16,Float32}
-    r = sqrt(-FastMath.log_fast(u01(Float32, u2)))
+    r = sqrt(-_fast_log(Float32, u2))
     s, c = _fast_sincospi(Float32, u1)
     complex(F(r * s), F(r * c))
 end
