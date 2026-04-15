@@ -185,15 +185,15 @@ function Random.rand!(rng::RNG, A::AnyGPUArray{T}) where T <: BatchedRandTypes
 end
 
 
-## Generic rand! fallback via ElementRNG
+## ElementRNG: a device-side AbstractRNG for generic rand/randn fallbacks
 
-# For Number types outside BatchedRandTypes (BigFloat, FixedPointNumbers,
-# user-defined types, ...), an immutable ElementRNG wraps a Philox4x32 call as
-# an AbstractRNG, and Julia's Random stdlib handles the type conversion via
-# `rand(rng, T)`.
+# For element types without a specialized batched kernel (BigFloat,
+# FixedPointNumbers, user-defined types, ...), we create a per-work-item
+# AbstractRNG and delegate to Random stdlib's `rand(rng, T)` / `randn(rng, T)`.
 #
-# State (subcounter) lives in a stack-allocated Ref; the struct holds a pointer
-# to it. This avoids mutable struct heap allocation on GPU.
+# The struct is immutable (mutable structs get heap-allocated on GPU); the
+# per-work-item subcounter state lives in a stack-allocated Ref that the
+# struct holds a pointer to.
 
 struct ElementRNG <: AbstractRNG
     seed::UInt64
@@ -227,6 +227,9 @@ end
     rand(rng, Random.Sampler(typeof(rng), T, Val(1)))
 @inline Random.rand(rng::ElementRNG, ::Random.SamplerType{Complex{T}}) where {T<:Real} =
     complex(rand(rng, T), rand(rng, T))
+
+
+## Generic rand! fallback via ElementRNG
 
 @kernel function rand_generic_kernel!(@Const(seed), @Const(counter), A::AbstractArray{T}) where T
     gid = @index(Global, Linear)
