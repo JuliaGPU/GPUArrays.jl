@@ -1,6 +1,6 @@
 @testsuite "random" (AT, eltypes)->begin
     rng = if AT <: AbstractGPUArray
-        GPUArrays.default_rng(AT)
+        GPUArrays.RNG{AT}()
     else
         Random.default_rng()
     end

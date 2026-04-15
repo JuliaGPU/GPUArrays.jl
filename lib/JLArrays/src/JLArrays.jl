@@ -539,14 +539,6 @@ end
 
 using Random
 
-const GLOBAL_RNG = Ref{Union{Nothing,GPUArrays.RNG}}(nothing)
-function GPUArrays.default_rng(::Type{<:JLArray})
-    if GLOBAL_RNG[] === nothing
-        GLOBAL_RNG[] = GPUArrays.RNG()
-    end
-    GLOBAL_RNG[]
-end
-
 
 ## GPUArrays interfaces
 

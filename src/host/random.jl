@@ -158,17 +158,19 @@ end
 
 
 ## RNG type
+#
+# Parameterized on the GPU array type `AT` (e.g. `CuArray`, `ROCArray`, `JLArray`).
+# `AT` is only consulted by the *out-of-place* `rand`/`randn` constructors and by
+# the CPU-array fill fallback — the in-place `rand!`/`randn!` GPU paths dispatch
+# on the destination's KernelAbstractions backend and ignore `AT`.
 
-mutable struct RNG <: AbstractRNG
+mutable struct RNG{AT} <: AbstractRNG
     seed::UInt64
     counter::UInt32
 end
 
-RNG() = RNG(rand(Random.RandomDevice(), UInt64), UInt32(0))
-RNG(seed::Integer) = RNG(seed % UInt64, UInt32(0))
-
-# return an instance of GPUArrays.RNG suitable for the requested array type
-default_rng(::Type{<:AnyGPUArray}) = error("Not implemented") # COV_EXCL_LINE
+RNG{AT}() where {AT} = RNG{AT}(rand(Random.RandomDevice(), UInt64), UInt32(0))
+RNG{AT}(seed::Integer) where {AT} = RNG{AT}(seed % UInt64, UInt32(0))
 
 Random.seed!(rng::RNG) = (rng.seed = rand(Random.RandomDevice(), UInt64); rng.counter = 0; rng)
 Random.seed!(rng::RNG, seed::Integer) = (rng.seed = seed % UInt64; rng.counter = 0; rng)
@@ -442,3 +444,44 @@ function Random.randn!(rng::RNG, A::AnyGPUArray{T}) where T <: Union{AbstractFlo
 end
 
 
+## Non-GPU array fallback: generate on AT, copyto! the destination.
+#
+# Without this, `rand!(rng::RNG{CuArray}, ::Vector)` would hit Random's stdlib
+# scalar path and silently iterate the GPU rng one element at a time.
+
+function Random.rand!(rng::RNG{AT}, A::AbstractArray{T}) where {AT, T}
+    isempty(A) && return A
+    B = AT{T}(undef, size(A))
+    Random.rand!(rng, B)
+    copyto!(A, B)
+end
+function Random.randn!(rng::RNG{AT}, A::AbstractArray{T}) where {AT, T}
+    isempty(A) && return A
+    B = AT{T}(undef, size(A))
+    Random.randn!(rng, B)
+    copyto!(A, B)
+end
+
+
+## Out-of-place rand / randn — construct an AT array and fill it.
+
+Random.rand(rng::RNG{AT}, ::Type{T}, dims::Dims) where {AT, T} =
+    Random.rand!(rng, AT{T}(undef, dims))
+Random.randn(rng::RNG{AT}, ::Type{T}, dims::Dims) where {AT, T<:Union{AbstractFloat,
+                                                                       Complex{<:AbstractFloat}}} =
+    Random.randn!(rng, AT{T}(undef, dims))
+
+# untyped: default to Float32 (matches CUDA convention; better fit than Float64
+# on consumer GPUs)
+Random.rand(rng::RNG{AT}, dims::Dims) where {AT} = Random.rand(rng, Float32, dims)
+Random.randn(rng::RNG{AT}, dims::Dims) where {AT} = Random.randn(rng, Float32, dims)
+
+# variadic dim spellings
+Random.rand(rng::RNG, dim1::Integer, dims::Integer...) =
+    Random.rand(rng, Dims((dim1, dims...)))
+Random.randn(rng::RNG, dim1::Integer, dims::Integer...) =
+    Random.randn(rng, Dims((dim1, dims...)))
+Random.rand(rng::RNG, ::Type{T}, dim1::Integer, dims::Integer...) where T =
+    Random.rand(rng, T, Dims((dim1, dims...)))
+Random.randn(rng::RNG, ::Type{T}, dim1::Integer, dims::Integer...) where T =
+    Random.randn(rng, T, Dims((dim1, dims...)))
