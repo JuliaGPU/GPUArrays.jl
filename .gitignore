@@ -1,4 +1,4 @@
-Manifest.toml
+Manifest*.toml
 
 *.jl.cov
 *.jl.*.cov
