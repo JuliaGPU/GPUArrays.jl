@@ -77,4 +77,15 @@
             end
         end
     end
+
+    # a CPU RNG into a GPU array should route through a CPU generate + copyto!,
+    # not the stdlib scalar setindex! fallback
+    if AT <: AbstractGPUArray && Float32 in eltypes
+        @testset "CPU RNG → GPU array" begin
+            cpu_rng = MersenneTwister(1)
+            A = AT{Float32}(undef, 16)
+            @test (rand!(cpu_rng, A); true)
+            @test (randn!(cpu_rng, A); true)
+        end
+    end
 end
