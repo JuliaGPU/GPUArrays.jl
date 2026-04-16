@@ -464,6 +464,18 @@ function Random.randn!(rng::RNG{AT}, A::AbstractArray{T}) where {AT, T}
 end
 
 
+## CPU RNG → GPU array: generate on CPU, copyto! the destination.
+#
+# Without this, `rand!(::Random.TaskLocalRNG, ::CuArray)` hits Random's stdlib
+# scalar path and iterates the GPU array one element at a time.
+
+Random.rand!(rng::AbstractRNG, A::AnyGPUArray) =
+    copyto!(A, rand(rng, eltype(A), size(A)...))
+Random.randn!(rng::AbstractRNG, A::AnyGPUArray{T}) where {T<:Union{AbstractFloat,
+                                                                   Complex{<:AbstractFloat}}} =
+    copyto!(A, randn(rng, eltype(A), size(A)...))
+
+
 ## Out-of-place rand / randn — construct an AT array and fill it.
 
 Random.rand(rng::RNG{AT}, ::Type{T}, dims::Dims) where {AT, T} =
