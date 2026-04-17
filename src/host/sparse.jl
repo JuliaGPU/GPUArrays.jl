@@ -62,10 +62,7 @@ dense_vector_type(::Type{<:AbstractArray})       = Vector
 dense_array_type(::Type{<:SparseMatrixCSC}) = SparseMatrixCSC
 sparse_array_type(::Type{<:SparseMatrixCSC})    = SparseMatrixCSC
 
-function sparse_array_type(sa::AbstractGPUSparseArray) end
-function dense_array_type(sa::AbstractGPUSparseArray) end
-function coo_type(sa::AbstractGPUSparseArray) end
-coo_type(::SA) where {SA<:AbstractGPUSparseMatrixCSC} = SA
+coo_type(sa) = coo_type(typeof(sa))
 
 function _spadjoint end
 function _sptranspose end
