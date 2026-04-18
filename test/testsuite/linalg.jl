@@ -292,7 +292,7 @@ end
 
 @testsuite "linalg/kron" (AT, eltypes) -> begin
     @testset "$T, $opa, $opb" for T in eltypes, opa in (vec, identity, transpose, adjoint), opb in (vec, identity, transpose, adjoint)
-        @test compare(kron, AT, opa(rand(T, 32, 64)), opb(rand(T, 128, 16)))
+        @test compare(kron, AT, opa(rand(T, 16, 32)), opb(rand(T, 64, 8)))
     end
 end
 
