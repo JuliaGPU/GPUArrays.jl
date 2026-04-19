@@ -51,10 +51,12 @@ end
 
 @inline function u01(::Type{Float64}, u::UInt64)
     # Bit-pattern construction avoids the expensive Float64(::UInt64) conversion
-    # and fma on consumer GPUs (where FP64 throughput is as low as 1:64). The
-    # low bit of the mantissa is forced set so the result is strictly in (0, 1),
+    # on consumer GPUs (where FP64 throughput is as low as 1:64).
+    # The output is uniformly sampled from the following 2^52 evenly spaced points.
+    # 1*2^-53, 3*2^-53, 5*2^-53 ... (2^53-1)*2^-53
+    # so the result is strictly in (0, 1),
     # which is required by Box-Muller's log(u).
-    reinterpret(Float64, ((u >> 12) | 0x1) | 0x3ff0000000000000) - 1.0
+    reinterpret(Float64, (u >> 12) | 0x3ff0000000000000) - prevfloat(1.0)
 end
 
 
