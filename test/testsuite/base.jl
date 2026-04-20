@@ -347,13 +347,13 @@ end
             # due to different definition of `Int` type
             # print([1]) shows as [1] on 64bit but Int64[1] on 32bit
             msg = showstr(A)
-            @test msg == "[1]" || msg == "Int64[1]"
+            @test occursin("([1])", msg) || occursin("(Int64[1])", msg)
 
             msg = replstr(B)
             @test occursin(Regex("^2×2 $AT{Int64,\\s?2.*}:\n 1  2\n 3  4\$"), msg)
 
             msg = showstr(B)
-            @test msg == "[1 2; 3 4]" || msg == "Int64[1 2; 3 4]"
+            @test occursin("([1 2; 3 4])", msg) || occursin("(Int64[1 2; 3 4])", msg)
 
             # the printing of Adjoint depends on global state
             msg = replstr(A')
