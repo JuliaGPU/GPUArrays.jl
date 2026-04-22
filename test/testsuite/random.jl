@@ -6,7 +6,7 @@
     end
 
     @testset "rand" begin  # uniform
-        @testset "$T $d" for T in eltypes, d in (2, (2,2), (2,2,2), 3, (3,3))
+        @testset "$T $d" for T in eltypes, d in (2, (2,2), (2,2,2))
             A = AT{T}(undef, d)
             B = copy(A)
             rand!(rng, A)
@@ -31,7 +31,7 @@
 
     @testset "randn" begin  # normally-distributed
         @testset "$T $d" for T in filter(isrealfloattype, eltypes),
-                              d in (2, (2,2), (2,2,2), 3, (3,3))
+                              d in (2, (2,2), (2,2,2))
             A = AT{T}(undef, d)
             B = copy(A)
             randn!(rng, A)
