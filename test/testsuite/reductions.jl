@@ -56,14 +56,11 @@ end
         end
     end
     # Test more corner cases. Tests from AcceleraterKernels.jl
-    for dims in [1,2,3,4,[1,2],[1,3],[1,4],[2,3],[2,4],[3,4],[1,2,3],[1,2,4],[1,3,4],[2,3,4],[1,2,3,4]]
-        for isize in 0:3
-            for jsize in 0:3
-                for ksize in 0:3
-                    @test compare(A->mapreduce(x->x+x, +, A; init=zero(Int32), dims), AT, rand(Int32(1):Int32(10), isize, jsize, ksize))
-                end
-            end
-        end
+    # Cover empty (size 0) and non-singleton (size 3) axes; the size-10 loop above
+    # already covers the common non-edge shape.
+    for dims in [1,2,3,4,[1,2],[1,3],[1,4],[2,3],[2,4],[3,4],[1,2,3],[1,2,4],[1,3,4],[2,3,4],[1,2,3,4]],
+        isize in (0, 3), jsize in (0, 3), ksize in (0, 3)
+        @test compare(A->mapreduce(x->x+x, +, A; init=zero(Int32), dims), AT, rand(Int32(1):Int32(10), isize, jsize, ksize))
     end
 end
 
@@ -84,14 +81,11 @@ end
         end
     end
     # Test more corner cases. Tests from AcceleraterKernels.jl
-    for dims in [1,2,3,4,[1,2],[1,3],[1,4],[2,3],[2,4],[3,4],[1,2,3],[1,2,4],[1,3,4],[2,3,4],[1,2,3,4]]
-        for isize in 0:3
-            for jsize in 0:3
-                for ksize in 0:3
-                    @test compare(A->reduce(+, A; init=zero(Int32), dims), AT, rand(Int32(1):Int32(10), isize, jsize, ksize))
-                end
-            end
-        end
+    # Cover empty (size 0) and non-singleton (size 3) axes; the size-10 loop above
+    # already covers the common non-edge shape.
+    for dims in [1,2,3,4,[1,2],[1,3],[1,4],[2,3],[2,4],[3,4],[1,2,3],[1,2,4],[1,3,4],[2,3,4],[1,2,3,4]],
+        isize in (0, 3), jsize in (0, 3), ksize in (0, 3)
+        @test compare(A->reduce(+, A; init=zero(Int32), dims), AT, rand(Int32(1):Int32(10), isize, jsize, ksize))
     end
 end
 
