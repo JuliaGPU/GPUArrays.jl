@@ -1,6 +1,6 @@
 name = "GPUArrays"
 uuid = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
-version = "11.5.2"
+version = "11.5.3"
 
 [workspace]
 projects = ["lib/GPUArraysCore", "lib/JLArrays", "test", "docs"]
