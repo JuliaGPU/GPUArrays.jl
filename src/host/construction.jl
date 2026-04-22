@@ -88,7 +88,7 @@ function hasfieldcount(@nospecialize(dt))
 end
 
 # for finding specific element types, e.g., when Float64 is unsupported
-function contains_eltype(T, typ)
+function contains_eltype(@nospecialize(T), @nospecialize(typ))
     if T === typ
       return true
     elseif T isa Union

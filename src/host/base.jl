@@ -234,32 +234,40 @@ function _reinterpret_exception(::Type{T}, a::AbstractArray{S,N}) where {T,S,N}
 end
 
 struct ReinterpretBitsTypeError{T,A} <: Exception end
-function Base.showerror(io::IO, ::ReinterpretBitsTypeError{T, <:AbstractArray{S}}) where {T, S}
-  print(io, "cannot reinterpret an `$(S)` array to `$(T)`, because not all types are bitstypes")
+function Base.showerror(io::IO, @nospecialize(err::ReinterpretBitsTypeError))
+    T, A = typeof(err).parameters
+    S = eltype(A)
+    print(io, "cannot reinterpret an `$(S)` array to `$(T)`, because not all types are bitstypes")
 end
 
 struct ReinterpretZeroDimError{T,A} <: Exception end
-function Base.showerror(io::IO, ::ReinterpretZeroDimError{T, <:AbstractArray{S,N}}) where {T, S, N}
-  print(io, "cannot reinterpret a zero-dimensional `$(S)` array to `$(T)` which is of a different size")
+function Base.showerror(io::IO, @nospecialize(err::ReinterpretZeroDimError))
+    T, A = typeof(err).parameters
+    S = eltype(A)
+    print(io, "cannot reinterpret a zero-dimensional `$(S)` array to `$(T)` which is of a different size")
 end
 
 struct ReinterpretDivisibilityError{T,A} <: Exception
   dim::Int
 end
-function Base.showerror(io::IO, err::ReinterpretDivisibilityError{T, <:AbstractArray{S,N}}) where {T, S, N}
-  dim = err.dim
-  print(io, """
-      cannot reinterpret an `$(S)` array to `$(T)` whose first dimension has size `$(dim)`.
-      The resulting array would have non-integral first dimension.
-      """)
+function Base.showerror(io::IO, @nospecialize(err::ReinterpretDivisibilityError))
+    T, A = typeof(err).parameters
+    S = eltype(A)
+    dim = err.dim
+    print(io, """
+        cannot reinterpret an `$(S)` array to `$(T)` whose first dimension has size `$(dim)`.
+        The resulting array would have non-integral first dimension.
+        """)
 end
 
 struct ReinterpretFirstIndexError{T,A,Ax1} <: Exception
   ax1::Ax1
 end
-function Base.showerror(io::IO, err::ReinterpretFirstIndexError{T, <:AbstractArray{S,N}}) where {T, S, N}
-  ax1 = err.ax1
-  print(io, "cannot reinterpret a `$(S)` array to `$(T)` when the first axis is $ax1. Try reshaping first.")
+function Base.showerror(io::IO, @nospecialize(err::ReinterpretFirstIndexError))
+    T, A, _ = typeof(err).parameters
+    S = eltype(A)
+    ax1 = err.ax1
+    print(io, "cannot reinterpret a `$(S)` array to `$(T)` when the first axis is $ax1. Try reshaping first.")
 end
 
 
