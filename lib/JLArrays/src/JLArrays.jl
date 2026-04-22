@@ -615,7 +615,10 @@ end
 
 function (obj::Kernel{JLBackend})(args...; ndrange=nothing, workgroupsize=nothing)
     ndrange, workgroupsize, _, _ = launch_config(obj, ndrange, workgroupsize)
-    device_args = jlconvert.(args)
+    # Use `map` rather than `jlconvert.(args)` to skip the broadcast
+    # machinery (broadcasted/materialize/ntuple) that would otherwise
+    # be specialized per unique arg-tuple type.
+    device_args = map(jlconvert, args)
     new_obj = convert_to_cpu(obj)
     new_obj(device_args...; ndrange, workgroupsize)
 end
