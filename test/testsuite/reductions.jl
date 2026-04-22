@@ -92,19 +92,25 @@ end
 @testsuite "reductions/sum prod" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
-        for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
-                            (10,)=>:, (10,10)=>:, (10,10,10)=>:,
-                            (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
-                            (0,)=>[1]]
+
+        # whole-array reductions: exercise each unique shape only once
+        for sz in ((10,), (10,10), (10,10,10), (0,))
             @test compare(A->sum(A), AT, rand(range, sz))
-            @test compare(A->sum(A; dims=dims), AT, rand(range, sz))
             @test compare(A->prod(A), AT, rand(range, sz))
-            @test compare(A->prod(A; dims=dims), AT, rand(range, sz))
             if typeof(abs(rand(range))) in eltypes
                 # abs(::Complex{Int}) promotes to Float64
                 @test compare(A->sum(abs, A), AT, rand(range, sz))
                 @test compare(A->prod(abs, A), AT, rand(range, sz))
             end
+        end
+
+        # reductions along specific dims
+        for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
+                            (10,)=>:, (10,10)=>:, (10,10,10)=>:,
+                            (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
+                            (0,)=>[1]]
+            @test compare(A->sum(A; dims=dims), AT, rand(range, sz))
+            @test compare(A->prod(A; dims=dims), AT, rand(range, sz))
         end
 
         if ET in (Float32, Float64, Int64, ComplexF32, ComplexF64)
@@ -120,30 +126,33 @@ end
 
 @testsuite "reductions/minimum maximum extrema" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
+        ET <: Complex && continue
         range = ET <: Real ? (ET(1):ET(10)) : ET
+
+        # whole-array reductions: exercise each unique shape only once
+        for sz in ((10,), (10,10), (10,10,10))
+            @test compare(A->minimum(A), AT, rand(range, sz))
+            @test compare(A->minimum(x->x*x, A), AT, rand(range, sz))
+            @test compare(A->maximum(A), AT, rand(range, sz))
+            @test compare(A->maximum(x->x*x, A), AT, rand(range, sz))
+            @test compare(A->extrema(A), AT, rand(range, sz))
+            @test compare(A->extrema(x->x*x, A), AT, rand(range, sz))
+        end
+
+        # reductions along specific dims
         for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
                           (10,)=>:, (10,10)=>:, (10,10,10)=>:,
                           (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3]]
-            if !(ET <: Complex)
-                @test compare(A->minimum(A), AT, rand(range, sz))
-                @test compare(A->minimum(x->x*x, A), AT, rand(range, sz))
-                @test compare(A->minimum(A; dims=dims), AT, rand(range, sz))
-                @test compare(A->maximum(A), AT, rand(range, sz))
-                @test compare(A->maximum(x->x*x, A), AT, rand(range, sz))
-                @test compare(A->maximum(A; dims=dims), AT, rand(range, sz))
-                @test compare(A->extrema(A), AT, rand(range, sz))
-                @test compare(A->extrema(x->x*x, A), AT, rand(range, sz))
-                @test compare(A->extrema(A; dims=dims), AT, rand(range, sz))
-            end
+            @test compare(A->minimum(A; dims=dims), AT, rand(range, sz))
+            @test compare(A->maximum(A; dims=dims), AT, rand(range, sz))
+            @test compare(A->extrema(A; dims=dims), AT, rand(range, sz))
         end
 
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
                          (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1)]
-            if !(ET <: Complex)
-                @test compare((A,R)->minimum!(R, A), AT, rand(range, sz), fill(typemax(ET), red))
-                @test compare((A,R)->maximum!(R, A), AT, rand(range, sz), fill(typemin(ET), red))
-                @test compare((A,R)->extrema!(R, A), AT, rand(range, sz), fill((typemax(ET),typemin(ET)), red))
-            end
+            @test compare((A,R)->minimum!(R, A), AT, rand(range, sz), fill(typemax(ET), red))
+            @test compare((A,R)->maximum!(R, A), AT, rand(range, sz), fill(typemin(ET), red))
+            @test compare((A,R)->extrema!(R, A), AT, rand(range, sz), fill((typemax(ET),typemin(ET)), red))
         end
     end
 end
