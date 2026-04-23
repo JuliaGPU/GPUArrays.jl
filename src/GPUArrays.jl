@@ -20,6 +20,7 @@ using KernelAbstractions
 # device functionality
 include("device/abstractarray.jl")
 include("device/sparse.jl")
+include("device/indexing.jl")
 
 # host abstractions
 include("host/abstractarray.jl")
