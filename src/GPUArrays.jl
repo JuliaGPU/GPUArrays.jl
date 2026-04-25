@@ -16,6 +16,7 @@ using Reexport
 @reexport using GPUArraysCore
 
 using KernelAbstractions
+using Atomix
 
 # device functionality
 include("device/abstractarray.jl")
