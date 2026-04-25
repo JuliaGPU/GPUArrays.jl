@@ -84,6 +84,26 @@ end
             copy!(dst, src)
             @test dst == src
         end
+        @testset "copy! with differently sized vectors will resize the dst" begin
+            dst = AT(rand(Float32, (5,)))
+            src = AT(rand(Float32, (10,)))
+            copy!(dst, src)
+            @test length(dst) == 10
+            @test dst == src
+
+            dst = AT(rand(Float32, (10,)))
+            src = AT(rand(Float32, (5,)))
+            copy!(dst, src)
+            @test length(dst) == 5
+            @test dst == src
+        end
+
+        @testset "copy! with differently sized higher dim arrays will error." begin
+            dst = AT(rand(Float32, (10, 1)))
+            src = AT(rand(Float32, (5, 1)))
+            @test_throws Exception copy!(dst, src)
+            @test_throws Exception copy!(src, dst)
+        end
     end
 
     @testset "copyto!" begin
