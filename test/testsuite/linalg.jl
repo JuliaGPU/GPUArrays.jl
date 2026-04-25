@@ -493,6 +493,15 @@ end
         @test compare(mul!, AT, C, A, B, Ref(T(4)), Ref(T(5)))
         @test typeof(AT(rand(Tc, 3, 3)) * AT(rand(T, 3, 3))) <: AbstractMatrix
     end
+    @testset "$T with views" for T in eltypes
+        A = rand(T, 10, 10)
+        v1 = @view(A[:, 1:5])
+        v2 = @view(A[1:5, :])
+        dA = AT(A)
+        dv1 = @view(dA[:, 1:5])
+        dv2 = @view(dA[1:5, :])
+        @test Array(v1) * Array(v2) ≈ Array(v1 * v2)
+    end
 end
 
 @testsuite "linalg/norm" (AT, eltypes)->begin
