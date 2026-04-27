@@ -150,15 +150,15 @@ end
     j::Integer,
 ) where {Tv,Ti}
     @boundscheck checkbounds(A, i, j)
-    rowPtr, colVal, nzVal = A.rowPtr, A.colVal, A.nzVal
 
     i_block, i_idx = fldmod1(i, A.blockDim)
     j_block, j_idx = fldmod1(j, A.blockDim)
     block_idx = (i_idx-1) * A.blockDim + j_idx - 1
-    c1 = convert(Ti, rowPtr[i_block])
-    c2 = convert(Ti, rowPtr[i_block+1]-1)
-    (c1 > c2) && return zero(Tv)
-    c1 = searchsortedfirst(colVal, j_block, c1, c2, Base.Order.Forward)
-    (c1 > c2 || colVal[c1] != j_block) && return zero(Tv)
-    nzVal[c1+block_idx]
+    c1 = convert(Ti, A.rowPtr[i_block])
+    c2 = convert(Ti, A.rowPtr[i_block+1]-1)
+    result = zero(T)
+    for k in c1:c2
+        A.colVal[k] == i_block && (result == sum_duplicate(result, nonzeros(a)[k+block_idx]))
+    end
+    return result
 end
