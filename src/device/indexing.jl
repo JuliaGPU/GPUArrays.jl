@@ -74,6 +74,16 @@ end
     I::Tuple{Integer,Integer},
 ) = getindex(A, I[1], I[2])
 
+# Scalar getindex methods linear-scan the minor axis rather than binary-searching
+# and sum across matching entries. cuSPARSE formats don't guarantee sorted indices
+# within a major-axis slice (e.g. SpGEMM output may leave CSR columns unsorted
+# within a row, and COO is only guaranteed row-sorted), nor uniqueness — duplicate
+# (i, j) entries are permitted and their values sum, matching the convention of
+# Julia's `sparse()` constructor and SciPy/CuPy. For Bool we OR instead of sum,
+# also matching `sparse()`, since Bool + Bool doesn't stay Bool.
+sum_duplicate(a, b) = a + b
+sum_duplicate(a::Bool, b::Bool) = a | b
+
 ## Adapted logic from SparseArrays.AbstractSparseMatrixCSC
 @propagate_inbounds function Base.getindex(
     A::GPUSparseDeviceMatrixCSC{Tv,Ti},
@@ -115,7 +125,7 @@ end
     i::Integer,
     j::Integer,
 ) where {Tv,Ti}
-    # COO in CUDA is assumed to be sorted by row:
+    # COO in CUDA is assumed to be sorted by row (not col):
     #https://docs.nvidia.com/cuda/cusparse/storage-formats.html?highlight=coo#coordinate-coo
     @boundscheck checkbounds(A, i, j)
     rowInd, colInd, nzVal = A.rowInd, A.colInd, A.nzVal
@@ -125,10 +135,12 @@ end
     (rl > nnz(A) || rowInd[rl] > i) && return zero(Tv)
     rr = min(searchsortedfirst(rowInd, i+1, Base.Order.Forward), nnz(A))
     # Important to exclude rr, as including it un-sorts colInd[rl:rr] 
-    jj = searchsortedfirst(colInd, j, rl, rr-1, Base.Order.Forward) 
-    (jj > rr || jj == nnz(A) + 1 || colInd[jj] > j) && return zero(Tv)
-
-    return nzVal[jj]
+    # Column is not guaranteed to be sorted. We linear scan
+    result = zero(Tv)
+    for k in rl:rl
+        A.colInd[k] == i && (result = sum_duplicate(result, nonzeros(A)[k]))
+    end
+    return result
 end
 
 ## Adapted from CUDA.jl/blob/lib/cusparse/src/array.jl#L500
