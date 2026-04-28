@@ -121,8 +121,8 @@ unsafe_free!(x::AbstractGPUArray) = unsafe_free!(storage(x))
 
 using Serialization: AbstractSerializer, serialize_type
 
-function Serialization.serialize(s::AbstractSerializer, t::T) where T <: AbstractGPUArray
-    serialize_type(s, T)
+function Serialization.serialize(s::AbstractSerializer, @nospecialize(t::AbstractGPUArray))
+    serialize_type(s, typeof(t))
     serialize(s, Array(t))
 end
 
@@ -136,16 +136,17 @@ end
 struct ToArray end
 Adapt.adapt_storage(::ToArray, xs::AbstractGPUArray) = convert(Array, xs)
 
-# display
-Base.print_array(io::IO, X::AnyGPUArray) =
+# display: show is called on the materialised CPU copy, so no need to
+# specialize the forwarders per element type / wrapper.
+Base.print_array(io::IO, @nospecialize(X::AnyGPUArray)) =
     Base.print_array(io, adapt(ToArray(), X))
 
 # show
-Base._show_nonempty(io::IO, X::AnyGPUArray, prefix::String) =
+Base._show_nonempty(io::IO, @nospecialize(X::AnyGPUArray), prefix::String) =
     Base._show_nonempty(io, adapt(ToArray(), X), prefix)
-Base._show_empty(io::IO, X::AnyGPUArray) =
+Base._show_empty(io::IO, @nospecialize(X::AnyGPUArray)) =
     Base._show_empty(io, adapt(ToArray(), X))
-Base.show_vector(io::IO, v::AnyGPUArray, args...) =
+Base.show_vector(io::IO, @nospecialize(v::AnyGPUArray), args...) =
     Base.show_vector(io, adapt(ToArray(), v), args...)
 
 ## collect to CPU (discarding wrapper type)
@@ -324,7 +325,7 @@ end
 
 Base.copy(x::AbstractGPUArray) = error("Not implemented") # COV_EXCL_LINE
 
-Base.deepcopy_internal(x::AbstractGPUArray, ::IdDict) = copy(x)
+Base.deepcopy_internal(@nospecialize(x::AbstractGPUArray), ::IdDict) = copy(x)
 
 
 # filtering
@@ -345,7 +346,7 @@ end
 
 # this is needed because copyto! of most GPU arrays
 # doesn't currently support Tuple sources
-function Base.append!(a::AbstractGPUVector, items::Tuple)
+function Base.append!(a::AbstractGPUVector, @nospecialize(items::Tuple))
     append!(a, collect(items))
     return a
 end

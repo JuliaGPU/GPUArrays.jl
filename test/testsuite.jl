@@ -16,26 +16,36 @@ using Test
 
 using Adapt
 
-test_result(a, b; kwargs...) = a == b
+test_result(@nospecialize(a), @nospecialize(b); kwargs...) = a == b
 test_result(a::Number, b::Number; kwargs...) = ≈(a, b; kwargs...)
 test_result(a::Missing, b::Missing; kwargs...) = true
 test_result(a::Number, b::Missing; kwargs...) = false
 test_result(a::Missing, b::Number; kwargs...) = false
-function test_result(a::AbstractArray{T}, b::AbstractArray{T}; kwargs...) where {T<:Number}
-    ≈(collect(a), collect(b); kwargs...)
+# Branch on eltype at runtime so one compiled method body handles every
+# (T, ndims) combination — the `where T` version would still instantiate
+# per element type even under @nospecialize.
+function test_result(@nospecialize(a::AbstractArray), @nospecialize(b::AbstractArray); kwargs...)
+    T = eltype(a)
+    # The original `where T<:…` methods required matching eltypes; preserve
+    # that by falling through to `a == b` when they diverge.
+    if eltype(b) === T
+        if T <: Number
+            return ≈(collect(a), collect(b); kwargs...)
+        elseif T <: NTuple{N,<:Number} where {N}
+            ET = eltype(T)
+            return ≈(reinterpret(ET, collect(a)), reinterpret(ET, collect(b)); kwargs...)
+        end
+    end
+    a == b
 end
-function test_result(a::AbstractArray{T}, b::AbstractArray{T};
-                     kwargs...) where {T<:NTuple{N,<:Number} where {N}}
-    ET = eltype(T)
-    ≈(reinterpret(ET, collect(a)), reinterpret(ET, collect(b)); kwargs...)
-end
-function test_result(as::NTuple{N,Any}, bs::NTuple{N,Any}; kwargs...) where {N}
+function test_result(@nospecialize(as::Tuple), @nospecialize(bs::Tuple); kwargs...)
+    length(as) == length(bs) || return false
     all(zip(as, bs)) do (a, b)
         test_result(a, b; kwargs...)
     end
 end
 
-function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
+function compare(@nospecialize(f), AT::Type{<:AbstractGPUArray}, @nospecialize(xs...); kwargs...)
     # copy on the CPU, adapt on the GPU, but keep Ref's
     cpu_in = map(x -> isa(x, Base.RefValue) ? x[] : deepcopy(x), xs)
     gpu_in = map(x -> isa(x, Base.RefValue) ? x[] : adapt(AT, x), xs)
@@ -46,7 +56,7 @@ function compare(f, AT::Type{<:AbstractGPUArray}, xs...; kwargs...)
     test_result(cpu_out, gpu_out; kwargs...)
 end
 
-function compare(f, AT::Type{<:Array}, xs...; kwargs...)
+function compare(@nospecialize(f), AT::Type{<:Array}, @nospecialize(xs...); kwargs...)
     # no need to actually run this tests: we have nothing to compare against,
     # and we'll run it on a CPU array anyhow when comparing to a GPU array.
     #
