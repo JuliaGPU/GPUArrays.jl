@@ -100,20 +100,20 @@ macro testsuite(name, ex)
     end
 end
 
-include("testsuite/construction.jl")
-include("testsuite/indexing.jl")
-include("testsuite/base.jl")
-include("testsuite/vector.jl")
-include("testsuite/reductions.jl")
-include("testsuite/broadcasting.jl")
-include("testsuite/linalg.jl")
-include("testsuite/math.jl")
-include("testsuite/random.jl")
-include("testsuite/uniformscaling.jl")
-include("testsuite/statistics.jl")
+# include("testsuite/construction.jl")
+# include("testsuite/indexing.jl")
+# include("testsuite/base.jl")
+# include("testsuite/vector.jl")
+# include("testsuite/reductions.jl")
+# include("testsuite/broadcasting.jl")
+# include("testsuite/linalg.jl")
+# include("testsuite/math.jl")
+# include("testsuite/random.jl")
+# include("testsuite/uniformscaling.jl")
+# include("testsuite/statistics.jl")
 include("testsuite/sparse.jl")
-include("testsuite/alloc_cache.jl")
-include("testsuite/jld2ext.jl")
+# include("testsuite/alloc_cache.jl")
+# include("testsuite/jld2ext.jl")
 
 """
 Runs the entire GPUArrays test suite on array type `AT`

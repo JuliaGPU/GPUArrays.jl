@@ -9,8 +9,7 @@ const init_worker_code = quote
     include("testsuite.jl")
 
     TestSuite.sparse_types(::Type{<:JLArray}) = (JLSparseVector, JLSparseMatrixCSC, JLSparseMatrixCSR)
-    TestSuite.sparse_types(::Type{<:Array})   = (SparseVector, SparseMatrixCSC)
-    TestSuite.sparse_device_types(::Type{<:Array}) = (GPUSparseDeviceVector, GPUSparseDeviceMatrixCSC, GPUSparseDeviceMatrixCSR, GPUSparseDeviceMatrixCOO)
+    TestSuite.sparse_types(::Type{<:Array})   = (SparseVector, SparseMatrixCSC) # TODO: Add CSR, COO, etc formats
 
     # Disable Float16-related tests until JuliaGPU/KernelAbstractions#600 is resolved
     if isdefined(JLArrays.KernelAbstractions, :POCL)

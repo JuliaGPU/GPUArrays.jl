@@ -20,6 +20,29 @@ Base.IndexStyle(::Type{GPUSparseDeviceVector}) = Base.IndexLinear()
     (ii <= m && nzind[ii] == i) ? nzval[ii] : zero(Tv)
 end
 
+# @propagate_inbounds function Base.setindex!(
+#     x::GPUSparseDeviceVector{Tv,Ti},
+#     v::Tv,
+#     i::Integer,
+# ) where {Tv,Ti}
+#     @boundscheck checkbounds(x, i)
+#     m = nnz(x)
+#     nzind = nonzeroinds(x)
+#     nzval = nonzeros(x)
+
+#     ii = searchsortedfirst(nzind, convert(Ti, i))
+#     # (ii <= m && nzind[ii] == i) ? nzval[ii] : zero(Tv)
+#     if 1 <= ii <= m && nzind[ii] == i
+#         nzval[ii] = v
+#     else
+#         # nzval[ii] = convert(Tv, 43)
+#         if v !== zero(Tv)
+#             # insert!(nzind, ii, convert(Tv, i))
+#             insert!(nzind, ii, v)
+#         end
+#     end
+# end
+
 # Logical getindex
 @propagate_inbounds function Base.getindex(
     v::GPUSparseDeviceVector,
