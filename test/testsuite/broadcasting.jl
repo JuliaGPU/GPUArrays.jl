@@ -2,6 +2,7 @@
     broadcasting(AT, eltypes)
     vec3(AT, eltypes)
     unknown_wrapper(AT, eltypes)
+    composed_function(AT, eltypes)
 end
 
 test_idx(idx, A::AbstractArray{T}) where T = A[idx] * T(2)
@@ -225,6 +226,28 @@ function unknown_wrapper(AT, eltypes)
             # test for dispatch with dest's BroadcastStyle.
             WA .= ET(1)
             @test all(isequal(ET(1)), Array(A))
+        end
+    end
+end
+
+# `(f ∘ g).(args...)` is rewritten to `f.(g.(args...))` for AbstractGPUArrayStyle so
+# that the kernel closure never carries a `ComposedFunction` value — the latter
+# forces a kwsorter dispatch that GPUCompiler cannot resolve when the inner body
+# has non-trivial control flow (e.g. NNlib.tanh_fast). On CPU this is a no-op.
+function composed_function(AT, eltypes)
+    sq(x) = x*x
+    for ET in eltypes
+        @testset "ComposedFunction $ET" begin
+            a = AT(rand(ET, 8))
+            b = AT(rand(ET, 8))
+            ca, cb = Array(a), Array(b)
+
+            @test Array(broadcast(sq ∘ (+), a, b))   ≈ (ca .+ cb).^2
+            @test Array((sq ∘ (+)).(a, b))           ≈ (ca .+ cb).^2
+            @test Array((sq ∘ sq ∘ (+)).(a, b))      ≈ ((ca .+ cb).^2).^2
+            @test Array((sq ∘ identity).(a))         ≈ ca.^2
+            @test Array((sq ∘ (+)).(a, Ref(ET(2))))  ≈ (ca .+ ET(2)).^2
+            @test Array((identity ∘ (-)).(a, b))     ≈ ca .- cb
         end
     end
 end

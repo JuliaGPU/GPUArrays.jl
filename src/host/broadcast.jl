@@ -4,6 +4,16 @@ using Base.Broadcast
 
 using Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle, instantiate
 
+# Rewrite `(f ∘ g).(args...)` as `f.(g.(args...))` whenever the broadcast style is
+# a GPU style. The fused `Broadcasted` tree is identical in semantics, but the
+# kernel closure no longer has to call `ComposedFunction`'s `(c)(args...; kw...)`
+# entry — which forces a kwsorter dispatch GPUCompiler cannot resolve statically
+# when the inner function has a non-trivial body (e.g. `NNlib.tanh_fast`'s
+# polynomial+sign branch produces an `InvalidIRError` on CUDA). The CPU
+# broadcast path is unaffected because dispatch is gated on `AbstractGPUArrayStyle`.
+@inline Broadcast.broadcasted(S::AbstractGPUArrayStyle, c::ComposedFunction, args...) =
+    Broadcast.broadcasted(S, c.outer, Broadcast.broadcasted(S, c.inner, args...))
+
 # but make sure we don't dispatch to the optimized copy method that directly indexes
 function Broadcast.copy(bc::Broadcasted{<:AbstractGPUArrayStyle{0}})
     ElType = Broadcast.combine_eltypes(bc.f, bc.args)
