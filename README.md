@@ -12,19 +12,19 @@
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
 [docs-dev-url]: http://JuliaGPU.github.io/GPUArrays.jl/dev/
 
-[gitlab-img]: https://gitlab.com/JuliaGPU/GPUArrays.jl/badges/master/pipeline.svg
-[gitlab-url]: https://gitlab.com/JuliaGPU/GPUArrays.jl/commits/master
+[gitlab-img]: https://gitlab.com/JuliaGPU/GPUArrays.jl/badges/main/pipeline.svg
+[gitlab-url]: https://gitlab.com/JuliaGPU/GPUArrays.jl/commits/main
 
-[gh-img]: https://github.com/JuliaGPU/GPUArrays.jl/actions/workflows/Test.yml/badge.svg?branch=master
+[gh-img]: https://github.com/JuliaGPU/GPUArrays.jl/actions/workflows/Test.yml/badge.svg?branch=main
 [gh-url]: https://github.com/JuliaGPU/GPUArrays.jl/actions/workflows/Test.yml
 
-[buildkite-img]: https://badge.buildkite.com/05f9b27c5ce6c3906566fb66cfc42d44586e16d88a805a0b7b.svg?branch=master
+[buildkite-img]: https://badge.buildkite.com/05f9b27c5ce6c3906566fb66cfc42d44586e16d88a805a0b7b.svg?branch=main
 [buildkite-url]: https://buildkite.com/julialang/gpuarrays-dot-jl
 
 [pkgeval-img]: https://juliaci.github.io/NanosoldierReports/pkgeval_badges/G/GPUArrays.svg
 [pkgeval-url]: https://juliaci.github.io/NanosoldierReports/pkgeval_badges/G/GPUArrays.html
 
-[codecov-img]: https://codecov.io/gh/JuliaGPU/GPUArrays.jl/branch/master/graph/badge.svg
+[codecov-img]: https://codecov.io/gh/JuliaGPU/GPUArrays.jl/branch/main/graph/badge.svg
 [codecov-url]: https://codecov.io/gh/JuliaGPU/GPUArrays.jl
 
 This package is the counterpart of Julia's `AbstractArray` interface, but for GPU array
