@@ -230,10 +230,6 @@ function unknown_wrapper(AT, eltypes)
     end
 end
 
-# `(f ∘ g).(args...)` is rewritten to `f.(g.(args...))` for AbstractGPUArrayStyle so
-# that the kernel closure never carries a `ComposedFunction` value — the latter
-# forces a kwsorter dispatch that GPUCompiler cannot resolve when the inner body
-# has non-trivial control flow (e.g. NNlib.tanh_fast). On CPU this is a no-op.
 function composed_function(AT, eltypes)
     sq(x) = x*x
     for ET in eltypes
