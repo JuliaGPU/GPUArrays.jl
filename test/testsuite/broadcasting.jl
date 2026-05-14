@@ -2,6 +2,7 @@
     broadcasting(AT, eltypes)
     vec3(AT, eltypes)
     unknown_wrapper(AT, eltypes)
+    composed_function(AT, eltypes)
 end
 
 test_idx(idx, A::AbstractArray{T}) where T = A[idx] * T(2)
@@ -225,6 +226,24 @@ function unknown_wrapper(AT, eltypes)
             # test for dispatch with dest's BroadcastStyle.
             WA .= ET(1)
             @test all(isequal(ET(1)), Array(A))
+        end
+    end
+end
+
+function composed_function(AT, eltypes)
+    sq(x) = x*x
+    for ET in eltypes
+        @testset "ComposedFunction $ET" begin
+            a = AT(rand(ET, 8))
+            b = AT(rand(ET, 8))
+            ca, cb = Array(a), Array(b)
+
+            @test Array(broadcast(sq ∘ (+), a, b))   ≈ (ca .+ cb).^2
+            @test Array((sq ∘ (+)).(a, b))           ≈ (ca .+ cb).^2
+            @test Array((sq ∘ sq ∘ (+)).(a, b))      ≈ ((ca .+ cb).^2).^2
+            @test Array((sq ∘ identity).(a))         ≈ ca.^2
+            @test Array((sq ∘ (+)).(a, Ref(ET(2))))  ≈ (ca .+ ET(2)).^2
+            @test Array((identity ∘ (-)).(a, b))     ≈ ca .- cb
         end
     end
 end

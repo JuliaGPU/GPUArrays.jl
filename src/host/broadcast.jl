@@ -4,6 +4,11 @@ using Base.Broadcast
 
 using Base.Broadcast: BroadcastStyle, Broadcasted, AbstractArrayStyle, instantiate
 
+# split `ComposedFunction` so the kernel closure doesn't hit its kwarg-accepting
+# call, whose kwsorter dispatch GPUCompiler can't resolve statically.
+@inline Broadcast.broadcasted(S::AbstractGPUArrayStyle, c::ComposedFunction, args...) =
+    Broadcast.broadcasted(S, c.outer, Broadcast.broadcasted(S, c.inner, args...))
+
 # but make sure we don't dispatch to the optimized copy method that directly indexes
 function Broadcast.copy(bc::Broadcasted{<:AbstractGPUArrayStyle{0}})
     ElType = Broadcast.combine_eltypes(bc.f, bc.args)
