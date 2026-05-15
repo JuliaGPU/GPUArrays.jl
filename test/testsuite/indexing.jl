@@ -286,14 +286,15 @@ end
 end
 
 @testsuite "indexing reshaped wrappers" (AT, eltypes) -> begin
-    # Regression for #587: `Q[:] = …` where `Q = @view P[…]` of a GPU array used to
-    # throw a `MethodError` due to ambiguous `_unsafe_setindex!` on the
-    # `ReshapedArray{…,<:WrappedGPUArray}` that `_maybe_reshape` produces.
+    # Regression for #587: `Q[:] = …` on an `IndexCartesian` SubArray of a GPU array
+    # threw a `MethodError` due to ambiguous `_unsafe_setindex!` on the
+    # `ReshapedArray{…,<:WrappedGPUArray}` that `_maybe_reshape` produces. A
+    # strided view triggers the same dispatch path as the original `BitVector`
+    # MWE without depending on non-isbits indices that some backends reject.
     @testset "issue #587 with $T" for T in eltypes
-        @test compare(AT, ones(T, 16, 16, 16)) do P
-            active = (1:16) .< 12
-            Q = @view P[:, :, active]
-            Q[:] = Q .+ one(T)
+        @test compare(AT, ones(T, 8, 8, 8)) do P
+            Q = view(P, 1:2:7, :, :)
+            Q[:] = fill(T(2), length(Q))
             P
         end
     end
