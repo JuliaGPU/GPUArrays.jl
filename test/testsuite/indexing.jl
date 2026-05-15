@@ -284,3 +284,44 @@ end
         @test compare(argmin, AT, -rand(Int, 10))
     end
 end
+
+@testsuite "indexing reshaped wrappers" (AT, eltypes) -> begin
+    # Regression for #587: `Q[:] = …` on an `IndexCartesian` SubArray of a GPU array
+    # threw a `MethodError` due to ambiguous `_unsafe_setindex!` on the
+    # `ReshapedArray{…,<:WrappedGPUArray}` that `_maybe_reshape` produces. A
+    # strided view triggers the same dispatch path as the original `BitVector`
+    # MWE without depending on non-isbits indices that some backends reject.
+    @testset "issue #587 with $T" for T in eltypes
+        @test compare(AT, ones(T, 8, 8, 8)) do P
+            Q = view(P, 1:2:7, :, :)
+            Q[:] = fill(T(2), length(Q))
+            P
+        end
+    end
+
+    @testset "reshape(view) with $T" for T in eltypes
+        @test compare(AT, ones(T, 4, 4, 4)) do A
+            R = reshape(view(A, 1:2, 1:2, 1:2), :)
+            R[:] = fill(T(2), length(R))
+            A
+        end
+    end
+
+    @testset "reshape(PermutedDimsArray) with $T" for T in eltypes
+        @test compare(AT, ones(T, 4, 4)) do A
+            R = reshape(PermutedDimsArray(A, (2, 1)), :)
+            R[1:2] = fill(zero(T), 2)
+            A
+        end
+    end
+
+    @testset "reshape(reinterpret) with $T" for T in eltypes
+        T <: Complex || continue
+        IT = Complex{Int16}
+        @test compare(AT, ones(T, 4, 4)) do A
+            R = reshape(reinterpret(IT, A), :)
+            R[1:2] = fill(zero(IT), 2)
+            A
+        end
+    end
+end
