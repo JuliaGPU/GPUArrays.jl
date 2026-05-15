@@ -25,7 +25,7 @@ jobs:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         timeout-minutes: 10
         with:
           version: ${{ matrix.version }}
@@ -62,7 +62,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: '1.12'
       - uses: julia-actions/cache@v3
@@ -113,7 +113,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: '1.10'
       - name: Develop packages
