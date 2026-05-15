@@ -757,7 +757,7 @@ end
 
 ## norm
 
-function LinearAlgebra.norm(v::AbstractGPUArray{T}, p::Real=2) where {T}
+function LinearAlgebra.norm(v::AnyGPUArray{T}, p::Real=2) where {T}
     result_type, sum_type, promote_ = _normtypes(T)
     isempty(v) && return zero(result_type)
     p == 0 && return convert(result_type, count(!iszero, v))
@@ -805,7 +805,7 @@ end
 ## normalize
 
 # Avoid `first(a)` scalar indexing in LinearAlgebra.normalize (JuliaGPU/CUDA.jl#3097)
-function LinearAlgebra.normalize(a::AbstractGPUArray, p::Real=2)
+function LinearAlgebra.normalize(a::AnyGPUArray, p::Real=2)
     nrm = norm(a, p)
     if !isempty(a)
         T = typeof(zero(eltype(a))/nrm)

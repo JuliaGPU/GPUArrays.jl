@@ -551,6 +551,29 @@ end
         @test compare(normalize, AT, arr)
         @test compare(normalize, AT, arr, Ref(1))
     end
+    # Wrapped GPU arrays (e.g. SubArray) must also avoid scalar iteration.
+    @testset "$p-norm(view, $sz x $T)" for sz in [(5,), (5, 5), (4, 4, 4)],
+                                           p in Any[0, 1, 2, Inf],
+                                           T in eltypes
+        if T == Int8
+            continue
+        end
+        if !in(float(real(T)), eltypes)
+            continue
+        end
+        range = real(T) <: Integer ? (T.(1:10)) : T
+        arr = rand(range, sz)
+        indices = map(d -> 2:d-1, sz)
+        @test compare(x -> norm(view(x, indices...), p), AT, arr)
+    end
+    @testset "normalize(view, $T)" for T in eltypes
+        if !in(float(real(T)), eltypes)
+            continue
+        end
+        range = real(T) <: Integer ? (T.(1:10)) : T
+        arr = rand(range, 10)
+        @test compare(x -> normalize(view(x, 2:9)), AT, arr)
+    end
 end
 
 @testsuite "linalg/NaN_false" (AT, eltypes)->begin
