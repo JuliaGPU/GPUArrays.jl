@@ -164,17 +164,15 @@ function Base._unsafe_getindex!(dest::AbstractGPUArray, src::AbstractArray, Is::
 end
 # Similar for `setindex!`, its default fallback is equivalent to `copyto!`.
 # We only dispatch the `copyto!` part (`Base._unsafe_setindex!`) to our implement.
-function Base._unsafe_setindex!(::IndexStyle, A::WrappedGPUArray, x, Is::Vararg{Union{Real,AbstractArray}, N}) where N
-    return vectorized_setindex!(A, x, Base.ensure_indexable(Is)...)
-end
-
-#Implementation for ReshapedArrays using Cartesian indexing to resolve dispatch ties.
-function Base._unsafe_setindex!(::Base.IndexCartesian, A::Base.ReshapedArray{T, N, <:WrappedGPUArray}, x, Is::Vararg{Union{Real, AbstractArray}, M}) where {T, N, M}
-    return vectorized_setindex!(A, x, Base.ensure_indexable(Is)...)
-end
-
-#Implementation for ReshapedArrays using Linear indexing to resolve dispatch ties.
-function Base._unsafe_setindex!(::Base.IndexLinear, A::Base.ReshapedArray{T, N, <:WrappedGPUArray}, x, Is::Vararg{Union{Real, AbstractArray}, M}) where {T, N, M}
+# Also cover the outer `ReshapedArray` that `_maybe_reshape` produces when the parent
+# is a `WrappedGPUArray`. Keeping this in the same `Union` as `WrappedGPUArray` (rather
+# than as a second method) avoids the dispatch ambiguity from #587: the two signatures
+# would otherwise overlap (`WrappedGPUArray` already includes some `ReshapedArray`s)
+# without either being a strict subtype of the other.
+function Base._unsafe_setindex!(::IndexStyle, A::Union{
+            WrappedGPUArray,
+            Base.ReshapedArray{<:Any, <:Any, <:WrappedGPUArray},
+        }, x, Is::Vararg{Union{Real,AbstractArray}, N}) where N
     return vectorized_setindex!(A, x, Base.ensure_indexable(Is)...)
 end
 
