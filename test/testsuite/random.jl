@@ -36,15 +36,13 @@
             @test count(x -> real(x) < 0, Array(A)) > 0
             out = Array(A)
             @test real(out[1]) != imag(out[1])
-
-            # Tuples
-            A = AT{NTuple{2, Int128}}(undef, 1024)
-            rand!(rng, A)
-            @test count(x -> first(x) < 0, Array(A)) > 0
         end
-        A = AT{NTuple{2, Int16}}(undef, 1024)
-        rand!(rng, A)
-        @test count(x -> first(x) < 0, Array(A)) > 0
+        # rand support for Tuple requires at least Julia 1.11
+        if VERSION ≥ v"1.11"
+            A = AT{NTuple{5, Int64}}(undef, 1024)
+            rand!(rng, A)
+            @test allunique(collect(Iterators.flatten(Array(A))))
+        end
     end
 
     @testset "randn" begin  # normally-distributed
