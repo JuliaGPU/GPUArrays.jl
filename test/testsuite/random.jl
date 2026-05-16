@@ -28,18 +28,20 @@
         rand!(rng, A)
         @test false in Array(A)
 
-        # Complex{Int128}
-        A = AT{Complex{Int128}}(undef, 1024)
-        rand!(rng, A)
-        @test count(x -> real(x) < 0, Array(A)) > 0
-        out = Array(A)
-        @test real(out[1]) != imag(out[1])
+        # Int128 is not supported on many backends yet
+        if nameof(AT) == :JLArray
+            # Complex{Int128}
+            A = AT{Complex{Int128}}(undef, 1024)
+            rand!(rng, A)
+            @test count(x -> real(x) < 0, Array(A)) > 0
+            out = Array(A)
+            @test real(out[1]) != imag(out[1])
 
-        # Tuples
-        A = AT{NTuple{2, Int128}}(undef, 1024)
-        rand!(rng, A)
-        @test count(x -> first(x) < 0, Array(A)) > 0
-
+            # Tuples
+            A = AT{NTuple{2, Int128}}(undef, 1024)
+            rand!(rng, A)
+            @test count(x -> first(x) < 0, Array(A)) > 0
+        end
         A = AT{NTuple{2, Int16}}(undef, 1024)
         rand!(rng, A)
         @test count(x -> first(x) < 0, Array(A)) > 0
