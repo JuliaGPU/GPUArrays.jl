@@ -2,10 +2,8 @@
 
 const AbstractArrayOrBroadcasted = Union{AbstractArray,Broadcast.Broadcasted}
 
-# GPUArrays' mapreduce methods build on `Base.mapreducedim!`, but with an additional
-# argument `init` value to avoid eager initialization of `R` (if set to something).
-mapreducedim!(f, op, R::AnyGPUArray, A::AbstractArrayOrBroadcasted;
-              init=nothing) = error("Not implemented") # COV_EXCL_LINE
+# GPUArrays' mapreduce methods delegate to AcceleratedKernels.jl via mapreducedim!.
+
 # resolve ambiguities
 Base.mapreducedim!(f, op, R::AnyGPUArray, A::AbstractArray) = mapreducedim!(f, op, R, A)
 Base.mapreducedim!(f, op, R::AnyGPUArray, A::Broadcast.Broadcasted) = mapreducedim!(f, op, R, A)
@@ -36,6 +34,29 @@ Base.mapreduce(f, op, A::AnyGPUArray, As::AbstractArrayOrBroadcasted...;
                dims=:, init=nothing) = _mapreduce(f, op, A, As...; dims=dims, init=init)
 Base.mapreduce(f, op, A::Broadcast.Broadcasted{<:AbstractGPUArrayStyle}, As::AbstractArrayOrBroadcasted...;
                dims=:, init=nothing) = _mapreduce(f, op, A, As...; dims=dims, init=init)
+
+function mapreducedim!(f::F, op::OP, R::AnyGPUArray{T}, A::AbstractArrayOrBroadcasted;
+                       init=nothing) where {F, OP, T}
+    Base.check_reducedims(R, A)
+    length(A) == 0 && return R
+
+    # add singleton dimensions to the output container, if needed
+    if ndims(R) < ndims(A)
+        new_size = Base.fill_to_length(size(R), 1, Val(ndims(A)))
+        R = reshape(R, new_size)
+    end
+
+    # figure out which dims are being reduced
+    red_dims = Tuple(i for i in 1:ndims(A) if size(R, i) != size(A, i))
+
+    # resolve init and neutral
+    init = init === nothing ? neutral_element(op, T) : init
+    neutral = neutral_element(op, T)
+
+    AcceleratedKernels.mapreduce(f, op, A; init, neutral, dims=red_dims, temp=R)
+
+    return R
+end
 
 function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,N,D}
     # figure out the destination container type by looking at the initializer element,
