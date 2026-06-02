@@ -1,6 +1,6 @@
 # integration with LinearAlgebra stdlib
 
-using LinearAlgebra: MulAddMul, wrap, diagm, BlasReal
+using LinearAlgebra: MulAddMul, wrap, diagm, BlasReal, AbstractTriangular
 
 ## transpose and adjoint
 
@@ -516,6 +516,37 @@ end
             throw(DimensionMismatch(lazy"first array has length $(length(C)) which does not match the length of the second, $(length(X))."))
         end
         @. C = s * X * alpha + C * beta
+        return C
+    end
+    function LinearAlgebra._generic_matmatmul_nonadjtrans!(C::AbstractGPUVecOrMat{R}, A::AbstractTriangular, B::AbstractTriangular, alpha::Number, beta::Number) where {R}
+        if size(A,2) != size(B,1)
+            throw(DimensionMismatch(lazy"matrix A has dimensions $(size(A)), matrix B has dimensions $(size(B))"))
+        end
+        if size(C,1) != size(A,1) || size(C,2) != size(B,2)
+            throw(DimensionMismatch(lazy"result C has dimensions $(size(C)), needs $((size(A,1),size(B,2)))"))
+        end
+        if isempty(A) || isempty(B)
+            return fill!(C, zero(R))
+        end
+        upperA = A isa Union{UnitUpperTriangular, UpperTriangular}
+        upperB = B isa Union{UnitUpperTriangular, UpperTriangular}
+        # this function is ONLY reached if beta is not zero
+        @kernel function trimatmul(C, A, B, alpha, beta)
+            idx = @index(Global, Linear)
+            assume.(size(C) .> 0)
+            i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
+            l, m, n = size(A, 1), size(B, 1), size(B, 2)
+            
+            @inbounds if i <= l && j <= n
+                Cij = beta * C[i,j]
+                Cij += A[i,i] * B[i,j] * alpha
+                for k in (upperA ? (i + 1) : 1):(upperA ? m : (i - 1))
+                    Cij += alpha * A[i,k] * B[k,j]
+                end
+                C[i,j] = Cij
+            end
+        end
+        trimatmul(get_backend(C))(C, A, B, alpha, beta; ndrange = length(C))
         return C
     end
 end

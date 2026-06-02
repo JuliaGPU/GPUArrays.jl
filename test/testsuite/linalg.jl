@@ -185,6 +185,19 @@
                 mul!(C, collect(A), f(TR(collect(B))))
                 @test collect(Ct) ≈ C
             end
+            @testset "matmul! with nonzero β ($TR1 x $TR2)" for T in (Float32, ComplexF32), TR1 in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), TR2 in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
+                if !(T in eltypes)
+                    continue
+                end
+                n = 128
+                A = AT(rand(T, n, n))
+                B = AT(rand(T, n, n))
+                Ct = AT(rand(T, n, n))
+                C = collect(Ct) 
+                mul!(Ct, TR1(A), TR2(B), 1, -1)
+                mul!(C, TR1(collect(A)), TR2(collect(B)), 1, -1)
+                @test collect(Ct) ≈ C
+            end
         end
     end
 
