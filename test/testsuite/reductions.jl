@@ -1,19 +1,3 @@
-@testsuite "reductions/mapreducedim!" (AT, eltypes)->begin
-    @testset "$ET" for ET in eltypes
-        range = ET <: Real ? (ET(1):ET(10)) : ET
-        for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
-                         (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1),
-                         (0,)=>(1,)]
-            @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, sz), zeros(ET, red))
-            @test compare((A,R)->Base.mapreducedim!(identity, *, R, A), AT, rand(range, sz), ones(ET, red))
-            @test compare((A,R)->Base.mapreducedim!(x->x+x, +, R, A), AT, rand(range, sz), zeros(ET, red))
-        end
-
-        # implicit singleton dimensions
-        @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,2)), zeros(ET, (2,)))
-        @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,3)), zeros(ET, (2,)))
-    end
-end
 
 @testsuite "reductions/mapreducedim!_large" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
@@ -31,15 +15,25 @@ end
     end
 end
 
-@testsuite "reductions/reducedim!" (AT, eltypes)->begin
+@testsuite "reductions/mapreducedim!" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
                          (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1),
                          (0,)=>(1,)]
+            # mapreducedim!
+            @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, sz), zeros(ET, red))
+            @test compare((A,R)->Base.mapreducedim!(identity, *, R, A), AT, rand(range, sz), ones(ET, red))
+            @test compare((A,R)->Base.mapreducedim!(x->x+x, +, R, A), AT, rand(range, sz), zeros(ET, red))
+
+            # reducedim!
             @test compare((A,R)->Base.reducedim!(+, R, A), AT, rand(range, sz), zeros(ET, red))
             @test compare((A,R)->Base.reducedim!(*, R, A), AT, rand(range, sz), ones(ET, red))
         end
+
+        # implicit singleton dimensions
+        @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,2)), zeros(ET, (2,)))
+        @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,3)), zeros(ET, (2,)))
     end
 end
 
