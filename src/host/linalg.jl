@@ -264,6 +264,13 @@ function LinearAlgebra.istril(A::AbstractGPUMatrix, k::Integer = 0)
     mapreduce(mapper, reducer, A, eachindex(IndexCartesian(), A); init=true)
 end
 
+# the structure of a triangular wrapper is encoded in its type, so we can answer the
+# opposite-triangle queries in O(1) instead of scanning (which would scalar-index the parent)
+LinearAlgebra.istriu(::LowerTriangular{<:Any, <:AbstractGPUMatrix}) = false
+LinearAlgebra.istriu(::UnitLowerTriangular{<:Any, <:AbstractGPUMatrix}) = false
+LinearAlgebra.istril(::UpperTriangular{<:Any, <:AbstractGPUMatrix}) = false
+LinearAlgebra.istril(::UnitUpperTriangular{<:Any, <:AbstractGPUMatrix}) = false
+
 
 ## diagonal
 
@@ -528,8 +535,8 @@ end
         if isempty(A) || isempty(B)
             return fill!(C, zero(R))
         end
-        upperA = A isa Union{UnitUpperTriangular, UpperTriangular}
-        upperB = B isa Union{UnitUpperTriangular, UpperTriangular}
+        upperA = istriu(A)
+        upperB = istriu(B)
         # this function is ONLY reached if beta is not zero
         @kernel function trimatmul(C, A, B, alpha, beta)
             idx = @index(Global, Linear)
@@ -598,8 +605,8 @@ end
         if isempty(A) || isempty(B)
             return fill!(C, zero(R))
         end
-        upperA = A isa Union{UnitUpperTriangular, UpperTriangular}
-        upperB = B isa Union{UnitUpperTriangular, UpperTriangular}
+        upperA = istriu(A)
+        upperB = istriu(B)
         @kernel function trimatmul(C, A, B)
             idx = @index(Global, Linear)
             assume.(size(C) .> 0)
