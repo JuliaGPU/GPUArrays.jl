@@ -537,7 +537,6 @@ end
         end
         upperA = istriu(A)
         upperB = istriu(B)
-        # this function is ONLY reached if beta is not zero
         @kernel function trimatmul(C, A, B, alpha, beta)
             idx = @index(Global, Linear)
             assume.(size(C) .> 0)
@@ -545,7 +544,8 @@ end
             l, m, n = size(A, 1), size(B, 1), size(B, 2)
             
             @inbounds if i <= l && j <= n
-                Cij = beta * C[i,j]
+                # treat C as write-only when beta is zero (it may hold NaN/Inf)
+                Cij = iszero(beta) ? zero(R) : beta * C[i,j]
                 Cij += A[i,i] * B[i,j] * alpha
                 for k in (upperA ? (i + 1) : 1):(upperA ? m : (i - 1))
                     Cij += alpha * A[i,k] * B[k,j]

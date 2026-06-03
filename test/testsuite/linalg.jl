@@ -198,6 +198,20 @@
                 mul!(C, TR1(collect(A)), TR2(collect(B)), 1, -1)
                 @test collect(Ct) ≈ C
             end
+            @testset "matmul! is write-only for β=0 ($TR1 x $TR2)" for T in (Float32, ComplexF32), TR1 in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), TR2 in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
+                if !(T in eltypes)
+                    continue
+                end
+                n = 128
+                A = AT(rand(T, n, n))
+                B = AT(rand(T, n, n))
+                # C starts as NaN: with β=0 it must be ignored (not multiplied), α≠1 to reach this path
+                Ct = AT(fill(T(NaN), n, n))
+                C = collect(Ct)
+                mul!(Ct, TR1(A), TR2(B), 2, 0)
+                mul!(C, TR1(collect(A)), TR2(collect(B)), 2, 0)
+                @test collect(Ct) ≈ C
+            end
         end
     end
 
