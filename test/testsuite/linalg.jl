@@ -197,6 +197,12 @@
                 mul!(Ct, TR1(A), TR2(B), 1, -1)
                 mul!(C, TR1(collect(A)), TR2(collect(B)), 1, -1)
                 @test collect(Ct) ≈ C
+                # general case: α≠1 and β≠0 together
+                Et = AT(rand(T, n, n))
+                E = collect(Et)
+                mul!(Et, TR1(A), TR2(B), 3, 2)
+                mul!(E, TR1(collect(A)), TR2(collect(B)), 3, 2)
+                @test collect(Et) ≈ E
             end
             @testset "matmul! is write-only for β=0 ($TR1 x $TR2)" for T in (Float32, ComplexF32), TR1 in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), TR2 in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
                 if !(T in eltypes)
