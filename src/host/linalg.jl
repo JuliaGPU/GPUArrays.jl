@@ -551,6 +551,40 @@ end
     end
 end
 
+@static if VERSION < v"1.12.0-rc"
+    function LinearAlgebra._generic_matmatmul!(C::AbstractGPUVecOrMat{R}, tA::Char, tB::Char, A::AbstractTriangular, B::AbstractTriangular, add::LinearAlgebra.MulAddMul) where {R}
+        if size(A,2) != size(B,1)
+            throw(DimensionMismatch(lazy"matrix A has dimensions $(size(A)), matrix B has dimensions $(size(B))"))
+        end
+        if size(C,1) != size(A,1) || size(C,2) != size(B,2)
+            throw(DimensionMismatch(lazy"result C has dimensions $(size(C)), needs $((size(A,1),size(B,2)))"))
+        end
+        if isempty(A) || isempty(B)
+            return fill!(C, zero(R))
+        end
+        upperA = A isa Union{UnitUpperTriangular, UpperTriangular}
+        upperB = B isa Union{UnitUpperTriangular, UpperTriangular}
+        @kernel function trimatmul(C, A, B)
+            idx = @index(Global, Linear)
+            assume.(size(C) .> 0)
+            i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
+            l, m, n = size(A, 1), size(B, 1), size(B, 2)
+            
+            @inbounds if i <= l && j <= n
+                z2 = zero(A[i, 1]*B[1, j] + A[i, 1]*B[1, j])
+                Cij = convert(promote_type(R, typeof(z2)), z2)
+                Cij += A[i,i] * B[i,j]
+                for k in (upperA ? (i + 1) : 1):(upperA ? m : (i - 1))
+                    Cij += A[i,k] * B[k,j]
+                end
+                C[i,j] = add(Cij, C[i, j])
+            end
+        end
+        trimatmul(get_backend(C))(C, A, B; ndrange = length(C))
+        return C
+    end
+end
+
 function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix{T}, B::AbstractGPUVecOrMat{S}) where {T,S,R}
     if size(A,2) != size(B,1)
         throw(DimensionMismatch(lazy"matrix A has dimensions $(size(A)), matrix B has dimensions $(size(B))"))
