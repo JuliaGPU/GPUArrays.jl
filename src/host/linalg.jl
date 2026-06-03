@@ -536,7 +536,6 @@ end
             return fill!(C, zero(R))
         end
         upperA = istriu(A)
-        upperB = istriu(B)
         @kernel function trimatmul(C, A, B, alpha, beta)
             idx = @index(Global, Linear)
             assume.(size(C) .> 0)
@@ -569,10 +568,7 @@ end
         if isempty(A) || isempty(B)
             return fill!(C, zero(R))
         end
-        wA = LinearAlgebra.wrap(A, tA)
-        wB = LinearAlgebra.wrap(B, tB)
         upperA = istriu(A)
-        upperB = istriu(B)
         @kernel function trimatmul(C, A, B)
             idx = @index(Global, Linear)
             assume.(size(C) .> 0)
@@ -606,7 +602,6 @@ end
             return fill!(C, zero(R))
         end
         upperA = istriu(A)
-        upperB = istriu(B)
         @kernel function trimatmul(C, A, B)
             idx = @index(Global, Linear)
             assume.(size(C) .> 0)
