@@ -264,13 +264,6 @@ function LinearAlgebra.istril(A::AbstractGPUMatrix, k::Integer = 0)
     mapreduce(mapper, reducer, A, eachindex(IndexCartesian(), A); init=true)
 end
 
-# the structure of a triangular wrapper is encoded in its type, so we can answer the
-# opposite-triangle queries in O(1) instead of scanning (which would scalar-index the parent)
-LinearAlgebra.istriu(::LowerTriangular{<:Any, <:AbstractGPUMatrix}) = false
-LinearAlgebra.istriu(::UnitLowerTriangular{<:Any, <:AbstractGPUMatrix}) = false
-LinearAlgebra.istril(::UpperTriangular{<:Any, <:AbstractGPUMatrix}) = false
-LinearAlgebra.istril(::UnitUpperTriangular{<:Any, <:AbstractGPUMatrix}) = false
-
 
 ## diagonal
 
@@ -535,13 +528,13 @@ end
         if isempty(A) || isempty(B)
             return fill!(C, zero(R))
         end
-        upperA = istriu(A)
+        upperA = A isa Union{UnitUpperTriangular, UpperTriangular}
         @kernel function trimatmul(C, A, B, alpha, beta)
             idx = @index(Global, Linear)
             assume.(size(C) .> 0)
             i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
             l, m, n = size(A, 1), size(B, 1), size(B, 2)
-            
+
             @inbounds if i <= l && j <= n
                 # treat C as write-only when beta is zero (it may hold NaN/Inf)
                 Cij = iszero(beta) ? zero(R) : beta * C[i,j]
@@ -568,13 +561,13 @@ end
         if isempty(A) || isempty(B)
             return fill!(C, zero(R))
         end
-        upperA = istriu(A)
+        upperA = A isa Union{UnitUpperTriangular, UpperTriangular}
         @kernel function trimatmul(C, A, B)
             idx = @index(Global, Linear)
             assume.(size(C) .> 0)
             i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
             l, m, n = size(A, 1), size(B, 1), size(B, 2)
-            
+
             @inbounds if i <= l && j <= n
                 z2 = zero(A[i, 1]*B[1, j] + A[i, 1]*B[1, j])
                 Cij = convert(promote_type(R, typeof(z2)), z2)
@@ -601,13 +594,13 @@ end
         if isempty(A) || isempty(B)
             return fill!(C, zero(R))
         end
-        upperA = istriu(A)
+        upperA = A isa Union{UnitUpperTriangular, UpperTriangular}
         @kernel function trimatmul(C, A, B)
             idx = @index(Global, Linear)
             assume.(size(C) .> 0)
             i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
             l, m, n = size(A, 1), size(B, 1), size(B, 2)
-            
+
             @inbounds if i <= l && j <= n
                 z2 = zero(A[i, 1]*B[1, j] + A[i, 1]*B[1, j])
                 Cij = convert(promote_type(R, typeof(z2)), z2)
