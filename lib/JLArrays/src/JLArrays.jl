@@ -451,6 +451,16 @@ Adapt.adapt_storage(::Type{<:JLArray{T}}, xs::AbstractArray) where {T} =
 # adapt back to the CPU
 Adapt.adapt_storage(::Type{Array}, xs::JLArray) = convert(Array, xs)
 
+## triangular checks
+LinearAlgebra.istriu(A::LinearAlgebra.UnitUpperTriangular{T, JLMatrix{T}}) where {T} = true
+LinearAlgebra.istriu(A::LinearAlgebra.UpperTriangular{T, JLMatrix{T}}) where {T} = true
+LinearAlgebra.istril(A::LinearAlgebra.UnitUpperTriangular{T, JLMatrix{T}}) where {T} = false
+LinearAlgebra.istril(A::LinearAlgebra.UpperTriangular{T, JLMatrix{T}}) where {T} = false
+
+LinearAlgebra.istriu(A::LinearAlgebra.UnitLowerTriangular{T, JLMatrix{T}}) where {T} = false
+LinearAlgebra.istriu(A::LinearAlgebra.LowerTriangular{T, JLMatrix{T}}) where {T} = false
+LinearAlgebra.istril(A::LinearAlgebra.UnitLowerTriangular{T, JLMatrix{T}}) where {T} = true
+LinearAlgebra.istril(A::LinearAlgebra.LowerTriangular{T, JLMatrix{T}}) where {T} = true 
 
 ## conversions
 
