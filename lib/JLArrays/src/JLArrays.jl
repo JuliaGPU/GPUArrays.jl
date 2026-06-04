@@ -451,7 +451,6 @@ Adapt.adapt_storage(::Type{<:JLArray{T}}, xs::AbstractArray) where {T} =
 # adapt back to the CPU
 Adapt.adapt_storage(::Type{Array}, xs::JLArray) = convert(Array, xs)
 
-
 ## conversions
 
 Base.convert(::Type{T}, x::T) where T <: JLArray = x
