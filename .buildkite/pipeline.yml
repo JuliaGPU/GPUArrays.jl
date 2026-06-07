@@ -27,19 +27,13 @@ steps:
                   Pkg.develop("CUDA")
                   Pkg.activate(package)
 
+                  println("--- :julia: Installing CUDA sublibraries")
                   try
-                    Pkg.develop([
-                      PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore),
-                      PackageSpec(path=joinpath(package, "CUDACore")),
-                      PackageSpec(path=joinpath(package, "CUDATools")),
-                      PackageSpec(path=joinpath(package, "lib", "cupti")),
-                      PackageSpec(path=joinpath(package, "lib", "nvml")),
-                      PackageSpec(path=joinpath(package, "lib", "cublas")),
-                      PackageSpec(path=joinpath(package, "lib", "cusparse")),
-                      PackageSpec(path=joinpath(package, "lib", "cusolver")),
-                      PackageSpec(path=joinpath(package, "lib", "cufft")),
-                      PackageSpec(path=joinpath(package, "lib", "curand")),
-                    ])
+                    Pkg.develop([PackageSpec(; path) for path in (
+                      "CUDACore", "CUDATools", "lib/cupti", "lib/nvml",
+                      "lib/cublas", "lib/cusparse", "lib/cusolver", "lib/cufft", "lib/curand",
+                      "lib/cudnn", "lib/cutensor", "lib/cutensornet", "lib/custatevec"
+                    )])
                     TestEnv.activate()
                   catch err
                     @error "Could not install CUDA.jl" exception=(err,catch_backtrace())
