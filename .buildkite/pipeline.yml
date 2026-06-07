@@ -27,9 +27,8 @@ steps:
                   Pkg.develop("CUDA")
                   Pkg.activate(package)
 
-                  println("--- :julia: Installing CUDA sublibraries")
                   try
-                    Pkg.develop([PackageSpec(; path) for path in (
+                    Pkg.develop([PackageSpec(; path) for path in ("gpuarrayscore",
                       "CUDACore", "CUDATools", "lib/cupti", "lib/nvml",
                       "lib/cublas", "lib/cusparse", "lib/cusolver", "lib/cufft", "lib/curand",
                       "lib/cudnn", "lib/cutensor", "lib/cutensornet", "lib/custatevec"
