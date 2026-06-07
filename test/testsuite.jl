@@ -16,6 +16,8 @@ using Test
 
 using Adapt
 
+using BFloat16s
+
 test_result(@nospecialize(a), @nospecialize(b); kwargs...) = a == b
 test_result(a::Number, b::Number; kwargs...) = ≈(a, b; kwargs...)
 test_result(a::Missing, b::Missing; kwargs...) = true

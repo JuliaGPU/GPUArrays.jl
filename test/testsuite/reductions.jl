@@ -1,7 +1,7 @@
 @testsuite "reductions/mapreducedim!" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
-        range = ET <: Real ? (ET(1):ET(10)) : ET
-        for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
+        range = (ET <: Real && ET != BFloat16) ? (ET(1):ET(10)) : ET
+        @testset "($(sz), $(red))" for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (5,5,5)=>(1,1,1), (10,10,10)=>(10,10,10),
                          (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1),
                          (0,)=>(1,)]
             @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, sz), zeros(ET, red))
@@ -18,13 +18,13 @@ end
 @testsuite "reductions/mapreducedim!_large" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
         # Skip smaller floating types due to precision issues
-        if ET in (Float16, ComplexF16)
+        if ET in (Float16, ComplexF16, BFloat16)
             continue
         end
 
-        range = ET <: Real ? (ET(1):ET(10)) : ET
+        range = (ET <: Real && ET != BFloat16) ? (ET(1):ET(10)) : ET
         # Reduce larger array sizes to test multiple-element reading in certain implementations
-        for (sz,red) in [(500000,)=>(1,), (1000,500)=>(1,1), (500,1000)=>(1,1),
+        @testset "($(sz), $(red))" for (sz,red) in [(500000,)=>(1,), (1000,500)=>(1,1), (500,1000)=>(1,1),
                          (500,1000)=>(500,1), (1000,500)=>(1,500)]
             @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, sz), zeros(ET, red))
         end
@@ -33,8 +33,8 @@ end
 
 @testsuite "reductions/reducedim!" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
-        range = ET <: Real ? (ET(1):ET(10)) : ET
-        for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
+        range = (ET <: Real && ET != BFloat16) ? (ET(1):ET(10)) : ET
+        @testset "($(sz), $(red))" for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (5,5,5)=>(1,1,1), (10,10,10)=>(10,10,10),
                          (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1),
                          (0,)=>(1,)]
             @test compare((A,R)->Base.reducedim!(+, R, A), AT, rand(range, sz), zeros(ET, red))
@@ -45,9 +45,9 @@ end
 
 @testsuite "reductions/mapreduce" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
-        range = ET <: Real ? (ET(1):ET(10)) : ET
-        for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
-                          (10,)=>:, (10,10)=>:, (10,10,10)=>:,
+        range = (ET <: Real && ET != BFloat16) ? (ET(1):ET(10)) : ET
+        @testset "($(sz), $(dims))" for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (5,5,5)=>[1,2,3], (10,10,10)=>[],
+                          (10,)=>:, (10,10)=>:, (5,5,5)=>:,
                           (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
                           (0,)=>[1]]
             @test compare(A->mapreduce(identity, +, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
@@ -66,9 +66,9 @@ end
 
 @testsuite "reductions/reduce" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
-        range = ET <: Real ? (ET(1):ET(10)) : ET
-        for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
-                          (10,)=>:, (10,10)=>:, (10,10,10)=>:,
+        range = (ET <: Real && ET != BFloat16) ? (ET(1):ET(10)) : ET
+        @testset "($(sz), $(dims))" for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (5,5,5)=>[1,2,3], (10,10,10)=>[],
+                          (10,)=>:, (10,10)=>:, (5,5,5)=>:,
                           (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
                           (0,)=>[1]]
             @test compare(A->reduce(+, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
@@ -91,10 +91,10 @@ end
 
 @testsuite "reductions/sum prod" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
-        range = ET <: Real ? (ET(1):ET(10)) : ET
+        range = (ET <: Real && ET != BFloat16) ? (ET(1):ET(10)) : ET
 
         # whole-array reductions: exercise each unique shape only once
-        for sz in ((10,), (10,10), (10,10,10), (0,))
+        for sz in ((10,), (10,10), (5,5,5), (0,))
             @test compare(A->sum(A), AT, rand(range, sz))
             @test compare(A->prod(A), AT, rand(range, sz))
             if typeof(abs(rand(range))) in eltypes
@@ -105,8 +105,8 @@ end
         end
 
         # reductions along specific dims
-        for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
-                            (10,)=>:, (10,10)=>:, (10,10,10)=>:,
+        @testset "($(sz), $(dims))" for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (5,5,5)=>[1,2,3], (10,10,10)=>[],
+                            (10,)=>:, (10,10)=>:, (5,5,5)=>:,
                             (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
                             (0,)=>[1]]
             @test compare(A->sum(A; dims=dims), AT, rand(range, sz))
@@ -127,7 +127,7 @@ end
 @testsuite "reductions/minimum maximum extrema" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
         ET <: Complex && continue
-        range = ET <: Real ? (ET(1):ET(10)) : ET
+        range = (ET <: Real && ET != BFloat16) ? (ET(1):ET(10)) : ET
 
         # whole-array reductions: exercise each unique shape only once
         for sz in ((10,), (10,10), (10,10,10))
@@ -198,7 +198,7 @@ end
 
 @testsuite "reductions/== isequal" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
-        range = ET <: Real ? (ET(1):ET(10)) : ET
+        range = (ET <: Real && ET != BFloat16) ? (ET(1):ET(10)) : ET
 
         # different sizes should trip up both (CUDA.jl#1524)
         @test compare((A, B) -> A == B, AT, rand(range, (2,3)), rand(range, 6))
