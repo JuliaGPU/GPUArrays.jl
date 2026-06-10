@@ -219,6 +219,45 @@
                 @test collect(Ct) ≈ C
             end
         end
+
+        @testset "mul! + Symmetric/Hermitian" begin
+            # with BLAS eltypes these dispatch through generic_matmatmul_wrapper!'s
+            # SymmHemmGeneric path, which must not end up in BLAS.symm!/hemm!
+            @testset "$W{$T}, uplo=$uplo" for T in (Float32, ComplexF32), W in (Symmetric, Hermitian), uplo in (:U, :L)
+                if !(T in eltypes)
+                    continue
+                end
+                n = 128
+                A = AT(rand(T, n, n))
+                B = AT(rand(T, n, n))
+                b = AT(rand(T, n))
+
+                # matrix-matrix, wrapped on either side
+                Ct = AT(zeros(T, n, n))
+                C = zeros(T, n, n)
+                mul!(Ct, W(A, uplo), B)
+                mul!(C, W(collect(A), uplo), collect(B))
+                @test collect(Ct) ≈ C
+
+                mul!(Ct, B, W(A, uplo))
+                mul!(C, collect(B), W(collect(A), uplo))
+                @test collect(Ct) ≈ C
+
+                # general case: α≠1 and β≠0 together
+                Et = AT(rand(T, n, n))
+                E = collect(Et)
+                mul!(Et, W(A, uplo), B, 3, 2)
+                mul!(E, W(collect(A), uplo), collect(B), 3, 2)
+                @test collect(Et) ≈ E
+
+                # matrix-vector
+                ct = AT(zeros(T, n))
+                c = zeros(T, n)
+                mul!(ct, W(A, uplo), b)
+                mul!(c, W(collect(A), uplo), collect(b))
+                @test collect(ct) ≈ c
+            end
+        end
     end
 
     @testset "diagm" begin
