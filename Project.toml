@@ -1,6 +1,6 @@
 name = "GPUArrays"
 uuid = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
-version = "11.5.5"
+version = "11.5.6"
 
 [workspace]
 projects = ["lib/GPUArraysCore", "lib/JLArrays", "test", "docs"]
@@ -26,7 +26,7 @@ JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 JLD2Ext = "JLD2"
 
 [compat]
-Adapt = "4.0"
+Adapt = "4.6.1"
 GPUArraysCore = "= 0.2.0"
 JLD2 = "0.4, 0.5, 0.6"
 KernelAbstractions = "0.9.28, 0.10"
