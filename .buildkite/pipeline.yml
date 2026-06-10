@@ -254,7 +254,7 @@ steps:
                 end
 
                 println("+++ :julia: Running tests")
-                Pkg.test(; coverage=true)'
+                Pkg.test(; coverage=true, test_args=`--all`)'
     agents:
       queue: "juliaecosystem"
       os: "macos"
