@@ -277,7 +277,9 @@ end
         # test with Complex elements as long as f outputs a real
         let x = rand(ComplexF32, 100)
             @test findmax(real, x) == findmax(real, AT(x))
-            @test findmax(abs, x; dims=1) ≈ Array.(findmax(abs, AT(x); dims=1))
+            @test findmax(real, x; dims=1) == Array.(findmax(real, AT(x); dims=1))
+            @test findmin(real, x) == findmin(real, AT(x))
+            @test findmin(real, x; dims=1) == Array.(findmin(real, AT(x); dims=1))
         end
     end
 
