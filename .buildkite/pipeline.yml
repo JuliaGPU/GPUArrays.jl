@@ -52,8 +52,7 @@ steps:
                 println("+++ :julia: Running tests")
                 Pkg.test(; coverage=true)'
     agents:
-      queue: "juliagpu"
-      cuda: "*"
+      queue: "cuda"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 120
     soft_fail:
@@ -99,8 +98,7 @@ steps:
                 println("+++ :julia: Running tests")
                 Pkg.test(; coverage=true)'
     agents:
-      queue: "juliagpu"
-      cuda: "*"
+      queue: "cuda"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 120
     matrix:
@@ -150,8 +148,7 @@ steps:
                 println("+++ :julia: Running tests")
                 Pkg.test(; coverage=true)'
     agents:
-      queue: "juliagpu"
-      rocm: "*"
+      queue: "rocm"
       rocmgpu: "*"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 120
@@ -204,8 +201,7 @@ steps:
                 println("+++ :julia: Running tests")
                 Pkg.test(; coverage=true)'
     agents:
-      queue: "juliagpu"
-      intel: "*"
+      queue: "oneapi"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
     matrix:
@@ -256,9 +252,7 @@ steps:
                 println("+++ :julia: Running tests")
                 Pkg.test(; coverage=true)'
     agents:
-      queue: "juliaecosystem"
-      os: "macos"
-      arch: "aarch64"
+      queue: "metal"
     if: build.message !~ /\[skip tests\]/
     timeout_in_minutes: 60
     matrix:
