@@ -1,19 +1,3 @@
-@testsuite "reductions/mapreducedim!" (AT, eltypes)->begin
-    @testset "$ET" for ET in eltypes
-        range = ET <: Real ? (ET(1):ET(10)) : ET
-        for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
-                         (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1),
-                         (0,)=>(1,)]
-            @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, sz), zeros(ET, red))
-            @test compare((A,R)->Base.mapreducedim!(identity, *, R, A), AT, rand(range, sz), ones(ET, red))
-            @test compare((A,R)->Base.mapreducedim!(x->x+x, +, R, A), AT, rand(range, sz), zeros(ET, red))
-        end
-
-        # implicit singleton dimensions
-        @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,2)), zeros(ET, (2,)))
-        @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,3)), zeros(ET, (2,)))
-    end
-end
 
 @testsuite "reductions/mapreducedim!_large" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
@@ -31,15 +15,25 @@ end
     end
 end
 
-@testsuite "reductions/reducedim!" (AT, eltypes)->begin
+@testsuite "reductions/mapreducedim!" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
         for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
                          (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1),
                          (0,)=>(1,)]
+            # mapreducedim!
+            @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, sz), zeros(ET, red))
+            @test compare((A,R)->Base.mapreducedim!(identity, *, R, A), AT, rand(range, sz), ones(ET, red))
+            @test compare((A,R)->Base.mapreducedim!(x->x+x, +, R, A), AT, rand(range, sz), zeros(ET, red))
+
+            # reducedim!
             @test compare((A,R)->Base.reducedim!(+, R, A), AT, rand(range, sz), zeros(ET, red))
             @test compare((A,R)->Base.reducedim!(*, R, A), AT, rand(range, sz), ones(ET, red))
         end
+
+        # implicit singleton dimensions
+        @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,2)), zeros(ET, (2,)))
+        @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,3)), zeros(ET, (2,)))
     end
 end
 
@@ -50,9 +44,14 @@ end
                           (10,)=>:, (10,10)=>:, (10,10,10)=>:,
                           (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
                           (0,)=>[1]]
+            # mapreduce
             @test compare(A->mapreduce(identity, +, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
             @test compare(A->mapreduce(identity, *, A; dims=dims, init=one(ET)), AT, rand(range, sz))
             @test compare(A->mapreduce(x->x+x, +, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
+
+            # reduce
+            @test compare(A->reduce(+, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
+            @test compare(A->reduce(*, A; dims=dims, init=one(ET)), AT, rand(range, sz))
         end
     end
     # Test more corner cases. Tests from AcceleraterKernels.jl
@@ -61,30 +60,6 @@ end
     for dims in [1,2,3,4,[1,2],[1,3],[1,4],[2,3],[2,4],[3,4],[1,2,3],[1,2,4],[1,3,4],[2,3,4],[1,2,3,4]],
         isize in (0, 3), jsize in (0, 3), ksize in (0, 3)
         @test compare(A->mapreduce(x->x+x, +, A; init=zero(Int32), dims), AT, rand(Int32(1):Int32(10), isize, jsize, ksize))
-    end
-end
-
-@testsuite "reductions/reduce" (AT, eltypes)->begin
-    @testset "$ET" for ET in eltypes
-        range = ET <: Real ? (ET(1):ET(10)) : ET
-        for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
-                          (10,)=>:, (10,10)=>:, (10,10,10)=>:,
-                          (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
-                          (0,)=>[1]]
-            @test compare(A->reduce(+, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
-            @test compare(A->reduce(*, A; dims=dims, init=one(ET)), AT, rand(range, sz))
-            if ET <: Integer
-                @test compare(A->reduce(&, A; dims=dims, init=~zero(ET)), AT, rand(range, sz))
-                @test compare(A->reduce(|, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
-                @test compare(A->reduce(⊻, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
-            end
-        end
-    end
-    # Test more corner cases. Tests from AcceleraterKernels.jl
-    # Cover empty (size 0) and non-singleton (size 3) axes; the size-10 loop above
-    # already covers the common non-edge shape.
-    for dims in [1,2,3,4,[1,2],[1,3],[1,4],[2,3],[2,4],[3,4],[1,2,3],[1,2,4],[1,3,4],[2,3,4],[1,2,3,4]],
-        isize in (0, 3), jsize in (0, 3), ksize in (0, 3)
         @test compare(A->reduce(+, A; init=zero(Int32), dims), AT, rand(Int32(1):Int32(10), isize, jsize, ksize))
     end
 end
@@ -120,6 +95,20 @@ end
                 @test compare((A,R)->sum!(R, A), AT, rand(range, sz), rand(ET, red))
                 @test compare((A,R)->prod!(R, A), AT, rand(range, sz), rand(ET, red))
             end
+        end
+    end
+end
+
+@testsuite "reductions/and or xor" (AT, eltypes)->begin
+    @testset "$ET" for ET in filter(x -> x <: Integer, eltypes)
+        range = ET <: Real ? (ET(1):ET(10)) : ET
+        for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
+                          (10,)=>:, (10,10)=>:, (10,10,10)=>:,
+                          (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
+                          (0,)=>[1]]
+            @test compare(A->reduce(&, A; dims=dims, init=~zero(ET)), AT, rand(range, sz))
+            @test compare(A->reduce(|, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
+            @test compare(A->reduce(⊻, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
         end
     end
 end
