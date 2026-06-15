@@ -274,6 +274,11 @@ end
             @test isequal(findmin(x; dims=2), Array.(findmin(AT(x); dims=2)))
             @test isequal(findmin(x; dims=3), Array.(findmin(AT(x); dims=3)))
         end
+        # test with Complex elements as long as f outputs a real
+        let x = rand(ComplexF32, 100)
+            @test findmax(abs, x) == findmax(abs, AT(x))
+            @test findmax(abs, x; dims=1) == Array.(findmax(abs, AT(x); dims=1))
+        end
     end
 
     @testset "argmax & argmin" begin
