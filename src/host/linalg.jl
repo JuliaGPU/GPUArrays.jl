@@ -857,7 +857,7 @@ function _normtypes(::Type{T}) where {T}
 end
 
 ## normalize
-
+@static if VERSION < v"1.14.0-DEV.2264" # no longer needed as of JuliaLang/LinearAlgebra#1634
 # Avoid `first(a)` scalar indexing in LinearAlgebra.normalize (JuliaGPU/CUDA.jl#3097)
 function LinearAlgebra.normalize(a::AnyGPUArray, p::Real=2)
     nrm = norm(a, p)
@@ -870,7 +870,7 @@ function LinearAlgebra.normalize(a::AnyGPUArray, p::Real=2)
         return T[]
     end
 end
-
+end
 ## opnorm
 
 function LinearAlgebra.opnorm1(A::AnyGPUArray{T,2}) where {T}
