@@ -157,6 +157,11 @@ function vector_construction(AT, eltypes)
 
         dense_x = dense_AT(collect(x))
         @test SparseVector(dense_x) == x
+        if dense_x isa GPUArrays.AnyGPUArray
+            typed_d_x = GPUArrays.sparse_from_dense(typeof(d_x), dense_x)
+            @test typed_d_x isa typeof(d_x)
+            @test SparseVector(typed_d_x) == x
+        end
         @test sparse(dense_x) isa AT{ET}
         @test SparseVector(sparse(dense_x)) == x
     end
@@ -239,6 +244,11 @@ function matrix_construction(AT, eltypes)
 
         dense_x = dense_AT(collect(x))
         @test SparseMatrixCSC(dense_x) == x
+        if dense_x isa GPUArrays.AnyGPUArray
+            typed_d_x = GPUArrays.sparse_from_dense(typeof(d_x), dense_x)
+            @test typed_d_x isa typeof(d_x)
+            @test SparseMatrixCSC(typed_d_x) == x
+        end
         @test sparse(dense_x) isa GPUArrays.sparse_array_type(dense_x){ET}
         @test SparseMatrixCSC(sparse(dense_x)) == x
         if dense_x isa GPUArrays.AnyGPUArray

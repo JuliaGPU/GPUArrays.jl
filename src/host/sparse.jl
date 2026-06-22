@@ -44,55 +44,67 @@ Base.iszero(A::AbstractGPUSparseArray) = SparseArrays.nnz(A) == 0 || all(iszero,
 SparseArrays.SparseVector(x::AbstractGPUSparseVector) = SparseVector(length(x), Array(SparseArrays.nonzeroinds(x)), Array(SparseArrays.nonzeros(x)))
 SparseArrays.SparseMatrixCSC(x::AbstractGPUSparseMatrixCSC) = SparseMatrixCSC(size(x)..., Array(SparseArrays.getcolptr(x)), Array(SparseArrays.rowvals(x)), Array(SparseArrays.nonzeros(x)))
 
-@kernel function dense_sparse_values_kernel!(values, A, indices)
+function check_sparse_target(::Type{ST}, ::Type{Tv}, ::Type{Ti}) where {ST,Tv,Ti}
+    Tv isa Type && Ti isa Type ||
+        throw(ArgumentError("sparse target type $ST must specify value and index eltypes"))
+    return
+end
+
+@kernel function dense_sparse_vector_kernel!(iPtr, nzVal, A, indices)
     i = @index(Global, Linear)
     if i <= length(indices)
-        @inbounds values[i] = A[indices[i]]
+        @inbounds begin
+            idx = indices[i]
+            iPtr[i] = idx
+            nzVal[i] = A[idx]
+        end
     end
 end
 
-function dense_sparse_values(A::AnyGPUArray{Tv}, indices) where {Tv}
-    values = similar(A, Tv, length(indices))
-    if !isempty(values)
-        dense_sparse_values_kernel!(get_backend(A))(values, A, indices; ndrange=length(indices))
+@kernel function dense_sparse_matrix_kernel!(rowInd, colInd, nzVal, A, indices)
+    i = @index(Global, Linear)
+    if i <= length(indices)
+        @inbounds begin
+            idx = indices[i]
+            rowInd[i] = idx[1]
+            colInd[i] = idx[2]
+            nzVal[i] = A[idx]
+        end
     end
-    return values
 end
 
-function SparseArrays.SparseVector(x::AnyGPUVector)
-    inds = findall(!iszero, x)
-    vals = dense_sparse_values(x, inds)
-    host_inds = Array(inds)
-    host_vals = Array(vals)
-    unsafe_free!(inds)
-    unsafe_free!(vals)
-    return SparseVector(length(x), host_inds, host_vals)
+function sparse_from_dense(::Type{ST}, A::AnyGPUVector) where {Tv,Ti,ST<:AbstractGPUSparseVector{Tv,Ti}}
+    check_sparse_target(ST, Tv, Ti)
+    indices = findall(!iszero, A)
+    nstored = length(indices)
+    iPtr = similar(A, Ti, nstored)
+    nzVal = similar(A, Tv, nstored)
+    if nstored > 0
+        dense_sparse_vector_kernel!(get_backend(A))(iPtr, nzVal, A, indices;
+                                                    ndrange=nstored)
+    end
+    unsafe_free!(indices)
+    return ST(iPtr, nzVal, length(A))
 end
 
-function SparseArrays.SparseMatrixCSC(x::AnyGPUMatrix)
-    inds = findall(!iszero, x)
-    vals = dense_sparse_values(x, inds)
-    host_inds = Array(inds)
-    host_vals = Array(vals)
-    unsafe_free!(inds)
-    unsafe_free!(vals)
+function sparse_from_dense(::Type{ST}, A::AnyGPUMatrix) where {Tv,Ti,ST<:AbstractGPUSparseMatrix{Tv,Ti}}
+    check_sparse_target(ST, Tv, Ti)
+    indices = findall(!iszero, A)
+    nstored = length(indices)
+    rowInd = similar(A, Ti, nstored)
+    colInd = similar(A, Ti, nstored)
+    nzVal = similar(A, Tv, nstored)
+    if nstored > 0
+        dense_sparse_matrix_kernel!(get_backend(A))(rowInd, colInd, nzVal, A, indices;
+                                                    ndrange=nstored)
+    end
+    unsafe_free!(indices)
 
-    rows = getindex.(host_inds, 1)
-    cols = getindex.(host_inds, 2)
-    return sparse(rows, cols, host_vals, size(x)...)
-end
-
-function SparseArrays.sparse(A::AnyGPUVector)
-    sparse_array_type(A)(SparseVector(A))
-end
-
-function SparseArrays.sparse(A::AnyGPUMatrix; fmt=:csc)
-    if fmt == :csc
-        return sparse_array_type(A)(SparseMatrixCSC(A))
-    elseif fmt == :csr
-        return csr_type(sparse_array_type(A))(SparseMatrixCSC(A))
+    if ST <: AbstractGPUSparseMatrixCOO
+        return ST(rowInd, colInd, nzVal, size(A), nstored)
     else
-        throw(ArgumentError("format :$fmt not available, use :csc or :csr"))
+        COO = coo_type(ST)
+        return ST(COO{Tv,Ti}(rowInd, colInd, nzVal, size(A), nstored))
     end
 end
 

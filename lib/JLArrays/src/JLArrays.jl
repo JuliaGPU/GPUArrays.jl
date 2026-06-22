@@ -435,6 +435,9 @@ function JLSparseVector(xs::SparseVector{Tv, Ti}) where {Ti, Tv}
     copyto!(nzVal, convert(Vector{Tv}, xs.nzval))
     return JLSparseVector{Tv, Ti}(iPtr, nzVal, length(xs),)
 end
+SparseArrays.SparseVector(xs::JLArray{<:Any,1}) = SparseVector(JLSparseVector(xs))
+JLSparseVector(xs::JLArray{T,1}) where {T} =
+    GPUArrays.sparse_from_dense(JLSparseVector{T,Int}, xs)
 Base.length(x::JLSparseVector) = x.len
 Base.size(x::JLSparseVector) = (x.len,)
 
@@ -447,8 +450,10 @@ function JLSparseMatrixCSC(xs::SparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
     copyto!(nzVal,  convert(Vector{Tv}, xs.nzval))
     return JLSparseMatrixCSC{Tv, Ti}(colPtr, rowVal, nzVal, (xs.m, xs.n))
 end
+SparseArrays.SparseMatrixCSC(xs::JLArray{<:Any,2}) = SparseMatrixCSC(JLSparseMatrixCSC(xs))
 JLSparseMatrixCSC(xs::SparseVector) = JLSparseMatrixCSC(SparseMatrixCSC(xs))
-JLSparseMatrixCSC(xs::JLArray{<:Any,2}) = JLSparseMatrixCSC(SparseMatrixCSC(xs))
+JLSparseMatrixCSC(xs::JLArray{T,2}) where {T} =
+    GPUArrays.sparse_from_dense(JLSparseMatrixCSC{T,Int}, xs)
 Base.length(x::JLSparseMatrixCSC) = prod(x.dims)
 Base.size(x::JLSparseMatrixCSC) = x.dims
 
@@ -463,18 +468,23 @@ function JLSparseMatrixCSR(xs::SparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
     return JLSparseMatrixCSR{Tv, Ti}(rowPtr, colVal, nzVal, (xs.m, xs.n))
 end
 JLSparseMatrixCSR(xs::SparseVector{Tv, Ti}) where {Ti, Tv} = JLSparseMatrixCSR(SparseMatrixCSC(xs))
-JLSparseMatrixCSR(xs::JLArray{<:Any,2}) = JLSparseMatrixCSR(SparseMatrixCSC(xs))
+JLSparseMatrixCSR(xs::JLArray{T,2}) where {T} =
+    GPUArrays.sparse_from_dense(JLSparseMatrixCSR{T,Int}, xs)
 function JLSparseMatrixCOO(xs::SparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
     rowInd, colInd, nzVal = findnz(xs)
     return JLSparseMatrixCOO{Tv, Ti}(JLVector{Ti}(rowInd), JLVector{Ti}(colInd),
                                      JLVector{Tv}(nzVal), (xs.m, xs.n))
 end
 JLSparseMatrixCOO(xs::SparseVector) = JLSparseMatrixCOO(SparseMatrixCSC(xs))
-JLSparseMatrixCOO(xs::JLArray{<:Any,2}) = JLSparseMatrixCOO(SparseMatrixCSC(xs))
+JLSparseMatrixCOO(xs::JLArray{T,2}) where {T} =
+    GPUArrays.sparse_from_dense(JLSparseMatrixCOO{T,Int}, xs)
 function JLSparseMatrixCSR(xs::JLSparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
     return JLSparseMatrixCSR(SparseMatrixCSC(xs))
 end
 function JLSparseMatrixCOO(xs::Union{JLSparseMatrixCSC{Tv, Ti},JLSparseMatrixCSR{Tv, Ti}}) where {Tv, Ti}
+    return JLSparseMatrixCOO(SparseMatrixCSC(xs))
+end
+function JLSparseMatrixCOO{Tv,Ti}(xs::Union{JLSparseMatrixCSC{Tv, Ti},JLSparseMatrixCSR{Tv, Ti}}) where {Tv, Ti}
     return JLSparseMatrixCOO(SparseMatrixCSC(xs))
 end
 function JLSparseMatrixCSC(xs::JLSparseMatrixCSR{Tv, Ti}) where {Ti, Tv}
@@ -483,9 +493,31 @@ end
 function JLSparseMatrixCSC(xs::JLSparseMatrixCOO{Tv, Ti}) where {Ti, Tv}
     return JLSparseMatrixCSC(SparseMatrixCSC(xs))
 end
+function JLSparseMatrixCSC{Tv,Ti}(xs::JLSparseMatrixCOO{Tv, Ti}) where {Ti, Tv}
+    return JLSparseMatrixCSC(SparseMatrixCSC(xs))
+end
 function JLSparseMatrixCSR(xs::JLSparseMatrixCOO{Tv, Ti}) where {Ti, Tv}
     return JLSparseMatrixCSR(SparseMatrixCSC(xs))
 end
+function JLSparseMatrixCSR{Tv,Ti}(xs::JLSparseMatrixCOO{Tv, Ti}) where {Ti, Tv}
+    return JLSparseMatrixCSR(SparseMatrixCSC(xs))
+end
+
+SparseArrays.sparse(xs::JLArray{T,1}) where {T} =
+    GPUArrays.sparse_from_dense(JLSparseVector{T,Int}, xs)
+
+function SparseArrays.sparse(xs::JLArray{T,2}; fmt=:csc) where {T}
+    if fmt == :csc
+        return GPUArrays.sparse_from_dense(JLSparseMatrixCSC{T,Int}, xs)
+    elseif fmt == :csr
+        return GPUArrays.sparse_from_dense(JLSparseMatrixCSR{T,Int}, xs)
+    elseif fmt == :coo
+        return GPUArrays.sparse_from_dense(JLSparseMatrixCOO{T,Int}, xs)
+    else
+        throw(ArgumentError("format :$fmt not available, use :csc, :csr, or :coo"))
+    end
+end
+
 function Base.copyto!(dst::JLSparseMatrixCSR, src::JLSparseMatrixCSR)
     if size(dst) != size(src)
         throw(ArgumentError("Inconsistent Sparse Matrix size"))
