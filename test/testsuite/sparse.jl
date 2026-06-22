@@ -414,32 +414,45 @@ function mapreduce_matrix(AT, eltypes)
             x = sprand(ET, m, n, p)
             dx = AT(x)
 
+            # The `abs`-reductions below produce a result of element type `RT`; for some
+            # input eltypes that is a type the back-end can't allocate (e.g. `abs` of a
+            # `Complex{<:Integer}` is `Float64`, unsupported on Metal). Only exercise them
+            # when the back-end supports the result type; `sum` keeps the input eltype and
+            # is always tested.
+            RT = typeof(abs(zero(ET)))
+
             # dim=:
             y  = sum(x)
             dy = sum(dx)
             @test y ≈ dy
 
-            y  = mapreduce(abs, +, x)
-            dy = mapreduce(abs, +, dx)
-            @test y ≈ dy
+            if RT in eltypes
+                y  = mapreduce(abs, +, x)
+                dy = mapreduce(abs, +, dx)
+                @test y ≈ dy
+            end
 
             # dim=1
             y  = sum(x, dims=1)
             dy = sum(dx, dims=1)
             @test y ≈ Array(dy)
 
-            y  = mapreduce(abs, +, x, dims=1)
-            dy = mapreduce(abs, +, dx, dims=1)
-            @test y ≈ Array(dy)
+            if RT in eltypes
+                y  = mapreduce(abs, +, x, dims=1)
+                dy = mapreduce(abs, +, dx, dims=1)
+                @test y ≈ Array(dy)
+            end
 
             # dim=2
             y = sum(x, dims=2)
             dy = sum(dx, dims=2)
             @test y ≈ Array(dy)
 
-            y  = mapreduce(abs, +, x, dims=2)
-            dy = mapreduce(abs, +, dx, dims=2)
-            @test y ≈ Array(dy)
+            if RT in eltypes
+                y  = mapreduce(abs, +, x, dims=2)
+                dy = mapreduce(abs, +, dx, dims=2)
+                @test y ≈ Array(dy)
+            end
             if ET in (Float32, Float64)
                 dy = mapreduce(abs, +, dx; init=zero(ET))
                 y  = mapreduce(abs, +, x; init=zero(ET))
@@ -447,13 +460,15 @@ function mapreduce_matrix(AT, eltypes)
             end
 
             # test with a matrix with fully empty rows
-            x = zeros(ET, m, n)
-            x[2, :] .= -one(ET)
-            x[2, end] = -ET(16)
-            dx = AT(sparse(x))
-            y  = mapreduce(abs, max, x)
-            dy = mapreduce(abs, max, dx)
-            @test y ≈ dy
+            if RT in eltypes
+                x = zeros(ET, m, n)
+                x[2, :] .= -one(ET)
+                x[2, end] = -ET(16)
+                dx = AT(sparse(x))
+                y  = mapreduce(abs, max, x)
+                dy = mapreduce(abs, max, dx)
+                @test y ≈ dy
+            end
         end
     end
 end
