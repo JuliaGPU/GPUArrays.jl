@@ -2,14 +2,14 @@
     sparse_ATs = sparse_types(AT)
     for sparse_AT in sparse_ATs
         if sparse_AT <: AbstractSparseVector
-            vector(sparse_AT, eltypes)
-            vector_construction(sparse_AT, eltypes)
-            broadcasting_vector(sparse_AT, eltypes)
+            vector(sparse_AT, AT, eltypes)
+            vector_construction(sparse_AT, AT, eltypes)
+            broadcasting_vector(sparse_AT, AT, eltypes)
             iszero_vector(sparse_AT, eltypes)
         elseif sparse_AT <: AbstractSparseMatrix
             matrix(sparse_AT, eltypes)
-            matrix_construction(sparse_AT, eltypes)
-            broadcasting_matrix(sparse_AT, eltypes)
+            matrix_construction(sparse_AT, AT, eltypes)
+            broadcasting_matrix(sparse_AT, AT, eltypes)
             mapreduce_matrix(sparse_AT, eltypes)
             linalg(sparse_AT, eltypes)
             iszero_matrix(sparse_AT, eltypes)
@@ -68,6 +68,12 @@ function coo_lhs(::Type{T}) where {T<:Complex}
     ]
 end
 
+# A non-zero-preserving broadcast densifies its result: GPU back-ends return the dense
+# array type `dense_AT`, whereas CPU `SparseArrays` returns its sparse type with every
+# entry explicitly stored. Accept either so the suite is meaningful for both.
+is_densified(x, dense_AT, ::Type{ET}) where {ET} =
+    dense_AT <: GPUArrays.AnyGPUArray ? x isa dense_AT{ET} : (issparse(x) && eltype(x) === ET)
+
 function coo_matmul(AT, dense_AT, eltypes)
     for ET in (Float16, Float32, ComplexF16, ComplexF32)
         ET in eltypes || continue
@@ -103,8 +109,7 @@ function coo_matmul(AT, dense_AT, eltypes)
     end
 end
 
-function vector(AT, eltypes)
-    dense_AT = GPUArrays.dense_array_type(AT)
+function vector(AT, dense_AT, eltypes)
     for ET in eltypes
         @testset "Sparse vector properties($ET)" begin
             m = 25
@@ -141,8 +146,7 @@ function vector(AT, eltypes)
     end
 end
 
-function vector_construction(AT, eltypes)
-    dense_AT = GPUArrays.dense_array_type(AT)
+function vector_construction(AT, dense_AT, eltypes)
     for ET in eltypes
         m = 25
         n = 35
@@ -158,7 +162,7 @@ function vector_construction(AT, eltypes)
         dense_x = dense_AT(collect(x))
         @test SparseVector(dense_x) == x
         if dense_x isa GPUArrays.AnyGPUArray
-            typed_d_x = GPUArrays.sparse_from_dense(typeof(d_x), dense_x)
+            typed_d_x = AT(dense_x)
             @test typed_d_x isa typeof(d_x)
             @test SparseVector(typed_d_x) == x
         end
@@ -168,7 +172,6 @@ function vector_construction(AT, eltypes)
 end
 
 function matrix(AT, eltypes)
-    dense_AT = GPUArrays.dense_array_type(AT)
     for ET in eltypes
         @testset "Sparse matrix properties($ET)" begin
             m = 25
@@ -224,8 +227,7 @@ function matrix(AT, eltypes)
     end
 end
 
-function matrix_construction(AT, eltypes)
-    dense_AT = GPUArrays.dense_array_type(AT)
+function matrix_construction(AT, dense_AT, eltypes)
     for ET in eltypes
         m = 25
         n = 35
@@ -245,11 +247,11 @@ function matrix_construction(AT, eltypes)
         dense_x = dense_AT(collect(x))
         @test SparseMatrixCSC(dense_x) == x
         if dense_x isa GPUArrays.AnyGPUArray
-            typed_d_x = GPUArrays.sparse_from_dense(typeof(d_x), dense_x)
+            typed_d_x = AT(dense_x)
             @test typed_d_x isa typeof(d_x)
             @test SparseMatrixCSC(typed_d_x) == x
         end
-        @test sparse(dense_x) isa GPUArrays.sparse_array_type(dense_x){ET}
+        @test issparse(sparse(dense_x))
         @test SparseMatrixCSC(sparse(dense_x)) == x
         if dense_x isa GPUArrays.AnyGPUArray
             @test SparseMatrixCSC(sparse(dense_x; fmt=:csr)) == x
@@ -257,8 +259,7 @@ function matrix_construction(AT, eltypes)
     end
 end
 
-function broadcasting_vector(AT, eltypes)
-    dense_AT = GPUArrays.dense_array_type(AT)
+function broadcasting_vector(AT, dense_AT, eltypes)
     for ET in eltypes
         @testset "SparseVector($ET)" begin
             m  = 64
@@ -278,14 +279,14 @@ function broadcasting_vector(AT, eltypes)
             # not zero-preserving
             y  = x  .+ ET(1)
             dy = dx .+ ET(1)
-            @test dy isa dense_AT{ET}
+            @test is_densified(dy, dense_AT, ET)
             hy = Array(dy)
             @test Array(y) == hy
 
             # involving something dense
             y  = x  .+ ones(ET, m)
             dy = dx .+ dense_AT(ones(ET, m))
-            @test dy isa dense_AT{ET}
+            @test is_densified(dy, dense_AT, ET)
             @test Array(y) == Array(dy)
 
             # sparse to sparse
@@ -316,7 +317,7 @@ function broadcasting_vector(AT, eltypes)
             dw = AT(w)
             z  = @. x  * y  * w  * dense_arr
             dz = @. dx * dy * dw * d_dense_arr
-            @test dz isa dense_AT{ET}
+            @test is_densified(dz, dense_AT, ET)
             @test Array(z) == Array(dz)
             
             y  = sprand(ET, m, p)
@@ -332,7 +333,7 @@ function broadcasting_vector(AT, eltypes)
             dx = AT(x)
             dy = dx .+ 1
             y  = x .+ 1
-            @test dy isa dense_AT{promote_type(ET, Int)}
+            @test is_densified(dy, dense_AT, promote_type(ET, Int))
             @test Array(y) == Array(dy)
             ## zero-preserving
             dy = dx .* 1
@@ -346,8 +347,7 @@ function broadcasting_vector(AT, eltypes)
     end
 end
 
-function broadcasting_matrix(AT, eltypes)
-    dense_AT = GPUArrays.dense_array_type(AT)
+function broadcasting_matrix(AT, dense_AT, eltypes)
     for ET in eltypes
        @testset "SparseMatrix($ET)" begin
             m, n = 5, 6
@@ -363,7 +363,7 @@ function broadcasting_matrix(AT, eltypes)
             # not zero-preserving
             y  = x  .+ ET(1)
             dy = dx .+ ET(1)
-            @test dy isa dense_AT{ET}
+            @test is_densified(dy, dense_AT, ET)
             hy = Array(dy)
             dense_y = Array(y)
             @test Array(y) == Array(dy)
@@ -371,7 +371,7 @@ function broadcasting_matrix(AT, eltypes)
             # involving something dense
             y  = x  .* ones(ET, m, n)
             dy = dx .* dense_AT(ones(ET, m, n))
-            @test dy isa dense_AT{ET}
+            @test is_densified(dy, dense_AT, ET)
             @test Array(y) == Array(dy)
             
             # multiple inputs
@@ -407,7 +407,6 @@ function broadcasting_matrix(AT, eltypes)
 end
 
 function mapreduce_matrix(AT, eltypes)
-    dense_AT = GPUArrays.dense_array_type(AT)
     for ET in eltypes
         @testset "SparseMatrix($ET)" begin
             m,n = 5,6
@@ -460,7 +459,6 @@ function mapreduce_matrix(AT, eltypes)
 end
 
 function linalg(AT, eltypes)
-    dense_AT = GPUArrays.dense_array_type(AT)
     for ET in eltypes
         # sprandn doesn't work nicely with these...
         if !(ET <: Union{Int16, Int32, Int64, Complex{Int16}, Complex{Int32}, Complex{Int64}})

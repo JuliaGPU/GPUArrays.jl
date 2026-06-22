@@ -87,7 +87,11 @@ function sparse_from_dense(::Type{ST}, A::AnyGPUVector) where {Tv,Ti,ST<:Abstrac
     return ST(iPtr, nzVal, length(A))
 end
 
-function sparse_from_dense(::Type{ST}, A::AnyGPUMatrix) where {Tv,Ti,ST<:AbstractGPUSparseMatrix{Tv,Ti}}
+# Densifying a dense array naturally produces coordinate (COO) format, so this builds a
+# COO directly. Other formats are obtained by converting the COO with `sparse_csr`/
+# `sparse_csc` (which back-ends already provide as constructors), avoiding any need to map
+# a target type to its COO sibling.
+function sparse_from_dense(::Type{ST}, A::AnyGPUMatrix) where {Tv,Ti,ST<:AbstractGPUSparseMatrixCOO{Tv,Ti}}
     check_sparse_target(ST, Tv, Ti)
     indices = findall(!iszero, A)
     nstored = length(indices)
@@ -99,34 +103,23 @@ function sparse_from_dense(::Type{ST}, A::AnyGPUMatrix) where {Tv,Ti,ST<:Abstrac
                                                     ndrange=nstored)
     end
     unsafe_free!(indices)
-
-    if ST <: AbstractGPUSparseMatrixCOO
-        return ST(rowInd, colInd, nzVal, size(A), nstored)
-    else
-        COO = coo_type(ST)
-        return ST(COO{Tv,Ti}(rowInd, colInd, nzVal, size(A), nstored))
-    end
+    return ST(rowInd, colInd, nzVal, size(A), nstored)
 end
 
 # similar
 Base.similar(Vec::V) where {V<:AbstractGPUSparseVector} = V(copy(SparseArrays.nonzeroinds(Vec)), similar(SparseArrays.nonzeros(Vec)), length(Vec))
 Base.similar(Mat::M) where {M<:AbstractGPUSparseMatrixCSC} = M(copy(SparseArrays.getcolptr(Mat)), copy(SparseArrays.rowvals(Mat)), similar(SparseArrays.nonzeros(Mat)), size(Mat))
 
-Base.similar(Vec::V, T::Type) where {Tv, Ti, V<:AbstractGPUSparseVector{Tv, Ti}} = sparse_array_type(V){T, Ti}(copy(SparseArrays.nonzeroinds(Vec)), similar(SparseArrays.nonzeros(Vec), T), length(Vec))
-Base.similar(Mat::M, T::Type) where {M<:AbstractGPUSparseMatrixCSC} = sparse_array_type(M)(copy(SparseArrays.getcolptr(Mat)), copy(SparseArrays.rowvals(Mat)), similar(SparseArrays.nonzeros(Mat), T), size(Mat))
+# `similar(A, ::Type)` (structure-preserving, new element type) is a back-end method, just
+# like the dense `similar`. The generic algorithms below always build their outputs with
+# `similar` (dispatched on a representative value), so there is no need for backends to
+# provide `*_array_type` mapping functions to reconstruct a sparse type from a type.
 
-dense_array_type(a::AbstractArray)     = dense_array_type(typeof(a))
-sparse_array_type(a::AbstractArray)    = sparse_array_type(typeof(a))
-dense_vector_type(a::AbstractArray)    = dense_vector_type(typeof(a))
-
-dense_array_type(::Type{<:SparseVector}) = SparseVector
-sparse_array_type(::Type{<:SparseVector}) = SparseVector
-dense_vector_type(::Type{<:AbstractSparseArray}) = Vector
-dense_vector_type(::Type{<:AbstractArray})       = Vector
-dense_array_type(::Type{<:SparseMatrixCSC}) = SparseMatrixCSC
-sparse_array_type(::Type{<:SparseMatrixCSC})    = SparseMatrixCSC
-
-coo_type(sa) = coo_type(typeof(sa))
+# Stored (minor-axis) index buffer, accessed generically through the conventional field;
+# the analogue of `SparseArrays.storedinds`. Used by the broadcast/construction code.
+_stored_inds(A::AbstractGPUSparseMatrixCSR) = A.colVal
+_stored_inds(A::AbstractGPUSparseMatrixCSC) = A.rowVal
+_stored_inds(A::AbstractGPUSparseVector)    = A.iPtr
 
 function _spadjoint end
 function _sptranspose end
@@ -152,8 +145,11 @@ end
 
 sparse_op_size(A, trans::Bool) = trans ? reverse(size(A)) : size(A)
 
+# Format-conversion verbs: converting to the format already held is the identity;
+# back-ends implement the cross-format conversions (as constructors).
+sparse_csc(A::AbstractGPUSparseMatrixCSC) = A
+sparse_csr(A::AbstractGPUSparseMatrixCSR) = A
 sparse_coo(A::AbstractGPUSparseMatrixCOO) = A
-sparse_coo(A::AbstractGPUSparseMatrix) = coo_type(A)(A)
 
 @inline function sparse_atomic_add!(A::AbstractArray{<:Real}, parts, I::Integer, x)
     @inbounds Atomix.@atomic A[Int(I)] += x
@@ -447,7 +443,7 @@ function LinearAlgebra.opnorm(A::AbstractGPUSparseMatrixCSR, p::Real=2)
     end
 end
 
-LinearAlgebra.opnorm(A::AbstractGPUSparseMatrixCSC, p::Real=2) = opnorm(csr_type(A)(A), p)
+LinearAlgebra.opnorm(A::AbstractGPUSparseMatrixCSC, p::Real=2) = opnorm(sparse_csr(A), p)
 
 function LinearAlgebra.norm(A::AbstractGPUSparseMatrix{T}, p::Real=2) where T
     if p == Inf
@@ -462,7 +458,7 @@ function LinearAlgebra.norm(A::AbstractGPUSparseMatrix{T}, p::Real=2) where T
 end
 
 function SparseArrays.findnz(S::MT) where {MT <: AbstractGPUSparseMatrix}
-    S2 = coo_type(MT)(S)
+    S2 = sparse_coo(S)
     I = S2.rowInd
     J = S2.colInd
     V = S2.nzVal
@@ -502,61 +498,61 @@ end
 for SparseMatrixType in [:AbstractGPUSparseMatrixCSC, :AbstractGPUSparseMatrixCSR]
     @eval begin
         LinearAlgebra.triu(A::ST, k::Integer) where {T, ST<:$SparseMatrixType{T}} =
-            ST( triu(coo_type(A)(A), k) )
+            ST( triu(sparse_coo(A), k) )
         LinearAlgebra.triu(A::Transpose{T,<:ST}, k::Integer) where {T, ST<:$SparseMatrixType{T}} =
-            ST( triu(coo_type(A)(_sptranspose(parent(A))), k) )
+            ST( triu(sparse_coo(_sptranspose(parent(A))), k) )
         LinearAlgebra.triu(A::Adjoint{T,<:ST}, k::Integer) where {T, ST<:$SparseMatrixType{T}} =
-            ST( triu(coo_type(A)(_spadjoint(parent(A))), k) )
+            ST( triu(sparse_coo(_spadjoint(parent(A))), k) )
 
         LinearAlgebra.tril(A::ST, k::Integer) where {T, ST<:$SparseMatrixType{T}} =
-            ST( tril(coo_type(A)(A), k) )
+            ST( tril(sparse_coo(A), k) )
         LinearAlgebra.tril(A::Transpose{T,<:ST}, k::Integer) where {T, ST<:$SparseMatrixType{T}} =
-            ST( tril(coo_type(A)(_sptranspose(parent(A))), k) )
+            ST( tril(sparse_coo(_sptranspose(parent(A))), k) )
         LinearAlgebra.tril(A::Adjoint{T,<:ST}, k::Integer) where {T, ST<:$SparseMatrixType{T}} =
-            ST( tril(coo_type(A)(_spadjoint(parent(A))), k) )
+            ST( tril(sparse_coo(_spadjoint(parent(A))), k) )
 
         LinearAlgebra.triu(A::Union{ST, Transpose{T,<:ST}, Adjoint{T,<:ST}}) where {T, ST<:$SparseMatrixType{T}} =
-            ST( triu(coo_type(A)(A), 0) )
+            ST( triu(sparse_coo(A), 0) )
         LinearAlgebra.tril(A::Union{ST,Transpose{T,<:ST}, Adjoint{T,<:ST}}) where {T, ST<:$SparseMatrixType{T}} =
-            ST( tril(coo_type(A)(A), 0) )
+            ST( tril(sparse_coo(A), 0) )
 
         LinearAlgebra.kron(A::ST, B::ST) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(coo_type(A)(A), coo_type(B)(B)) )
+            ST( kron(sparse_coo(A), sparse_coo(B)) )
         LinearAlgebra.kron(A::ST, B::Diagonal) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(coo_type(A)(A), B) )
+            ST( kron(sparse_coo(A), B) )
         LinearAlgebra.kron(A::Diagonal, B::ST) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(A, coo_type(B)(B)) )
+            ST( kron(A, sparse_coo(B)) )
 
         LinearAlgebra.kron(A::Transpose{T,<:ST}, B::ST) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(coo_type(A)(_sptranspose(parent(A))), coo_type(B)(B)) )
+            ST( kron(sparse_coo(_sptranspose(parent(A))), sparse_coo(B)) )
         LinearAlgebra.kron(A::ST, B::Transpose{T,<:ST}) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(coo_type(A)(A), coo_type(parent(B))(_sptranspose(parent(B)))) )
+            ST( kron(sparse_coo(A), sparse_coo(_sptranspose(parent(B)))) )
         LinearAlgebra.kron(A::Transpose{T,<:ST}, B::Transpose{T,<:ST}) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(coo_type(A)(_sptranspose(parent(A))), coo_type(parent(B))(_sptranspose(parent(B)))) )
+            ST( kron(sparse_coo(_sptranspose(parent(A))), sparse_coo(_sptranspose(parent(B)))) )
         LinearAlgebra.kron(A::Transpose{T,<:ST}, B::Diagonal) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(coo_type(A)(_sptranspose(parent(A))), B) )
+            ST( kron(sparse_coo(_sptranspose(parent(A))), B) )
         LinearAlgebra.kron(A::Diagonal, B::Transpose{T,<:ST}) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(A, coo_type(B)(_sptranspose(parent(B)))) )
+            ST( kron(A, sparse_coo(_sptranspose(parent(B)))) )
 
         LinearAlgebra.kron(A::Adjoint{T,<:ST}, B::ST) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(coo_type(A)(_spadjoint(parent(A))), coo_type(B)(B)) )
+            ST( kron(sparse_coo(_spadjoint(parent(A))), sparse_coo(B)) )
         LinearAlgebra.kron(A::ST, B::Adjoint{T,<:ST}) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(coo_type(A)(A), coo_type(parent(B))(_spadjoint(parent(B)))) )
+            ST( kron(sparse_coo(A), sparse_coo(_spadjoint(parent(B)))) )
         LinearAlgebra.kron(A::Adjoint{T,<:ST}, B::Adjoint{T,<:ST}) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(coo_type(parent(A))(_spadjoint(parent(A))), coo_type(parent(B))(_spadjoint(parent(B)))) )
+            ST( kron(sparse_coo(_spadjoint(parent(A))), sparse_coo(_spadjoint(parent(B)))) )
         LinearAlgebra.kron(A::Adjoint{T,<:ST}, B::Diagonal) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(coo_type(parent(A))(_spadjoint(parent(A))), B) )
+            ST( kron(sparse_coo(_spadjoint(parent(A))), B) )
         LinearAlgebra.kron(A::Diagonal, B::Adjoint{T,<:ST}) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(A, coo_type(parent(B))(_spadjoint(parent(B)))) )
+            ST( kron(A, sparse_coo(_spadjoint(parent(B)))) )
 
 
         function Base.reshape(A::ST, dims::Dims) where {ST<:$SparseMatrixType}
-            B = coo_type(A)(A)
+            B = sparse_coo(A)
             ST(reshape(B, dims))
         end
 
         function SparseArrays.droptol!(A::ST, tol::Real) where {ST<:$SparseMatrixType}
-            B = coo_type(A)(A)
+            B = sparse_coo(A)
             droptol!(B, tol)
             copyto!(A, ST(B))
         end
@@ -1184,17 +1180,10 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
     elseif length(sparse_args) == 1 && sparse_typ <: Union{AbstractGPUSparseMatrixCSR, AbstractGPUSparseMatrixCSC}
         # we only have a single sparse input, so we can reuse its structure for the output.
         # this avoids a kernel launch and costly synchronization.
-        if sparse_typ <: AbstractGPUSparseMatrixCSR
-            offsets = rowPtr = sparse_arg.rowPtr
-            colVal  = similar(sparse_arg.colVal)
-            nzVal   = similar(sparse_arg.nzVal, Tv)
-            output  = sparse_array_type(sparse_typ)(rowPtr, colVal, nzVal, size(bc))
-        elseif sparse_typ <: AbstractGPUSparseMatrixCSC
-            offsets = colPtr = sparse_arg.colPtr
-            rowVal  = similar(sparse_arg.rowVal)
-            nzVal   = similar(sparse_arg.nzVal, Tv)
-            output  = sparse_array_type(sparse_typ)(colPtr, rowVal, nzVal, size(bc))
-        end
+        # structure is preserved, so a structure-preserving `similar` gives the output
+        # container directly; the kernel rewrites the (identical) pointer array from `offsets`.
+        output  = similar(sparse_arg, Tv)
+        offsets = sparse_typ <: AbstractGPUSparseMatrixCSR ? sparse_arg.rowPtr : sparse_arg.colPtr
     else
         # determine the number of non-zero elements per row so that we can create an
         # appropriately-structured output container
@@ -1240,17 +1229,22 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
             total_nnz = mapreduce(x->first(x) != typemax(first(x)), +, offsets)
         end
         output = if sparse_typ <: Union{AbstractGPUSparseMatrixCSR,AbstractGPUSparseMatrixCSC}
-            ixVal = similar(offsets, Ti, total_nnz)
-            nzVal = similar(offsets, Tv, total_nnz)
-            output_sparse_typ = sparse_array_type(sparse_typ) 
-            output_sparse_typ(offsets, ixVal, nzVal, size(bc))
+            # build an empty sparse output of the same kind, then size its index/value
+            # storage to the computed nnz. The kernel fills the pointer array (from
+            # `offsets`), the stored indices, and the values.
+            out = similar(sparse_arg, Tv, size(bc))
+            resize!(_stored_inds(out), total_nnz)
+            resize!(nonzeros(out), total_nnz)
+            out.nnz = total_nnz
+            out
         elseif sparse_typ <: AbstractGPUSparseVector && !fpreszeros
-            val_array = bc.args[first(sparse_args)].nzVal
-            similar(val_array, Tv, size(bc))
+            similar(nonzeros(sparse_arg), Tv, size(bc))
         elseif sparse_typ <: AbstractGPUSparseVector && fpreszeros
-            iPtr   = similar(offsets, Ti, total_nnz)
-            nzVal  = similar(offsets, Tv, total_nnz)
-            sparse_array_type(sparse_arg){Tv, Ti}(iPtr, nzVal, rows)
+            out = similar(sparse_arg, Tv, (rows,))
+            resize!(_stored_inds(out), total_nnz)
+            resize!(nonzeros(out), total_nnz)
+            out.nnz = total_nnz
+            out
         end
         if sparse_typ <: AbstractGPUSparseVector && !fpreszeros
             nonsparse_args = map(bc.args) do arg
@@ -1353,9 +1347,6 @@ end
 end
 ## COV_EXCL_STOP
 
-function csc_type end
-function csr_type end
-
 # TODO: implement mapreducedim!
 function Base.mapreduce(f, op, A::AbstractGPUSparseMatrix; dims=:, init=nothing)
     # figure out the destination container type by looking at the initializer element,
@@ -1377,9 +1368,9 @@ function Base.mapreduce(f, op, A::AbstractGPUSparseMatrix; dims=:, init=nothing)
     in(dims, [Colon(), 1, 2]) || error("only dims=:, dims=1 or dims=2 is supported")
 
     if A isa AbstractGPUSparseMatrixCSR && dims == 1
-        A = csc_type(A)(A)
+        A = sparse_csc(A)
     elseif A isa AbstractGPUSparseMatrixCSC && dims == 2
-        A = csr_type(A)(A)
+        A = sparse_csr(A)
     end
     m, n      = size(A)
     val_array = nonzeros(A)
