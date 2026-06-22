@@ -119,6 +119,312 @@ coo_type(sa) = coo_type(typeof(sa))
 function _spadjoint end
 function _sptranspose end
 
+const SparseMatmulEltypes = Union{Float16,Float32,ComplexF16,ComplexF32}
+
+sparse_matmul_accumulator(::Type{T}) where {T} = T
+sparse_matmul_accumulator(::Type{Float16}) = Float32
+sparse_matmul_accumulator(::Type{ComplexF16}) = ComplexF32
+
+const GPUSparseMatrixOrWrapper = Union{
+    AbstractGPUSparseMatrix,
+    Transpose{<:Any,<:AbstractGPUSparseMatrix},
+    Adjoint{<:Any,<:AbstractGPUSparseMatrix},
+}
+
+function sparse_op(t::AbstractChar)
+    t in ('N', 'n', 'S', 's', 'H', 'h') && return false, false
+    t in ('T', 't') && return true, false
+    t in ('C', 'c') && return true, true
+    throw(ArgumentError("unsupported sparse matrix operation '$t'"))
+end
+
+sparse_op_size(A, trans::Bool) = trans ? reverse(size(A)) : size(A)
+
+sparse_coo(A::AbstractGPUSparseMatrixCOO) = A
+sparse_coo(A::AbstractGPUSparseMatrix) = coo_type(A)(A)
+
+@inline function sparse_atomic_add!(A::AbstractArray{<:Real}, parts, I::Integer, x)
+    @inbounds Atomix.@atomic A[Int(I)] += x
+    return
+end
+
+@inline function sparse_atomic_add!(A::AbstractArray{<:Complex}, parts, I::Integer, x)
+    j = 2 * Int(I)
+    @inbounds begin
+        Atomix.@atomic parts[j - 1] += real(x)
+        Atomix.@atomic parts[j] += imag(x)
+    end
+    return
+end
+
+sparse_atomic_parts(A::AbstractArray{<:Real}) = A
+sparse_atomic_parts(A::AbstractArray{<:Complex{T}}) where {T} = reinterpret(T, A)
+
+@kernel function sparse_scale_kernel!(Y, beta)
+    i = @index(Global, Linear)
+    if i <= length(Y)
+        T = eltype(Y)
+        @inbounds Y[i] = iszero(beta) ? zero(T) : T(beta) * Y[i]
+    end
+end
+
+@kernel function sparse_combine_kernel!(Y, acc, alpha, beta, ::Val{Tacc}) where {Tacc}
+    i = @index(Global, Linear)
+    if i <= length(Y)
+        Ty = eltype(Y)
+        @inbounds Y[i] = iszero(beta) ?
+            Ty(Tacc(alpha) * Tacc(acc[i])) :
+            Ty(Tacc(alpha) * Tacc(acc[i]) + Tacc(beta) * Tacc(Y[i]))
+    end
+end
+
+function sparse_scale!(Y, beta)
+    isempty(Y) && return Y
+    sparse_scale_kernel!(get_backend(Y))(Y, beta; ndrange=length(Y))
+    return Y
+end
+
+function sparse_combine!(Y::AnyGPUArray{Ty}, acc, alpha, beta) where {Ty}
+    isempty(Y) && return Y
+    Tacc = sparse_matmul_accumulator(Ty)
+    sparse_combine_kernel!(get_backend(Y))(Y, acc, Tacc(alpha), Tacc(beta), Val(Tacc);
+                                           ndrange=length(Y))
+    return Y
+end
+
+@kernel function spmv_coo_kernel!(y, yparts, alpha, rowInd, colInd, nzVal, x,
+                                  trans::Bool, conjval::Bool, ::Val{Tacc}) where {Tacc}
+    k = @index(Global, Linear)
+    if k <= length(nzVal)
+        @inbounds begin
+            out = trans ? colInd[k] : rowInd[k]
+            src = trans ? rowInd[k] : colInd[k]
+            v = Tacc(nzVal[k])
+            v = conjval ? conj(v) : v
+            sparse_atomic_add!(y, yparts, out, Tacc(alpha) * v * Tacc(x[src]))
+        end
+    end
+end
+
+@kernel function spmm_coo_kernel!(C, Cparts, alpha, rowInd, colInd, nzVal, B,
+                                  trans::Bool, conjval::Bool, ::Val{Tacc}) where {Tacc}
+    k, j = @index(Global, NTuple)
+    if k <= length(nzVal) && j <= size(B, 2)
+        @inbounds begin
+            outrow = trans ? colInd[k] : rowInd[k]
+            srcrow = trans ? rowInd[k] : colInd[k]
+            v = Tacc(nzVal[k])
+            v = conjval ? conj(v) : v
+            lin = Int(outrow) + (Int(j) - 1) * size(C, 1)
+            sparse_atomic_add!(C, Cparts, lin, Tacc(alpha) * v * Tacc(B[srcrow, j]))
+        end
+    end
+end
+
+@kernel function dense_spmm_coo_kernel!(C, Cparts, alpha, A, rowInd, colInd, nzVal,
+                                        trans::Bool, conjval::Bool, ::Val{Tacc}) where {Tacc}
+    i, k = @index(Global, NTuple)
+    if i <= size(C, 1) && k <= length(nzVal)
+        @inbounds begin
+            outcol = trans ? rowInd[k] : colInd[k]
+            srccol = trans ? colInd[k] : rowInd[k]
+            v = Tacc(nzVal[k])
+            v = conjval ? conj(v) : v
+            lin = Int(i) + (Int(outcol) - 1) * size(C, 1)
+            sparse_atomic_add!(C, Cparts, lin, Tacc(alpha) * Tacc(A[i, srccol]) * v)
+        end
+    end
+end
+
+function spmv_coo!(y::AnyGPUVector{Ty}, A::AbstractGPUSparseMatrixCOO, x,
+                   alpha::Number, beta::Number, trans::Bool, conjval::Bool) where {Ty}
+    Tacc = sparse_matmul_accumulator(Ty)
+    if Tacc === Ty
+        sparse_scale!(y, beta)
+        target = y
+        scatter_alpha = Tacc(alpha)
+    else
+        target = similar(y, Tacc, size(y))
+        fill!(target, zero(Tacc))
+        scatter_alpha = one(Tacc)
+    end
+
+    if nnz(A) > 0
+        parts = sparse_atomic_parts(target)
+        spmv_coo_kernel!(get_backend(y))(target, parts, scatter_alpha, A.rowInd, A.colInd,
+                                         nonzeros(A), x, trans, conjval, Val(Tacc);
+                                         ndrange=nnz(A))
+    end
+
+    if !(Tacc === Ty)
+        sparse_combine!(y, target, alpha, beta)
+        unsafe_free!(target)
+    end
+    return y
+end
+
+function spmm_coo!(C::AnyGPUMatrix{Tc}, A::AbstractGPUSparseMatrixCOO, B,
+                   alpha::Number, beta::Number, trans::Bool, conjval::Bool) where {Tc}
+    Tacc = sparse_matmul_accumulator(Tc)
+    if Tacc === Tc
+        sparse_scale!(C, beta)
+        target = C
+        scatter_alpha = Tacc(alpha)
+    else
+        target = similar(C, Tacc, size(C))
+        fill!(target, zero(Tacc))
+        scatter_alpha = one(Tacc)
+    end
+
+    if nnz(A) > 0 && size(C, 2) > 0
+        parts = sparse_atomic_parts(target)
+        spmm_coo_kernel!(get_backend(C))(target, parts, scatter_alpha, A.rowInd, A.colInd,
+                                         nonzeros(A), B, trans, conjval, Val(Tacc);
+                                         ndrange=(nnz(A), size(C, 2)))
+    end
+
+    if !(Tacc === Tc)
+        sparse_combine!(C, target, alpha, beta)
+        unsafe_free!(target)
+    end
+    return C
+end
+
+function dense_spmm_coo!(C::AnyGPUMatrix{Tc}, A, B::AbstractGPUSparseMatrixCOO,
+                         alpha::Number, beta::Number, trans::Bool, conjval::Bool) where {Tc}
+    Tacc = sparse_matmul_accumulator(Tc)
+    if Tacc === Tc
+        sparse_scale!(C, beta)
+        target = C
+        scatter_alpha = Tacc(alpha)
+    else
+        target = similar(C, Tacc, size(C))
+        fill!(target, zero(Tacc))
+        scatter_alpha = one(Tacc)
+    end
+
+    if nnz(B) > 0 && size(C, 1) > 0
+        parts = sparse_atomic_parts(target)
+        dense_spmm_coo_kernel!(get_backend(C))(target, parts, scatter_alpha, A, B.rowInd,
+                                               B.colInd, nonzeros(B), trans, conjval,
+                                               Val(Tacc);
+                                               ndrange=(size(C, 1), nnz(B)))
+    end
+
+    if !(Tacc === Tc)
+        sparse_combine!(C, target, alpha, beta)
+        unsafe_free!(target)
+    end
+    return C
+end
+
+function Base.:(*)(A::GPUSparseMatrixOrWrapper, x::AnyGPUVector)
+    size(A, 2) == length(x) || throw(DimensionMismatch())
+    y = similar(x, promote_type(eltype(A), eltype(x)), size(A, 1))
+    return LinearAlgebra.mul!(y, A, x)
+end
+
+function Base.:(*)(A::GPUSparseMatrixOrWrapper, B::AnyGPUMatrix)
+    size(A, 2) == size(B, 1) || throw(DimensionMismatch())
+    C = similar(B, promote_type(eltype(A), eltype(B)), (size(A, 1), size(B, 2)))
+    return LinearAlgebra.mul!(C, A, B)
+end
+
+function Base.:(*)(A::AnyGPUMatrix, B::GPUSparseMatrixOrWrapper)
+    size(A, 2) == size(B, 1) || throw(DimensionMismatch())
+    C = similar(A, promote_type(eltype(A), eltype(B)), (size(A, 1), size(B, 2)))
+    return LinearAlgebra.mul!(C, A, B)
+end
+
+LinearAlgebra.generic_matvecmul!(y::AnyGPUVector{Ty}, tA::AbstractChar,
+                                 A::AbstractGPUSparseMatrix{Ta}, x::AnyGPUVector{Tx},
+                                 muladd::MulAddMul) where {
+                                     Ty<:SparseMatmulEltypes,
+                                     Ta<:SparseMatmulEltypes,
+                                     Tx<:SparseMatmulEltypes,
+                                 } =
+    LinearAlgebra.generic_matvecmul!(y, tA, A, x, muladd.alpha, muladd.beta)
+
+function LinearAlgebra.generic_matvecmul!(y::AnyGPUVector{Ty}, tA::AbstractChar,
+                                          A::AbstractGPUSparseMatrix{Ta},
+                                          x::AnyGPUVector{Tx},
+                                          alpha::Number, beta::Number) where {
+                                              Ty<:SparseMatmulEltypes,
+                                              Ta<:SparseMatmulEltypes,
+                                              Tx<:SparseMatmulEltypes,
+                                          }
+    trans, conjval = sparse_op(tA)
+    Asize = sparse_op_size(A, trans)
+    Asize[2] == length(x) ||
+        throw(DimensionMismatch("A has dimensions $Asize but x has length $(length(x))"))
+    Asize[1] == length(y) ||
+        throw(DimensionMismatch("A has dimensions $Asize but y has length $(length(y))"))
+    y === x && throw(ArgumentError("output vector must not be aliased with input vector"))
+    isempty(y) && return y
+
+    return spmv_coo!(y, sparse_coo(A), x, alpha, beta, trans, conjval)
+end
+
+LinearAlgebra.generic_matmatmul!(C::AnyGPUMatrix{Tc}, tA, tB,
+                                 A::AbstractGPUSparseMatrix{Ta}, B::AnyGPUMatrix{Tb},
+                                 muladd::MulAddMul) where {
+                                     Tc<:SparseMatmulEltypes,
+                                     Ta<:SparseMatmulEltypes,
+                                     Tb<:SparseMatmulEltypes,
+                                 } =
+    LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, muladd.alpha, muladd.beta)
+
+function LinearAlgebra.generic_matmatmul!(C::AnyGPUMatrix{Tc}, tA, tB,
+                                          A::AbstractGPUSparseMatrix{Ta},
+                                          B::AnyGPUMatrix{Tb},
+                                          alpha::Number, beta::Number) where {
+                                              Tc<:SparseMatmulEltypes,
+                                              Ta<:SparseMatmulEltypes,
+                                              Tb<:SparseMatmulEltypes,
+                                          }
+    trans, conjval = sparse_op(tA)
+    Bop = LinearAlgebra.wrap(B, tB)
+    Asize = sparse_op_size(A, trans)
+    Asize[2] == size(Bop, 1) ||
+        throw(DimensionMismatch("A has dimensions $Asize but B has dimensions $(size(Bop))"))
+    size(C) == (Asize[1], size(Bop, 2)) ||
+        throw(DimensionMismatch("C has dimensions $(size(C)), should have $((Asize[1], size(Bop, 2)))"))
+    C === B && throw(ArgumentError("output matrix must not be aliased with input matrix"))
+    isempty(C) && return C
+
+    return spmm_coo!(C, sparse_coo(A), Bop, alpha, beta, trans, conjval)
+end
+
+LinearAlgebra.generic_matmatmul!(C::AnyGPUMatrix{Tc}, tA, tB,
+                                 A::AnyGPUMatrix{Ta}, B::AbstractGPUSparseMatrix{Tb},
+                                 muladd::MulAddMul) where {
+                                     Tc<:SparseMatmulEltypes,
+                                     Ta<:SparseMatmulEltypes,
+                                     Tb<:SparseMatmulEltypes,
+                                 } =
+    LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, muladd.alpha, muladd.beta)
+
+function LinearAlgebra.generic_matmatmul!(C::AnyGPUMatrix{Tc}, tA, tB,
+                                          A::AnyGPUMatrix{Ta},
+                                          B::AbstractGPUSparseMatrix{Tb},
+                                          alpha::Number, beta::Number) where {
+                                              Tc<:SparseMatmulEltypes,
+                                              Ta<:SparseMatmulEltypes,
+                                              Tb<:SparseMatmulEltypes,
+                                          }
+    Aop = LinearAlgebra.wrap(A, tA)
+    trans, conjval = sparse_op(tB)
+    Bsize = sparse_op_size(B, trans)
+    size(Aop, 2) == Bsize[1] ||
+        throw(DimensionMismatch("A has dimensions $(size(Aop)) but B has dimensions $Bsize"))
+    size(C) == (size(Aop, 1), Bsize[2]) ||
+        throw(DimensionMismatch("C has dimensions $(size(C)), should have $((size(Aop, 1), Bsize[2]))"))
+    C === A && throw(ArgumentError("output matrix must not be aliased with input matrix"))
+    isempty(C) && return C
+
+    return dense_spmm_coo!(C, Aop, sparse_coo(B), alpha, beta, trans, conjval)
+end
+
 function LinearAlgebra.opnorm(A::AbstractGPUSparseMatrixCSR, p::Real=2)
     if p == Inf
         return maximum(sum(abs, A; dims=2))

@@ -15,10 +15,93 @@
             iszero_matrix(sparse_AT, eltypes)
        end
     end
+    coo_AT = sparse_coo_type(AT)
+    coo_AT === nothing || coo_matmul(coo_AT, AT, eltypes)
 end
 
 using SparseArrays
 using SparseArrays: nonzeroinds, nonzeros, rowvals
+
+function coo_values(::Type{T}) where {T<:Real}
+    return T[1, 2, 3, 4]
+end
+
+function coo_values(::Type{T}) where {T<:Complex}
+    return T[1 + im, 2 - 3im, 3 + 2im, 4 - im]
+end
+
+function coo_vector(::Type{T}) where {T<:Real}
+    return T[2, 3, 5]
+end
+
+function coo_vector(::Type{T}) where {T<:Complex}
+    return T[2 - im, 3 + 4im, 5 - 2im]
+end
+
+function coo_rhs(::Type{T}) where {T<:Real}
+    return T[
+        1 2;
+        3 4;
+        5 6
+    ]
+end
+
+function coo_rhs(::Type{T}) where {T<:Complex}
+    return T[
+        1 + im 2 - im;
+        3 + 2im 4 - 3im;
+        5 - im 6 + im
+    ]
+end
+
+function coo_lhs(::Type{T}) where {T<:Real}
+    return T[
+        1 2 3;
+        4 5 6
+    ]
+end
+
+function coo_lhs(::Type{T}) where {T<:Complex}
+    return T[
+        1 - im 2 + im 3 - 2im;
+        4 + 3im 5 - im 6 + im
+    ]
+end
+
+function coo_matmul(AT, dense_AT, eltypes)
+    for ET in (Float16, Float32, ComplexF16, ComplexF32)
+        ET in eltypes || continue
+        @testset "COO repeated-index matmul($ET)" begin
+            I = Int32[1, 1, 2, 3]
+            J = Int32[1, 1, 2, 1]
+            V = coo_values(ET)
+            A = sparse(Int.(I), Int.(J), V, 3, 3)
+            dA = AT(dense_AT(I), dense_AT(J), dense_AT(V), (3, 3), length(V))
+
+            x = coo_vector(ET)
+            dx = dense_AT(x)
+            @test Array(dA * dx) ≈ Array(A * x)
+            @test Array(transpose(dA) * dx) ≈ Array(transpose(A) * x)
+            @test Array(adjoint(dA) * dx) ≈ Array(adjoint(A) * x)
+
+            old_y = dense_AT(fill(ET(1), 3))
+            mul!(old_y, dA, dx, ET(2), ET(3))
+            @test Array(old_y) ≈ Array(ET(2) .* (A * x) .+ ET(3))
+
+            B = coo_rhs(ET)
+            dB = dense_AT(B)
+            @test Array(dA * dB) ≈ Array(A * B)
+            @test Array(transpose(dA) * dB) ≈ Array(transpose(A) * B)
+            @test Array(adjoint(dA) * dB) ≈ Array(adjoint(A) * B)
+
+            L = coo_lhs(ET)
+            dL = dense_AT(L)
+            @test Array(dL * dA) ≈ Array(L * A)
+            @test Array(dL * transpose(dA)) ≈ Array(L * transpose(A))
+            @test Array(dL * adjoint(dA)) ≈ Array(L * adjoint(A))
+        end
+    end
+end
 
 function vector(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)

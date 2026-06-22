@@ -9,6 +9,7 @@ using Printf
 using LinearAlgebra.BLAS
 using Base.Cartesian
 
+using Atomix
 using Adapt
 using LLVM.Interop
 
