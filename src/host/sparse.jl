@@ -44,6 +44,58 @@ Base.iszero(A::AbstractGPUSparseArray) = SparseArrays.nnz(A) == 0 || all(iszero,
 SparseArrays.SparseVector(x::AbstractGPUSparseVector) = SparseVector(length(x), Array(SparseArrays.nonzeroinds(x)), Array(SparseArrays.nonzeros(x)))
 SparseArrays.SparseMatrixCSC(x::AbstractGPUSparseMatrixCSC) = SparseMatrixCSC(size(x)..., Array(SparseArrays.getcolptr(x)), Array(SparseArrays.rowvals(x)), Array(SparseArrays.nonzeros(x)))
 
+@kernel function dense_sparse_values_kernel!(values, A, indices)
+    i = @index(Global, Linear)
+    if i <= length(indices)
+        @inbounds values[i] = A[indices[i]]
+    end
+end
+
+function dense_sparse_values(A::AnyGPUArray{Tv}, indices) where {Tv}
+    values = similar(A, Tv, length(indices))
+    if !isempty(values)
+        dense_sparse_values_kernel!(get_backend(A))(values, A, indices; ndrange=length(indices))
+    end
+    return values
+end
+
+function SparseArrays.SparseVector(x::AnyGPUVector)
+    inds = findall(!iszero, x)
+    vals = dense_sparse_values(x, inds)
+    host_inds = Array(inds)
+    host_vals = Array(vals)
+    unsafe_free!(inds)
+    unsafe_free!(vals)
+    return SparseVector(length(x), host_inds, host_vals)
+end
+
+function SparseArrays.SparseMatrixCSC(x::AnyGPUMatrix)
+    inds = findall(!iszero, x)
+    vals = dense_sparse_values(x, inds)
+    host_inds = Array(inds)
+    host_vals = Array(vals)
+    unsafe_free!(inds)
+    unsafe_free!(vals)
+
+    rows = getindex.(host_inds, 1)
+    cols = getindex.(host_inds, 2)
+    return sparse(rows, cols, host_vals, size(x)...)
+end
+
+function SparseArrays.sparse(A::AnyGPUVector)
+    sparse_array_type(A)(SparseVector(A))
+end
+
+function SparseArrays.sparse(A::AnyGPUMatrix; fmt=:csc)
+    if fmt == :csc
+        return sparse_array_type(A)(SparseMatrixCSC(A))
+    elseif fmt == :csr
+        return csr_type(sparse_array_type(A))(SparseMatrixCSC(A))
+    else
+        throw(ArgumentError("format :$fmt not available, use :csc or :csr"))
+    end
+end
+
 # similar
 Base.similar(Vec::V) where {V<:AbstractGPUSparseVector} = V(copy(SparseArrays.nonzeroinds(Vec)), similar(SparseArrays.nonzeros(Vec)), length(Vec))
 Base.similar(Mat::M) where {M<:AbstractGPUSparseMatrixCSC} = M(copy(SparseArrays.getcolptr(Mat)), copy(SparseArrays.rowvals(Mat)), similar(SparseArrays.nonzeros(Mat)), size(Mat))

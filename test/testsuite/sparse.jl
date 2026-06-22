@@ -71,6 +71,11 @@ function vector_construction(AT, eltypes)
         @test collect(d_x) == collect(x)
         @test similar(d_x) isa AT{ET}
         @test similar(d_x, Float32) isa AT{Float32}
+
+        dense_x = dense_AT(collect(x))
+        @test SparseVector(dense_x) == x
+        @test sparse(dense_x) isa AT{ET}
+        @test SparseVector(sparse(dense_x)) == x
     end
 end
 
@@ -148,6 +153,14 @@ function matrix_construction(AT, eltypes)
         @test similar(d_x, Float32, (n, m)) isa AT{Float32}
         @test similar(d_x, (3, 4)) isa AT{ET}
         @test size(similar(d_x, (3, 4))) == (3, 4)
+
+        dense_x = dense_AT(collect(x))
+        @test SparseMatrixCSC(dense_x) == x
+        @test sparse(dense_x) isa GPUArrays.sparse_array_type(dense_x){ET}
+        @test SparseMatrixCSC(sparse(dense_x)) == x
+        if dense_x isa GPUArrays.AnyGPUArray
+            @test SparseMatrixCSC(sparse(dense_x; fmt=:csr)) == x
+        end
     end
 end
 

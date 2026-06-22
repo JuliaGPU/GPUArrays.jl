@@ -224,10 +224,14 @@ GPUArrays.dense_vector_type(a::JLArray{T, N}) where {T, N} = JLArray{T, 1}
 GPUArrays.dense_vector_type(::Type{JLArray{T, N}}) where {T, N} = JLArray{T, 1}
 
 GPUArrays.sparse_array_type(sa::JLSparseMatrixCSC) = JLSparseMatrixCSC
+GPUArrays.sparse_array_type(sa::JLArray{<:Any,2}) = JLSparseMatrixCSC
+GPUArrays.sparse_array_type(::Type{<:JLArray{<:Any,2}}) = JLSparseMatrixCSC
 GPUArrays.sparse_array_type(::Type{<:JLSparseMatrixCSC}) = JLSparseMatrixCSC
 GPUArrays.sparse_array_type(sa::JLSparseMatrixCSR) = JLSparseMatrixCSR
 GPUArrays.sparse_array_type(::Type{<:JLSparseMatrixCSR}) = JLSparseMatrixCSR
 GPUArrays.sparse_array_type(sa::JLSparseVector) = JLSparseVector
+GPUArrays.sparse_array_type(sa::JLArray{<:Any,1}) = JLSparseVector
+GPUArrays.sparse_array_type(::Type{<:JLArray{<:Any,1}}) = JLSparseVector
 GPUArrays.sparse_array_type(::Type{<:JLSparseVector}) = JLSparseVector
 
 GPUArrays.dense_array_type(sa::JLSparseVector) = JLArray
@@ -238,7 +242,9 @@ GPUArrays.dense_array_type(sa::JLSparseMatrixCSR) = JLArray
 GPUArrays.dense_array_type(::Type{<:JLSparseMatrixCSR}) = JLArray
 
 GPUArrays.csc_type(sa::JLSparseMatrixCSR) = JLSparseMatrixCSC
+GPUArrays.csc_type(::Type{<:JLSparseMatrixCSR}) = JLSparseMatrixCSC
 GPUArrays.csr_type(sa::JLSparseMatrixCSC) = JLSparseMatrixCSR
+GPUArrays.csr_type(::Type{<:JLSparseMatrixCSC}) = JLSparseMatrixCSR
 
 Base.similar(Mat::JLSparseMatrixCSR) = JLSparseMatrixCSR(copy(Mat.rowPtr), copy(Mat.colVal), similar(nonzeros(Mat)), size(Mat))
 Base.similar(Mat::JLSparseMatrixCSR, T::Type) = JLSparseMatrixCSR(copy(Mat.rowPtr), copy(Mat.colVal), similar(nonzeros(Mat), T), size(Mat))
@@ -383,6 +389,7 @@ function JLSparseMatrixCSC(xs::SparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
     return JLSparseMatrixCSC{Tv, Ti}(colPtr, rowVal, nzVal, (xs.m, xs.n))
 end
 JLSparseMatrixCSC(xs::SparseVector) = JLSparseMatrixCSC(SparseMatrixCSC(xs))
+JLSparseMatrixCSC(xs::JLArray{<:Any,2}) = JLSparseMatrixCSC(SparseMatrixCSC(xs))
 Base.length(x::JLSparseMatrixCSC) = prod(x.dims)
 Base.size(x::JLSparseMatrixCSC) = x.dims
 
@@ -397,6 +404,7 @@ function JLSparseMatrixCSR(xs::SparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
     return JLSparseMatrixCSR{Tv, Ti}(rowPtr, colVal, nzVal, (xs.m, xs.n))
 end
 JLSparseMatrixCSR(xs::SparseVector{Tv, Ti}) where {Ti, Tv} = JLSparseMatrixCSR(SparseMatrixCSC(xs))
+JLSparseMatrixCSR(xs::JLArray{<:Any,2}) = JLSparseMatrixCSR(SparseMatrixCSC(xs))
 function JLSparseMatrixCSR(xs::JLSparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
     return JLSparseMatrixCSR(SparseMatrixCSC(xs))
 end
@@ -454,6 +462,13 @@ Adapt.adapt_storage(::Type{Array}, xs::JLArray) = convert(Array, xs)
 ## conversions
 
 Base.convert(::Type{T}, x::T) where T <: JLArray = x
+
+
+## indexing
+
+Base.findall(bools::JLArray{Bool}) = JLArray(findall(Array(bools)))
+Base.findall(f::Function, A::JLArray) = JLArray(findall(f, Array(A)))
+Base.findall(f::Base.Fix2{typeof(in)}, A::JLArray) = JLArray(findall(f, Array(A)))
 
 
 ## broadcast
