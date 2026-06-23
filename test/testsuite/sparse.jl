@@ -8,13 +8,13 @@
             broadcasting_vector(sparse_AT, AT, eltypes)
             iszero_vector(sparse_AT, eltypes)
         elseif sparse_AT <: AbstractSparseMatrix
-            # `matmul`/`matmul_accumulation` run for every matrix format (incl. COO, which
-            # natively supports matmul). The rest of the matrix battery is CSC/CSR-only:
-            # COO lacks the generic operations they exercise — broadcast (used by
-            # `iszero_matrix` and several construction paths), dims-reductions, `opnorm`,
-            # and `issymmetric`/`similar`-with-shape.
+            # `matmul` runs for every format (incl. COO). The matrix battery below is
+            # CSC/CSR-only: COO lacks the broadcast/reductions/`opnorm`/`issymmetric` it uses.
             matmul(sparse_AT, AT, eltypes)
-            matmul_accumulation(sparse_AT, AT, eltypes)
+            # Float32 accumulation is a GPU-kernel contract; stdlib `Array` accumulates
+            # narrowly, so assert it only for GPU formats.
+            sparse_AT <: GPUArrays.AbstractGPUSparseMatrix &&
+                matmul_accumulation(sparse_AT, AT, eltypes)
             if sparse_AT <: Union{GPUArrays.AbstractGPUSparseMatrixCSC,
                                   GPUArrays.AbstractGPUSparseMatrixCSR}
                 matrix(sparse_AT, eltypes)
