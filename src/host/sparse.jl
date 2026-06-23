@@ -195,11 +195,178 @@ end
 
 sparse_op_size(A, trans::Bool) = trans ? reverse(size(A)) : size(A)
 
-# Format-conversion verbs: converting to the format already held is the identity;
-# back-ends implement the cross-format conversions (as constructors).
+# Format-conversion verbs: converting to the format already held is the identity. The
+# cross-format conversions are `convert` (below). A back-end supplies the 3 verb methods
+# naming its concrete sibling types — `sparse_coo(A::MyCSC) = convert(MyCOO, A)` — which is
+# also where its `MyCOO(::MyCSC)` constructors route.
 sparse_csc(A::AbstractGPUSparseMatrixCSC) = A
 sparse_csr(A::AbstractGPUSparseMatrixCSR) = A
 sparse_coo(A::AbstractGPUSparseMatrixCOO) = A
+
+## Generic format conversions (CSC↔CSR↔COO), on-device.
+#
+# Conversion is owned by `convert` (dispatched on GPUArrays' own abstract types, so not type
+# piracy); construction is owned by the back-end through its conventional field constructor,
+# which `convert` calls — the same division `SparseArrays` uses (`convert`/constructors for
+# conversion, `SparseMatrixCSC(m, n, colptr, rowval, nzval)` for construction). Conversions
+# preserve the source's value/index eltypes; every buffer is allocated from a source array
+# via `similar`, so the storage mode and back-end are inherited. `sortperm` on a back-end
+# vector is required (the COO→CSR/CSC path; already implied by `findnz`).
+
+@inline function sparse_lower_bound(xs, lo::Ti, hi::Ti, key::Ti) where {Ti}
+    l = lo
+    r = hi
+    while l < r
+        m = (l + r) >>> 1
+        @inbounds v = xs[m]
+        if v < key
+            l = m + one(Ti)
+        else
+            r = m
+        end
+    end
+    return l
+end
+
+# Expand a compressed pointer array (CSC `colPtr` / CSR `rowPtr`, length `dim+1`) into one
+# explicit lead index per stored entry: thread `lead` writes its index into the slots
+# `ptr[lead]:ptr[lead+1]-1` of `out`.
+@kernel function expand_ptr_kernel!(out, ptr)
+    lead = @index(Global, Linear)
+    if lead <= length(ptr) - 1
+        T = eltype(out)
+        @inbounds begin
+            k = ptr[lead]
+            stop = ptr[lead + 1]
+            v = T(lead)
+            while k < stop
+                out[k] = v
+                k += oneunit(k)
+            end
+        end
+    end
+end
+
+# Build a lead-major linear sort key per stored COO entry (lead-major: sorting by the key
+# orders entries by `(lead, sub)`); `subdim` is the size of the sub axis.
+@kernel function coo_sort_keys_kernel!(keys, leadInd, subInd, subdim)
+    i = @index(Global, Linear)
+    if i <= length(keys)
+        @inbounds keys[i] = (Int64(leadInd[i]) - Int64(1)) * Int64(subdim) + Int64(subInd[i])
+    end
+end
+
+# Gather the three COO arrays through a permutation (e.g. from `sortperm`).
+@kernel function coo_gather_kernel!(leadOut, subOut, nzOut, leadIn, subIn, nzIn, perm)
+    i = @index(Global, Linear)
+    if i <= length(perm)
+        @inbounds begin
+            src = perm[i]
+            leadOut[i] = leadIn[src]
+            subOut[i] = subIn[src]
+            nzOut[i] = nzIn[src]
+        end
+    end
+end
+
+# Build a compressed pointer array from sorted lead indices: `ptr[i]` is the first 1-based
+# position of a stored entry whose lead index is ≥ `i`, and `ptr[end] = nnz+1`.
+@kernel function compressed_ptr_from_sorted_kernel!(ptr, sortedLead, nnz)
+    i = @index(Global, Linear)
+    Ti = eltype(ptr)
+    if i <= length(ptr)
+        @inbounds ptr[i] = if i == length(ptr)
+            Ti(nnz) + one(Ti)
+        else
+            sparse_lower_bound(sortedLead, one(Ti), Ti(nnz) + one(Ti), Ti(i))
+        end
+    end
+end
+
+# Order a COO matrix's stored entries lead-major, returning fresh (lead, sub, nz) arrays at
+# the source eltypes. Duplicate coordinates are preserved (no summing).
+function _sorted_coo(A::AbstractGPUSparseMatrixCOO{Tv,Ti}, ::Val{lead}) where {Tv,Ti,lead}
+    lead === :row || lead === :col ||
+        throw(ArgumentError("COO sort lead must be :row or :col"))
+    total = Int(nnz(A))
+    leadIn = lead === :row ? A.rowInd : A.colInd
+    subIn  = lead === :row ? A.colInd : A.rowInd
+    subdim = lead === :row ? size(A, 2) : size(A, 1)
+
+    leadOut = similar(leadIn, Ti, total)
+    subOut  = similar(subIn, Ti, total)
+    nzOut   = similar(nonzeros(A), Tv, total)
+    total == 0 && return leadOut, subOut, nzOut
+
+    backend = get_backend(leadOut)
+    keys = similar(leadIn, Int64, total)
+    coo_sort_keys_kernel!(backend)(keys, leadIn, subIn, subdim; ndrange=total)
+    perm = sortperm(keys)
+    coo_gather_kernel!(backend)(leadOut, subOut, nzOut, leadIn, subIn, nonzeros(A), perm;
+                                ndrange=total)
+    unsafe_free!(keys)
+    unsafe_free!(perm)
+    return leadOut, subOut, nzOut
+end
+
+# compressed pointer array of length `dim+1` from (possibly empty) sorted lead indices,
+# inheriting the lead array's index eltype and storage.
+function _compressed_ptr(sortedLead, dim::Integer, n::Integer)
+    ptr = similar(sortedLead, dim + 1)
+    if n > 0
+        compressed_ptr_from_sorted_kernel!(get_backend(ptr))(ptr, sortedLead, n;
+                                                             ndrange=dim + 1)
+    else
+        fill!(ptr, one(eltype(ptr)))
+    end
+    return ptr
+end
+
+# Cross-format conversions are ordinary `convert` methods, dispatched on GPUArrays' own
+# abstract types (so this is not type piracy and avoids the ambiguity a generic constructor
+# would have with a back-end's host-array constructor). The result is built with the
+# back-end's conventional field constructor `ST(components..., dims[, nnz])` — the write-side
+# analogue of the `colPtr`/`rowVal`/`nzVal` read contract, and how `SparseArrays` itself
+# builds (`SparseMatrixCSC(m, n, colptr, rowval, nzval)`). A back-end with unconventional
+# construction overrides the relevant `convert` method.
+
+# CSR → COO: expand `rowPtr` into explicit row indices; columns and values are shared.
+function Base.convert(::Type{ST}, A::AbstractGPUSparseMatrixCSR) where {ST<:AbstractGPUSparseMatrixCOO}
+    n = Int(nnz(A))
+    rowInd = similar(A.colVal, n)
+    n > 0 && expand_ptr_kernel!(get_backend(rowInd))(rowInd, A.rowPtr; ndrange=size(A, 1))
+    return ST(rowInd, A.colVal, nonzeros(A), size(A), n)
+end
+
+# CSC → COO: expand `colPtr` into explicit column indices; rows and values are shared.
+function Base.convert(::Type{ST}, A::AbstractGPUSparseMatrixCSC) where {ST<:AbstractGPUSparseMatrixCOO}
+    n = Int(nnz(A))
+    colInd = similar(A.rowVal, n)
+    n > 0 && expand_ptr_kernel!(get_backend(colInd))(colInd, A.colPtr; ndrange=size(A, 2))
+    return ST(A.rowVal, colInd, nonzeros(A), size(A), n)
+end
+
+# COO → CSR: sort row-major, then compress the row indices into a `rowPtr`.
+function Base.convert(::Type{ST}, A::AbstractGPUSparseMatrixCOO) where {ST<:AbstractGPUSparseMatrixCSR}
+    rowInd, colVal, nzVal = _sorted_coo(A, Val(:row))
+    rowPtr = _compressed_ptr(rowInd, size(A, 1), Int(nnz(A)))
+    unsafe_free!(rowInd)
+    return ST(rowPtr, colVal, nzVal, size(A))
+end
+
+# COO → CSC: sort column-major, then compress the column indices into a `colPtr`.
+function Base.convert(::Type{ST}, A::AbstractGPUSparseMatrixCOO) where {ST<:AbstractGPUSparseMatrixCSC}
+    colInd, rowVal, nzVal = _sorted_coo(A, Val(:col))
+    colPtr = _compressed_ptr(colInd, size(A, 2), Int(nnz(A)))
+    unsafe_free!(colInd)
+    return ST(colPtr, rowVal, nzVal, size(A))
+end
+
+# CSC ↔ CSR route through COO (the back-end's verb yields its concrete COO type).
+Base.convert(::Type{ST}, A::AbstractGPUSparseMatrixCSC) where {ST<:AbstractGPUSparseMatrixCSR} =
+    convert(ST, sparse_coo(A))
+Base.convert(::Type{ST}, A::AbstractGPUSparseMatrixCSR) where {ST<:AbstractGPUSparseMatrixCSC} =
+    convert(ST, sparse_coo(A))
 
 @inline function sparse_atomic_add!(A::AbstractArray{<:Real}, parts, I::Integer, x)
     @inbounds Atomix.@atomic A[Int(I)] += x
