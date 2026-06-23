@@ -74,9 +74,15 @@ formats you need, but note that several generic operations route through COO.
     allocates its outputs through `similar`, never by naming a type. The empty-of-a-shape
     form just delegates to the `undef` constructor (threading the source's storage mode),
     so the constructor is the real primitive.
-  * **Conversion verbs** `GPUArrays.sparse_csc`/`sparse_csr`/`sparse_coo`, for the formats
-    other than the one each produces (the identity case is generic) — the value-level
-    analogue of `SparseArrays.sparse`.
+  * **Format-conversion hooks** `GPUArrays.coo_type`/`csr_type`/`csc_type` — map any of your
+    sparse-matrix types to the *type* of the named sibling format
+    (`coo_type(::Type{<:MyCSC}) = MyCOO`); generic code converts with `coo_type(A)(A)`. These
+    are type-level hooks rather than plain `convert(Dest, A)` because a format is the
+    wrapper's identity (distinct structs), not a type parameter — so, unlike an eltype change,
+    there is no generic wrapper→sibling-wrapper operation, and only the back-end knows its
+    sibling types. The cross-format `convert` methods above are the engine the resulting
+    constructors route through; the identity case (`coo_type(coo)(coo)`) is your identity
+    constructor.
   * **`KernelAbstractions.get_backend`** for the sparse types (usually
     `get_backend(nonzeros(A))`).
   * **`Adapt.adapt_structure`** converting each host struct to its device counterpart

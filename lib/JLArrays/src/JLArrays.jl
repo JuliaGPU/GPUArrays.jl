@@ -264,11 +264,13 @@ function Base.getindex(A::JLSparseMatrixCSR{Tv, Ti}, i0::Integer, i1::Integer) w
 end
 
 GPUArrays.storage(a::JLArray) = a.data
-# format-conversion verbs (cross-format only; the identity cases are handled generically
-# by GPUArrays). these reuse the format constructors defined below.
-GPUArrays.sparse_csc(A::Union{JLSparseMatrixCSR,JLSparseMatrixCOO}) = JLSparseMatrixCSC(A)
-GPUArrays.sparse_csr(A::Union{JLSparseMatrixCSC,JLSparseMatrixCOO}) = JLSparseMatrixCSR(A)
-GPUArrays.sparse_coo(A::Union{JLSparseMatrixCSC,JLSparseMatrixCSR}) = JLSparseMatrixCOO(A)
+const JLSparseMatrix{Tv,Ti} = Union{JLSparseMatrixCSC{Tv,Ti},JLSparseMatrixCSR{Tv,Ti},JLSparseMatrixCOO{Tv,Ti}}
+# format-conversion hooks: map any JLArrays sparse matrix to the *type* of its sibling
+# format. Generic GPUArrays code converts with `coo_type(A)(A)` etc., routing through the
+# format constructors defined below.
+GPUArrays.csc_type(::Type{<:JLSparseMatrix}) = JLSparseMatrixCSC
+GPUArrays.csr_type(::Type{<:JLSparseMatrix}) = JLSparseMatrixCSR
+GPUArrays.coo_type(::Type{<:JLSparseMatrix}) = JLSparseMatrixCOO
 
 Base.similar(Mat::JLSparseMatrixCSR) = JLSparseMatrixCSR(copy(Mat.rowPtr), copy(Mat.colVal), similar(nonzeros(Mat)), size(Mat))
 Base.similar(Mat::JLSparseMatrixCSR, T::Type) = JLSparseMatrixCSR(copy(Mat.rowPtr), copy(Mat.colVal), similar(nonzeros(Mat), T), size(Mat))
@@ -493,8 +495,8 @@ JLSparseMatrixCOO(xs::JLArray{T,2}) where {T} =
     GPUArrays.to_sparse(JLSparseMatrixCOO{T,Int}, xs)
 # Cross-format device→device conversions (CSC↔CSR↔COO): the back-end owns the constructors;
 # the on-device conversion algorithm is GPUArrays' generic `convert` (replacing the former
-# host round-trips through `SparseMatrixCSC`). The `sparse_csc/csr/coo` verbs above route to
-# these. The COO→CSR/CSC path needs `sortperm`, provided below.
+# host round-trips through `SparseMatrixCSC`). The `csc_type/csr_type/coo_type` hooks above
+# route to these. The COO→CSR/CSC path needs `sortperm`, provided below.
 JLSparseMatrixCOO(A::Union{JLSparseMatrixCSC,JLSparseMatrixCSR}) =
     convert(JLSparseMatrixCOO, A)
 JLSparseMatrixCSR(A::Union{JLSparseMatrixCSC,JLSparseMatrixCOO}) =
