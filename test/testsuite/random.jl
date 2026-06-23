@@ -1,3 +1,14 @@
+# A non-`Number` isbits eltype with a custom sampler, mirroring how ColorTypes
+# hooks colorants into the Random API. Exercises the generic element-wise rand!
+# path; regression cover for JuliaGPU/CUDA.jl#3179.
+struct RGBTriplet
+    r::Float32
+    g::Float32
+    b::Float32
+end
+Random.rand(rng::AbstractRNG, ::Random.SamplerType{RGBTriplet}) =
+    RGBTriplet(rand(rng, Float32), rand(rng, Float32), rand(rng, Float32))
+
 @testsuite "random" (AT, eltypes)->begin
     rng = if AT <: AbstractGPUArray
         GPUArrays.RNG{AT}()
@@ -86,6 +97,18 @@
             A = AT{Float32}(undef, 16)
             @test (rand!(cpu_rng, A); true)
             @test (randn!(cpu_rng, A); true)
+        end
+    end
+
+    # non-`Number` eltypes with a custom sampler must generate element-wise
+    # rather than hit an ambiguous fallback (JuliaGPU/CUDA.jl#3179)
+    if AT <: AbstractGPUArray
+        @testset "non-Number eltype" begin
+            A = AT{RGBTriplet}(undef, 1024)
+            rand!(rng, A)
+            h = Array(A)
+            @test all(t -> 0f0 <= t.r <= 1f0 && 0f0 <= t.g <= 1f0 && 0f0 <= t.b <= 1f0, h)
+            @test any(t -> t.r != h[1].r, h)
         end
     end
 end

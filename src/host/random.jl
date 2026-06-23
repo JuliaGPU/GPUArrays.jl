@@ -447,7 +447,7 @@ end
     end
 end
 
-function Random.rand!(rng::RNG, A::AnyGPUArray{T}) where T <: Number
+function Random.rand!(rng::RNG, A::AnyGPUArray{T}) where T
     isempty(A) && return A
     rand_generic_kernel!(get_backend(A))(rng.seed, rng.counter, A; ndrange=length(A))
     advance_counter!(rng)
