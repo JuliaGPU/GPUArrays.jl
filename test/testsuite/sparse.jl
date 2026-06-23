@@ -7,16 +7,26 @@
             broadcasting_vector(sparse_AT, AT, eltypes)
             iszero_vector(sparse_AT, eltypes)
         elseif sparse_AT <: AbstractSparseMatrix
-            matrix(sparse_AT, eltypes)
-            matrix_construction(sparse_AT, AT, eltypes)
-            broadcasting_matrix(sparse_AT, AT, eltypes)
-            mapreduce_matrix(sparse_AT, eltypes)
-            linalg(sparse_AT, eltypes)
-            iszero_matrix(sparse_AT, eltypes)
+            # The matrix battery is only run for CSC/CSR. COO lacks the generic operations
+            # these exercise: broadcast (which `iszero_matrix` and several construction
+            # paths use), dims-reductions, `opnorm`, and `issymmetric`/`similar`-with-shape.
+            # COO is still registered in `sparse_types` so the repeated-index `coo_matmul`
+            # test below is discovered; the loop itself doesn't otherwise exercise it.
+            if sparse_AT <: Union{GPUArrays.AbstractGPUSparseMatrixCSC,
+                                  GPUArrays.AbstractGPUSparseMatrixCSR}
+                matrix(sparse_AT, eltypes)
+                matrix_construction(sparse_AT, AT, eltypes)
+                broadcasting_matrix(sparse_AT, AT, eltypes)
+                mapreduce_matrix(sparse_AT, eltypes)
+                linalg(sparse_AT, eltypes)
+                iszero_matrix(sparse_AT, eltypes)
+            end
        end
     end
-    coo_AT = sparse_coo_type(AT)
-    coo_AT === nothing || coo_matmul(coo_AT, AT, eltypes)
+    # the repeated-index COO matmul test runs against whichever COO type the back-end
+    # registers in `sparse_types` (no separate `sparse_coo_type` hook).
+    i = findfirst(T -> T <: GPUArrays.AbstractGPUSparseMatrixCOO, sparse_ATs)
+    i === nothing || coo_matmul(sparse_ATs[i], AT, eltypes)
 end
 
 using SparseArrays
