@@ -1,5 +1,6 @@
 @testsuite "sparse" (AT, eltypes)->begin
     sparse_ATs = sparse_types(AT)
+    matrix_ATs = filter(T -> T <: AbstractSparseMatrix, sparse_ATs)
     for sparse_AT in sparse_ATs
         if sparse_AT <: AbstractSparseVector
             vector(sparse_AT, AT, eltypes)
@@ -7,11 +8,13 @@
             broadcasting_vector(sparse_AT, AT, eltypes)
             iszero_vector(sparse_AT, eltypes)
         elseif sparse_AT <: AbstractSparseMatrix
-            # The matrix battery is only run for CSC/CSR. COO lacks the generic operations
-            # these exercise: broadcast (which `iszero_matrix` and several construction
-            # paths use), dims-reductions, `opnorm`, and `issymmetric`/`similar`-with-shape.
-            # COO is still registered in `sparse_types` so the repeated-index `coo_matmul`
-            # test below is discovered; the loop itself doesn't otherwise exercise it.
+            # `matmul`/`matmul_accumulation` run for every matrix format (incl. COO, which
+            # natively supports matmul). The rest of the matrix battery is CSC/CSR-only:
+            # COO lacks the generic operations they exercise — broadcast (used by
+            # `iszero_matrix` and several construction paths), dims-reductions, `opnorm`,
+            # and `issymmetric`/`similar`-with-shape.
+            matmul(sparse_AT, AT, eltypes)
+            matmul_accumulation(sparse_AT, AT, eltypes)
             if sparse_AT <: Union{GPUArrays.AbstractGPUSparseMatrixCSC,
                                   GPUArrays.AbstractGPUSparseMatrixCSR}
                 matrix(sparse_AT, eltypes)
@@ -23,6 +26,8 @@
             end
        end
     end
+    # cross-format conversions need ≥2 registered matrix formats to be meaningful.
+    length(matrix_ATs) > 1 && conversions(matrix_ATs, AT, eltypes)
     # the repeated-index COO matmul test runs against whichever COO type the back-end
     # registers in `sparse_types` (no separate `sparse_coo_type` hook).
     i = findfirst(T -> T <: GPUArrays.AbstractGPUSparseMatrixCOO, sparse_ATs)
@@ -115,6 +120,138 @@ function coo_matmul(AT, dense_AT, eltypes)
             @test Array(dL * dA) ≈ Array(L * A)
             @test Array(dL * transpose(dA)) ≈ Array(L * transpose(A))
             @test Array(dL * adjoint(dA)) ≈ Array(L * adjoint(A))
+        end
+    end
+end
+
+# Narrow complex test data to the matmul eltype: complex eltypes keep both parts (so
+# `transpose` and `adjoint` differ); real eltypes take the real part, since a complex value
+# with a nonzero imaginary part can't be converted to a real type directly. Projecting onto
+# the real part reproduces the proven real test data exactly (e.g. `1 + 2im` → `1`).
+matmul_cast(x::AbstractArray, ::Type{ET}) where {ET<:Complex} = ET.(x)
+matmul_cast(x::AbstractArray, ::Type{ET}) where {ET<:Real}    = ET.(real.(x))
+matmul_cast(x::Number, ::Type{ET}) where {ET<:Complex} = ET(x)
+matmul_cast(x::Number, ::Type{ET}) where {ET<:Real}    = ET(real(x))
+
+# Per matrix format, general (duplicate-free) matmul: SpMV, SpMM, and dense·sparse, each
+# with transpose/adjoint and the 5-arg `mul!`. The repeated-coordinate COO case is covered
+# separately by `coo_matmul`.
+function matmul(AT, dense_AT, eltypes)
+    for ET in (Float16, Float32, ComplexF16, ComplexF32)
+        ET in eltypes || continue
+        @testset "$(nameof(AT)) matmul($ET)" begin
+            V = matmul_cast(ComplexF32[1 + 2im, 2 - im, 3 + im, 4 - 3im, 5 + 2im], ET)
+            A = sparse([1, 1, 2, 4, 4], [1, 3, 2, 1, 4], V, 4, 4)
+            dA = AT(A)
+
+            α = matmul_cast(2 + im, ET)
+            β = matmul_cast(3 - im, ET)
+
+            # SpMV, transpose/adjoint, and the 5-arg and bool `mul!`
+            x = matmul_cast(ComplexF32[2 - im, 3 + 2im, 5 - 4im, 7 + im], ET)
+            dx = dense_AT(x)
+            @test Array(dA * dx) ≈ Array(A * x)
+            @test Array(transpose(dA) * dx) ≈ Array(transpose(A) * x)
+            @test Array(adjoint(dA) * dx) ≈ Array(adjoint(A) * x)
+
+            y = matmul_cast(ComplexF32[1 + im, 2 - im, 3 + 2im, 4 - im], ET)
+            dy = dense_AT(copy(y))
+            mul!(dy, dA, dx, α, β)
+            @test Array(dy) ≈ α .* Array(A * x) .+ β .* y
+
+            dz = dense_AT(zeros(ET, size(A, 1)))
+            mul!(dz, dA, dx, true, false)
+            @test Array(dz) ≈ Array(A * x)
+
+            # SpMM, transpose/adjoint, and the 5-arg `mul!`
+            B = matmul_cast(ComplexF32[
+                1 + im 2 - im 3 + 2im;
+                4 - im 5 + im 6 - 2im;
+                7 + im 8 - im 9 + 3im;
+                2 + 4im 3 - 5im 4 + im
+            ], ET)
+            dB = dense_AT(B)
+            @test Array(dA * dB) ≈ Array(A * B)
+            @test Array(transpose(dA) * dB) ≈ Array(transpose(A) * B)
+            @test Array(adjoint(dA) * dB) ≈ Array(adjoint(A) * B)
+
+            C = matmul_cast(ComplexF32[
+                1 - im 2 + im 3 - 2im;
+                4 + im 5 - im 6 + 2im;
+                7 - im 8 + im 9 - 3im;
+                2 - 4im 3 + 5im 4 - im
+            ], ET)
+            dC = dense_AT(copy(C))
+            mul!(dC, dA, dB, α, β)
+            @test Array(dC) ≈ α .* Array(A * B) .+ β .* C
+
+            # dense·sparse, transpose/adjoint, and the 5-arg `mul!`
+            L = matmul_cast(ComplexF32[
+                1 - im 2 + im 3 - 2im 4 + im;
+                5 + 2im 6 - im 7 + im 8 - 3im
+            ], ET)
+            dL = dense_AT(L)
+            @test Array(dL * dA) ≈ Array(L * A)
+            @test Array(dL * transpose(dA)) ≈ Array(L * transpose(A))
+            @test Array(dL * adjoint(dA)) ≈ Array(L * adjoint(A))
+
+            D = matmul_cast(ComplexF32[
+                1 + im 2 - im 3 + 2im 4 - im;
+                2 + 3im 3 - im 5 + im 7 - 2im
+            ], ET)
+            dD = dense_AT(copy(D))
+            mul!(dD, dL, dA, α, β)
+            @test Array(dD) ≈ α .* Array(L * A) .+ β .* D
+        end
+    end
+end
+
+# Per matrix format, the Float16/ComplexF16 accumulation contract: the back-end must
+# accumulate in Float32/ComplexF32 and round once at the end. Every product feeding a given
+# output entry is identical, so the n-term sum is independent of accumulation order, and the
+# result must match a host reference accumulated in `Tacc` *exactly* (`==`, not `≈`); a
+# narrow Float16 accumulation would lose precision and the equality would fail.
+function matmul_accumulation(AT, dense_AT, eltypes)
+    for ET in (Float16, ComplexF16)
+        ET in eltypes || continue
+        Tacc = ET <: Complex ? ComplexF32 : Float32
+        @testset "$(nameof(AT)) matmul accumulation($ET)" begin
+            n = 128
+            av = matmul_cast(0.1 + 0.2im, ET)
+            xv = matmul_cast(0.1 - 0.3im, ET)
+
+            # SpMV: a 1×n row times a length-n vector
+            A = sparse(fill(1, n), 1:n, fill(av, n), 1, n)
+            x = fill(xv, n)
+            dA = AT(A)
+            dx = dense_AT(x)
+            @test Array(dA * dx) == ET.(SparseMatrixCSC{Tacc,Int}(A) * Tacc.(x))
+
+            # SpMM: the same row times an n×3 dense matrix
+            B = fill(xv, n, 3)
+            dB = dense_AT(B)
+            @test Array(dA * dB) == ET.(SparseMatrixCSC{Tacc,Int}(A) * Tacc.(B))
+
+            # dense·sparse: a 3×n dense matrix times an n×1 column
+            S = sparse(1:n, fill(1, n), fill(av, n), n, 1)
+            dS = AT(S)
+            L = fill(xv, 3, n)
+            dL = dense_AT(L)
+            @test Array(dL * dS) == ET.(Tacc.(L) * SparseMatrixCSC{Tacc,Int}(S))
+        end
+    end
+end
+
+# Round-trip a duplicate-free matrix (and an empty one) through every ordered pair of
+# registered matrix formats: `src == dst` exercises the identity path and `src != dst` the
+# cross-format `convert`. Conversions preserve coordinates, so the round-trip is exact.
+function conversions(matrix_ATs, dense_AT, eltypes)
+    @testset "sparse format conversions" begin
+        A = sparse([1, 4, 2, 4, 1], [3, 1, 2, 5, 1], Float32[3, 4, 5, 6, 7], 4, 5)
+        Z = spzeros(Float32, 3, 4)
+        for src in matrix_ATs, dst in matrix_ATs
+            @test SparseMatrixCSC(dst(src(A))) == A
+            @test SparseMatrixCSC(dst(src(Z))) == Z
         end
     end
 end

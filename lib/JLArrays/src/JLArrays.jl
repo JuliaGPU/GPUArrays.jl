@@ -212,6 +212,8 @@ JLSparseMatrixCOO(rowInd::JLArray{Ti, 1}, colInd::JLArray{Ti, 1},
                   nnz::Integer=length(nzVal)) where {Tv, Ti <: Integer} =
     JLSparseMatrixCOO{Tv, Ti}(rowInd, colInd, nzVal, dims, nnz)
 
+JLSparseMatrixCOO(A::JLSparseMatrixCOO) = A
+
 Base.length(x::JLSparseMatrixCOO) = prod(x.dims)
 Base.size(x::JLSparseMatrixCOO) = x.dims
 SparseArrays.nnz(x::JLSparseMatrixCOO) = x.nnz
