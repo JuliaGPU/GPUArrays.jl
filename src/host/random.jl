@@ -586,7 +586,8 @@ function Random.rand!(rng::RNG{AT}, A::AbstractArray{T}) where {AT, T}
     Random.rand!(rng, B)
     copyto!(A, B)
 end
-function Random.randn!(rng::RNG{AT}, A::AbstractArray{T}) where {AT, T}
+function Random.randn!(rng::RNG{AT}, A::AbstractArray{T}) where {AT, T<:Union{AbstractFloat,
+                                                                             Complex{<:AbstractFloat}}}
     isempty(A) && return A
     B = similar(AT{T}, size(A))
     Random.randn!(rng, B)

@@ -110,5 +110,10 @@ Random.rand(rng::AbstractRNG, ::Random.SamplerType{RGBTriplet}) =
             @test all(t -> 0f0 <= t.r <= 1f0 && 0f0 <= t.g <= 1f0 && 0f0 <= t.b <= 1f0, h)
             @test any(t -> t.r != h[1].r, h)
         end
+
+        # randn! on a non-float eltype must error cleanly, not recurse forever
+        @testset "randn! rejects non-float" begin
+            @test_throws MethodError randn!(rng, AT{Int32}(undef, 4))
+        end
     end
 end
