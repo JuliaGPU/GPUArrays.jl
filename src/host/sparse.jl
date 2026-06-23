@@ -73,10 +73,15 @@ end
     end
 end
 
-# `to_sparse`/`to_dense` are the on-device conversions between a dense GPU array and a
-# sparse one. `to_sparse` needs a target format (the result layout is ambiguous);
-# `to_dense` does not.
+"""
+    to_sparse(ST, A)
 
+Build a sparse array of type `ST` from the dense GPU array `A`, on the device (no host
+round-trip); the inverse of [`to_dense`](@ref). `ST` must be a concrete
+`AbstractGPUSparseVector` or `AbstractGPUSparseMatrixCOO` (other matrix formats follow by
+converting the resulting COO with `sparse_csr`/`sparse_csc`). The target format is required
+because the result layout would otherwise be ambiguous; `to_dense` needs no such argument.
+"""
 function to_sparse(::Type{ST}, A::AnyGPUVector) where {Tv,Ti,ST<:AbstractGPUSparseVector{Tv,Ti}}
     check_sparse_target(ST, Tv, Ti)
     indices = findall(!iszero, A)

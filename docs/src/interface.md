@@ -33,15 +33,16 @@ There are numerous examples of potential interfaces for GPUArrays, such as with 
 
 ## Sparse arrays
 
-Sparse arrays cannot share the `AbstractGPUArray` supertype: that is a
-`DenseArray`, whereas a sparse array must be an `AbstractSparseArray`. GPUArrays
-therefore provides a parallel hierarchy, and generic sparse functionality
-(broadcast, `mapreduce`, sparse/dense matrix multiplication, `norm`/`opnorm`,
-`findnz`, `triu`/`tril`/`kron`, format conversion, indexing) is defined on it.
+A sparse array can't share the `AbstractGPUArray` supertype — that is a `DenseArray`,
+whereas a sparse array must be an `AbstractSparseArray` — so GPUArrays keeps a parallel
+sparse hierarchy with its own generic functionality. Integrating a back-end has three
+parts: the storage types it provides, the methods it implements to plug them in, and the
+functionality it then gets for free.
 
-A back-end provides one mutable struct per supported format, subtyping the
-matching abstract type and using the conventional field names (the generic code
-reads them directly):
+### Storage types to provide
+
+One mutable struct per supported format, subtyping the matching abstract type and using
+the conventional field names (generic code reads them directly):
 
 | supertype | fields |
 |:--|:--|
@@ -50,35 +51,42 @@ reads them directly):
 | `AbstractGPUSparseMatrixCSR{Tv,Ti}` | `rowPtr`, `colVal`, `nzVal`, `dims`, `nnz` |
 | `AbstractGPUSparseMatrixCOO{Tv,Ti}` | `rowInd`, `colInd`, `nzVal`, `dims`, `nnz` |
 
-where the index/pointer/value arrays are the back-end's own dense vector type
-(so `nonzeros(A)`, `SparseArrays.nonzeroinds`, `rowvals`, `getcolptr` work, and
-`get_backend(nonzeros(A))` identifies the compute backend).
+The pointer/index/value arrays are the back-end's own dense vector type. Provide only the
+formats you need, but note that several generic operations route through COO.
 
-On top of the structs, a back-end implements:
+### Interface to implement
 
-  * constructors from the component arrays (e.g.
-    `MyCSR(rowPtr, colVal, nzVal, dims)`) and the inter-format and
-    dense↔sparse conversions (`MyCSR(::MyCOO)`, `MyCSC(::SparseMatrixCSC)`,
-    `SparseMatrixCSC(::MyCSC)`, …);
+  * **Constructors** — from component arrays (`MyCSR(rowPtr, colVal, nzVal, dims)`),
+    between formats (`MyCSR(::MyCOO)`, …), and to/from host `SparseArrays`
+    (`MyCSC(::SparseMatrixCSC)`, `SparseMatrixCSC(::MyCSC)`).
+  * **`Base.similar`** — structure-preserving (`similar(A)`, `similar(A, ::Type)`) and
+    empty-of-a-shape (`similar(A, ::Type, dims)`), as for dense arrays; generic code
+    allocates its outputs through `similar`, never by naming a type.
+  * **Conversion verbs** `GPUArrays.sparse_csc`/`sparse_csr`/`sparse_coo`, for the formats
+    other than the one each produces (the identity case is generic) — the value-level
+    analogue of `SparseArrays.sparse`.
+  * **`KernelAbstractions.get_backend`** for the sparse types (usually
+    `get_backend(nonzeros(A))`).
+  * **`Adapt.adapt_structure`** converting each host struct to its device counterpart
+    (`GPUArrays.GPUSparseDeviceVector`, `GPUSparseDeviceMatrixCSC`/`CSR`/`COO`), so the
+    generic kernels can consume it inside `@kernel`s.
+  * **`GPUArrays._sptranspose`/`_spadjoint`** — materialize a (conjugate) transpose; used
+    by `kron`/`triu`/`tril` on lazily wrapped operands.
 
-  * `Base.similar` — structure-preserving (`similar(A)`, `similar(A, ::Type)`)
-    and empty-of-a-shape (`similar(A, ::Type, dims)`), exactly as for dense
-    arrays. The generic algorithms allocate their outputs through `similar`
-    rather than by naming a type;
+`SparseArrays`' accessors (`nnz`, `nonzeros`, `nonzeroinds`, `rowvals`, `getcolptr`) come
+for free from the field names. Dense↔sparse conversion is generic and on-device:
+`to_sparse(::Type{ST}, dense)` scans into a sparse array (`ST` a vector or COO type;
+CSR/CSC follow via the verbs) and `to_dense(A)` scatters back to a dense array of the
+back-end — so a back-end's `MyArray(::MySparse…)` and dense→sparse constructors can simply
+call them.
 
-  * the format-conversion verbs `GPUArrays.sparse_csc`, `GPUArrays.sparse_csr`
-    and `GPUArrays.sparse_coo`, for the formats other than the one each
-    produces (converting to the format already held is the generic identity).
-    These are the value-level equivalent of `SparseArrays.sparse` and back the
-    generic code that needs a particular layout (e.g. matrix multiplication
-    funnels through COO).
+### Functionality you get
 
-Dense↔sparse conversion is provided generically and on-device: `to_sparse(::Type{ST},
-A)` scans a dense array into a sparse one (`ST` is an `AbstractGPUSparseVector` or
-`AbstractGPUSparseMatrixCOO` -- CSR/CSC follow via the conversion verbs), and `to_dense(A)`
-is the inverse, scattering a sparse array into a dense one of the same back-end. A
-back-end's dense↔sparse constructors (`MyArray(::MySparse…)`, `MyCSR(::MyDense)`) can be
-defined in terms of these.
+Broadcasting; `mapreduce` and reductions (`sum`, `norm`, `opnorm`); sparse–dense and
+sparse–vector multiplication (`*`, `mul!`, including transposed/adjoint operands);
+`findnz`, `triu`/`tril`/`kron`/`reshape`/`droptol!`; `iszero`/`issymmetric`/`ishermitian`;
+scalar and slice indexing; `copy`/`copyto!`/`collect`/`Array`; and conversion between
+formats and to/from dense.
 
 ## Caching Allocator
 
