@@ -73,7 +73,11 @@ end
     end
 end
 
-function sparse_from_dense(::Type{ST}, A::AnyGPUVector) where {Tv,Ti,ST<:AbstractGPUSparseVector{Tv,Ti}}
+# `to_sparse`/`to_dense` are the on-device conversions between a dense GPU array and a
+# sparse one. `to_sparse` needs a target format (the result layout is ambiguous);
+# `to_dense` does not.
+
+function to_sparse(::Type{ST}, A::AnyGPUVector) where {Tv,Ti,ST<:AbstractGPUSparseVector{Tv,Ti}}
     check_sparse_target(ST, Tv, Ti)
     indices = findall(!iszero, A)
     nstored = length(indices)
@@ -91,7 +95,7 @@ end
 # COO directly. Other formats are obtained by converting the COO with `sparse_csr`/
 # `sparse_csc` (which back-ends already provide as constructors), avoiding any need to map
 # a target type to its COO sibling.
-function sparse_from_dense(::Type{ST}, A::AnyGPUMatrix) where {Tv,Ti,ST<:AbstractGPUSparseMatrixCOO{Tv,Ti}}
+function to_sparse(::Type{ST}, A::AnyGPUMatrix) where {Tv,Ti,ST<:AbstractGPUSparseMatrixCOO{Tv,Ti}}
     check_sparse_target(ST, Tv, Ti)
     indices = findall(!iszero, A)
     nstored = length(indices)
@@ -104,6 +108,47 @@ function sparse_from_dense(::Type{ST}, A::AnyGPUMatrix) where {Tv,Ti,ST<:Abstrac
     end
     unsafe_free!(indices)
     return ST(rowInd, colInd, nzVal, size(A), nstored)
+end
+
+@kernel function densify_vector_kernel!(out, iPtr, nzVal)
+    k = @index(Global, Linear)
+    if k <= length(nzVal)
+        @inbounds out[iPtr[k]] = nzVal[k]
+    end
+end
+
+@kernel function densify_matrix_kernel!(out, rowInd, colInd, nzVal)
+    k = @index(Global, Linear)
+    if k <= length(nzVal)
+        @inbounds out[rowInd[k], colInd[k]] = nzVal[k]
+    end
+end
+
+"""
+    to_dense(A)
+
+Materialize the sparse GPU array `A` into a dense array of the same back-end, on the
+device (no host round-trip); the inverse of [`to_sparse`](@ref). Stored coordinates are
+assumed unique (true for CSC/CSR and for COO produced by conversion); duplicate COO
+coordinates resolve to the last value written.
+"""
+function to_dense(x::AbstractGPUSparseVector{Tv}) where {Tv}
+    out = fill!(similar(nonzeros(x), Tv, length(x)), zero(Tv))
+    if nnz(x) > 0
+        densify_vector_kernel!(get_backend(out))(out, SparseArrays.nonzeroinds(x), nonzeros(x);
+                                                 ndrange=nnz(x))
+    end
+    return out
+end
+
+function to_dense(A::AbstractGPUSparseMatrix{Tv}) where {Tv}
+    coo = sparse_coo(A)
+    out = fill!(similar(nonzeros(A), Tv, size(A)), zero(Tv))
+    if nnz(coo) > 0
+        densify_matrix_kernel!(get_backend(out))(out, coo.rowInd, coo.colInd, nonzeros(coo);
+                                                 ndrange=nnz(coo))
+    end
+    return out
 end
 
 # similar

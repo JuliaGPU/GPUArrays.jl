@@ -298,10 +298,10 @@ Base.similar(Mat::JLSparseMatrixCSR, T::Type, dims::Tuple{Int, Int}) = similar(M
 Base.similar(Mat::JLSparseMatrixCSC, dims::Tuple{Int, Int}) = similar(Mat, dims...)
 Base.similar(Mat::JLSparseMatrixCSR, dims::Tuple{Int, Int}) = similar(Mat, dims...)
 
-JLArray(x::JLSparseVector)    = JLArray(collect(SparseVector(x)))
-JLArray(x::JLSparseMatrixCSC) = JLArray(collect(SparseMatrixCSC(x)))
-JLArray(x::JLSparseMatrixCSR) = JLArray(collect(SparseMatrixCSC(x)))
-JLArray(x::JLSparseMatrixCOO) = JLArray(collect(SparseMatrixCSC(x)))
+JLArray(x::JLSparseVector)    = GPUArrays.to_dense(x)
+JLArray(x::JLSparseMatrixCSC) = GPUArrays.to_dense(x)
+JLArray(x::JLSparseMatrixCSR) = GPUArrays.to_dense(x)
+JLArray(x::JLSparseMatrixCOO) = GPUArrays.to_dense(x)
 
 # conversion of untyped data to a typed Array
 function typed_data(x::JLArray{T}) where {T}
@@ -416,7 +416,7 @@ function JLSparseVector(xs::SparseVector{Tv, Ti}) where {Ti, Tv}
 end
 SparseArrays.SparseVector(xs::JLArray{<:Any,1}) = SparseVector(JLSparseVector(xs))
 JLSparseVector(xs::JLArray{T,1}) where {T} =
-    GPUArrays.sparse_from_dense(JLSparseVector{T,Int}, xs)
+    GPUArrays.to_sparse(JLSparseVector{T,Int}, xs)
 Base.length(x::JLSparseVector) = x.len
 Base.size(x::JLSparseVector) = (x.len,)
 
@@ -454,7 +454,7 @@ function JLSparseMatrixCOO(xs::SparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
 end
 JLSparseMatrixCOO(xs::SparseVector) = JLSparseMatrixCOO(SparseMatrixCSC(xs))
 JLSparseMatrixCOO(xs::JLArray{T,2}) where {T} =
-    GPUArrays.sparse_from_dense(JLSparseMatrixCOO{T,Int}, xs)
+    GPUArrays.to_sparse(JLSparseMatrixCOO{T,Int}, xs)
 function JLSparseMatrixCSR(xs::JLSparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
     return JLSparseMatrixCSR(SparseMatrixCSC(xs))
 end
@@ -481,7 +481,7 @@ function JLSparseMatrixCSR{Tv,Ti}(xs::JLSparseMatrixCOO{Tv, Ti}) where {Ti, Tv}
 end
 
 SparseArrays.sparse(xs::JLArray{T,1}) where {T} =
-    GPUArrays.sparse_from_dense(JLSparseVector{T,Int}, xs)
+    GPUArrays.to_sparse(JLSparseVector{T,Int}, xs)
 
 function SparseArrays.sparse(xs::JLArray{T,2}; fmt=:csc) where {T}
     if fmt == :csc

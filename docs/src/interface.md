@@ -73,9 +73,12 @@ On top of the structs, a back-end implements:
     generic code that needs a particular layout (e.g. matrix multiplication
     funnels through COO).
 
-`sparse_from_dense(::Type{<:AbstractGPUSparseMatrixCOO}, A)` is provided
-generically to densify-scan into COO; a back-end's CSR/CSC-from-dense
-constructors can be defined as `sparse_csr`/`sparse_csc` of that COO.
+Dense↔sparse conversion is provided generically and on-device: `to_sparse(::Type{ST},
+A)` scans a dense array into a sparse one (`ST` is an `AbstractGPUSparseVector` or
+`AbstractGPUSparseMatrixCOO` -- CSR/CSC follow via the conversion verbs), and `to_dense(A)`
+is the inverse, scattering a sparse array into a dense one of the same back-end. A
+back-end's dense↔sparse constructors (`MyArray(::MySparse…)`, `MyCSR(::MyDense)`) can be
+defined in terms of these.
 
 ## Caching Allocator
 
