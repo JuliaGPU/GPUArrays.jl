@@ -455,30 +455,22 @@ end
 JLSparseMatrixCOO(xs::SparseVector) = JLSparseMatrixCOO(SparseMatrixCSC(xs))
 JLSparseMatrixCOO(xs::JLArray{T,2}) where {T} =
     GPUArrays.to_sparse(JLSparseMatrixCOO{T,Int}, xs)
-function JLSparseMatrixCSR(xs::JLSparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
-    return JLSparseMatrixCSR(SparseMatrixCSC(xs))
-end
-function JLSparseMatrixCOO(xs::Union{JLSparseMatrixCSC{Tv, Ti},JLSparseMatrixCSR{Tv, Ti}}) where {Tv, Ti}
-    return JLSparseMatrixCOO(SparseMatrixCSC(xs))
-end
-function JLSparseMatrixCOO{Tv,Ti}(xs::Union{JLSparseMatrixCSC{Tv, Ti},JLSparseMatrixCSR{Tv, Ti}}) where {Tv, Ti}
-    return JLSparseMatrixCOO(SparseMatrixCSC(xs))
-end
-function JLSparseMatrixCSC(xs::JLSparseMatrixCSR{Tv, Ti}) where {Ti, Tv}
-    return JLSparseMatrixCSC(SparseMatrixCSC(xs))
-end
-function JLSparseMatrixCSC(xs::JLSparseMatrixCOO{Tv, Ti}) where {Ti, Tv}
-    return JLSparseMatrixCSC(SparseMatrixCSC(xs))
-end
-function JLSparseMatrixCSC{Tv,Ti}(xs::JLSparseMatrixCOO{Tv, Ti}) where {Ti, Tv}
-    return JLSparseMatrixCSC(SparseMatrixCSC(xs))
-end
-function JLSparseMatrixCSR(xs::JLSparseMatrixCOO{Tv, Ti}) where {Ti, Tv}
-    return JLSparseMatrixCSR(SparseMatrixCSC(xs))
-end
-function JLSparseMatrixCSR{Tv,Ti}(xs::JLSparseMatrixCOO{Tv, Ti}) where {Ti, Tv}
-    return JLSparseMatrixCSR(SparseMatrixCSC(xs))
-end
+# Cross-format device→device conversions (CSC↔CSR↔COO): the back-end owns the constructors;
+# the on-device conversion algorithm is GPUArrays' generic `convert` (replacing the former
+# host round-trips through `SparseMatrixCSC`). The `sparse_csc/csr/coo` verbs above route to
+# these. The COO→CSR/CSC path needs `sortperm`, provided below.
+JLSparseMatrixCOO(A::Union{JLSparseMatrixCSC,JLSparseMatrixCSR}) =
+    convert(JLSparseMatrixCOO, A)
+JLSparseMatrixCSR(A::Union{JLSparseMatrixCSC,JLSparseMatrixCOO}) =
+    convert(JLSparseMatrixCSR, A)
+JLSparseMatrixCSC(A::Union{JLSparseMatrixCSR,JLSparseMatrixCOO}) =
+    convert(JLSparseMatrixCSC, A)
+
+# `sortperm` on a JLArray vector, required by the generic COO→CSR/CSC conversions (and by
+# `findnz`). Computed on the host and wrapped back into a device vector so that the gather
+# kernel can index the permutation on-device (mirrors Metal's `sortperm`, which also returns
+# a device `Int` vector).
+Base.sortperm(x::JLVector; kwargs...) = JLArray(sortperm(Array(x); kwargs...))
 
 SparseArrays.sparse(xs::JLArray{T,1}) where {T} =
     GPUArrays.to_sparse(JLSparseVector{T,Int}, xs)
