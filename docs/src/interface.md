@@ -59,9 +59,21 @@ formats you need, but note that several generic operations route through COO.
   * **Constructors** — from component arrays (`MyCSR(rowPtr, colVal, nzVal, dims)`),
     between formats (`MyCSR(::MyCOO)`, …), and to/from host `SparseArrays`
     (`MyCSC(::SparseMatrixCSC)`, `SparseMatrixCSC(::MyCSC)`).
+  * **`undef` constructors** — `MyCSC{Tv,Ti}(undef, dims)` / `MyVec{Tv,Ti}(undef, n)`,
+    building a *structurally-empty* array (no stored entries), mirroring dense
+    `Array{T}(undef, dims)` and `SparseArrays`' `SparseMatrixCSC{Tv,Ti}(undef, m, n)`. This
+    is the empty-of-a-shape allocation primitive. Note there is no uninitialized-structure
+    analogue: for a sparse array `undef` means empty, exactly as in `SparseArrays`.
+    Implementing these through a `spzeros(Tv, Ti, dims…; fmt=…)` helper (the value-level
+    analogue of `SparseArrays.spzeros`, with a format selector) is recommended — it also
+    serves as a convenient public, format-polymorphic entry point — but `spzeros` itself is
+    not mandated, since its signature is back-end-flavored (format symbols, storage modes)
+    whereas the `undef` constructor is uniform.
   * **`Base.similar`** — structure-preserving (`similar(A)`, `similar(A, ::Type)`) and
     empty-of-a-shape (`similar(A, ::Type, dims)`), as for dense arrays; generic code
-    allocates its outputs through `similar`, never by naming a type.
+    allocates its outputs through `similar`, never by naming a type. The empty-of-a-shape
+    form just delegates to the `undef` constructor (threading the source's storage mode),
+    so the constructor is the real primitive.
   * **Conversion verbs** `GPUArrays.sparse_csc`/`sparse_csr`/`sparse_coo`, for the formats
     other than the one each produces (the identity case is generic) — the value-level
     analogue of `SparseArrays.sparse`.

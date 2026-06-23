@@ -282,14 +282,48 @@ Base.similar(Mat::JLSparseMatrixCSC{<:Any, Ti}, ::Type{T}) where {T, Ti} =
 Base.similar(Vec::JLSparseVector{<:Any, Ti}, ::Type{T}) where {T, Ti} =
     JLSparseVector{T, Ti}(copy(Vec.iPtr), similar(nonzeros(Vec), T), length(Vec))
 
+# Empty (structurally-zero) sparse allocation — the value-level analogue of
+# `SparseArrays.spzeros` and the shared implementation behind the `undef` constructors and
+# the empty-of-shape `similar` below. The matrix method selects the format via `fmt`
+# (mirroring `sparse(A; fmt=…)`); the vector method takes a length. Unexported (so it never
+# clashes with `SparseArrays.spzeros`); call it as `JLArrays.spzeros`.
+function spzeros(::Type{Tv}, ::Type{Ti}, dims::Dims{2}; fmt=:csc) where {Tv, Ti}
+    if fmt === :csc
+        JLSparseMatrixCSC{Tv, Ti}(JLVector(ones(Ti, dims[2] + 1)), JLVector{Ti}(undef, 0), JLVector{Tv}(undef, 0), dims)
+    elseif fmt === :csr
+        JLSparseMatrixCSR{Tv, Ti}(JLVector(ones(Ti, dims[1] + 1)), JLVector{Ti}(undef, 0), JLVector{Tv}(undef, 0), dims)
+    elseif fmt === :coo
+        JLSparseMatrixCOO{Tv, Ti}(JLVector{Ti}(undef, 0), JLVector{Ti}(undef, 0), JLVector{Tv}(undef, 0), dims)
+    else
+        throw(ArgumentError("format :$fmt not available, use :csc, :csr, or :coo"))
+    end
+end
+spzeros(::Type{Tv}, ::Type{Ti}, dims::Dims{1}) where {Tv, Ti} =
+    JLSparseVector{Tv, Ti}(JLVector{Ti}(undef, 0), JLVector{Tv}(undef, 0), dims[1])
+spzeros(::Type{Tv}, ::Type{Ti}, dims::Integer...; kw...) where {Tv, Ti} =
+    spzeros(Tv, Ti, map(Int, dims); kw...)
+spzeros(::Type{Tv}, dims::Union{Integer,Dims}...; kw...) where {Tv} =
+    spzeros(Tv, Int, dims...; kw...)
+
+# `undef` constructors — the mandated empty-of-shape allocation primitive, mirroring the
+# dense `JLArray{T,N}(undef, dims)` and `SparseArrays`' `SparseMatrixCSC{Tv,Ti}(undef, m, n)`.
+JLSparseVector{Tv, Ti}(::UndefInitializer, len::Integer) where {Tv, Ti} =
+    spzeros(Tv, Ti, (Int(len),))
+JLSparseMatrixCSC{Tv, Ti}(::UndefInitializer, dims::Dims{2}) where {Tv, Ti} = spzeros(Tv, Ti, dims; fmt=:csc)
+JLSparseMatrixCSR{Tv, Ti}(::UndefInitializer, dims::Dims{2}) where {Tv, Ti} = spzeros(Tv, Ti, dims; fmt=:csr)
+JLSparseMatrixCOO{Tv, Ti}(::UndefInitializer, dims::Dims{2}) where {Tv, Ti} = spzeros(Tv, Ti, dims; fmt=:coo)
+JLSparseMatrixCSC{Tv, Ti}(u::UndefInitializer, m::Integer, n::Integer) where {Tv, Ti} = JLSparseMatrixCSC{Tv, Ti}(u, (Int(m), Int(n)))
+JLSparseMatrixCSR{Tv, Ti}(u::UndefInitializer, m::Integer, n::Integer) where {Tv, Ti} = JLSparseMatrixCSR{Tv, Ti}(u, (Int(m), Int(n)))
+JLSparseMatrixCOO{Tv, Ti}(u::UndefInitializer, m::Integer, n::Integer) where {Tv, Ti} = JLSparseMatrixCOO{Tv, Ti}(u, (Int(m), Int(n)))
+
 # empty sparse arrays of a given shape, used by the generic broadcast machinery as the
 # output container before its storage is sized and filled. the index type is preserved.
 Base.similar(Mat::JLSparseMatrixCSC{<:Any, Ti}, ::Type{T}, N::Int, M::Int) where {T, Ti} =
-    JLSparseMatrixCSC{T, Ti}(JLVector(ones(Ti, M + 1)), JLVector{Ti}(undef, 0), JLVector{T}(undef, 0), (N, M))
+    JLSparseMatrixCSC{T, Ti}(undef, (N, M))
 Base.similar(Mat::JLSparseMatrixCSR{<:Any, Ti}, ::Type{T}, N::Int, M::Int) where {T, Ti} =
-    JLSparseMatrixCSR{T, Ti}(JLVector(ones(Ti, N + 1)), JLVector{Ti}(undef, 0), JLVector{T}(undef, 0), (N, M))
+    JLSparseMatrixCSR{T, Ti}(undef, (N, M))
 Base.similar(Vec::JLSparseVector{<:Any, Ti}, ::Type{T}, dims::Dims{1}) where {T, Ti} =
-    JLSparseVector{T, Ti}(JLVector{Ti}(undef, 0), JLVector{T}(undef, 0), dims[1])
+    JLSparseVector{T, Ti}(undef, dims[1])
 
 Base.similar(Mat::JLSparseMatrixCSC{Tv, Ti}, N::Int, M::Int) where {Tv, Ti} = similar(Mat, Tv, N, M)
 Base.similar(Mat::JLSparseMatrixCSR{Tv, Ti}, N::Int, M::Int) where {Tv, Ti} = similar(Mat, Tv, N, M)

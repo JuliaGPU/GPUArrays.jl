@@ -26,6 +26,7 @@
             end
        end
     end
+    undef_construction(sparse_ATs, eltypes)
     # cross-format conversions need ≥2 registered matrix formats to be meaningful.
     length(matrix_ATs) > 1 && conversions(matrix_ATs, AT, eltypes)
     # the repeated-index COO matmul test runs against whichever COO type the back-end
@@ -252,6 +253,39 @@ function conversions(matrix_ATs, dense_AT, eltypes)
         for src in matrix_ATs, dst in matrix_ATs
             @test SparseMatrixCSC(dst(src(A))) == A
             @test SparseMatrixCSC(dst(src(Z))) == Z
+        end
+    end
+end
+
+# The mandated empty-of-shape primitive: `ST{Tv,Ti}(undef, dims)` builds a structurally
+# empty array (no stored entries), mirroring dense `undef` and `SparseArrays`' undef
+# constructors. Exercised per registered format; the back-end's index type is read off a
+# reference instance so the test stays back-end agnostic.
+function undef_construction(sparse_ATs, eltypes)
+    @testset "undef construction" begin
+        for ST in sparse_ATs
+            if ST <: AbstractSparseVector
+                Ti = typeof(ST(spzeros(Float32, 3))).parameters[2]
+                for Tv in (Float32, ComplexF32)
+                    Tv in eltypes || continue
+                    v = ST{Tv,Ti}(undef, 5)
+                    @test v isa ST{Tv,Ti}
+                    @test size(v) == (5,)
+                    @test nnz(v) == 0
+                    @test SparseVector(v) == spzeros(Tv, 5)
+                end
+            else
+                Ti = typeof(ST(spzeros(Float32, 3, 4))).parameters[2]
+                for Tv in (Float32, ComplexF32)
+                    Tv in eltypes || continue
+                    A = ST{Tv,Ti}(undef, (3, 4))
+                    @test A isa ST{Tv,Ti}
+                    @test size(A) == (3, 4)
+                    @test nnz(A) == 0
+                    @test SparseMatrixCSC(A) == spzeros(Tv, 3, 4)
+                    @test size(ST{Tv,Ti}(undef, 3, 4)) == (3, 4)  # varargs form
+                end
+            end
         end
     end
 end
