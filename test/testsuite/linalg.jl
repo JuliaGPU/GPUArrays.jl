@@ -193,7 +193,7 @@
                 A = AT(rand(T, n, n))
                 B = AT(rand(T, n, n))
                 Ct = AT(rand(T, n, n))
-                C = collect(Ct) 
+                C = collect(Ct)
                 mul!(Ct, TR1(A), TR2(B), 1, -1)
                 mul!(C, TR1(collect(A)), TR2(collect(B)), 1, -1)
                 @test collect(Ct) ≈ C
@@ -573,6 +573,31 @@ end
         dv1 = @view(dA[:, 1:5])
         dv2 = @view(dA[1:5, :])
         @test Array(v1) * Array(v2) ≈ Array(v1 * v2)
+    end
+end
+
+@testsuite "linalg/mul!/integer-accumulate" (AT, eltypes)->begin
+    # products must be formed in the wide accumulator type, not the narrow input type, else
+    # narrow-integer products overflow.
+    gpu = AT <: AbstractGPUArray
+    @testset "$Tin -> $Tout" for (Tin, Tout) in ((Int16, Int32), (Int16, Int64), (Int32, Int64))
+        Tin in eltypes || continue
+        n = 16
+        hi = Tin(4) * isqrt(typemax(Tin))       # |a*b| reliably exceeds typemax(Tin)
+        rng = (-hi):hi
+        A, B, x = rand(rng, n, n), rand(rng, n, n), rand(rng, n)
+        dA, dB, dx = AT(A), AT(B), AT(x)
+
+        if gpu || VERSION >= v"1.11"
+            C = AT(zeros(Tout, n, n))
+            mul!(C, dA, dB)
+            @test Array(C) == Tout.(Int64.(A) * Int64.(B))
+        end
+        if gpu # JuliaLang/LinearAlgebra.jl#1659
+            c = AT(zeros(Tout, n))
+            mul!(c, dA, dx)
+            @test Array(c) == Tout.(Int64.(A) * Int64.(x))
+        end
     end
 end
 
