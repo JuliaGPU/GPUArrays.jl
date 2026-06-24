@@ -132,6 +132,14 @@ function broadcasting(AT, eltypes)
             @test compare(A -> A .* ET(10), AT, rand(ET, 40, 40))
             @test compare((A, B) -> A .* B, AT, rand(ET, 40, 40), rand(ET, 40, 40))
             @test compare((A, B) -> A .* B .+ ET(10), AT, rand(ET, 40, 40), rand(ET, 40, 40))
+
+            @testset "mismatched sizes" begin
+                a = AT(rand(ET, 10, 1))
+                b = AT(rand(ET, 3, 1))
+                @test_throws DimensionMismatch a + b
+                @test_throws DimensionMismatch b + a
+                @test_throws DimensionMismatch a .+ b
+            end
         end
 
         @testset "map! $ET" begin
