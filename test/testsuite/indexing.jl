@@ -159,6 +159,7 @@ end
         # 1D
         @test compare(findfirst, AT, rand(Bool, 100))
         @test compare(x->findfirst(>(0.5f0), x), AT, rand(Float32, 100))
+        @test compare(findfirst, AT, fill(false, 10))
         let x = fill(false, 10)
             @test findfirst(x) == findfirst(AT(x))
         end
