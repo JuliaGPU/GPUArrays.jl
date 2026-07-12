@@ -261,5 +261,5 @@ end
 
 Base.findmax(a::AnyGPUArray; dims=:) = findminmax(Base.isless, identity, a; init=typemin(eltype(a)), dims)
 Base.findmin(a::AnyGPUArray; dims=:) = findminmax(Base.isgreater, identity, a; init=typemax(eltype(a)), dims)
-Base.findmax(f::Function, a::AnyGPUArray; dims=:) = findminmax(Base.isless, f, a; init=typemin(eltype(a)), dims)
-Base.findmin(f::Function, a::AnyGPUArray; dims=:) = findminmax(Base.isgreater, f, a; init=typemax(eltype(a)), dims)
+Base.findmax(f::Function, a::AnyGPUArray; dims=:) = findminmax(Base.isless, f, a; init=typemin(f(zero(eltype(a)))), dims)
+Base.findmin(f::Function, a::AnyGPUArray; dims=:) = findminmax(Base.isgreater, f, a; init=typemax(f(zero(eltype(a)))), dims)

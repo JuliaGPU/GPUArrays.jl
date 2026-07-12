@@ -185,6 +185,78 @@
                 mul!(C, collect(A), f(TR(collect(B))))
                 @test collect(Ct) ≈ C
             end
+            @testset "matmul! with nonzero β ($TR1 x $TR2)" for T in (Float32, ComplexF32), TR1 in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), TR2 in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
+                if !(T in eltypes)
+                    continue
+                end
+                n = 128
+                A = AT(rand(T, n, n))
+                B = AT(rand(T, n, n))
+                Ct = AT(rand(T, n, n))
+                C = collect(Ct)
+                mul!(Ct, TR1(A), TR2(B), 1, -1)
+                mul!(C, TR1(collect(A)), TR2(collect(B)), 1, -1)
+                @test collect(Ct) ≈ C
+                # general case: α≠1 and β≠0 together
+                Et = AT(rand(T, n, n))
+                E = collect(Et)
+                mul!(Et, TR1(A), TR2(B), 3, 2)
+                mul!(E, TR1(collect(A)), TR2(collect(B)), 3, 2)
+                @test collect(Et) ≈ E
+            end
+            @testset "matmul! is write-only for β=0 ($TR1 x $TR2)" for T in (Float32, ComplexF32), TR1 in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), TR2 in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
+                if !(T in eltypes)
+                    continue
+                end
+                n = 128
+                A = AT(rand(T, n, n))
+                B = AT(rand(T, n, n))
+                # C starts as NaN: with β=0 it must be ignored (not multiplied), α≠1 to reach this path
+                Ct = AT(fill(T(NaN), n, n))
+                C = collect(Ct)
+                mul!(Ct, TR1(A), TR2(B), 2, 0)
+                mul!(C, TR1(collect(A)), TR2(collect(B)), 2, 0)
+                @test collect(Ct) ≈ C
+            end
+        end
+
+        @testset "mul! + Symmetric/Hermitian" begin
+            # with BLAS eltypes these dispatch through generic_matmatmul_wrapper!'s
+            # SymmHemmGeneric path, which must not end up in BLAS.symm!/hemm!
+            @testset "$W{$T}, uplo=$uplo" for T in (Float32, ComplexF32), W in (Symmetric, Hermitian), uplo in (:U, :L)
+                if !(T in eltypes)
+                    continue
+                end
+                n = 128
+                A = AT(rand(T, n, n))
+                B = AT(rand(T, n, n))
+                b = AT(rand(T, n))
+
+                # matrix-matrix, wrapped on either side
+                Ct = AT(zeros(T, n, n))
+                C = zeros(T, n, n)
+                mul!(Ct, W(A, uplo), B)
+                mul!(C, W(collect(A), uplo), collect(B))
+                @test collect(Ct) ≈ C
+
+                mul!(Ct, B, W(A, uplo))
+                mul!(C, collect(B), W(collect(A), uplo))
+                @test collect(Ct) ≈ C
+
+                # general case: α≠1 and β≠0 together
+                Et = AT(rand(T, n, n))
+                E = collect(Et)
+                mul!(Et, W(A, uplo), B, 3, 2)
+                mul!(E, W(collect(A), uplo), collect(B), 3, 2)
+                @test collect(Et) ≈ E
+
+                # matrix-vector
+                ct = AT(zeros(T, n))
+                c = zeros(T, n)
+                mul!(ct, W(A, uplo), b)
+                mul!(c, W(collect(A), uplo), collect(b))
+                @test collect(ct) ≈ c
+            end
         end
     end
 
@@ -501,6 +573,31 @@ end
         dv1 = @view(dA[:, 1:5])
         dv2 = @view(dA[1:5, :])
         @test Array(v1) * Array(v2) ≈ Array(v1 * v2)
+    end
+end
+
+@testsuite "linalg/mul!/integer-accumulate" (AT, eltypes)->begin
+    # products must be formed in the wide accumulator type, not the narrow input type, else
+    # narrow-integer products overflow.
+    gpu = AT <: AbstractGPUArray
+    @testset "$Tin -> $Tout" for (Tin, Tout) in ((Int16, Int32), (Int16, Int64), (Int32, Int64))
+        Tin in eltypes || continue
+        n = 16
+        hi = Tin(4) * isqrt(typemax(Tin))       # |a*b| reliably exceeds typemax(Tin)
+        rng = (-hi):hi
+        A, B, x = rand(rng, n, n), rand(rng, n, n), rand(rng, n)
+        dA, dB, dx = AT(A), AT(B), AT(x)
+
+        if gpu || VERSION >= v"1.11"
+            C = AT(zeros(Tout, n, n))
+            mul!(C, dA, dB)
+            @test Array(C) == Tout.(Int64.(A) * Int64.(B))
+        end
+        if gpu # JuliaLang/LinearAlgebra.jl#1659
+            c = AT(zeros(Tout, n))
+            mul!(c, dA, dx)
+            @test Array(c) == Tout.(Int64.(A) * Int64.(x))
+        end
     end
 end
 

@@ -443,7 +443,7 @@ end
     end
 end
 
-function Random.rand!(rng::RNG, A::AnyGPUArray)
+function Random.rand!(rng::RNG, A::AnyGPUArray{T}) where T
     isempty(A) && return A
     rand_generic_kernel!(get_backend(A))(rng.seed, rng.counter, A; ndrange=length(A))
     advance_counter!(rng)
@@ -583,7 +583,8 @@ function Random.rand!(rng::RNG{AT}, A::AbstractArray{T}) where {AT, T}
     Random.rand!(rng, B)
     copyto!(A, B)
 end
-function Random.randn!(rng::RNG{AT}, A::AbstractArray{T}) where {AT, T}
+function Random.randn!(rng::RNG{AT}, A::AbstractArray{T}) where {AT, T<:Union{AbstractFloat,
+                                                                             Complex{<:AbstractFloat}}}
     isempty(A) && return A
     B = similar(AT{T}, size(A))
     Random.randn!(rng, B)

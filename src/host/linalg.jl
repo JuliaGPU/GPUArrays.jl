@@ -1,6 +1,6 @@
 # integration with LinearAlgebra stdlib
 
-using LinearAlgebra: MulAddMul, wrap, diagm, BlasReal
+using LinearAlgebra: MulAddMul, wrap, diagm, BlasReal, AbstractTriangular
 
 ## transpose and adjoint
 
@@ -459,9 +459,10 @@ function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::Abstrac
 
         @inbounds if i <= size(A,1) && j <= size(B,2)
             z2 = zero(A[i, 1]*B[1, j] + A[i, 1]*B[1, j])
-            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Tacc = promote_type(R, typeof(z2))
+            Cij = convert(Tacc, z2)
             for k in 1:size(A,2)
-                Cij += A[i, k]*B[k, j]
+                Cij += convert(Tacc, A[i, k]) * convert(Tacc, B[k, j])
             end
             C[i,j] = add(Cij, C[i,j])
         end
@@ -487,10 +488,53 @@ function LinearAlgebra.generic_matmatmul!(C::AbstractGPUVecOrMat, tA, tB, A::Abs
     LinearAlgebra.@stable_muladdmul generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), MulAddMul(a, b))
 end
 end
+
+# triangular × triangular matmul: C = α·(A·B) + β·C, with both A and B triangular.
+# Shared by the version-specific LinearAlgebra entry points below, which differ only in how
+# α/β arrive (raw scalars on ≥1.12, a MulAddMul on older). The wrapper type — not the data —
+# fixes which triangle holds the nonzeros, so we read it with a plain `isa` check.
+function _triangular_matmatmul!(C::AbstractGPUVecOrMat{R}, A::AbstractTriangular, B::AbstractTriangular, alpha::Number, beta::Number) where {R}
+    if size(A,2) != size(B,1)
+        throw(DimensionMismatch(lazy"matrix A has dimensions $(size(A)), matrix B has dimensions $(size(B))"))
+    end
+    if size(C,1) != size(A,1) || size(C,2) != size(B,2)
+        throw(DimensionMismatch(lazy"result C has dimensions $(size(C)), needs $((size(A,1),size(B,2)))"))
+    end
+    if isempty(A) || isempty(B)
+        return fill!(C, zero(R))
+    end
+    upperA = A isa Union{UnitUpperTriangular, UpperTriangular}
+    @kernel function trimatmul(C, A, B, alpha, beta)
+        idx = @index(Global, Linear)
+        assume.(size(C) .> 0)
+        i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
+        l, m, n = size(A, 1), size(B, 1), size(B, 2)
+
+        @inbounds if i <= l && j <= n
+            z2 = zero(A[i, 1]*B[1, j] + A[i, 1]*B[1, j])
+            Tacc = promote_type(R, typeof(z2))
+            Cij = convert(Tacc, z2)
+            Cij += convert(Tacc, A[i,i]) * convert(Tacc, B[i,j])
+            for k in (upperA ? (i + 1) : 1):(upperA ? m : (i - 1))
+                Cij += convert(Tacc, A[i,k]) * convert(Tacc, B[k,j])
+            end
+            # treat C as write-only when beta is zero (it may hold NaN/Inf)
+            C[i,j] = iszero(beta) ? alpha * Cij : alpha * Cij + beta * C[i,j]
+        end
+    end
+    trimatmul(get_backend(C))(C, A, B, alpha, beta; ndrange = length(C))
+    return C
+end
+
 @static if VERSION ≥ v"1.12.0-rc"
     # we need to use the generic wrapper to avoid dispatch to the 2x2or3x3 method
     using LinearAlgebra: generic_matmatmul_wrapper!, BlasFlag
     function LinearAlgebra.generic_matmatmul_wrapper!(C::AbstractGPUMatrix{T}, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat{T}, B::AbstractGPUVecOrMat{T}, alpha::Number, beta::Number, val::LinearAlgebra.BlasFlag.SyrkHerkGemm) where {T}
+        LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+    end
+    # Symmetric/Hermitian inputs with BLAS eltypes would otherwise dispatch to BLAS.symm!/
+    # hemm!: GPU arrays are DenseArrays, so they match the StridedMatrix{<:BlasFloat} methods
+    function LinearAlgebra.generic_matmatmul_wrapper!(C::AbstractGPUMatrix{T}, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat{T}, B::AbstractGPUVecOrMat{T}, alpha::Number, beta::Number, val::LinearAlgebra.BlasFlag.SymmHemmGeneric) where {T}
         LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
     end
     # need to support mixed complex/real types too
@@ -518,6 +562,18 @@ end
         @. C = s * X * alpha + C * beta
         return C
     end
+    LinearAlgebra._generic_matmatmul_nonadjtrans!(C::AbstractGPUVecOrMat, A::AbstractTriangular, B::AbstractTriangular, alpha::Number, beta::Number) =
+        _triangular_matmatmul!(C, A, B, alpha, beta)
+end
+
+@static if VERSION < v"1.11.0-rc"
+    LinearAlgebra._generic_matmatmul!(C::AbstractGPUVecOrMat, tA::Char, tB::Char, A::AbstractTriangular, B::AbstractTriangular, add::LinearAlgebra.MulAddMul) =
+        _triangular_matmatmul!(C, A, B, add.alpha, add.beta)
+end
+
+@static if v"1.11.0-rc" < VERSION < v"1.12.0-rc"
+    LinearAlgebra._generic_matmatmul!(C::AbstractGPUVecOrMat, A::AbstractTriangular, B::AbstractTriangular, add::LinearAlgebra.MulAddMul) =
+        _triangular_matmatmul!(C, A, B, add.alpha, add.beta)
 end
 
 function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix{T}, B::AbstractGPUVecOrMat{S}) where {T,S,R}
@@ -542,10 +598,11 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij += (unit ? one(Cij) : A[i,i]) * B[i,j]
+            Tacc = promote_type(R, typeof(z2))
+            Cij = convert(Tacc, z2)
+            Cij += (unit ? one(Cij) : convert(Tacc, A[i,i])) * convert(Tacc, B[i,j])
             for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
-                Cij += A[i,k] * B[k,j]
+                Cij += convert(Tacc, A[i,k]) * convert(Tacc, B[k,j])
             end
             C[i,j] += Cij
         end
@@ -559,10 +616,11 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij += (unit ? one(Cij) : transpose(A[i,i])) * B[i,j]
+            Tacc = promote_type(R, typeof(z2))
+            Cij = convert(Tacc, z2)
+            Cij += (unit ? one(Cij) : transpose(convert(Tacc, A[i,i]))) * convert(Tacc, B[i,j])
             for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
-                Cij += transpose(A[k,i]) * B[k,j]
+                Cij += transpose(convert(Tacc, A[k,i])) * convert(Tacc, B[k,j])
             end
             C[i,j] += Cij
         end
@@ -576,10 +634,11 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij += (unit ? one(Cij) : adjoint(A[i,i])) * B[i,j]
+            Tacc = promote_type(R, typeof(z2))
+            Cij = convert(Tacc, z2)
+            Cij += (unit ? one(Cij) : adjoint(convert(Tacc, A[i,i]))) * convert(Tacc, B[i,j])
             for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
-                Cij += adjoint(A[k,i]) * B[k,j]
+                Cij += adjoint(convert(Tacc, A[k,i])) * convert(Tacc, B[k,j])
             end
             C[i,j] += Cij
         end
@@ -620,10 +679,11 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij += A[i,j] * (unit ? one(Cij) : B[j,j])
+            Tacc = promote_type(R, typeof(z2))
+            Cij = convert(Tacc, z2)
+            Cij += convert(Tacc, A[i,j]) * (unit ? one(Cij) : convert(Tacc, B[j,j]))
             for k in (upper ? 1 : (j + 1)):(upper ? (j - 1) : m)
-                Cij += A[i,k] * B[k,j]
+                Cij += convert(Tacc, A[i,k]) * convert(Tacc, B[k,j])
             end
             C[i,j] += Cij
         end
@@ -637,10 +697,11 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij += A[i,j] * (unit ? one(Cij) : transpose(B[j,j]))
+            Tacc = promote_type(R, typeof(z2))
+            Cij = convert(Tacc, z2)
+            Cij += convert(Tacc, A[i,j]) * (unit ? one(Cij) : transpose(convert(Tacc, B[j,j])))
             for k in (upper ? 1 : (j + 1) ):(upper ? (j - 1) : m)
-                Cij += A[i,k] * transpose(B[j,k])
+                Cij += convert(Tacc, A[i,k]) * transpose(convert(Tacc, B[j,k]))
             end
             C[i,j] += Cij
         end
@@ -654,10 +715,11 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij += A[i,j] * (unit ? one(Cij) : adjoint(B[j,j]))
+            Tacc = promote_type(R, typeof(z2))
+            Cij = convert(Tacc, z2)
+            Cij += convert(Tacc, A[i,j]) * (unit ? one(Cij) : adjoint(convert(Tacc, B[j,j])))
             for k in (upper ? 1 : (j + 1)):(upper ? (j - 1) : m)
-                Cij += A[i,k] * adjoint(B[j,k])
+                Cij += convert(Tacc, A[i,k]) * adjoint(convert(Tacc, B[j,k]))
             end
             C[i,j] += Cij
         end
@@ -803,7 +865,7 @@ function _normtypes(::Type{T}) where {T}
 end
 
 ## normalize
-
+@static if VERSION < v"1.14.0-DEV.2264" # no longer needed as of JuliaLang/LinearAlgebra#1634
 # Avoid `first(a)` scalar indexing in LinearAlgebra.normalize (JuliaGPU/CUDA.jl#3097)
 function LinearAlgebra.normalize(a::AnyGPUArray, p::Real=2)
     nrm = norm(a, p)
@@ -816,7 +878,7 @@ function LinearAlgebra.normalize(a::AnyGPUArray, p::Real=2)
         return T[]
     end
 end
-
+end
 ## opnorm
 
 function LinearAlgebra.opnorm1(A::AnyGPUArray{T,2}) where {T}
