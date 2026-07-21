@@ -3,3 +3,6 @@ Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 
 [compact]
 Documenter = "1.8"
+
+[compat]
+Documenter = "1.17.0"
