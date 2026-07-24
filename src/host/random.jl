@@ -424,7 +424,7 @@ for T in (UInt64, UInt128, Int128)
     end
 end
 
-@inline Random.rand(rng::ElementRNG, ::Random.SamplerType{T}) where T <: Union{UInt8, UInt16, UInt32, Int8, Int16, Int32, Int64, Bool} =
+@inline Random.rand(rng::ElementRNG, ::Random.SamplerType{T}) where T <: Union{Bool,Base.BitInteger} =
     rand(rng, Random.SamplerType{UInt64}()) % T
 
 
