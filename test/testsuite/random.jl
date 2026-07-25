@@ -57,7 +57,7 @@ Random.rand(rng::AbstractRNG, ::Random.SamplerType{RGBTriplet}) =
     end
 
     @testset "randn" begin  # normally-distributed
-        @testset "$T $d" for T in filter(isrealfloattype, eltypes),
+        @testset "$T $d" for T in filter(isfloattype, eltypes),
                               d in (2, (2,2), (2,2,2))
             A = AT{T}(undef, d)
             B = copy(A)

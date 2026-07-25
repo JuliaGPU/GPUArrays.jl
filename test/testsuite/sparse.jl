@@ -355,24 +355,20 @@ end
 
 function linalg(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
-    for ET in eltypes
-        # sprandn doesn't work nicely with these...
-        if !(ET <: Union{Int16, Int32, Int64, Int128, Complex{Int16}, Complex{Int32}, Complex{Int64}})
-            @testset "Sparse matrix($ET) linear algebra" begin
-                m = 10
-                A  = sprandn(ET, m, m, 0.2)
-                B  = sprandn(ET, m, m, 0.3)
-                ZA = spzeros(ET, m, m)
-                C  = I(div(m, 2))
-                dA = AT(A)
-                dB = AT(B)
-                dZA = AT(ZA)
-                @testset "opnorm and norm" begin
-                    @test opnorm(A, Inf) ≈ opnorm(dA, Inf)
-                    @test opnorm(A, 1)   ≈ opnorm(dA, 1)
-                    @test_throws ArgumentError opnorm(dA, 2)
-                end
-            end
+    # sprandn only works on real or complex float types
+    @testset "Sparse matrix($ET) linear algebra" for ET in filter(isfloattype, eltypes)
+        m = 10
+        A  = sprandn(ET, m, m, 0.2)
+        B  = sprandn(ET, m, m, 0.3)
+        ZA = spzeros(ET, m, m)
+        C  = I(div(m, 2))
+        dA = AT(A)
+        dB = AT(B)
+        dZA = AT(ZA)
+        @testset "opnorm and norm" begin
+            @test opnorm(A, Inf) ≈ opnorm(dA, Inf)
+            @test opnorm(A, 1)   ≈ opnorm(dA, 1)
+            @test_throws ArgumentError opnorm(dA, 2)
         end
     end
 end
