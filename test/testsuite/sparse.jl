@@ -157,7 +157,7 @@ function broadcasting_vector(AT, eltypes)
         @testset "SparseVector($ET)" begin
             m  = 64
             p  = 0.5
-            x  = sprand(ET, m, p)
+            x  = dropzeros(sprand(ET, m, p))
             dx = AT(x)
 
             # zero-preserving
