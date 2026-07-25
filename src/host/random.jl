@@ -324,10 +324,7 @@ end
 ## Specialized rand! kernels for common types
 
 # Each Philox4x32 call produces 4 UInt32 outputs. Specialized kernels batch
-# multiple values per work item to use all 4 outputs efficiently:
-# - ≤4-byte types (including Float16): 4 values per call
-# - 8-byte types (Int64/UInt64/Float64/Complex{Float32}/Complex{Float16}): 2 values per call
-# - 16-byte types (Int128/UInt128/Complex{Float64}):     1 value per call
+# multiple values per work item to use all 4 outputs efficiently
 
 # Convert Philox UInt32 outputs to N values of type T
 @inline philox_to_vals(::Type{Float16}, a1, a2, a3, a4) =
