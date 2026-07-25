@@ -517,7 +517,8 @@ end
 #
 # For AbstractFloats outside BatchedRandnTypes (BFloat16, user-defined float
 # types, etc.) we route through Random's `randn(rng, T)`.
-# `randn(rng, T)` functions may alse be called indirectly by `rand(rng, G)` in `rand_generic_kernel!`
+# `randn(rng, T)` functions may also be called indirectly when a user type's
+# rand sampler calls `randn`, via `rand_generic_kernel!`.
 
 # Bypass Base's ziggurat-based randn(rng, Float{16,32,64}) — its `wi`/`ki`/`fi`
 # tables aren't device-accessible, and on Metal the Float64 tables can't even
