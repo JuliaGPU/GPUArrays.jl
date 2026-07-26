@@ -367,13 +367,13 @@ end
             # due to different definition of `Int` type
             # print([1]) shows as [1] on 64bit but Int64[1] on 32bit
             msg = showstr(A)
-            @test occursin("([1])", msg) || occursin("(Int64[1])", msg)
+            AT != Array && @test occursin("([1])", msg) || occursin("(Int64[1])", msg)
 
             msg = replstr(B)
             @test occursin(Regex("^2×2 $AT{Int64,\\s?2.*}:\n 1  2\n 3  4\$"), msg)
 
             msg = showstr(B)
-            @test occursin("([1 2; 3 4])", msg) || occursin("(Int64[1 2; 3 4])", msg)
+            AT != Array && @test occursin("([1 2; 3 4])", msg) || occursin("(Int64[1 2; 3 4])", msg)
 
             # the printing of Adjoint depends on global state
             msg = replstr(A')
@@ -406,7 +406,7 @@ end
       @testset "selectdim" begin
         @test compare(x -> selectdim(x, 3, 1), AT, rand(Float32, 2, 2, 2))
         let x = AT(rand(Float32, 5, 4, 3))
-          @test typeof(selectdim(x, 3, 1)) == typeof(view(x, :, :, 1))         
+          @test typeof(selectdim(x, 3, 1)) == typeof(view(x, :, :, 1))
           @test typeof(selectdim(x, 2, 1)) == typeof(view(x, :, 1, :))
         end
       end
