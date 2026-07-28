@@ -20,6 +20,48 @@ end
 using SparseArrays
 using SparseArrays: nonzeroinds, nonzeros, rowvals
 
+@kernel function linearize_kernel!(dst, @Const(src))
+    I = @index(Global, Linear)
+    @inbounds dst[I] = src[I]
+end
+
+function linearize!(dst, src)
+    backend = get_backend(src)
+    @assert length(dst) == length(src)
+
+    kernel = linearize_kernel!(backend)
+    kernel(dst, src, ndrange=length(dst))
+    return
+end
+
+@kernel function singleindex_kernel!(dst, @Const(src), i)
+    I = @index(Global, Linear)
+    @inbounds dst[1] = src[i]
+end
+
+function singleindex!(dst, src::AbstractSparseVector, i::Integer)
+    backend = get_backend(src)
+    @assert length(dst) == 1
+    checkbounds(src, i)
+    kernel = singleindex_kernel!(backend)
+    kernel(dst, src, i, ndrange=1)
+    return
+end
+
+@kernel function singleindex_kernel!(dst, @Const(src), i, j)
+    I = @index(Global, Linear)
+    @inbounds dst[1] = src[i, j]
+end
+
+function singleindex!(dst, src::AbstractSparseMatrix, i::Integer, j::Integer)
+    backend = get_backend(src)
+    @assert length(dst) == 1
+    checkbounds(src, i)
+    kernel = singleindex_kernel!(backend)
+    kernel(dst, src, i, j, ndrange=1)
+    return
+end
+
 function vector(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
     for ET in eltypes
@@ -38,6 +80,7 @@ function vector(AT, eltypes)
             @test ndims(d_x)  == 1
             dense_d_x  = dense_AT(x)
             dense_d_x2 = dense_AT(d_x)
+            # Indexing
             @allowscalar begin
                 @test Array(d_x[:])        == x[:]
                 @test d_x[firstindex(d_x)] == x[firstindex(x)]
@@ -54,6 +97,13 @@ function vector(AT, eltypes)
             @test Array(nonzeroinds(d_x)) == nonzeroinds(x)
             @test Array(rowvals(d_x)) == nonzeroinds(x)
             @test nnz(d_x)    == length(nonzeros(d_x))
+            # Device-side (scalar) indexing
+            dst = zeros(ET, size(d_x))
+            linearize!(dst, d_x)
+            @test x == dst
+            dst_single = zeros(ET, 1)
+            singleindex!(dst_single, d_x, 17)
+            @test only(dst_single) == x[17]
         end
     end
 end
@@ -77,7 +127,7 @@ end
 function matrix(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
     for ET in eltypes
-        @testset "Sparse matrix properties($ET)" begin
+        @testset "$(AT) properties($ET)" begin
             m = 25
             n = 35
             k = 10
@@ -98,6 +148,7 @@ function matrix(AT, eltypes)
             @test size(d_x, 2) == n
             @test size(d_x, 3) == 1
             @test ndims(d_x)   == 2
+            # Indexing
             @allowscalar begin
                 @test d_x[:, :]            == x[:, :]
                 @test d_tx[:, :]           == transpose(x)[:, :]
@@ -127,6 +178,16 @@ function matrix(AT, eltypes)
             @test nnz(d_x)    == length(nonzeros(d_x))
             @test !issymmetric(d_x)
             @test !ishermitian(d_x)
+            # Device-side (scalar) indexing
+            x    = sprand(ET, m, n, 0.2)
+            d_x  = AT(x)
+            dst = zeros(ET, length(d_x))
+            linearize!(dst, d_x)
+            @test Array(x[:]) == dst
+            dst_single = zeros(ET, 1)
+            i, j = floor(Int, m * 0.5), floor(Int, n * 0.5)
+            singleindex!(dst_single, d_x, i, j)
+            @test only(dst_single) == x[i, j]
         end
     end
 end

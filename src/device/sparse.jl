@@ -106,6 +106,7 @@ Base.length(g::AbstractGPUSparseDeviceMatrix) = prod(g.dims)
 Base.size(g::AbstractGPUSparseDeviceMatrix) = g.dims
 SparseArrays.nnz(g::AbstractGPUSparseDeviceMatrix) = g.nnz
 SparseArrays.getnzval(g::AbstractGPUSparseDeviceMatrix) = g.nzVal
+# FIXME: Implement `rowvals` to explicitly say why it's not available for CSR format?
 
 struct GPUSparseDeviceArrayCSR{Tv, Ti, Vi, Vv, N, M, A} <: AbstractSparseArray{Tv, Ti, N}
     rowPtr::Vi

@@ -1,0 +1,164 @@
+# device-level indexing
+using SparseArrays: nonzeroinds, nonzeros, nnz, getcolptr
+using Base: @propagate_inbounds
+
+Base.IndexStyle(::Type{GPUSparseDeviceVector}) = Base.IndexLinear()
+
+# Implementing only scalar indexing. Non-scalar indexing would allocate in device code
+
+## Adapted from SparseArrays.AbstractSparseVector
+@propagate_inbounds function Base.getindex(
+    v::GPUSparseDeviceVector{Tv,Ti},
+    i::Integer,
+) where {Tv,Ti}
+    @boundscheck checkbounds(v, i)
+    m = nnz(v)
+    nzind = nonzeroinds(v)
+    nzval = nonzeros(v)
+
+    ii = searchsortedfirst(nzind, convert(Ti, i))
+    (ii <= m && nzind[ii] == i) ? nzval[ii] : zero(Tv)
+end
+
+# Logical getindex
+@propagate_inbounds function Base.getindex(
+    v::GPUSparseDeviceVector,
+    I::AbstractVector{Bool},
+)
+    isone(count(I)) ? v[findfirst(I)] :
+    error(
+        "Logical index contains more than one true value. Device arrays only support scalar indexing.",
+    )
+end
+
+@propagate_inbounds function Base.getindex(
+    A::AbstractGPUSparseDeviceMatrix,
+    i::Integer,
+    J::AbstractVector{Bool},
+)
+    isone(count(J)) ? A[i, findfirst(J)] :
+    error(
+        "Logical index contains more than one true value. Device arrays only support scalar indexing.",
+    )
+end
+
+@propagate_inbounds function Base.getindex(
+    A::AbstractGPUSparseDeviceMatrix,
+    I::AbstractVector{Bool},
+    j::Integer,
+)
+    isone(count(I)) ? A[findfirst(I), j] :
+    error(
+        "Logical index contains more than one true value. Device arrays only support scalar indexing.",
+    )
+end
+
+@propagate_inbounds function Base.getindex(
+    A::AbstractGPUSparseDeviceMatrix,
+    I::AbstractVector{Bool},
+    J::AbstractVector{Bool},
+)
+    if (isone(count(I)) && isone(count(J)))
+        A[findfirst(I), findfirst(J)]
+    else
+        failing_len, failing_idx = findmax((count(I), count(J)))
+        error(
+            "Logical index $(failing_idx == 1 ? "I" : "J") contains $(failing_len) true " *
+            "values. Device arrays only support scalar indexing.",
+        )
+    end
+end
+
+@propagate_inbounds Base.getindex(
+    A::AbstractGPUSparseDeviceMatrix,
+    I::Tuple{Integer,Integer},
+) = getindex(A, I[1], I[2])
+
+# Scalar getindex methods linear-scan the minor axis rather than binary-searching
+# and sum across matching entries. cuSPARSE formats don't guarantee sorted indices
+# within a major-axis slice (e.g. SpGEMM output may leave CSR columns unsorted
+# within a row, and COO is only guaranteed row-sorted), nor uniqueness — duplicate
+# (i, j) entries are permitted and their values sum, matching the convention of
+# Julia's `sparse()` constructor and SciPy/CuPy. For Bool we OR instead of sum,
+# also matching `sparse()`, since Bool + Bool doesn't stay Bool.
+sum_duplicate(a, b) = a + b
+sum_duplicate(a::Bool, b::Bool) = a | b
+
+## Adapted logic from SparseArrays.AbstractSparseMatrixCSC
+@propagate_inbounds function Base.getindex(
+    A::GPUSparseDeviceMatrixCSC{Tv,Ti},
+    i::Integer,
+    j::Integer,
+) where {Tv,Ti}
+    @boundscheck checkbounds(A, i, j)
+    colPtr, rowVal, nzVal = getcolptr(A), rowvals(A), nonzeros(A)
+
+    # Range of possible row indices
+    rl = convert(Ti, @inbounds colPtr[j])
+    rr = convert(Ti, @inbounds colPtr[j+1] - 1)
+    (rl > rr) && return zero(Tv)
+
+    ii = searchsortedfirst(rowVal, convert(Ti, i), rl, rr, Base.Order.Forward)
+    (ii <= nnz(A) && rowVal[ii] == i) ? nzVal[ii] : zero(Tv)
+end
+
+@propagate_inbounds function Base.getindex(
+    A::GPUSparseDeviceMatrixCSR{Tv,Ti},
+    i::Integer,
+    j::Integer,
+) where {Tv,Ti}
+    @boundscheck checkbounds(A, i, j)
+    rowPtr, colVal, nzVal = A.rowPtr, A.colVal, A.nzVal
+
+    # Range of possible col indices
+    rt = convert(Ti, @inbounds rowPtr[i])
+    rb = convert(Ti, @inbounds rowPtr[i+1] - 1)
+    (rt > rb) && return zero(Tv)
+
+    jj = searchsortedfirst(colVal, convert(Ti, j), rt, rb, Base.Order.Forward)
+    (jj <= nnz(A) && colVal[jj] == j) ? nzVal[jj] : zero(Tv)
+end
+
+## Adapted from CUDA.jl/blob/lib/cusparse/src/array.jl#L490
+@propagate_inbounds function Base.getindex(
+    A::GPUSparseDeviceMatrixCOO{Tv,Ti},
+    i::Integer,
+    j::Integer,
+) where {Tv,Ti}
+    # COO in CUDA is assumed to be sorted by row (not col):
+    #https://docs.nvidia.com/cuda/cusparse/storage-formats.html?highlight=coo#coordinate-coo
+    @boundscheck checkbounds(A, i, j)
+    rowInd, colInd, nzVal = A.rowInd, A.colInd, A.nzVal
+
+    # Looking for the range s.t. rowInd[r1:r2] .== i
+    rl = searchsortedfirst(rowInd, i, Base.Order.Forward)
+    (rl > nnz(A) || rowInd[rl] > i) && return zero(Tv)
+    rr = min(searchsortedfirst(rowInd, i+1, Base.Order.Forward), nnz(A))
+    # Important to exclude rr, as including it un-sorts colInd[rl:rr] 
+    # Column is not guaranteed to be sorted. We linear scan
+    result = zero(Tv)
+    for k in rl:rl
+        A.colInd[k] == i && (result = sum_duplicate(result, nonzeros(A)[k]))
+    end
+    return result
+end
+
+## Adapted from CUDA.jl/blob/lib/cusparse/src/array.jl#L500
+@propagate_inbounds function Base.getindex(
+    A::GPUSparseDeviceMatrixBSR{Tv,Ti},
+    i::Integer,
+    j::Integer,
+) where {Tv,Ti}
+    @boundscheck checkbounds(A, i, j)
+
+    i_block, i_idx = fldmod1(i, A.blockDim)
+    j_block, j_idx = fldmod1(j, A.blockDim)
+    block_idx = (i_idx-1) * A.blockDim + j_idx - 1
+    c1 = convert(Ti, A.rowPtr[i_block])
+    c2 = convert(Ti, A.rowPtr[i_block+1]-1)
+    result = zero(T)
+    for k in c1:c2
+        A.colVal[k] == i_block && (result == sum_duplicate(result, nonzeros(a)[k+block_idx]))
+    end
+    return result
+end
