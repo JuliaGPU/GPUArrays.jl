@@ -44,28 +44,615 @@ Base.iszero(A::AbstractGPUSparseArray) = SparseArrays.nnz(A) == 0 || all(iszero,
 SparseArrays.SparseVector(x::AbstractGPUSparseVector) = SparseVector(length(x), Array(SparseArrays.nonzeroinds(x)), Array(SparseArrays.nonzeros(x)))
 SparseArrays.SparseMatrixCSC(x::AbstractGPUSparseMatrixCSC) = SparseMatrixCSC(size(x)..., Array(SparseArrays.getcolptr(x)), Array(SparseArrays.rowvals(x)), Array(SparseArrays.nonzeros(x)))
 
+function check_sparse_target(::Type{ST}, ::Type{Tv}, ::Type{Ti}) where {ST,Tv,Ti}
+    Tv isa Type && Ti isa Type ||
+        throw(ArgumentError("sparse target type $ST must specify value and index eltypes"))
+    return
+end
+
+@kernel function dense_sparse_vector_kernel!(iPtr, nzVal, A, indices)
+    i = @index(Global, Linear)
+    if i <= length(indices)
+        @inbounds begin
+            idx = indices[i]
+            iPtr[i] = idx
+            nzVal[i] = A[idx]
+        end
+    end
+end
+
+@kernel function dense_sparse_matrix_kernel!(rowInd, colInd, nzVal, A, indices)
+    i = @index(Global, Linear)
+    if i <= length(indices)
+        @inbounds begin
+            idx = indices[i]
+            rowInd[i] = idx[1]
+            colInd[i] = idx[2]
+            nzVal[i] = A[idx]
+        end
+    end
+end
+
+"""
+    to_sparse(ST, A)
+
+Build a sparse array of type `ST` from the dense GPU array `A`, on the device (no host
+round-trip); the inverse of [`to_dense`](@ref). `ST` must be a concrete
+`AbstractGPUSparseVector` or `AbstractGPUSparseMatrixCOO` (other matrix formats follow by
+converting the resulting COO with `csr_type`/`csc_type`). The target format is required
+because the result layout would otherwise be ambiguous; `to_dense` needs no such argument.
+"""
+function to_sparse(::Type{ST}, A::AnyGPUVector) where {Tv,Ti,ST<:AbstractGPUSparseVector{Tv,Ti}}
+    check_sparse_target(ST, Tv, Ti)
+    indices = findall(!iszero, A)
+    nstored = length(indices)
+    iPtr = similar(A, Ti, nstored)
+    nzVal = similar(A, Tv, nstored)
+    if nstored > 0
+        dense_sparse_vector_kernel!(get_backend(A))(iPtr, nzVal, A, indices;
+                                                    ndrange=nstored)
+    end
+    unsafe_free!(indices)
+    return ST(iPtr, nzVal, length(A))
+end
+
+# Densifying a dense array naturally produces coordinate (COO) format, so this builds a
+# COO directly. Other formats are obtained by converting the COO with `csr_type`/
+# `csc_type` (which back-ends already provide as constructors), avoiding any need to map
+# a target type to its COO sibling.
+function to_sparse(::Type{ST}, A::AnyGPUMatrix) where {Tv,Ti,ST<:AbstractGPUSparseMatrixCOO{Tv,Ti}}
+    check_sparse_target(ST, Tv, Ti)
+    indices = findall(!iszero, A)
+    nstored = length(indices)
+    rowInd = similar(A, Ti, nstored)
+    colInd = similar(A, Ti, nstored)
+    nzVal = similar(A, Tv, nstored)
+    if nstored > 0
+        dense_sparse_matrix_kernel!(get_backend(A))(rowInd, colInd, nzVal, A, indices;
+                                                    ndrange=nstored)
+    end
+    unsafe_free!(indices)
+    return ST(rowInd, colInd, nzVal, size(A), nstored)
+end
+
+@kernel function densify_vector_kernel!(out, iPtr, nzVal)
+    k = @index(Global, Linear)
+    if k <= length(nzVal)
+        @inbounds out[iPtr[k]] = nzVal[k]
+    end
+end
+
+@kernel function densify_matrix_kernel!(out, rowInd, colInd, nzVal)
+    k = @index(Global, Linear)
+    if k <= length(nzVal)
+        @inbounds out[rowInd[k], colInd[k]] = nzVal[k]
+    end
+end
+
+"""
+    to_dense(A)
+
+Materialize the sparse GPU array `A` into a dense array of the same back-end, on the
+device (no host round-trip); the inverse of [`to_sparse`](@ref). Stored coordinates are
+assumed unique (true for CSC/CSR and for COO produced by conversion); duplicate COO
+coordinates resolve to the last value written.
+"""
+function to_dense(x::AbstractGPUSparseVector{Tv}) where {Tv}
+    out = fill!(similar(nonzeros(x), Tv, length(x)), zero(Tv))
+    if nnz(x) > 0
+        densify_vector_kernel!(get_backend(out))(out, SparseArrays.nonzeroinds(x), nonzeros(x);
+                                                 ndrange=nnz(x))
+    end
+    return out
+end
+
+function to_dense(A::AbstractGPUSparseMatrix{Tv}) where {Tv}
+    coo = coo_type(A)(A)
+    out = fill!(similar(nonzeros(A), Tv, size(A)), zero(Tv))
+    if nnz(coo) > 0
+        densify_matrix_kernel!(get_backend(out))(out, coo.rowInd, coo.colInd, nonzeros(coo);
+                                                 ndrange=nnz(coo))
+    end
+    return out
+end
+
 # similar
 Base.similar(Vec::V) where {V<:AbstractGPUSparseVector} = V(copy(SparseArrays.nonzeroinds(Vec)), similar(SparseArrays.nonzeros(Vec)), length(Vec))
 Base.similar(Mat::M) where {M<:AbstractGPUSparseMatrixCSC} = M(copy(SparseArrays.getcolptr(Mat)), copy(SparseArrays.rowvals(Mat)), similar(SparseArrays.nonzeros(Mat)), size(Mat))
 
-Base.similar(Vec::V, T::Type) where {Tv, Ti, V<:AbstractGPUSparseVector{Tv, Ti}} = sparse_array_type(V){T, Ti}(copy(SparseArrays.nonzeroinds(Vec)), similar(SparseArrays.nonzeros(Vec), T), length(Vec))
-Base.similar(Mat::M, T::Type) where {M<:AbstractGPUSparseMatrixCSC} = sparse_array_type(M)(copy(SparseArrays.getcolptr(Mat)), copy(SparseArrays.rowvals(Mat)), similar(SparseArrays.nonzeros(Mat), T), size(Mat))
+# `similar(A, ::Type)` (structure-preserving, new element type) is a back-end method, just
+# like the dense `similar`. The generic algorithms below always build their outputs with
+# `similar` (dispatched on a representative value), so there is no need for backends to
+# provide `*_array_type` mapping functions to reconstruct a sparse type from a type.
 
-dense_array_type(a::AbstractArray)     = dense_array_type(typeof(a))
-sparse_array_type(a::AbstractArray)    = sparse_array_type(typeof(a))
-dense_vector_type(a::AbstractArray)    = dense_vector_type(typeof(a))
-
-dense_array_type(::Type{<:SparseVector}) = SparseVector
-sparse_array_type(::Type{<:SparseVector}) = SparseVector
-dense_vector_type(::Type{<:AbstractSparseArray}) = Vector
-dense_vector_type(::Type{<:AbstractArray})       = Vector
-dense_array_type(::Type{<:SparseMatrixCSC}) = SparseMatrixCSC
-sparse_array_type(::Type{<:SparseMatrixCSC})    = SparseMatrixCSC
-
-coo_type(sa) = coo_type(typeof(sa))
+# Stored (minor-axis) index buffer, accessed generically through the conventional field;
+# the analogue of `SparseArrays.storedinds`. Used by the broadcast/construction code.
+_stored_inds(A::AbstractGPUSparseMatrixCSR) = A.colVal
+_stored_inds(A::AbstractGPUSparseMatrixCSC) = A.rowVal
+_stored_inds(A::AbstractGPUSparseVector)    = A.iPtr
 
 function _spadjoint end
 function _sptranspose end
+
+const SparseMatmulEltypes = Union{Float16,Float32,ComplexF16,ComplexF32}
+
+sparse_matmul_accumulator(::Type{T}) where {T} = T
+sparse_matmul_accumulator(::Type{Float16}) = Float32
+sparse_matmul_accumulator(::Type{ComplexF16}) = ComplexF32
+
+const GPUSparseMatrixOrWrapper = Union{
+    AbstractGPUSparseMatrix,
+    Transpose{<:Any,<:AbstractGPUSparseMatrix},
+    Adjoint{<:Any,<:AbstractGPUSparseMatrix},
+}
+
+function sparse_op(t::AbstractChar)
+    t in ('N', 'n', 'S', 's', 'H', 'h') && return false, false
+    t in ('T', 't') && return true, false
+    t in ('C', 'c') && return true, true
+    throw(ArgumentError("unsupported sparse matrix operation '$t'"))
+end
+
+sparse_op_size(A, trans::Bool) = trans ? reverse(size(A)) : size(A)
+
+# Format-conversion hooks: a back-end maps any of its sparse-matrix types to the *type* of
+# its sibling format (`coo_type(::Type{<:MyCSC}) = MyCOO`); generic code then converts with
+# `coo_type(A)(A)`. This is a type-level hook rather than plain `convert(Dest, A)` because the
+# format is the wrapper's identity (distinct structs/fields), not a type parameter — so unlike
+# an eltype change there is no generic wrapper→sibling-wrapper operation, and only the back-end
+# knows its sibling types. The cross-format `convert` algorithm below is the engine those
+# constructors route through; the identity case (`coo_type(coo)(coo)`) is the back-end's
+# identity constructor.
+coo_type(a) = coo_type(typeof(a))
+csr_type(a) = csr_type(typeof(a))
+csc_type(a) = csc_type(typeof(a))
+
+## Generic format conversions (CSC↔CSR↔COO), on-device.
+#
+# Conversion is owned by `convert` (dispatched on GPUArrays' own abstract types, so not type
+# piracy); construction is owned by the back-end through its conventional field constructor,
+# which `convert` calls — the same division `SparseArrays` uses (`convert`/constructors for
+# conversion, `SparseMatrixCSC(m, n, colptr, rowval, nzval)` for construction). Conversions
+# preserve the source's value/index eltypes; every buffer is allocated from a source array
+# via `similar`, so the storage mode and back-end are inherited. `sortperm` on a back-end
+# vector is required (the COO→CSR/CSC path; already implied by `findnz`).
+
+@inline function sparse_lower_bound(xs, lo::Ti, hi::Ti, key::Ti) where {Ti}
+    l = lo
+    r = hi
+    while l < r
+        m = (l + r) >>> 1
+        @inbounds v = xs[m]
+        if v < key
+            l = m + one(Ti)
+        else
+            r = m
+        end
+    end
+    return l
+end
+
+# Expand a compressed pointer array (CSC `colPtr` / CSR `rowPtr`, length `dim+1`) into one
+# explicit lead index per stored entry: thread `lead` writes its index into the slots
+# `ptr[lead]:ptr[lead+1]-1` of `out`.
+@kernel function expand_ptr_kernel!(out, ptr)
+    lead = @index(Global, Linear)
+    if lead <= length(ptr) - 1
+        T = eltype(out)
+        @inbounds begin
+            k = ptr[lead]
+            stop = ptr[lead + 1]
+            v = T(lead)
+            while k < stop
+                out[k] = v
+                k += oneunit(k)
+            end
+        end
+    end
+end
+
+# Build a lead-major linear sort key per stored COO entry (lead-major: sorting by the key
+# orders entries by `(lead, sub)`); `subdim` is the size of the sub axis.
+@kernel function coo_sort_keys_kernel!(keys, leadInd, subInd, subdim)
+    i = @index(Global, Linear)
+    if i <= length(keys)
+        @inbounds keys[i] = (Int64(leadInd[i]) - Int64(1)) * Int64(subdim) + Int64(subInd[i])
+    end
+end
+
+# Gather the three COO arrays through a permutation (e.g. from `sortperm`).
+@kernel function coo_gather_kernel!(leadOut, subOut, nzOut, leadIn, subIn, nzIn, perm)
+    i = @index(Global, Linear)
+    if i <= length(perm)
+        @inbounds begin
+            src = perm[i]
+            leadOut[i] = leadIn[src]
+            subOut[i] = subIn[src]
+            nzOut[i] = nzIn[src]
+        end
+    end
+end
+
+# Build a compressed pointer array from sorted lead indices: `ptr[i]` is the first 1-based
+# position of a stored entry whose lead index is ≥ `i`, and `ptr[end] = nnz+1`.
+@kernel function compressed_ptr_from_sorted_kernel!(ptr, sortedLead, nnz)
+    i = @index(Global, Linear)
+    Ti = eltype(ptr)
+    if i <= length(ptr)
+        @inbounds ptr[i] = if i == length(ptr)
+            Ti(nnz) + one(Ti)
+        else
+            sparse_lower_bound(sortedLead, one(Ti), Ti(nnz) + one(Ti), Ti(i))
+        end
+    end
+end
+
+# Order a COO matrix's stored entries lead-major, returning fresh (lead, sub, nz) arrays at
+# the source eltypes. Duplicate coordinates are preserved (no summing).
+function _sorted_coo(A::AbstractGPUSparseMatrixCOO{Tv,Ti}, ::Val{lead}) where {Tv,Ti,lead}
+    lead === :row || lead === :col ||
+        throw(ArgumentError("COO sort lead must be :row or :col"))
+    total = Int(nnz(A))
+    leadIn = lead === :row ? A.rowInd : A.colInd
+    subIn  = lead === :row ? A.colInd : A.rowInd
+    subdim = lead === :row ? size(A, 2) : size(A, 1)
+
+    leadOut = similar(leadIn, Ti, total)
+    subOut  = similar(subIn, Ti, total)
+    nzOut   = similar(nonzeros(A), Tv, total)
+    total == 0 && return leadOut, subOut, nzOut
+
+    backend = get_backend(leadOut)
+    keys = similar(leadIn, Int64, total)
+    coo_sort_keys_kernel!(backend)(keys, leadIn, subIn, subdim; ndrange=total)
+    perm = sortperm(keys)
+    coo_gather_kernel!(backend)(leadOut, subOut, nzOut, leadIn, subIn, nonzeros(A), perm;
+                                ndrange=total)
+    unsafe_free!(keys)
+    unsafe_free!(perm)
+    return leadOut, subOut, nzOut
+end
+
+# compressed pointer array of length `dim+1` from (possibly empty) sorted lead indices,
+# inheriting the lead array's index eltype and storage.
+function _compressed_ptr(sortedLead, dim::Integer, n::Integer)
+    ptr = similar(sortedLead, dim + 1)
+    if n > 0
+        compressed_ptr_from_sorted_kernel!(get_backend(ptr))(ptr, sortedLead, n;
+                                                             ndrange=dim + 1)
+    else
+        fill!(ptr, one(eltype(ptr)))
+    end
+    return ptr
+end
+
+# Cross-format conversions are ordinary `convert` methods, dispatched on GPUArrays' own
+# abstract types (so this is not type piracy and avoids the ambiguity a generic constructor
+# would have with a back-end's host-array constructor). The result is built with the
+# back-end's conventional field constructor `ST(components..., dims[, nnz])` — the write-side
+# analogue of the `colPtr`/`rowVal`/`nzVal` read contract, and how `SparseArrays` itself
+# builds (`SparseMatrixCSC(m, n, colptr, rowval, nzval)`). A back-end with unconventional
+# construction overrides the relevant `convert` method.
+
+# CSR → COO: expand `rowPtr` into explicit row indices; columns and values are shared.
+function Base.convert(::Type{ST}, A::AbstractGPUSparseMatrixCSR) where {ST<:AbstractGPUSparseMatrixCOO}
+    n = Int(nnz(A))
+    rowInd = similar(A.colVal, n)
+    n > 0 && expand_ptr_kernel!(get_backend(rowInd))(rowInd, A.rowPtr; ndrange=size(A, 1))
+    return ST(rowInd, A.colVal, nonzeros(A), size(A), n)
+end
+
+# CSC → COO: expand `colPtr` into explicit column indices; rows and values are shared.
+function Base.convert(::Type{ST}, A::AbstractGPUSparseMatrixCSC) where {ST<:AbstractGPUSparseMatrixCOO}
+    n = Int(nnz(A))
+    colInd = similar(A.rowVal, n)
+    n > 0 && expand_ptr_kernel!(get_backend(colInd))(colInd, A.colPtr; ndrange=size(A, 2))
+    return ST(A.rowVal, colInd, nonzeros(A), size(A), n)
+end
+
+# COO → CSR: sort row-major, then compress the row indices into a `rowPtr`.
+function Base.convert(::Type{ST}, A::AbstractGPUSparseMatrixCOO) where {ST<:AbstractGPUSparseMatrixCSR}
+    rowInd, colVal, nzVal = _sorted_coo(A, Val(:row))
+    rowPtr = _compressed_ptr(rowInd, size(A, 1), Int(nnz(A)))
+    unsafe_free!(rowInd)
+    return ST(rowPtr, colVal, nzVal, size(A))
+end
+
+# COO → CSC: sort column-major, then compress the column indices into a `colPtr`.
+function Base.convert(::Type{ST}, A::AbstractGPUSparseMatrixCOO) where {ST<:AbstractGPUSparseMatrixCSC}
+    colInd, rowVal, nzVal = _sorted_coo(A, Val(:col))
+    colPtr = _compressed_ptr(colInd, size(A, 2), Int(nnz(A)))
+    unsafe_free!(colInd)
+    return ST(colPtr, rowVal, nzVal, size(A))
+end
+
+# CSC ↔ CSR route through COO (the back-end's hook yields its concrete COO type).
+Base.convert(::Type{ST}, A::AbstractGPUSparseMatrixCSC) where {ST<:AbstractGPUSparseMatrixCSR} =
+    convert(ST, coo_type(A)(A))
+Base.convert(::Type{ST}, A::AbstractGPUSparseMatrixCSR) where {ST<:AbstractGPUSparseMatrixCSC} =
+    convert(ST, coo_type(A)(A))
+
+@inline function sparse_atomic_add!(A::AbstractArray{<:Real}, parts, I::Integer, x)
+    @inbounds Atomix.@atomic A[Int(I)] += x
+    return
+end
+
+@inline function sparse_atomic_add!(A::AbstractArray{<:Complex}, parts, I::Integer, x)
+    j = 2 * Int(I)
+    @inbounds begin
+        Atomix.@atomic parts[j - 1] += real(x)
+        Atomix.@atomic parts[j] += imag(x)
+    end
+    return
+end
+
+sparse_atomic_parts(A::AbstractArray{<:Real}) = A
+sparse_atomic_parts(A::AbstractArray{<:Complex{T}}) where {T} = reinterpret(T, A)
+
+@kernel function sparse_scale_kernel!(Y, beta)
+    i = @index(Global, Linear)
+    if i <= length(Y)
+        T = eltype(Y)
+        @inbounds Y[i] = iszero(beta) ? zero(T) : T(beta) * Y[i]
+    end
+end
+
+@kernel function sparse_combine_kernel!(Y, acc, alpha, beta, ::Val{Tacc}) where {Tacc}
+    i = @index(Global, Linear)
+    if i <= length(Y)
+        Ty = eltype(Y)
+        @inbounds Y[i] = iszero(beta) ?
+            Ty(Tacc(alpha) * Tacc(acc[i])) :
+            Ty(Tacc(alpha) * Tacc(acc[i]) + Tacc(beta) * Tacc(Y[i]))
+    end
+end
+
+function sparse_scale!(Y, beta)
+    isempty(Y) && return Y
+    sparse_scale_kernel!(get_backend(Y))(Y, beta; ndrange=length(Y))
+    return Y
+end
+
+function sparse_combine!(Y::AnyGPUArray{Ty}, acc, alpha, beta) where {Ty}
+    isempty(Y) && return Y
+    Tacc = sparse_matmul_accumulator(Ty)
+    sparse_combine_kernel!(get_backend(Y))(Y, acc, Tacc(alpha), Tacc(beta), Val(Tacc);
+                                           ndrange=length(Y))
+    return Y
+end
+
+@kernel function spmv_coo_kernel!(y, yparts, alpha, rowInd, colInd, nzVal, x,
+                                  trans::Bool, conjval::Bool, ::Val{Tacc}) where {Tacc}
+    k = @index(Global, Linear)
+    if k <= length(nzVal)
+        @inbounds begin
+            out = trans ? colInd[k] : rowInd[k]
+            src = trans ? rowInd[k] : colInd[k]
+            v = Tacc(nzVal[k])
+            v = conjval ? conj(v) : v
+            sparse_atomic_add!(y, yparts, out, Tacc(alpha) * v * Tacc(x[src]))
+        end
+    end
+end
+
+@kernel function spmm_coo_kernel!(C, Cparts, alpha, rowInd, colInd, nzVal, B,
+                                  trans::Bool, conjval::Bool, ::Val{Tacc}) where {Tacc}
+    k, j = @index(Global, NTuple)
+    if k <= length(nzVal) && j <= size(B, 2)
+        @inbounds begin
+            outrow = trans ? colInd[k] : rowInd[k]
+            srcrow = trans ? rowInd[k] : colInd[k]
+            v = Tacc(nzVal[k])
+            v = conjval ? conj(v) : v
+            lin = Int(outrow) + (Int(j) - 1) * size(C, 1)
+            sparse_atomic_add!(C, Cparts, lin, Tacc(alpha) * v * Tacc(B[srcrow, j]))
+        end
+    end
+end
+
+@kernel function dense_spmm_coo_kernel!(C, Cparts, alpha, A, rowInd, colInd, nzVal,
+                                        trans::Bool, conjval::Bool, ::Val{Tacc}) where {Tacc}
+    i, k = @index(Global, NTuple)
+    if i <= size(C, 1) && k <= length(nzVal)
+        @inbounds begin
+            outcol = trans ? rowInd[k] : colInd[k]
+            srccol = trans ? colInd[k] : rowInd[k]
+            v = Tacc(nzVal[k])
+            v = conjval ? conj(v) : v
+            lin = Int(i) + (Int(outcol) - 1) * size(C, 1)
+            sparse_atomic_add!(C, Cparts, lin, Tacc(alpha) * Tacc(A[i, srccol]) * v)
+        end
+    end
+end
+
+function spmv_coo!(y::AnyGPUVector{Ty}, A::AbstractGPUSparseMatrixCOO, x,
+                   alpha::Number, beta::Number, trans::Bool, conjval::Bool) where {Ty}
+    Tacc = sparse_matmul_accumulator(Ty)
+    if Tacc === Ty
+        sparse_scale!(y, beta)
+        target = y
+        scatter_alpha = Tacc(alpha)
+    else
+        target = similar(y, Tacc, size(y))
+        fill!(target, zero(Tacc))
+        scatter_alpha = one(Tacc)
+    end
+
+    if nnz(A) > 0
+        parts = sparse_atomic_parts(target)
+        spmv_coo_kernel!(get_backend(y))(target, parts, scatter_alpha, A.rowInd, A.colInd,
+                                         nonzeros(A), x, trans, conjval, Val(Tacc);
+                                         ndrange=nnz(A))
+    end
+
+    if !(Tacc === Ty)
+        sparse_combine!(y, target, alpha, beta)
+        unsafe_free!(target)
+    end
+    return y
+end
+
+function spmm_coo!(C::AnyGPUMatrix{Tc}, A::AbstractGPUSparseMatrixCOO, B,
+                   alpha::Number, beta::Number, trans::Bool, conjval::Bool) where {Tc}
+    Tacc = sparse_matmul_accumulator(Tc)
+    if Tacc === Tc
+        sparse_scale!(C, beta)
+        target = C
+        scatter_alpha = Tacc(alpha)
+    else
+        target = similar(C, Tacc, size(C))
+        fill!(target, zero(Tacc))
+        scatter_alpha = one(Tacc)
+    end
+
+    if nnz(A) > 0 && size(C, 2) > 0
+        parts = sparse_atomic_parts(target)
+        spmm_coo_kernel!(get_backend(C))(target, parts, scatter_alpha, A.rowInd, A.colInd,
+                                         nonzeros(A), B, trans, conjval, Val(Tacc);
+                                         ndrange=(nnz(A), size(C, 2)))
+    end
+
+    if !(Tacc === Tc)
+        sparse_combine!(C, target, alpha, beta)
+        unsafe_free!(target)
+    end
+    return C
+end
+
+function dense_spmm_coo!(C::AnyGPUMatrix{Tc}, A, B::AbstractGPUSparseMatrixCOO,
+                         alpha::Number, beta::Number, trans::Bool, conjval::Bool) where {Tc}
+    Tacc = sparse_matmul_accumulator(Tc)
+    if Tacc === Tc
+        sparse_scale!(C, beta)
+        target = C
+        scatter_alpha = Tacc(alpha)
+    else
+        target = similar(C, Tacc, size(C))
+        fill!(target, zero(Tacc))
+        scatter_alpha = one(Tacc)
+    end
+
+    if nnz(B) > 0 && size(C, 1) > 0
+        parts = sparse_atomic_parts(target)
+        dense_spmm_coo_kernel!(get_backend(C))(target, parts, scatter_alpha, A, B.rowInd,
+                                               B.colInd, nonzeros(B), trans, conjval,
+                                               Val(Tacc);
+                                               ndrange=(size(C, 1), nnz(B)))
+    end
+
+    if !(Tacc === Tc)
+        sparse_combine!(C, target, alpha, beta)
+        unsafe_free!(target)
+    end
+    return C
+end
+
+function Base.:(*)(A::GPUSparseMatrixOrWrapper, x::AnyGPUVector)
+    size(A, 2) == length(x) || throw(DimensionMismatch())
+    y = similar(x, promote_type(eltype(A), eltype(x)), size(A, 1))
+    return LinearAlgebra.mul!(y, A, x)
+end
+
+function Base.:(*)(A::GPUSparseMatrixOrWrapper, B::AnyGPUMatrix)
+    size(A, 2) == size(B, 1) || throw(DimensionMismatch())
+    C = similar(B, promote_type(eltype(A), eltype(B)), (size(A, 1), size(B, 2)))
+    return LinearAlgebra.mul!(C, A, B)
+end
+
+function Base.:(*)(A::AnyGPUMatrix, B::GPUSparseMatrixOrWrapper)
+    size(A, 2) == size(B, 1) || throw(DimensionMismatch())
+    C = similar(A, promote_type(eltype(A), eltype(B)), (size(A, 1), size(B, 2)))
+    return LinearAlgebra.mul!(C, A, B)
+end
+
+LinearAlgebra.generic_matvecmul!(y::AnyGPUVector{Ty}, tA::AbstractChar,
+                                 A::AbstractGPUSparseMatrix{Ta}, x::AnyGPUVector{Tx},
+                                 muladd::MulAddMul) where {
+                                     Ty<:SparseMatmulEltypes,
+                                     Ta<:SparseMatmulEltypes,
+                                     Tx<:SparseMatmulEltypes,
+                                 } =
+    LinearAlgebra.generic_matvecmul!(y, tA, A, x, muladd.alpha, muladd.beta)
+
+function LinearAlgebra.generic_matvecmul!(y::AnyGPUVector{Ty}, tA::AbstractChar,
+                                          A::AbstractGPUSparseMatrix{Ta},
+                                          x::AnyGPUVector{Tx},
+                                          alpha::Number, beta::Number) where {
+                                              Ty<:SparseMatmulEltypes,
+                                              Ta<:SparseMatmulEltypes,
+                                              Tx<:SparseMatmulEltypes,
+                                          }
+    trans, conjval = sparse_op(tA)
+    Asize = sparse_op_size(A, trans)
+    Asize[2] == length(x) ||
+        throw(DimensionMismatch("A has dimensions $Asize but x has length $(length(x))"))
+    Asize[1] == length(y) ||
+        throw(DimensionMismatch("A has dimensions $Asize but y has length $(length(y))"))
+    y === x && throw(ArgumentError("output vector must not be aliased with input vector"))
+    isempty(y) && return y
+
+    return spmv_coo!(y, coo_type(A)(A), x, alpha, beta, trans, conjval)
+end
+
+LinearAlgebra.generic_matmatmul!(C::AnyGPUMatrix{Tc}, tA, tB,
+                                 A::AbstractGPUSparseMatrix{Ta}, B::AnyGPUMatrix{Tb},
+                                 muladd::MulAddMul) where {
+                                     Tc<:SparseMatmulEltypes,
+                                     Ta<:SparseMatmulEltypes,
+                                     Tb<:SparseMatmulEltypes,
+                                 } =
+    LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, muladd.alpha, muladd.beta)
+
+function LinearAlgebra.generic_matmatmul!(C::AnyGPUMatrix{Tc}, tA, tB,
+                                          A::AbstractGPUSparseMatrix{Ta},
+                                          B::AnyGPUMatrix{Tb},
+                                          alpha::Number, beta::Number) where {
+                                              Tc<:SparseMatmulEltypes,
+                                              Ta<:SparseMatmulEltypes,
+                                              Tb<:SparseMatmulEltypes,
+                                          }
+    trans, conjval = sparse_op(tA)
+    Bop = LinearAlgebra.wrap(B, tB)
+    Asize = sparse_op_size(A, trans)
+    Asize[2] == size(Bop, 1) ||
+        throw(DimensionMismatch("A has dimensions $Asize but B has dimensions $(size(Bop))"))
+    size(C) == (Asize[1], size(Bop, 2)) ||
+        throw(DimensionMismatch("C has dimensions $(size(C)), should have $((Asize[1], size(Bop, 2)))"))
+    C === B && throw(ArgumentError("output matrix must not be aliased with input matrix"))
+    isempty(C) && return C
+
+    return spmm_coo!(C, coo_type(A)(A), Bop, alpha, beta, trans, conjval)
+end
+
+LinearAlgebra.generic_matmatmul!(C::AnyGPUMatrix{Tc}, tA, tB,
+                                 A::AnyGPUMatrix{Ta}, B::AbstractGPUSparseMatrix{Tb},
+                                 muladd::MulAddMul) where {
+                                     Tc<:SparseMatmulEltypes,
+                                     Ta<:SparseMatmulEltypes,
+                                     Tb<:SparseMatmulEltypes,
+                                 } =
+    LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, muladd.alpha, muladd.beta)
+
+function LinearAlgebra.generic_matmatmul!(C::AnyGPUMatrix{Tc}, tA, tB,
+                                          A::AnyGPUMatrix{Ta},
+                                          B::AbstractGPUSparseMatrix{Tb},
+                                          alpha::Number, beta::Number) where {
+                                              Tc<:SparseMatmulEltypes,
+                                              Ta<:SparseMatmulEltypes,
+                                              Tb<:SparseMatmulEltypes,
+                                          }
+    Aop = LinearAlgebra.wrap(A, tA)
+    trans, conjval = sparse_op(tB)
+    Bsize = sparse_op_size(B, trans)
+    size(Aop, 2) == Bsize[1] ||
+        throw(DimensionMismatch("A has dimensions $(size(Aop)) but B has dimensions $Bsize"))
+    size(C) == (size(Aop, 1), Bsize[2]) ||
+        throw(DimensionMismatch("C has dimensions $(size(C)), should have $((size(Aop, 1), Bsize[2]))"))
+    C === A && throw(ArgumentError("output matrix must not be aliased with input matrix"))
+    isempty(C) && return C
+
+    return dense_spmm_coo!(C, Aop, coo_type(B)(B), alpha, beta, trans, conjval)
+end
 
 function LinearAlgebra.opnorm(A::AbstractGPUSparseMatrixCSR, p::Real=2)
     if p == Inf
@@ -92,7 +679,7 @@ function LinearAlgebra.norm(A::AbstractGPUSparseMatrix{T}, p::Real=2) where T
 end
 
 function SparseArrays.findnz(S::MT) where {MT <: AbstractGPUSparseMatrix}
-    S2 = coo_type(MT)(S)
+    S2 = coo_type(S)(S)
     I = S2.rowInd
     J = S2.colInd
     V = S2.nzVal
@@ -134,16 +721,16 @@ for SparseMatrixType in [:AbstractGPUSparseMatrixCSC, :AbstractGPUSparseMatrixCS
         LinearAlgebra.triu(A::ST, k::Integer) where {T, ST<:$SparseMatrixType{T}} =
             ST( triu(coo_type(A)(A), k) )
         LinearAlgebra.triu(A::Transpose{T,<:ST}, k::Integer) where {T, ST<:$SparseMatrixType{T}} =
-            ST( triu(coo_type(A)(_sptranspose(parent(A))), k) )
+            ST( triu(coo_type(parent(A))(_sptranspose(parent(A))), k) )
         LinearAlgebra.triu(A::Adjoint{T,<:ST}, k::Integer) where {T, ST<:$SparseMatrixType{T}} =
-            ST( triu(coo_type(A)(_spadjoint(parent(A))), k) )
+            ST( triu(coo_type(parent(A))(_spadjoint(parent(A))), k) )
 
         LinearAlgebra.tril(A::ST, k::Integer) where {T, ST<:$SparseMatrixType{T}} =
             ST( tril(coo_type(A)(A), k) )
         LinearAlgebra.tril(A::Transpose{T,<:ST}, k::Integer) where {T, ST<:$SparseMatrixType{T}} =
-            ST( tril(coo_type(A)(_sptranspose(parent(A))), k) )
+            ST( tril(coo_type(parent(A))(_sptranspose(parent(A))), k) )
         LinearAlgebra.tril(A::Adjoint{T,<:ST}, k::Integer) where {T, ST<:$SparseMatrixType{T}} =
-            ST( tril(coo_type(A)(_spadjoint(parent(A))), k) )
+            ST( tril(coo_type(parent(A))(_spadjoint(parent(A))), k) )
 
         LinearAlgebra.triu(A::Union{ST, Transpose{T,<:ST}, Adjoint{T,<:ST}}) where {T, ST<:$SparseMatrixType{T}} =
             ST( triu(coo_type(A)(A), 0) )
@@ -158,18 +745,18 @@ for SparseMatrixType in [:AbstractGPUSparseMatrixCSC, :AbstractGPUSparseMatrixCS
             ST( kron(A, coo_type(B)(B)) )
 
         LinearAlgebra.kron(A::Transpose{T,<:ST}, B::ST) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(coo_type(A)(_sptranspose(parent(A))), coo_type(B)(B)) )
+            ST( kron(coo_type(parent(A))(_sptranspose(parent(A))), coo_type(B)(B)) )
         LinearAlgebra.kron(A::ST, B::Transpose{T,<:ST}) where {T, ST<:$SparseMatrixType{T}} =
             ST( kron(coo_type(A)(A), coo_type(parent(B))(_sptranspose(parent(B)))) )
         LinearAlgebra.kron(A::Transpose{T,<:ST}, B::Transpose{T,<:ST}) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(coo_type(A)(_sptranspose(parent(A))), coo_type(parent(B))(_sptranspose(parent(B)))) )
+            ST( kron(coo_type(parent(A))(_sptranspose(parent(A))), coo_type(parent(B))(_sptranspose(parent(B)))) )
         LinearAlgebra.kron(A::Transpose{T,<:ST}, B::Diagonal) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(coo_type(A)(_sptranspose(parent(A))), B) )
+            ST( kron(coo_type(parent(A))(_sptranspose(parent(A))), B) )
         LinearAlgebra.kron(A::Diagonal, B::Transpose{T,<:ST}) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(A, coo_type(B)(_sptranspose(parent(B)))) )
+            ST( kron(A, coo_type(parent(B))(_sptranspose(parent(B)))) )
 
         LinearAlgebra.kron(A::Adjoint{T,<:ST}, B::ST) where {T, ST<:$SparseMatrixType{T}} =
-            ST( kron(coo_type(A)(_spadjoint(parent(A))), coo_type(B)(B)) )
+            ST( kron(coo_type(parent(A))(_spadjoint(parent(A))), coo_type(B)(B)) )
         LinearAlgebra.kron(A::ST, B::Adjoint{T,<:ST}) where {T, ST<:$SparseMatrixType{T}} =
             ST( kron(coo_type(A)(A), coo_type(parent(B))(_spadjoint(parent(B)))) )
         LinearAlgebra.kron(A::Adjoint{T,<:ST}, B::Adjoint{T,<:ST}) where {T, ST<:$SparseMatrixType{T}} =
@@ -814,17 +1401,10 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
     elseif length(sparse_args) == 1 && sparse_typ <: Union{AbstractGPUSparseMatrixCSR, AbstractGPUSparseMatrixCSC}
         # we only have a single sparse input, so we can reuse its structure for the output.
         # this avoids a kernel launch and costly synchronization.
-        if sparse_typ <: AbstractGPUSparseMatrixCSR
-            offsets = rowPtr = sparse_arg.rowPtr
-            colVal  = similar(sparse_arg.colVal)
-            nzVal   = similar(sparse_arg.nzVal, Tv)
-            output  = sparse_array_type(sparse_typ)(rowPtr, colVal, nzVal, size(bc))
-        elseif sparse_typ <: AbstractGPUSparseMatrixCSC
-            offsets = colPtr = sparse_arg.colPtr
-            rowVal  = similar(sparse_arg.rowVal)
-            nzVal   = similar(sparse_arg.nzVal, Tv)
-            output  = sparse_array_type(sparse_typ)(colPtr, rowVal, nzVal, size(bc))
-        end
+        # structure is preserved, so a structure-preserving `similar` gives the output
+        # container directly; the kernel rewrites the (identical) pointer array from `offsets`.
+        output  = similar(sparse_arg, Tv)
+        offsets = sparse_typ <: AbstractGPUSparseMatrixCSR ? sparse_arg.rowPtr : sparse_arg.colPtr
     else
         # determine the number of non-zero elements per row so that we can create an
         # appropriately-structured output container
@@ -870,17 +1450,22 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
             total_nnz = mapreduce(x->first(x) != typemax(first(x)), +, offsets)
         end
         output = if sparse_typ <: Union{AbstractGPUSparseMatrixCSR,AbstractGPUSparseMatrixCSC}
-            ixVal = similar(offsets, Ti, total_nnz)
-            nzVal = similar(offsets, Tv, total_nnz)
-            output_sparse_typ = sparse_array_type(sparse_typ) 
-            output_sparse_typ(offsets, ixVal, nzVal, size(bc))
+            # build an empty sparse output of the same kind, then size its index/value
+            # storage to the computed nnz. The kernel fills the pointer array (from
+            # `offsets`), the stored indices, and the values.
+            out = similar(sparse_arg, Tv, size(bc))
+            resize!(_stored_inds(out), total_nnz)
+            resize!(nonzeros(out), total_nnz)
+            out.nnz = total_nnz
+            out
         elseif sparse_typ <: AbstractGPUSparseVector && !fpreszeros
-            val_array = bc.args[first(sparse_args)].nzVal
-            similar(val_array, Tv, size(bc))
+            similar(nonzeros(sparse_arg), Tv, size(bc))
         elseif sparse_typ <: AbstractGPUSparseVector && fpreszeros
-            iPtr   = similar(offsets, Ti, total_nnz)
-            nzVal  = similar(offsets, Tv, total_nnz)
-            sparse_array_type(sparse_arg){Tv, Ti}(iPtr, nzVal, rows)
+            out = similar(sparse_arg, Tv, (rows,))
+            resize!(_stored_inds(out), total_nnz)
+            resize!(nonzeros(out), total_nnz)
+            out.nnz = total_nnz
+            out
         end
         if sparse_typ <: AbstractGPUSparseVector && !fpreszeros
             nonsparse_args = map(bc.args) do arg
@@ -982,9 +1567,6 @@ end
     end
 end
 ## COV_EXCL_STOP
-
-function csc_type end
-function csr_type end
 
 # TODO: implement mapreducedim!
 function Base.mapreduce(f, op, A::AbstractGPUSparseMatrix; dims=:, init=nothing)
