@@ -17,6 +17,9 @@ using Test
 using Adapt
 
 test_result(@nospecialize(a), @nospecialize(b); kwargs...) = a == b
+test_result(::Nothing, ::Nothing; kwargs...) = true
+test_result(::Nothing, @nospecialize(b); kwargs...) = false
+test_result(@nospecialize(a), ::Nothing; kwargs...) = false
 test_result(a::Number, b::Number; kwargs...) = ≈(a, b; kwargs...)
 test_result(a::Missing, b::Missing; kwargs...) = true
 test_result(a::Number, b::Missing; kwargs...) = false
