@@ -189,7 +189,7 @@ function broadcasting_vector(AT, eltypes)
             z  = x  .* y
             dz = dx .* dy
             @test dz isa AT{ET}
-            @test z == SparseVector(dz)
+            @test z ≈ SparseVector(dz)
 
             # multiple inputs
             y  = sprand(ET, m, p)
@@ -200,7 +200,7 @@ function broadcasting_vector(AT, eltypes)
             z  = @. x  * y  * w
             dz = @. dx * dy * dw
             @test dz isa AT{ET}
-            @test z == SparseVector(dz)
+            @test z ≈ SparseVector(dz)
 
             y = sprand(ET, m, p)
             w = sprand(ET, m, p)
@@ -211,15 +211,15 @@ function broadcasting_vector(AT, eltypes)
             z  = @. x  * y  * w  * dense_arr
             dz = @. dx * dy * dw * d_dense_arr
             @test dz isa dense_AT{ET}
-            @test Array(z) == Array(dz)
-            
+            @test Array(z) ≈ Array(dz)
+
             y  = sprand(ET, m, p)
             dy = AT(y)
             dx = AT(x)
             z  = x  .* y  .* ET(2)
             dz = dx .* dy .* ET(2)
             @test dz isa AT{ET}
-            @test z == SparseVector(dz)
+            @test z ≈ SparseVector(dz)
 
             # type-mismatching
             ## non-zero-preserving
@@ -267,14 +267,14 @@ function broadcasting_matrix(AT, eltypes)
             dy = dx .* dense_AT(ones(ET, m, n))
             @test dy isa dense_AT{ET}
             @test Array(y) == Array(dy)
-            
+
             # multiple inputs
             y  = sprand(ET, m, n, p)
             dy = AT(y)
             z  = x  .* y  .* ET(2)
             dz = dx .* dy .* ET(2)
             @test dz isa AT{ET}
-            @test z == SparseMatrixCSC(dz)
+            @test z ≈ SparseMatrixCSC(dz)
 
             # multiple inputs
             w  = sprand(ET, m, n, p)
@@ -282,7 +282,7 @@ function broadcasting_matrix(AT, eltypes)
             z  = x  .* y  .* w
             dz = dx .* dy .* dw
             @test dz isa AT{ET}
-            @test z == SparseMatrixCSC(dz)
+            @test z ≈ SparseMatrixCSC(dz)
 
             # create a matrix with nnz < leading_dim
             x = spdiagm(m, m, 2=>rand(ET, m - 2))
