@@ -1,6 +1,6 @@
 @testsuite "sparse" (AT, eltypes)->begin
     sparse_ATs = sparse_types(AT)
-    for sparse_AT in sparse_ATs
+    @testset "sparse_AT = $sparse_AT" for sparse_AT in sparse_ATs
         if sparse_AT <: AbstractSparseVector
             vector(sparse_AT, eltypes)
             vector_construction(sparse_AT, eltypes)
