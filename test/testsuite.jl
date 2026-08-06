@@ -77,7 +77,6 @@ supported_eltypes() = (Int16, Int32, Int64,
                        Complex{Int16}, Complex{Int32}, Complex{Int64})
 
 # derived sparse container types that are supported by the array type
-
 sparse_types(::Type{AT}) where {AT} = ()
 
 # some convenience predicates for filtering test eltypes
