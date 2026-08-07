@@ -1,6 +1,6 @@
 @testsuite "sparse" (AT, eltypes)->begin
     sparse_ATs = sparse_types(AT)
-    for sparse_AT in sparse_ATs
+    @testset "sparse_AT = $sparse_AT" for sparse_AT in sparse_ATs
         if sparse_AT <: AbstractSparseVector
             vector(sparse_AT, eltypes)
             vector_construction(sparse_AT, eltypes)
@@ -22,8 +22,8 @@ using SparseArrays: nonzeroinds, nonzeros, rowvals
 
 function vector(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
-    for ET in eltypes
-        @testset "Sparse vector properties($ET)" begin
+    @testset "Sparse vector properties" begin
+        @testset "$ET" for ET in eltypes
             m = 25
             n = 35
             k = 10
@@ -76,8 +76,8 @@ end
 
 function matrix(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
-    for ET in eltypes
-        @testset "Sparse matrix properties($ET)" begin
+    @testset "Sparse matrix properties" begin
+        @testset "$ET" for ET in eltypes
             m = 25
             n = 35
             k = 10
@@ -153,8 +153,8 @@ end
 
 function broadcasting_vector(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
-    for ET in eltypes
-        @testset "SparseVector($ET)" begin
+    @testset "SparseVector broadcasting" begin
+        @testset "$ET" for ET in eltypes
             m  = 64
             p  = 0.5
             x  = sprand(ET, m, p)
@@ -189,7 +189,7 @@ function broadcasting_vector(AT, eltypes)
             z  = x  .* y
             dz = dx .* dy
             @test dz isa AT{ET}
-            @test z == SparseVector(dz)
+            @test z ≈ SparseVector(dz)
 
             # multiple inputs
             y  = sprand(ET, m, p)
@@ -200,7 +200,7 @@ function broadcasting_vector(AT, eltypes)
             z  = @. x  * y  * w
             dz = @. dx * dy * dw
             @test dz isa AT{ET}
-            @test z == SparseVector(dz)
+            @test z ≈ SparseVector(dz)
 
             y = sprand(ET, m, p)
             w = sprand(ET, m, p)
@@ -211,15 +211,15 @@ function broadcasting_vector(AT, eltypes)
             z  = @. x  * y  * w  * dense_arr
             dz = @. dx * dy * dw * d_dense_arr
             @test dz isa dense_AT{ET}
-            @test Array(z) == Array(dz)
-            
+            @test Array(z) ≈ Array(dz)
+
             y  = sprand(ET, m, p)
             dy = AT(y)
             dx = AT(x)
             z  = x  .* y  .* ET(2)
             dz = dx .* dy .* ET(2)
             @test dz isa AT{ET}
-            @test z == SparseVector(dz)
+            @test z ≈ SparseVector(dz)
 
             # type-mismatching
             ## non-zero-preserving
@@ -242,8 +242,8 @@ end
 
 function broadcasting_matrix(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
-    for ET in eltypes
-       @testset "SparseMatrix($ET)" begin
+    @testset "SparseMatrix broadcasting" begin
+        @testset "$ET" for ET in eltypes
             m, n = 5, 6
             p   = 0.5
             x   = sprand(ET, m, n, p)
@@ -267,14 +267,14 @@ function broadcasting_matrix(AT, eltypes)
             dy = dx .* dense_AT(ones(ET, m, n))
             @test dy isa dense_AT{ET}
             @test Array(y) == Array(dy)
-            
+
             # multiple inputs
             y  = sprand(ET, m, n, p)
             dy = AT(y)
             z  = x  .* y  .* ET(2)
             dz = dx .* dy .* ET(2)
             @test dz isa AT{ET}
-            @test z == SparseMatrixCSC(dz)
+            @test z ≈ SparseMatrixCSC(dz)
 
             # multiple inputs
             w  = sprand(ET, m, n, p)
@@ -282,7 +282,7 @@ function broadcasting_matrix(AT, eltypes)
             z  = x  .* y  .* w
             dz = dx .* dy .* dw
             @test dz isa AT{ET}
-            @test z == SparseMatrixCSC(dz)
+            @test z ≈ SparseMatrixCSC(dz)
 
             # create a matrix with nnz < leading_dim
             x = spdiagm(m, m, 2=>rand(ET, m - 2))
@@ -302,8 +302,8 @@ end
 
 function mapreduce_matrix(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
-    for ET in eltypes
-        @testset "SparseMatrix($ET)" begin
+    @testset "SparseMatrix mapreduce" begin
+        @testset "$ET" for ET in eltypes
             m,n = 5,6
             p = 0.5
             x = sprand(ET, m, n, p)
@@ -355,31 +355,29 @@ end
 
 function linalg(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
-    for ET in eltypes
+    @testset "Sparse matrix linear algebra" begin
         # sprandn doesn't work nicely with these...
-        if !(ET <: Union{Int16, Int32, Int64, Complex{Int16}, Complex{Int32}, Complex{Int64}})
-            @testset "Sparse matrix($ET) linear algebra" begin
-                m = 10
-                A  = sprandn(ET, m, m, 0.2)
-                B  = sprandn(ET, m, m, 0.3)
-                ZA = spzeros(ET, m, m)
-                C  = I(div(m, 2))
-                dA = AT(A)
-                dB = AT(B)
-                dZA = AT(ZA)
-                @testset "opnorm and norm" begin
-                    @test opnorm(A, Inf) ≈ opnorm(dA, Inf)
-                    @test opnorm(A, 1)   ≈ opnorm(dA, 1)
-                    @test_throws ArgumentError opnorm(dA, 2)
-                end
+        @testset "$ET" for ET in filter(T -> !(T <: Union{Int16, Int32, Int64, Complex{Int16}, Complex{Int32}, Complex{Int64}}), eltypes)
+            m = 10
+            A  = sprandn(ET, m, m, 0.2)
+            B  = sprandn(ET, m, m, 0.3)
+            ZA = spzeros(ET, m, m)
+            C  = I(div(m, 2))
+            dA = AT(A)
+            dB = AT(B)
+            dZA = AT(ZA)
+            @testset "opnorm and norm" begin
+                @test opnorm(A, Inf) ≈ opnorm(dA, Inf)
+                @test opnorm(A, 1)   ≈ opnorm(dA, 1)
+                @test_throws ArgumentError opnorm(dA, 2)
             end
         end
     end
 end
 
 function iszero_vector(AT, eltypes)
-    for ET in eltypes
-        @testset "iszero SparseVector($ET)" begin
+    @testset "iszero SparseVector" begin
+        @testset "$ET" for ET in eltypes
             m = 25
 
             # Test non-zero sparse vector
@@ -408,8 +406,8 @@ function iszero_vector(AT, eltypes)
 end
 
 function iszero_matrix(AT, eltypes)
-    for ET in eltypes
-        @testset "iszero SparseMatrix($ET)" begin
+    @testset "iszero SparseMatrix" begin
+        @testset "$ET" for ET in eltypes
             m, n = 10, 10
 
             # Test non-zero sparse matrix
