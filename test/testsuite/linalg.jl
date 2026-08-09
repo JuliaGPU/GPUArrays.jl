@@ -601,6 +601,29 @@ end
     end
 end
 
+# a container-like element type that doesn't promote with its own scalars
+struct Duo{T}
+    a::T
+    b::T
+end
+Base.zero(::Type{Duo{T}}) where {T} = Duo(zero(T), zero(T))
+Base.zero(x::Duo) = zero(typeof(x))
+Base.:(+)(x::Duo, y::Duo) = Duo(x.a + y.a, x.b + y.b)
+Base.:(*)(x::Duo, y::Number) = Duo(x.a * y, x.b * y)
+Base.:(*)(x::Number, y::Duo) = Duo(x * y.a, x * y.b)
+
+@testsuite "linalg/mul!/mixed-eltype" (AT, eltypes)->begin
+    # mixed element types that have no common promotion type
+    @testset "Duo{$T} * $T" for T in filter(isfloattype, eltypes)
+        n = 4
+        A = [Duo(T(i), T(2i)) for i in 1:n, _ in 1:n]
+        B = T.(reshape(1:n^2, n, n))
+
+        @test Array(AT(A) * AT(B)) == A * B
+        @test Array(AT(B) * AT(A)) == B * A
+    end
+end
+
 @testsuite "linalg/norm" (AT, eltypes)->begin
     @testset "$p-norm($sz x $T)" for sz in [(2,), (2,0), (2,2,2)],
                                      p in Any[0, 0.5, 1, 1.5, 2, Inf, -Inf],
