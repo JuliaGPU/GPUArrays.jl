@@ -587,6 +587,7 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
     upper = tfun === identity ? uploc == 'U' :  uploc != 'U'
     unit  = isunitc == 'U'
+    oA = oneunit(eltype(A))
 
     @kernel function trimatmul(C, A, B)
         idx = @index(Global, Linear)
@@ -597,11 +598,11 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
             Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij = muladd(unit ? one(Cij) : A[i,i], B[i,j], Cij)
+            Cij = muladd(unit ? oA : A[i,i], B[i,j], Cij)
             for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
                 Cij = muladd(A[i,k], B[k,j], Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -614,11 +615,11 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
             Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij = muladd(unit ? one(Cij) : transpose(A[i,i]), B[i,j], Cij)
+            Cij = muladd(unit ? oA : transpose(A[i,i]), B[i,j], Cij)
             for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
                 Cij = muladd(transpose(A[k,i]), B[k,j], Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -631,11 +632,11 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
             Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij = muladd(unit ? one(Cij) : adjoint(A[i,i]), B[i,j], Cij)
+            Cij = muladd(unit ? oA : adjoint(A[i,i]), B[i,j], Cij)
             for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
                 Cij = muladd(adjoint(A[k,i]), B[k,j], Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -665,6 +666,7 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
     upper = tfun === identity ? uploc == 'U' :  uploc != 'U'
     unit  = isunitc == 'U'
+    oB = oneunit(eltype(B))
 
     @kernel function mattrimul(C, A, B)
         idx = @index(Global, Linear)
@@ -675,11 +677,11 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
             Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij = muladd(A[i,j], unit ? one(Cij) : B[j,j], Cij)
+            Cij = muladd(A[i,j], unit ? oB : B[j,j], Cij)
             for k in (upper ? 1 : (j + 1)):(upper ? (j - 1) : m)
                 Cij = muladd(A[i,k], B[k,j], Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -692,11 +694,11 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
             Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij = muladd(A[i,j], unit ? one(Cij) : transpose(B[j,j]), Cij)
+            Cij = muladd(A[i,j], unit ? oB : transpose(B[j,j]), Cij)
             for k in (upper ? 1 : (j + 1) ):(upper ? (j - 1) : m)
                 Cij = muladd(A[i,k], transpose(B[j,k]), Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -709,11 +711,11 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
             Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij = muladd(A[i,j], unit ? one(Cij) : adjoint(B[j,j]), Cij)
+            Cij = muladd(A[i,j], unit ? oB : adjoint(B[j,j]), Cij)
             for k in (upper ? 1 : (j + 1)):(upper ? (j - 1) : m)
                 Cij = muladd(A[i,k], adjoint(B[j,k]), Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 

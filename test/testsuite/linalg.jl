@@ -158,15 +158,15 @@
                 n = 128
                 A = AT(rand(T, n,n))
                 b = AT(rand(T, n))
-                Ct = AT(zeros(T, n))
-                C = zeros(T, n)
+                Ct = AT(fill(T(NaN), n))
+                C = fill(T(NaN), n)
                 mul!(Ct, f(TR(A)), b)
                 mul!(C, f(TR(collect(A))), collect(b))
                 @test collect(Ct) ≈ C
 
                 B = AT(rand(T, n, n))
-                Ct = AT(zeros(T, n, n))
-                C = zeros(T, n, n)
+                Ct = AT(fill(T(NaN), n, n))
+                C = fill(T(NaN), n, n)
                 mul!(Ct, f(TR(A)), B)
                 mul!(C, f(TR(collect(A))), collect(B))
                 @test collect(Ct) ≈ C
@@ -179,8 +179,8 @@
                 n = 128
                 A = AT(rand(T, n,n))
                 B = AT(rand(T, n, n))
-                Ct = AT(zeros(T, n, n))
-                C = zeros(T, n, n)
+                Ct = AT(fill(T(NaN), n, n))
+                C = fill(T(NaN), n, n)
                 mul!(Ct, A, f(TR(B)))
                 mul!(C, collect(A), f(TR(collect(B))))
                 @test collect(Ct) ≈ C
@@ -621,6 +621,12 @@ Base.:(*)(x::Number, y::Duo) = Duo(x * y.a, x * y.b)
 
         @test Array(AT(A) * AT(B)) == A * B
         @test Array(AT(B) * AT(A)) == B * A
+
+        @testset "$W" for W in (UpperTriangular, LowerTriangular,
+                                UnitUpperTriangular, UnitLowerTriangular)
+            @test Array(W(AT(B)) * AT(A)) == W(B) * A
+            @test Array(AT(A) * W(AT(B))) == A * W(B)
+        end
     end
 end
 
