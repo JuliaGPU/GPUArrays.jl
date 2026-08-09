@@ -1,6 +1,8 @@
 using ParallelTestRunner: runtests, parse_args
 import GPUArrays
 
+include("jlarrays_lu.jl")
+
 include("testsuite.jl")
 
 const init_worker_code = quote
