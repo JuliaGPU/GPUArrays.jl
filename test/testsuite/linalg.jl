@@ -158,15 +158,15 @@
                 n = 128
                 A = AT(rand(T, n,n))
                 b = AT(rand(T, n))
-                Ct = AT(zeros(T, n))
-                C = zeros(T, n)
+                Ct = AT(fill(T(NaN), n))
+                C = fill(T(NaN), n)
                 mul!(Ct, f(TR(A)), b)
                 mul!(C, f(TR(collect(A))), collect(b))
                 @test collect(Ct) ≈ C
 
                 B = AT(rand(T, n, n))
-                Ct = AT(zeros(T, n, n))
-                C = zeros(T, n, n)
+                Ct = AT(fill(T(NaN), n, n))
+                C = fill(T(NaN), n, n)
                 mul!(Ct, f(TR(A)), B)
                 mul!(C, f(TR(collect(A))), collect(B))
                 @test collect(Ct) ≈ C
@@ -179,8 +179,8 @@
                 n = 128
                 A = AT(rand(T, n,n))
                 B = AT(rand(T, n, n))
-                Ct = AT(zeros(T, n, n))
-                C = zeros(T, n, n)
+                Ct = AT(fill(T(NaN), n, n))
+                C = fill(T(NaN), n, n)
                 mul!(Ct, A, f(TR(B)))
                 mul!(C, collect(A), f(TR(collect(B))))
                 @test collect(Ct) ≈ C
@@ -597,6 +597,35 @@ end
             c = AT(zeros(Tout, n))
             mul!(c, dA, dx)
             @test Array(c) == Tout.(Int64.(A) * Int64.(x))
+        end
+    end
+end
+
+# a container-like element type that doesn't promote with its own scalars
+struct Duo{T}
+    a::T
+    b::T
+end
+Base.zero(::Type{Duo{T}}) where {T} = Duo(zero(T), zero(T))
+Base.zero(x::Duo) = zero(typeof(x))
+Base.:(+)(x::Duo, y::Duo) = Duo(x.a + y.a, x.b + y.b)
+Base.:(*)(x::Duo, y::Number) = Duo(x.a * y, x.b * y)
+Base.:(*)(x::Number, y::Duo) = Duo(x * y.a, x * y.b)
+
+@testsuite "linalg/mul!/mixed-eltype" (AT, eltypes)->begin
+    # mixed element types that have no common promotion type
+    @testset "Duo{$T} * $T" for T in filter(isfloattype, eltypes)
+        n = 4
+        A = [Duo(T(i), T(2i)) for i in 1:n, _ in 1:n]
+        B = T.(reshape(1:n^2, n, n))
+
+        @test Array(AT(A) * AT(B)) == A * B
+        @test Array(AT(B) * AT(A)) == B * A
+
+        @testset "$W" for W in (UpperTriangular, LowerTriangular,
+                                UnitUpperTriangular, UnitLowerTriangular)
+            @test Array(W(AT(B)) * AT(A)) == W(B) * A
+            @test Array(AT(A) * W(AT(B))) == A * W(B)
         end
     end
 end

@@ -459,10 +459,9 @@ function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::Abstrac
 
         @inbounds if i <= size(A,1) && j <= size(B,2)
             z2 = zero(A[i, 1]*B[1, j] + A[i, 1]*B[1, j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
+            Cij = convert(promote_type(R, typeof(z2)), z2)
             for k in 1:size(A,2)
-                Cij += convert(Tacc, A[i, k]) * convert(Tacc, B[k, j])
+                Cij = muladd(A[i, k], B[k, j], Cij)
             end
             C[i,j] = add(Cij, C[i,j])
         end
@@ -512,11 +511,10 @@ function _triangular_matmatmul!(C::AbstractGPUVecOrMat{R}, A::AbstractTriangular
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i, 1]*B[1, j] + A[i, 1]*B[1, j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            Cij += convert(Tacc, A[i,i]) * convert(Tacc, B[i,j])
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Cij = muladd(A[i,i], B[i,j], Cij)
             for k in (upperA ? (i + 1) : 1):(upperA ? m : (i - 1))
-                Cij += convert(Tacc, A[i,k]) * convert(Tacc, B[k,j])
+                Cij = muladd(A[i,k], B[k,j], Cij)
             end
             # treat C as write-only when beta is zero (it may hold NaN/Inf)
             C[i,j] = iszero(beta) ? alpha * Cij : alpha * Cij + beta * C[i,j]
@@ -589,6 +587,7 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
     upper = tfun === identity ? uploc == 'U' :  uploc != 'U'
     unit  = isunitc == 'U'
+    oA = oneunit(eltype(A))
 
     @kernel function trimatmul(C, A, B)
         idx = @index(Global, Linear)
@@ -598,13 +597,12 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            Cij += (unit ? one(Cij) : convert(Tacc, A[i,i])) * convert(Tacc, B[i,j])
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Cij = muladd(unit ? oA : A[i,i], B[i,j], Cij)
             for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
-                Cij += convert(Tacc, A[i,k]) * convert(Tacc, B[k,j])
+                Cij = muladd(A[i,k], B[k,j], Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -616,13 +614,12 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            Cij += (unit ? one(Cij) : transpose(convert(Tacc, A[i,i]))) * convert(Tacc, B[i,j])
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Cij = muladd(unit ? oA : transpose(A[i,i]), B[i,j], Cij)
             for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
-                Cij += transpose(convert(Tacc, A[k,i])) * convert(Tacc, B[k,j])
+                Cij = muladd(transpose(A[k,i]), B[k,j], Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -634,13 +631,12 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            Cij += (unit ? one(Cij) : adjoint(convert(Tacc, A[i,i]))) * convert(Tacc, B[i,j])
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Cij = muladd(unit ? oA : adjoint(A[i,i]), B[i,j], Cij)
             for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
-                Cij += adjoint(convert(Tacc, A[k,i])) * convert(Tacc, B[k,j])
+                Cij = muladd(adjoint(A[k,i]), B[k,j], Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -670,6 +666,7 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
     upper = tfun === identity ? uploc == 'U' :  uploc != 'U'
     unit  = isunitc == 'U'
+    oB = oneunit(eltype(B))
 
     @kernel function mattrimul(C, A, B)
         idx = @index(Global, Linear)
@@ -679,13 +676,12 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            Cij += convert(Tacc, A[i,j]) * (unit ? one(Cij) : convert(Tacc, B[j,j]))
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Cij = muladd(A[i,j], unit ? oB : B[j,j], Cij)
             for k in (upper ? 1 : (j + 1)):(upper ? (j - 1) : m)
-                Cij += convert(Tacc, A[i,k]) * convert(Tacc, B[k,j])
+                Cij = muladd(A[i,k], B[k,j], Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -697,13 +693,12 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            Cij += convert(Tacc, A[i,j]) * (unit ? one(Cij) : transpose(convert(Tacc, B[j,j])))
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Cij = muladd(A[i,j], unit ? oB : transpose(B[j,j]), Cij)
             for k in (upper ? 1 : (j + 1) ):(upper ? (j - 1) : m)
-                Cij += convert(Tacc, A[i,k]) * transpose(convert(Tacc, B[j,k]))
+                Cij = muladd(A[i,k], transpose(B[j,k]), Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -715,13 +710,12 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            Cij += convert(Tacc, A[i,j]) * (unit ? one(Cij) : adjoint(convert(Tacc, B[j,j])))
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Cij = muladd(A[i,j], unit ? oB : adjoint(B[j,j]), Cij)
             for k in (upper ? 1 : (j + 1)):(upper ? (j - 1) : m)
-                Cij += convert(Tacc, A[i,k]) * adjoint(convert(Tacc, B[j,k]))
+                Cij = muladd(A[i,k], adjoint(B[j,k]), Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
