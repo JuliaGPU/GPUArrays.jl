@@ -319,7 +319,8 @@ function LinearAlgebra.mul!(C::AbstractGPUArray,
     d = length(dc)
     length(da) == d || throw(DimensionMismatch("right hand side has $(length(da)) rows but output is $d by $d"))
     length(db) == d || throw(DimensionMismatch("left hand side has $(length(db)) rows but output is $d by $d"))
-    rmul!(C, β)
+    # C may be uninitialized, so a `β` that is zero has to fill rather than scale
+    iszero(β) ? fill!(C, zero(eltype(C))) : rmul!(C, β)
     @. dc += α * da * db
     return C
 end
