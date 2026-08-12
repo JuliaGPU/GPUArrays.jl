@@ -294,7 +294,33 @@ function Base.:\(D::Diagonal{<:Any, <:AbstractGPUArray}, B::AbstractGPUVecOrMat)
         return D.diag .\ B
     end
 end
+function LinearAlgebra.mul!(C::AbstractGPUArray,
+                            A::Diagonal{<:Any, <:AbstractGPUArray},
+                            B::Diagonal{<:Any, <:AbstractGPUArray})
+    dc = view(C, LinearAlgebra.diagind(C))
+    da = A.diag
+    db = B.diag
+    d = length(dc)
+    length(da) == d || throw(DimensionMismatch("right hand side has $(length(da)) rows but output is $d by $d"))
+    length(db) == d || throw(DimensionMismatch("left hand side has $(length(db)) rows but output is $d by $d"))
+    @. dc = da * db
+    return C
+end
 
+function LinearAlgebra.mul!(C::AbstractGPUArray,
+                            A::Diagonal{<:Any, <:AbstractGPUArray},
+                            B::Diagonal{<:Any, <:AbstractGPUArray},
+                            α::Number,
+                            β::Number)
+    dc = view(C, LinearAlgebra.diagind(C))
+    da = A.diag
+    db = B.diag
+    d = length(dc)
+    length(da) == d || throw(DimensionMismatch("right hand side has $(length(da)) rows but output is $d by $d"))
+    length(db) == d || throw(DimensionMismatch("left hand side has $(length(db)) rows but output is $d by $d"))
+    @. dc = α * da * db + β * dc
+    return C
+end
 function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
                             A::Diagonal{<:Any, <:AbstractGPUArray},
                             B::Diagonal{<:Any, <:AbstractGPUArray})

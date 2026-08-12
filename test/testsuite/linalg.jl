@@ -425,7 +425,9 @@ end
             end
             n = 128
             d = AT(rand(elty, n))
+            d2 = AT(rand(elty, n))
             D = Diagonal(d)
+            D2 = Diagonal(d2)
             B = AT(rand(elty, n, n))
             X = AT(zeros(elty, n, n))
             Y = zeros(elty, n, n)
@@ -434,11 +436,17 @@ end
             mul!(X, D, B)
             mul!(Y, Diagonal(collect(d)), collect(B))
             @test collect(X) ≈ Y
+            mul!(X, D, D2)
+            mul!(Y, Diagonal(collect(d)), Diagonal(collect(d2)))
+            @test collect(X) ≈ Y
             mul!(X, D, adjoint(B))
             mul!(Y, Diagonal(collect(d)), collect(adjoint(B)))
             @test collect(X) ≈ Y
             mul!(X, D, B, α, β)
             mul!(Y, Diagonal(collect(d)), collect(B), α, β)
+            @test collect(X) ≈ Y
+            mul!(X, D, D2, α, β)
+            mul!(Y, Diagonal(collect(d)), Diagonal(collect(d2)), α, β)
             @test collect(X) ≈ Y
             mul!(X, B, D)
             mul!(Y, collect(B), Diagonal(collect(d)))
