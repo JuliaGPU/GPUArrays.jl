@@ -297,6 +297,7 @@ end
 function LinearAlgebra.mul!(C::AbstractGPUArray,
                             A::Diagonal{<:Any, <:AbstractGPUArray},
                             B::Diagonal{<:Any, <:AbstractGPUArray})
+    C .= zero(eltype(C))
     dc = view(C, LinearAlgebra.diagind(C))
     da = A.diag
     db = B.diag
@@ -318,7 +319,8 @@ function LinearAlgebra.mul!(C::AbstractGPUArray,
     d = length(dc)
     length(da) == d || throw(DimensionMismatch("right hand side has $(length(da)) rows but output is $d by $d"))
     length(db) == d || throw(DimensionMismatch("left hand side has $(length(db)) rows but output is $d by $d"))
-    @. dc = α * da * db + β * dc
+    rmul!(C, β)
+    @. dc += α * da * db
     return C
 end
 function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
