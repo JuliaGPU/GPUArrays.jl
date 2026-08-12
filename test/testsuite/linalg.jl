@@ -565,14 +565,39 @@ end
         @test compare(mul!, AT, C, A, B, Ref(T(4)), Ref(T(5)))
         @test typeof(AT(rand(Tc, 3, 3)) * AT(rand(T, 3, 3))) <: AbstractMatrix
     end
-    @testset "$T with views" for T in eltypes
-        A = rand(T, 10, 10)
-        v1 = @view(A[:, 1:5])
-        v2 = @view(A[1:5, :])
-        dA = AT(A)
-        dv1 = @view(dA[:, 1:5])
-        dv2 = @view(dA[1:5, :])
-        @test Array(v1) * Array(v2) ≈ Array(v1 * v2)
+end
+
+@testsuite "linalg/mul!/strided-views" (AT, eltypes)->begin
+    @testset "$T" for T in (Float16, Float32, ComplexF32)
+        T in eltypes || continue
+
+        A = rand(T, 4, 3)
+        B = rand(T, 4, 5)
+        b = rand(T, 4)
+
+        @test compare((A, B) -> view(A, 1:2, :)' * view(B, 1:2, :), AT, A, B)
+        @test compare((A, B) -> transpose(view(A, 1:2, :)) * view(B, 1:2, :), AT, A, B)
+        @test compare((A, b) -> view(A, 1:2, :)' * view(b, 1:2), AT, A, b)
+        @test compare(A -> view(A, 1:2, :)' * view(A, 1:2, :), AT, A)
+
+        C = rand(T, 4, 5)
+        @test compare(AT, C, A, B) do C, A, B
+            mul!(view(C, 1:3, :), view(A, 1:2, :)', view(B, 1:2, :), T(2), T(1))
+            C
+        end
+
+        S = rand(T, 4, 4)
+        @test compare((S, B) -> Symmetric(view(S, 1:2, 1:2)) * view(B, 1:2, :), AT, S, B)
+    end
+
+    if Float32 in eltypes && ComplexF32 in eltypes
+        A = rand(ComplexF32, 4, 3)
+        B = rand(Float32, 3, 6)
+        @test compare((A, B) -> view(A, 1:2, :) * view(B, :, 1:5), AT, A, B)
+
+        A = rand(Float32, 4, 3)
+        B = rand(ComplexF32, 3, 6)
+        @test compare((A, B) -> view(A, 1:2, :) * view(B, :, 1:5), AT, A, B)
     end
 end
 
