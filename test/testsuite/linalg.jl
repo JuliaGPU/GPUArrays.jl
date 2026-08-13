@@ -580,9 +580,21 @@ end
         @test compare((A, b) -> view(A, 1:2, :)' * view(b, 1:2), AT, A, b)
         @test compare(A -> view(A, 1:2, :)' * view(A, 1:2, :), AT, A)
 
+        A2 = rand(T, 2, 3)
+        B2 = rand(T, 2, 5)
+        b2 = rand(T, 2)
+        @test compare((A, B) -> view(A, 1:2, :)' * B, AT, A, B2)
+        @test compare((A, B) -> A' * view(B, 1:2, :), AT, A2, B)
+        @test compare((A, b) -> view(A, 1:2, :)' * b, AT, A, b2)
+        @test compare((A, b) -> A' * view(b, 1:2), AT, A2, b)
+
         C = rand(T, 4, 5)
         @test compare(AT, C, A, B) do C, A, B
             mul!(view(C, 1:3, :), view(A, 1:2, :)', view(B, 1:2, :), T(2), T(1))
+            C
+        end
+        @test compare(AT, C, A2, B2) do C, A, B
+            mul!(view(C, 1:3, :), A', B, T(2), T(1))
             C
         end
 
@@ -598,6 +610,12 @@ end
         A = rand(Float32, 4, 3)
         B = rand(ComplexF32, 3, 6)
         @test compare((A, B) -> view(A, 1:2, :) * view(B, :, 1:5), AT, A, B)
+    end
+
+    if Int16 in eltypes
+        A = reshape(Int16.(1:12), 4, 3)
+        B = reshape(Int16.(1:20), 4, 5)
+        @test compare((A, B) -> view(A, 1:2, :)' * view(B, 1:2, :), AT, A, B)
     end
 end
 
