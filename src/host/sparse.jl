@@ -984,7 +984,7 @@ end
 ## COV_EXCL_STOP
 
 csc_type(A::AbstractGPUSparseMatrix) = csc_type(typeof(A))
-csr_type(A::AbstractGPUSparseMatrix) = csc_type(typeof(A))
+csr_type(A::AbstractGPUSparseMatrix) = csr_type(typeof(A))
 
 # TODO: implement mapreducedim!
 function Base.mapreduce(f, op, A::AbstractGPUSparseMatrix; dims=:, init=nothing)
