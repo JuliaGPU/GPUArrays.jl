@@ -237,8 +237,8 @@ GPUArrays.dense_array_type(::Type{<:JLSparseMatrixCSC}) = JLArray
 GPUArrays.dense_array_type(sa::JLSparseMatrixCSR) = JLArray
 GPUArrays.dense_array_type(::Type{<:JLSparseMatrixCSR}) = JLArray
 
-GPUArrays.csc_type(sa::JLSparseMatrixCSR) = JLSparseMatrixCSC
-GPUArrays.csr_type(sa::JLSparseMatrixCSC) = JLSparseMatrixCSR
+GPUArrays.csc_type(::Type{<:JLSparseMatrixCSR}) = JLSparseMatrixCSC
+GPUArrays.csr_type(::Type{<:JLSparseMatrixCSC}) = JLSparseMatrixCSR
 
 Base.similar(Mat::JLSparseMatrixCSR) = JLSparseMatrixCSR(copy(Mat.rowPtr), copy(Mat.colVal), similar(nonzeros(Mat)), size(Mat))
 Base.similar(Mat::JLSparseMatrixCSR, T::Type) = JLSparseMatrixCSR(copy(Mat.rowPtr), copy(Mat.colVal), similar(nonzeros(Mat), T), size(Mat))
