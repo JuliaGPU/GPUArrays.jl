@@ -616,7 +616,7 @@ end
                                         offsets::AbstractVector{Ti}, args...) where Ti
     # every thread processes an entire row
     leading_dim = @index(Global, Linear)
-    if leading_dim ≤ length(offsets)-1 
+    if leading_dim ≤ length(offsets)-1
         iter = @inbounds iter_type(T, Ti)(leading_dim, args...)
 
         # count the nonzero leading_dims of all inputs
@@ -783,7 +783,7 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
 
     # the kernels below parallelize across rows or cols, not elements, so it's unlikely
     # we'll launch many threads. to maximize utilization, parallelize across blocks first.
-    rows, cols = get(size(bc), 1, 1), get(size(bc), 2, 1) 
+    rows, cols = get(size(bc), 1, 1), get(size(bc), 2, 1)
     # `size(bc, ::Int)` is missing
     # for AbstractGPUSparseVec, figure out the actual row range we need to address, e.g. if m = 2^20
     # but the only rows present in any sparse vector input are between 2 and 128, no need to
@@ -872,7 +872,7 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
         output = if sparse_typ <: Union{AbstractGPUSparseMatrixCSR,AbstractGPUSparseMatrixCSC}
             ixVal = similar(offsets, Ti, total_nnz)
             nzVal = similar(offsets, Tv, total_nnz)
-            output_sparse_typ = sparse_array_type(sparse_typ) 
+            output_sparse_typ = sparse_array_type(sparse_typ)
             output_sparse_typ(offsets, ixVal, nzVal, size(bc))
         elseif sparse_typ <: AbstractGPUSparseVector && !fpreszeros
             val_array = bc.args[first(sparse_args)].nzVal
@@ -951,7 +951,7 @@ end
 
 @kernel function csc_reduce_kernel(f::F, op::OP, neutral, zeros_preserved::Bool, output::DenseArray, args...) where {F, OP}
     # every thread processes an entire column
-    col = @index(Global, Linear) 
+    col = @index(Global, Linear)
     if col ≤ size(output, 2)
         iter = @inbounds CSCIterator{Int}(col, args...)
 
@@ -983,8 +983,8 @@ end
 end
 ## COV_EXCL_STOP
 
-function csc_type end
-function csr_type end
+csc_type(A::AbstractGPUSparseMatrix) = csc_type(typeof(A))
+csr_type(A::AbstractGPUSparseMatrix) = csr_type(typeof(A))
 
 # TODO: implement mapreducedim!
 function Base.mapreduce(f, op, A::AbstractGPUSparseMatrix; dims=:, init=nothing)
@@ -1020,7 +1020,7 @@ function Base.mapreduce(f, op, A::AbstractGPUSparseMatrix; dims=:, init=nothing)
         output_dim = m
         ndrange = m
         kernel = csr_reduce_kernel(backend)
-    elseif A isa AbstractGPUSparseMatrixCSC 
+    elseif A isa AbstractGPUSparseMatrixCSC
         output_dim = (1, n)
         ndrange = n
         kernel = csc_reduce_kernel(backend)
