@@ -264,7 +264,21 @@ function LinearAlgebra.istril(A::AbstractGPUMatrix, k::Integer = 0)
     mapreduce(mapper, reducer, A, eachindex(IndexCartesian(), A); init=true)
 end
 
+## uniformscaling
 
+function LinearAlgebra.mul!(out::AnyGPUMatrix{T}, a::Number, B::LinearAlgebra.UniformScaling, α::Number, β::Number) where {T}
+    LinearAlgebra.checksquare(out)
+    if iszero(β)
+        fill!(out, zero(T))
+    elseif !isone(β)
+        rmul!(out, β)
+    end
+    s = convert(T, a*B.λ*α)
+    if !iszero(s)
+        view(out, diagind(out)) .+= s # allocates :-(
+    end
+    return out
+end
 ## diagonal
 
 Base.copy(D::Diagonal{T, <:AbstractGPUArray{T, N}}) where {T, N} = Diagonal(copy(D.diag))

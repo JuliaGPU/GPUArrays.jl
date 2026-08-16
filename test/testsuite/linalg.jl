@@ -314,6 +314,17 @@
             A = AT(rand(elty, n, n))
             mul!(A, B, s)
             @test collect(A) ≈ collect(B_copy) .* s
+
+            # views and SubArray
+            vB = @view B[1:n, 1:n]
+            mul!(vB, 42, I)
+            mul!(B_copy, 42, I)
+            @test collect(B) ≈ collect(B_copy)
+
+            # five arg mul!
+            @test compare(mul!, AT, rand(elty, 32, 32), rand(elty), LinearAlgebra.UniformScaling(rand(elty)), rand(elty), rand(elty))
+            @test compare(mul!, AT, rand(elty, 32, 32), rand(elty), LinearAlgebra.UniformScaling(rand(elty)), rand(elty), zero(elty))
+            @test compare(mul!, AT, rand(elty, 32, 32), rand(elty), LinearAlgebra.UniformScaling(zero(elty)), rand(elty), rand(elty))
         end
     end
 
