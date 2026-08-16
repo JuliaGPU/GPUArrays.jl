@@ -328,6 +328,24 @@
         end
     end
 
+    @testset "mul! + SubArray" begin
+        @testset "$elty" for elty in (Float32, ComplexF32)
+            n = 16
+            hA = rand(elty, n, 2)
+            A = AT(hA)
+            hB = zeros(elty, 2n, 2)
+            B = AT(hB)
+            vB = @view B[1:n, 1:2]
+            vhB = @view hB[1:n, 1:2]
+            mul!(vB, I, A)
+            mul!(vhB, I, hA)
+            @test collect(B) ≈ hB
+            mul!(vB, 5, A)
+            mul!(vhB, 5, hA)
+            @test collect(B) ≈ hB
+        end
+    end
+
     @testset "lmul! and rmul!" begin
         @testset "$T ($a,$b)" for (a,b) in [((3,4),(4,3)), ((3,), (1,3)), ((1,3), (3))], T in eltypes
             @test compare(rmul!, AT, rand(T, a), Ref(rand(T)))

@@ -275,10 +275,35 @@ function LinearAlgebra.mul!(out::AnyGPUMatrix{T}, a::Number, B::LinearAlgebra.Un
     end
     s = convert(T, a*B.λ*α)
     if !iszero(s)
-        view(out, diagind(out)) .+= s # allocates :-(
+        view(out, diagind(out)) .+= s
     end
     return out
 end
+
+@static if VERSION >= v"1.12.0-rc"
+    import LinearAlgebra: _lscale_add!
+    function LinearAlgebra._lscale_add!(C::AnyGPUMatrix, s::Number, X::AnyGPUMatrix, alpha::Number, beta::Number)
+        if axes(C) == axes(X)
+            if isone(alpha)
+                if iszero(beta)
+                    @. C = s * X
+                else
+                    @. C = s * X + C * beta
+                end
+            else
+                if iszero(beta)
+                    @. C = s * X * alpha
+                else
+                    @. C = s * X * alpha + C * beta
+                end
+            end
+        else
+            generic_mul!(C, s, X, alpha, beta)
+        end
+        return C
+    end
+end
+
 ## diagonal
 
 Base.copy(D::Diagonal{T, <:AbstractGPUArray{T, N}}) where {T, N} = Diagonal(copy(D.diag))
