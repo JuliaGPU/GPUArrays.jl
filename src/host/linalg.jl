@@ -264,6 +264,45 @@ function LinearAlgebra.istril(A::AbstractGPUMatrix, k::Integer = 0)
     mapreduce(mapper, reducer, A, eachindex(IndexCartesian(), A); init=true)
 end
 
+## uniformscaling
+
+function LinearAlgebra.mul!(out::AnyGPUMatrix{T}, a::Number, B::LinearAlgebra.UniformScaling, α::Number, β::Number) where {T}
+    LinearAlgebra.checksquare(out)
+    if iszero(β)
+        fill!(out, zero(T))
+    elseif !isone(β)
+        rmul!(out, β)
+    end
+    s = convert(T, a*B.λ*α)
+    if !iszero(s)
+        view(out, diagind(out)) .+= s
+    end
+    return out
+end
+
+@static if VERSION >= v"1.12.0-rc"
+    import LinearAlgebra: _lscale_add!
+    function LinearAlgebra._lscale_add!(C::AnyGPUMatrix, s::Number, X::AnyGPUMatrix, alpha::Number, beta::Number)
+        if axes(C) == axes(X)
+            if isone(alpha)
+                if iszero(beta)
+                    @. C = s * X
+                else
+                    @. C = s * X + C * beta
+                end
+            else
+                if iszero(beta)
+                    @. C = s * X * alpha
+                else
+                    @. C = s * X * alpha + C * beta
+                end
+            end
+        else
+            generic_mul!(C, s, X, alpha, beta)
+        end
+        return C
+    end
+end
 
 ## diagonal
 

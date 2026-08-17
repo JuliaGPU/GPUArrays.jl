@@ -314,6 +314,35 @@
             A = AT(rand(elty, n, n))
             mul!(A, B, s)
             @test collect(A) ≈ collect(B_copy) .* s
+
+            # views and SubArray
+            vB = @view B[1:n, 1:n]
+            mul!(vB, 42, I)
+            mul!(B_copy, 42, I)
+            @test collect(B) ≈ collect(B_copy)
+
+            # five arg mul!
+            @test compare(mul!, AT, rand(elty, 32, 32), rand(elty), LinearAlgebra.UniformScaling(rand(elty)), rand(elty), rand(elty))
+            @test compare(mul!, AT, rand(elty, 32, 32), rand(elty), LinearAlgebra.UniformScaling(rand(elty)), rand(elty), zero(elty))
+            @test compare(mul!, AT, rand(elty, 32, 32), rand(elty), LinearAlgebra.UniformScaling(zero(elty)), rand(elty), rand(elty))
+        end
+    end
+
+    @testset "mul! + SubArray" begin
+        @testset "$elty" for elty in (Float32, ComplexF32)
+            n = 16
+            hA = rand(elty, n, 2)
+            A = AT(hA)
+            hB = zeros(elty, 2n, 2)
+            B = AT(hB)
+            vB = @view B[1:n, 1:2]
+            vhB = @view hB[1:n, 1:2]
+            mul!(vB, I, A)
+            mul!(vhB, I, hA)
+            @test collect(B) ≈ hB
+            mul!(vB, 5, A)
+            mul!(vhB, 5, hA)
+            @test collect(B) ≈ hB
         end
     end
 
