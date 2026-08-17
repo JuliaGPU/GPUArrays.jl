@@ -236,6 +236,49 @@
             end
         end
 
+        @testset "ldiv!/rdiv! + Triangular" begin
+            @testset "trimatdiv ($TR \\ $T, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
+                if !(T in eltypes)
+                    continue
+                end
+                n = 32
+                # strictly diagonally dominant, so the solve is well-conditioned
+                # (also keeps the unit-diagonal wrappers well-conditioned)
+                A = rand(T, n, n) / n + I
+                b = rand(T, n)
+                B = rand(T, n, 4)
+                Ad, bd, Bd = AT(A), AT(b), AT(B)
+
+                @test collect(f(TR(Ad)) \ bd) ≈ f(TR(A)) \ b
+                @test collect(f(TR(Ad)) \ Bd) ≈ f(TR(A)) \ B
+
+                Cd = ldiv!(AT(fill(T(NaN), n)), f(TR(Ad)), bd)
+                C = ldiv!(fill(T(NaN), n), f(TR(A)), b)
+                @test collect(Cd) ≈ C
+
+                # 2-arg form overwrites the right hand side
+                Cd = ldiv!(f(TR(Ad)), copy(Bd))
+                C = ldiv!(f(TR(A)), copy(B))
+                @test collect(Cd) ≈ C
+            end
+
+            @testset "mattridiv ($T / $TR, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
+                if !(T in eltypes)
+                    continue
+                end
+                n = 32
+                A = rand(T, n, n) / n + I
+                B = rand(T, 4, n)
+                Ad, Bd = AT(A), AT(B)
+
+                @test collect(Bd / f(TR(Ad))) ≈ B / f(TR(A))
+
+                Cd = rdiv!(copy(Bd), f(TR(Ad)))
+                C = rdiv!(copy(B), f(TR(A)))
+                @test collect(Cd) ≈ C
+            end
+        end
+
         @testset "mul! + Symmetric/Hermitian" begin
             # with BLAS eltypes these dispatch through generic_matmatmul_wrapper!'s
             # SymmHemmGeneric path, which must not end up in BLAS.symm!/hemm!
