@@ -264,6 +264,24 @@ function LinearAlgebra.istril(A::AbstractGPUMatrix, k::Integer = 0)
     mapreduce(mapper, reducer, A, eachindex(IndexCartesian(), A); init=true)
 end
 
+# istriu/istril of triangular wrappers of the opposite triangularity: the generic
+# fallbacks in LinearAlgebra scan the wrapper element-by-element, which requires scalar
+# indexing. forwarding to the parent ends up in the mapreduce-based methods above, also
+# for lazily wrapped parents (via LinearAlgebra's Adjoint/Transpose forwards). needed by
+# e.g. 2-arg ldiv!/rdiv! on Julia 1.11.2+, which consult istriu/istril to select the
+# solver; LinearAlgebra provides equivalent methods on Julia 1.13+
+# (JuliaLang/LinearAlgebra.jl#1265), making these redundant there.
+@static if VERSION < v"1.13.0-"
+LinearAlgebra.istriu(A::LowerTriangular{<:Any, <:AnyGPUMatrix}, k::Integer = 0) =
+    istriu(parent(A), min(k, 1))
+LinearAlgebra.istriu(A::UnitLowerTriangular{<:Any, <:AnyGPUMatrix}, k::Integer = 0) =
+    k <= 0 && istriu(parent(A), k)
+LinearAlgebra.istril(A::UpperTriangular{<:Any, <:AnyGPUMatrix}, k::Integer = 0) =
+    istril(parent(A), max(k, -1))
+LinearAlgebra.istril(A::UnitUpperTriangular{<:Any, <:AnyGPUMatrix}, k::Integer = 0) =
+    k >= 0 && istril(parent(A), k)
+end
+
 ## uniformscaling
 
 function LinearAlgebra.mul!(out::AnyGPUMatrix{T}, a::Number, B::LinearAlgebra.UniformScaling, α::Number, β::Number) where {T}

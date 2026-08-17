@@ -150,6 +150,22 @@
             end
         end
 
+        @testset "istril/istriu of triangular wrappers" begin
+            n = 4
+            parents = (triu(rand(Float32, n, n)), tril(rand(Float32, n, n)),
+                       Float32.(diagm(0 => rand(n))), Float32.(diagm(1 => rand(n-1))),
+                       Float32.(diagm(-1 => rand(n-1))), zeros(Float32, n, n))
+            for A in parents, k in -2:2, f in (identity, transpose, adjoint)
+                B = AT(A)
+                # querying the opposite triangularity used to scan the wrapper with
+                # scalar indexing; these hit e.g. 2-arg ldiv!/rdiv! solver selection
+                @test istriu(LowerTriangular(f(B)), k) == istriu(LowerTriangular(f(A)), k)
+                @test istriu(UnitLowerTriangular(f(B)), k) == istriu(UnitLowerTriangular(f(A)), k)
+                @test istril(UpperTriangular(f(B)), k) == istril(UpperTriangular(f(A)), k)
+                @test istril(UnitUpperTriangular(f(B)), k) == istril(UnitUpperTriangular(f(A)), k)
+            end
+        end
+
         @testset "mul! + Triangular" begin
             @testset "trimatmul! ($TR x $T, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
                 if !(T in eltypes)
