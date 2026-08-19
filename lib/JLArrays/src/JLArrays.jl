@@ -162,8 +162,12 @@ function Base.getindex(A::JLSparseMatrixCSC{Tv, Ti}, i::Integer, j::Integer) whe
     r1 = Int(@inbounds A.colPtr[j])
     r2 = Int(@inbounds A.colPtr[j+1]-1)
     (r1 > r2) && return zero(Tv)
-    r1 = searchsortedfirst(view(A.rowVal, r1:r2), i) + r1 - 1
-    ((r1 > r2) || (A.rowVal[r1] != i)) ? zero(Tv) : A.nzVal[r1]
+    r0 = findfirst(i, view(A.rowVal, r1:r2))
+    if isnothing(r0)
+        return zero(Tv)
+    else
+        return A.nzVal[something(r0) + r1 - 1]
+    end
 end
 
 mutable struct JLSparseMatrixCSR{Tv, Ti} <: GPUArrays.AbstractGPUSparseMatrixCSR{Tv, Ti}
@@ -212,9 +216,12 @@ function Base.getindex(A::JLSparseMatrixCSR{Tv, Ti}, i0::Integer, i1::Integer) w
     c1 = Int(A.rowPtr[i0])
     c2 = Int(A.rowPtr[i0+1]-1)
     (c1 > c2) && return zero(Tv)
-    c1 = searchsortedfirst(A.colVal, i1, c1, c2, Base.Order.Forward)
-    (c1 > c2 || A.colVal[c1] != i1) && return zero(Tv)
-    nonzeros(A)[c1]
+    c0 = findfirst(i1, view(A.colVal, c1:c2))
+    if isnothing(c0)
+        return zero(Tv)
+    else
+        return nonzeros(A)[something(c0) + c1 - 1]
+    end
 end
 
 GPUArrays.storage(a::JLArray) = a.data
