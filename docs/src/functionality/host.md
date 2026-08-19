@@ -1,3 +1,0 @@
-# `AbstractGPUArray`
-
-TODO: describe functionality
