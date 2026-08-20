@@ -969,7 +969,7 @@ end
 function LinearAlgebra.generic_mattrimul!(C::AbstractGPUMatrix, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix, B::AbstractGPUMatrix)
     generic_mattrimul!(C, uploc, isunitc, tfun, A, B)
 end
-function LinearAlgebra.generic_trimatdiv!(C::AbstractGPUVecOrMat, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix, B::AbstractGPUVecOrMat)
+function LinearAlgebra.generic_trimatdiv!(C::AnyStridedGPUMatrix, uploc, isunitc, tfun::Function, A::AnyStridedGPUMatrix, B::AbstractMatrix)
     generic_trimatdiv!(C, uploc, isunitc, tfun, A, B)
 end
 function LinearAlgebra.generic_mattridiv!(C::AbstractGPUMatrix, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix, B::AbstractGPUMatrix)
