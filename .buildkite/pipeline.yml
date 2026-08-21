@@ -235,7 +235,7 @@ steps:
                 println("--- :julia: Installing Metal.jl")
                 withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
                         "JULIA_PKG_DEVDIR" => devdir) do
-                  Pkg.develop("Metal")
+                  Pkg.add(url="https://github.com/JuliaGPU/Metal.jl", rev="testsubset")
                   Pkg.activate(package)
 
                   try
