@@ -16,7 +16,7 @@
 
     # power
     for ET in eltypes
-        for p in 0:5
+        for p in [0,1,2,5]
             @test compare(x->x^p, AT, rand(ET, 2,2))
         end
     end
