@@ -551,7 +551,7 @@ has_strided_gpu_view(As...) =
 # signatures also cover view-free products to avoid overlapping methods for each possible view
 # position; those calls are sent back through LinearAlgebra's original implementation.
 @static if VERSION < v"1.11"
-function LinearAlgebra.mul!(C::AnyStridedGPUVector, A::AnyStridedGPUMatrixOperand,
+@inline function LinearAlgebra.mul!(C::AnyStridedGPUVector, A::AnyStridedGPUMatrixOperand,
                             B::AnyStridedGPUVector, a::Number, b::Number)
     if has_strided_gpu_view(C, A, B)
         return generic_matmatmul!(C, A, B, a, b)
@@ -559,9 +559,10 @@ function LinearAlgebra.mul!(C::AnyStridedGPUVector, A::AnyStridedGPUMatrixOperan
     invoke(LinearAlgebra.mul!,
            Tuple{AbstractVector,LinearAlgebra.AbstractVecOrMat,AbstractVector,Number,Number},
            C, A, B, a, b)
+    return C
 end
 
-function LinearAlgebra.mul!(C::AnyStridedGPUMatrix, A::AnyStridedGPUVecOrMatOperand,
+@inline function LinearAlgebra.mul!(C::AnyStridedGPUMatrix, A::AnyStridedGPUVecOrMatOperand,
                             B::AnyStridedGPUVecOrMatOperand, a::Number, b::Number)
     if has_strided_gpu_view(C, A, B)
         return generic_matmatmul!(C, A, B, a, b)
@@ -570,9 +571,10 @@ function LinearAlgebra.mul!(C::AnyStridedGPUMatrix, A::AnyStridedGPUVecOrMatOper
            Tuple{AbstractMatrix,LinearAlgebra.AbstractVecOrMat,
                  LinearAlgebra.AbstractVecOrMat,Number,Number},
            C, A, B, a, b)
+    return C
 end
 else
-function LinearAlgebra._mul!(C::AnyStridedGPUVector, A::AnyStridedGPUMatrixOperand,
+@inline function LinearAlgebra._mul!(C::AnyStridedGPUVector, A::AnyStridedGPUMatrixOperand,
                              B::AnyStridedGPUVector, a::Number, b::Number)
     if has_strided_gpu_view(C, A, B)
         return generic_matmatmul!(C, A, B, a, b)
@@ -580,9 +582,10 @@ function LinearAlgebra._mul!(C::AnyStridedGPUVector, A::AnyStridedGPUMatrixOpera
     invoke(LinearAlgebra._mul!,
            Tuple{AbstractVector,LinearAlgebra.AbstractVecOrMat,AbstractVector,Number,Number},
            C, A, B, a, b)
+    return C
 end
 
-function LinearAlgebra._mul!(C::AnyStridedGPUMatrix, A::AnyStridedGPUVecOrMatOperand,
+@inline function LinearAlgebra._mul!(C::AnyStridedGPUMatrix, A::AnyStridedGPUVecOrMatOperand,
                              B::AnyStridedGPUVecOrMatOperand, a::Number, b::Number)
     if has_strided_gpu_view(C, A, B)
         return generic_matmatmul!(C, A, B, a, b)
@@ -591,6 +594,7 @@ function LinearAlgebra._mul!(C::AnyStridedGPUMatrix, A::AnyStridedGPUVecOrMatOpe
            Tuple{AbstractMatrix,LinearAlgebra.AbstractVecOrMat,
                  LinearAlgebra.AbstractVecOrMat,Number,Number},
            C, A, B, a, b)
+    return C
 end
 end
 
