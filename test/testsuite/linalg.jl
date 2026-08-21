@@ -659,7 +659,8 @@ end
     end
 end
 
-@testsuite "linalg/mul!/vector-matrix" (AT, eltypes)->begin
+@testsuite "linalg/mul!/gemm" (AT, eltypes)->begin
+    # vector-matrix
     @testset "$T gemv y := $f(A) * x * a + y * b" for f in (identity, transpose, adjoint), T in eltypes
         y, A, x = rand(T, 4), rand(T, 4, 4), rand(T, 4)
 
@@ -675,9 +676,8 @@ end
             @test compare(mul!, AT, rand(T, 2,2), rand(T, 2,1), f(rand(T, 2)))
         end
     end
-end
 
-@testsuite "linalg/mul!/matrix-matrix" (AT, eltypes)->begin
+    # matrix-matrix
     @testset "$T gemm C := $f(A) * $g(B) * a + C * b" for f in (identity, transpose, adjoint), g in (identity, transpose, adjoint), T in eltypes
         A, B, C = rand(T, 4, 4), rand(T, 4, 4), rand(T, 4, 4)
 
