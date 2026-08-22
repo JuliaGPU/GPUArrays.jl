@@ -349,6 +349,31 @@ function Base.unsafe_convert(::Type{Ptr{T}}, x::JLArray{T}) where {T}
     error("Illegal conversion of a JLArray to a Ptr")
 end
 
+"""
+    lu(A::JLArray, args...; kwargs...)
+
+Compute an LU factorization using the host representation of `A`.
+"""
+function LinearAlgebra.lu(A::JLArray{T, 2}, args...; kwargs...) where {T}
+    return LinearAlgebra.lu(Array(A), args...; kwargs...)
+end
+
+function LinearAlgebra.ldiv!(
+        F::LinearAlgebra.LU{T, <:StridedMatrix{T}}, B::JLArray{T, N}
+    ) where {T <: LinearAlgebra.BlasFloat, N}
+    B_cpu = Array(B)
+    LinearAlgebra.ldiv!(F, B_cpu)
+    copyto!(B, B_cpu)
+    return B
+end
+
+function LinearAlgebra.ldiv!(Y::JLArray, F::LinearAlgebra.LU, B::JLArray)
+    B_cpu = Array(B)
+    LinearAlgebra.ldiv!(F, B_cpu)
+    copyto!(Y, B_cpu)
+    return Y
+end
+
 
 ## interop with Julia arrays
 
