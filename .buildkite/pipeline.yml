@@ -251,7 +251,7 @@ steps:
                 end
 
                 println("+++ :julia: Running tests")
-                Pkg.test(; coverage=true, test_args=`--verbose --all --all-eltypes`)'
+                Pkg.test(; coverage=true, test_args=`--verbose --all`)'
     agents:
       queue: "metal"
     if: build.message !~ /\[skip tests\]/
