@@ -95,7 +95,9 @@ function trim_eltypes(eltypes, testall)
         isempty(matched) || push!(trimmed, rand(matched))
         remaining = filter(!category, remaining)
     end
-    return vcat(trimmed, remaining)
+    types_to_use = vcat(trimmed, remaining)
+    @show types_to_use
+    return types_to_use
 end
 
 # derived sparse container types that are supported by the array type
