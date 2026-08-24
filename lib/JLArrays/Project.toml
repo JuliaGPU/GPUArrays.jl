@@ -1,7 +1,7 @@
 name = "JLArrays"
 uuid = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
-authors = ["Tim Besard <tim.besard@gmail.com>"]
 version = "0.3.2"
+authors = ["Tim Besard <tim.besard@gmail.com>"]
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -14,7 +14,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 [compat]
 Adapt = "2.0, 3.0, 4.0"
 GPUArrays = "11.1"
-KernelAbstractions = "0.9, 0.10"
+KernelAbstractions = "0.9"
 LinearAlgebra = "1"
 Random = "1"
 SparseArrays = "1"
