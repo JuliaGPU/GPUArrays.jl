@@ -1,4 +1,17 @@
-# KernelAbstractions interface
+module JLKernels
+
+using ..JLArrays
+using ..JLArrays: jlconvert
+
+import KernelAbstractions
+import KernelAbstractions: Kernel, StaticSize, DynamicSize, partition, launch_config
+
+import Adapt
+
+
+## back-end
+
+export JLBackend
 
 const MAXTHREADS = 256
 
@@ -36,11 +49,11 @@ KernelAbstractions.allocate(::JLBackend, ::Type{T}, dims::Tuple) where T = JLArr
     return ndrange, workgroupsize, iterspace, dynamic
 end
 
-@static if isdefined(JLArrays.KernelAbstractions, :isgpu) # KA v0.9
+@static if isdefined(KernelAbstractions, :isgpu) # KA v0.9
     KernelAbstractions.isgpu(b::JLBackend) = false
 end
 
-@static if !isdefined(JLArrays.KernelAbstractions, :POCL) # KA v0.9
+@static if !isdefined(KernelAbstractions, :POCL) # KA v0.9
     function convert_to_cpu(obj::Kernel{JLBackend, W, N, F}) where {W, N, F}
         return Kernel{typeof(KernelAbstractions.CPU(; static = obj.backend.static)), W, N, F}(KernelAbstractions.CPU(; static = obj.backend.static), obj.f)
     end
@@ -63,8 +76,10 @@ end
 Adapt.adapt_storage(::JLBackend, a::Array) = Adapt.adapt(JLArrays.JLArray, a)
 Adapt.adapt_storage(::JLBackend, a::JLArrays.JLArray) = a
 
-@static if !isdefined(JLArrays.KernelAbstractions, :POCL) # KA v0.9
+@static if !isdefined(KernelAbstractions, :POCL) # KA v0.9
     Adapt.adapt_storage(::KernelAbstractions.CPU, a::JLArrays.JLArray) = convert(Array, a)
 else
     Adapt.adapt_storage(::KernelAbstractions.POCLBackend, a::JLArrays.JLArray) = convert(Array, a)
+end
+
 end
