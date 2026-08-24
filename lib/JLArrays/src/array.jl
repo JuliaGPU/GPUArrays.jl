@@ -113,9 +113,11 @@ StridedJLVector{T} = StridedJLArray{T,1}
 StridedJLMatrix{T} = StridedJLArray{T,2}
 StridedJLVecOrMat{T} = Union{StridedJLVector{T}, StridedJLMatrix{T}}
 
-Base.pointer(x::StridedJLArray{T}) where {T} = Base.unsafe_convert(Ptr{T}, x)
-@inline function Base.pointer(x::StridedJLArray{T}, i::Integer) where T
-    Base.unsafe_convert(Ptr{T}, x) + Base._memory_offset(x, i)
+# Pointer access is only available for callers that explicitly want a pointer.
+Base.pointer(x::JLArray{T}) where {T} =
+    convert(Ptr{T}, pointer(x.data[])) + x.offset
+@inline function Base.pointer(x::JLArray{T}, i::Integer) where T
+    pointer(x) + (i - 1) * sizeof(T)
 end
 
 # anything that's (secretly) backed by a JLArray
@@ -132,8 +134,10 @@ Base.elsize(::Type{<:JLArray{T}}) where {T} = sizeof(T)
 Base.size(x::JLArray) = x.dims
 Base.sizeof(x::JLArray) = Base.elsize(x) * length(x)
 
-Base.unsafe_convert(::Type{Ptr{T}}, x::JLArray{T}) where {T} =
-    convert(Ptr{T}, pointer(x.data[])) + x.offset
+# Reject implicit conversions to a pointer, i.e., by passing to a CPU ccall.
+function Base.unsafe_convert(::Type{Ptr{T}}, x::JLArray{T}) where {T}
+    error("Illegal conversion of a JLArray to a Ptr")
+end
 
 
 ## interop with Julia arrays
