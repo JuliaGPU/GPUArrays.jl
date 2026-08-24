@@ -17,7 +17,6 @@ using Random
 import GPUArrays: dense_array_type
 
 import KernelAbstractions
-import KernelAbstractions: Adapt, StaticArrays, Backend, Kernel, StaticSize, DynamicSize, partition, blocks, workitems, launch_config
 
 @static if isdefined(JLArrays.KernelAbstractions, :POCL) # KA v0.10
     import KernelAbstractions: POCL
@@ -38,7 +37,8 @@ include("sparse.jl")
 include("broadcast.jl")
 include("mapreduce.jl")
 
-# KernelAbstractions interface
-include("kernels.jl")
+# KernelAbstractions
+include("JLKernels.jl")
+import .JLKernels: JLBackend
 
 end
