@@ -1,4 +1,4 @@
-using LinearAlgebra: MulAddMul
+using LinearAlgebra: MulAddMul, wrapper_char, _unwrap
 
 ## Matmul kernel
 
@@ -140,35 +140,14 @@ end
     return M, N, K
 end
 
-# legacy method
+# legacy methods
 generic_matmatmul!(C::AbstractArray, A::AbstractArray, B::AbstractArray, a::Number, b::Number) =
-    generic_matmatmul!(C, A, B, MulAddMul(a, b))
-function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::AbstractArray{S}, add::MulAddMul) where {T,S,R}
-    check_matmul_shapes(C, A, B)
-    if isempty(A) || isempty(B)
-        return fill!(C, zero(R))
-    end
-
-    @kernel function matmatmul_kernel!(C, A, B)
-        assume.(size(C) .> 0)
-        idx = @index(Global, Linear)
-        i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
-
-        @inbounds if i <= size(A,1) && j <= size(B,2)
-            z2 = zero(A[i, 1]*B[1, j] + A[i, 1]*B[1, j])
-            Cij = convert(promote_type(R, typeof(z2)), z2)
-            for k in 1:size(A,2)
-                Cij = muladd(A[i, k], B[k, j], Cij)
-            end
-            C[i,j] = add(Cij, C[i,j])
-        end
-    end
-    matmatmul_kernel!(get_backend(C))(C, A, B; ndrange = size(C))
-    C
-end
+    generic_matmatmul!(C, wrapper_char(A), wrapper_char(B), _unwrap(A), _unwrap(B), MulAddMul(a, b))
+generic_matmatmul!(C::AbstractArray, A::AbstractArray, B::AbstractArray, add::MulAddMul) =
+    generic_matmatmul!(C, wrapper_char(A), wrapper_char(B), _unwrap(A), _unwrap(B), add)
 
 # New method
-function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::AbstractArray{S}, add::MulAddMul, cA::AbstractChar, cB::AbstractChar) where {T, S, R}
+function generic_matmatmul!(C::AbstractArray{R}, cA::AbstractChar, cB::AbstractChar, A::AbstractArray{T}, B::AbstractArray{S}, add::MulAddMul) where {T, S, R}
     # Char(::WrapperChar) encodes the uplo flag as upper/lowercase ('S'/'s', 'H'/'h')
     cA, cB = Char(cA), Char(cB)
     M, N, K = check_matmul_shapes(C, A, B, cA, cB)
