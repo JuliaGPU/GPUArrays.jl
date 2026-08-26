@@ -32,7 +32,7 @@ end
     end
 end
 
-const MAX_TILE_DIM = 16
+const TILE_DIM = 16
 @kernel unsafe_indices = true function coalesced_matmul_kernel!(
         C, A, B, add,
         M, N, K, ::Val{TA}, ::Val{TB},
@@ -141,12 +141,12 @@ function generic_matmatmul!(C::AbstractArray{R}, cA::AbstractChar, cB::AbstractC
     # an empty inner dimension still needs to apply β; the kernel handles that (no tiles)
     isempty(C) && return C
 
-    workgroupsize=(MAX_TILE_DIM, MAX_TILE_DIM)
-    numworkgroups=(cld(M, MAX_TILE_DIM), cld(N, MAX_TILE_DIM))
+    workgroupsize=(TILE_DIM, TILE_DIM)
+    numworkgroups=(cld(M, TILE_DIM), cld(N, TILE_DIM))
 
     # KI.@kernel KI.get_backend(C) workgroupsize=workgroupsize numworkgroups=numworkgroups coalesced_matmul_kernel!(
-            # C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(MAX_TILE_DIM))
+            # C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(TILE_DIM))
     coalesced_matmul_kernel!(get_backend(C), workgroupsize)(
-            C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(MAX_TILE_DIM); ndrange=numworkgroups .* workgroupsize)
+            C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(TILE_DIM); ndrange=numworkgroups .* workgroupsize)
     C
 end
