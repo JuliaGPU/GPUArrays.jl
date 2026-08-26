@@ -286,7 +286,7 @@
                 if !(T in eltypes)
                     continue
                 end
-                n = 128
+                n = 33  # not a multiple of the matmul tile size
                 A = AT(rand(T, n, n))
                 B = AT(rand(T, n, n))
                 b = AT(rand(T, n))
@@ -660,9 +660,15 @@ end
 end
 
 @testsuite "linalg/mul!/gemm" (AT, eltypes)->begin
+    # rectangular shapes that are not multiples of the tile size, so that every dimension
+    # has a partial tile and the inner dimension spans more than one tile
+    m, k, n = 33, 17, 5
+    # size of the stored array such that f(A) is m×k
+    opsize(f, m, k) = f === identity ? (m, k) : (k, m)
+
     # vector-matrix
     @testset "$T gemv y := $f(A) * x * a + y * b" for f in (identity, transpose, adjoint), T in eltypes
-        y, A, x = rand(T, 4), rand(T, 4, 4), rand(T, 4)
+        y, A, x = rand(T, m), rand(T, opsize(f, m, k)...), rand(T, k)
 
         # workaround for https://github.com/JuliaLang/julia/issues/35163#issue-584248084
         T <: Integer && (y .%= T(10); A .%= T(10); x .%= T(10))
@@ -679,7 +685,7 @@ end
 
     # matrix-matrix
     @testset "$T gemm C := $f(A) * $g(B) * a + C * b" for f in (identity, transpose, adjoint), g in (identity, transpose, adjoint), T in eltypes
-        A, B, C = rand(T, 4, 4), rand(T, 4, 4), rand(T, 4, 4)
+        A, B, C = rand(T, opsize(f, m, k)...), rand(T, opsize(g, k, n)...), rand(T, m, n)
 
         # workaround for https://github.com/JuliaLang/julia/issues/35163#issue-584248084
         T <: Integer && (A .%= T(10); B .%= T(10); C .%= T(10))
@@ -692,12 +698,12 @@ end
     # empty inner dimension: C := C * b
     @testset "$T gemm with K == 0" for T in (Float32, Int32)
         T in eltypes || continue
-        C = rand(T, 3, 4)
-        @test compare(mul!, AT, C, rand(T, 3, 0), rand(T, 0, 4), Ref(T(4)), Ref(T(5)))
+        C = rand(T, m, n)
+        @test compare(mul!, AT, C, rand(T, m, 0), rand(T, 0, n), Ref(T(4)), Ref(T(5)))
     end
     @testset "$(complex(T)), $(complex(T)), $T gemm C := A * B * a + C * b" for T in filter(T-><:(T, Real) && <:(T, AbstractFloat), eltypes)
         Tc = complex(T)
-        A, B, C = rand(Tc, 4, 4), rand(T, 4, 4), rand(Tc, 4, 4)
+        A, B, C = rand(Tc, m, k), rand(T, k, n), rand(Tc, m, n)
 
         @test compare(*, AT, A, B)
         @test compare(mul!, AT, C, A, B)
