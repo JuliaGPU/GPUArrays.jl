@@ -16,33 +16,19 @@ using LinearAlgebra: MulAddMul, wrapper_char, _unwrap
     return val
 end
 
-# op(A)[outrow, contr], reading the stored (possibly transposed/wrapped) matrix
-@inline function opA(A, ::Val{TA}, outrow, contr) where {TA}
-    if TA === 'N'
-        @inbounds A[outrow, contr]
-    elseif TA === 'C'
-        @inbounds conj(A[contr, outrow])
-    elseif TA === 'T'
-        @inbounds A[contr, outrow]
-    elseif TA === 'S' || TA === 's'
-        symherm(A, outrow, contr, Val(TA === 'S'), Val(false))
+# op(X)[i, j], reading the stored (possibly transposed/wrapped) matrix. used for both
+# operands: A's element is op(A)[outrow, contr], B's is op(B)[contr, outcol]
+@inline function opelem(X, ::Val{TX}, i, j) where {TX}
+    if TX === 'N'
+        @inbounds X[i, j]
+    elseif TX === 'C'
+        @inbounds conj(X[j, i])
+    elseif TX === 'T'
+        @inbounds X[j, i]
+    elseif TX === 'S' || TX === 's'
+        symherm(X, i, j, Val(TX === 'S'), Val(false))
     else # 'H' / 'h'
-        symherm(A, outrow, contr, Val(TA === 'H'), Val(true))
-    end
-end
-
-# op(B)[contr, outcol]
-@inline function opB(B, ::Val{TB}, contr, outcol) where {TB}
-    if TB === 'N'
-        @inbounds B[contr, outcol]
-    elseif TB === 'C'
-        @inbounds conj(B[outcol, contr])
-    elseif TB === 'T'
-        @inbounds B[outcol, contr]
-    elseif TB === 'S' || TB === 's'
-        symherm(B, contr, outcol, Val(TB === 'S'), Val(false))
-    else # 'H' / 'h'
-        symherm(B, contr, outcol, Val(TB === 'H'), Val(true))
+        symherm(X, i, j, Val(TX === 'H'), Val(true))
     end
 end
 
@@ -87,13 +73,13 @@ const MAX_TILE_DIM = 16
         k0 = t * TILE
         ac = k0 + lj
         if gi <= M && ac <= K
-            @inbounds tile1[li, lj] = opA(A, Val(TA), gi, ac)
+            @inbounds tile1[li, lj] = opelem(A, Val(TA), gi, ac)
         else
             @inbounds tile1[li, lj] = zero(TAT)
         end
         ar = k0 + li
         if gj <= N && ar <= K
-            @inbounds tile2[li, lj] = opB(B, Val(TB), ar, gj)
+            @inbounds tile2[li, lj] = opelem(B, Val(TB), ar, gj)
         else
             @inbounds tile2[li, lj] = zero(TBT)
         end
