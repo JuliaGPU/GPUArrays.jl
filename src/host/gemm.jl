@@ -36,8 +36,8 @@ const MAX_TILE_DIM = 16
 @kernel unsafe_indices = true function coalesced_matmul_kernel!(
         C, A, B, add,
         M, N, K, ::Val{TA}, ::Val{TB},
-        ::Val{TILE}, ::Val{BANK} = Val(1),
-    ) where {TA, TB, TILE, BANK}
+        ::Val{TILE},
+    ) where {TA, TB, TILE}
     @uniform TAT = eltype(A); @uniform TBT = eltype(B); @uniform R = eltype(C)
 
     # li, lj, _ = KI.get_local_id()
@@ -49,9 +49,9 @@ const MAX_TILE_DIM = 16
     # gi = (grow - 1) * TILE + li
     # gj = (gcol - 1) * TILE + lj
 
-    # +BANK to avoid bank conflicts on shared memory
-    tile1 = @localmem TAT (TILE + BANK, TILE)
-    tile2 = @localmem TBT (TILE + BANK, TILE)
+    # padded by one row to avoid bank conflicts on shared memory
+    tile1 = @localmem TAT (TILE + 1, TILE)
+    tile2 = @localmem TBT (TILE + 1, TILE)
 
     # private variable for tile C
     @uniform Tacc = promote_type(R, typeof(zero(TAT) * zero(TBT) + zero(TAT) * zero(TBT)))
@@ -145,8 +145,8 @@ function generic_matmatmul!(C::AbstractArray{R}, cA::AbstractChar, cB::AbstractC
     numworkgroups=(cld(M, MAX_TILE_DIM), cld(N, MAX_TILE_DIM))
 
     # KI.@kernel KI.get_backend(C) workgroupsize=workgroupsize numworkgroups=numworkgroups coalesced_matmul_kernel!(
-            # C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(MAX_TILE_DIM), Val(1))
+            # C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(MAX_TILE_DIM))
     coalesced_matmul_kernel!(get_backend(C), workgroupsize)(
-            C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(MAX_TILE_DIM), Val(1); ndrange=numworkgroups .* workgroupsize)
+            C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(MAX_TILE_DIM); ndrange=numworkgroups .* workgroupsize)
     C
 end
