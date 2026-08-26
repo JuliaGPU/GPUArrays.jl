@@ -689,6 +689,12 @@ end
         @test compare(mul!, AT, C, f(A), g(B), Ref(T(4)), Ref(T(5)))
         @test typeof(AT(rand(T, 3, 3)) * AT(rand(T, 3, 3))) <: AbstractMatrix
     end
+    # empty inner dimension: C := C * b
+    @testset "$T gemm with K == 0" for T in (Float32, Int32)
+        T in eltypes || continue
+        C = rand(T, 3, 4)
+        @test compare(mul!, AT, C, rand(T, 3, 0), rand(T, 0, 4), Ref(T(4)), Ref(T(5)))
+    end
     @testset "$(complex(T)), $(complex(T)), $T gemm C := A * B * a + C * b" for T in filter(T-><:(T, Real) && <:(T, AbstractFloat), eltypes)
         Tc = complex(T)
         A, B, C = rand(Tc, 4, 4), rand(T, 4, 4), rand(Tc, 4, 4)
