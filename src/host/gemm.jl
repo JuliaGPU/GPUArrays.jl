@@ -152,9 +152,8 @@ function generic_matmatmul!(C::AbstractArray{R}, cA::AbstractChar, cB::AbstractC
     cA, cB = Char(cA), Char(cB)
     M, N, K = check_matmul_shapes(C, A, B, cA, cB)
 
-    if isempty(A) || isempty(B)
-        return fill!(C, zero(R))
-    end
+    # an empty inner dimension still needs to apply β; the kernel handles that (no tiles)
+    isempty(C) && return C
 
     workgroupsize=(MAX_TILE_DIM, MAX_TILE_DIM)
     numworkgroups=(cld(M, MAX_TILE_DIM), cld(N, MAX_TILE_DIM))
