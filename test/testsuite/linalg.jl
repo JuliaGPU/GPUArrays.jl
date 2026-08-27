@@ -733,6 +733,30 @@ end
 
         S = rand(T, 4, 4)
         @test compare((S, B) -> Symmetric(view(S, 1:2, 1:2)) * view(B, 1:2, :), AT, S, B)
+
+        # plain (unwrapped) strided views
+        P = rand(T, 5, 5)
+        @test compare((A, P) -> view(A, 1:2, :) * view(P, 1:3, 1:4), AT, A, P)
+
+        # non-unit strides (step-range views)
+        As = rand(T, 8, 6)
+        Bs = rand(T, 6, 10)
+        bs = rand(T, 6)
+        @test compare((A, B) -> view(A, 1:2:8, :) * view(B, :, 1:2:10), AT, As, Bs)
+        @test compare(A -> view(A, 1:2:8, :)' * view(A, 1:2:8, :), AT, As)
+        @test compare((A, b) -> view(A, 1:2:8, :) * b, AT, As, bs)
+        Cs = rand(T, 8, 5)
+        @test compare(AT, Cs, As, Bs) do C, A, B
+            mul!(view(C, 1:2:8, :), view(A, 1:2:8, :), view(B, :, 1:2:10), T(2), T(1))
+            C
+        end
+
+        # strided destination with contiguous operands
+        B3 = rand(T, 3, 5)
+        @test compare(AT, C, A2, B3) do C, A, B
+            mul!(view(C, 1:2, :), A, B)
+            C
+        end
     end
 
     if Float32 in eltypes && ComplexF32 in eltypes
