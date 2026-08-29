@@ -76,6 +76,30 @@ supported_eltypes() = (Int16, Int32, Int64,
                        ComplexF16, ComplexF32, ComplexF64,
                        Complex{Int16}, Complex{Int32}, Complex{Int64})
 
+# Bin eltypes to reduce tests while keeping coverage: keep one randomly-chosen
+# eltype per category, plus any eltypes that don't fit a category.
+function trim_eltypes(eltypes, testall)
+    categories = (
+        T -> T <: Integer && sizeof(T) < 4 && T != Bool, # small ints not Bool
+        T -> T <: Integer && sizeof(T) >= 4,             # big ints
+        T -> T == Float32,                               # float32
+        T -> T <: AbstractFloat && T != Float32,         # other floats
+        T -> T <: Complex{<:AbstractFloat},              # Complex float
+        T -> T <: Complex{<:Integer},                    # Complex int
+    )
+    remaining = unique(eltypes)
+    testall && return remaining
+    trimmed = Type[]
+    for category in categories
+        matched = filter(category, remaining)
+        isempty(matched) || push!(trimmed, rand(matched))
+        remaining = filter(!category, remaining)
+    end
+    types_to_use = vcat(trimmed, remaining)
+    @show types_to_use
+    return types_to_use
+end
+
 # derived sparse container types that are supported by the array type
 sparse_types(::Type{AT}) where {AT} = ()
 
@@ -95,7 +119,7 @@ macro testsuite(name, ex)
     quote
         # the supported element types can be overrided by passing in a different set,
         # or by specializing the `supported_eltypes` function on the array type and test.
-        $(esc(fn))(AT; eltypes=supported_eltypes(AT, $(esc(fn)))) = $(esc(ex))(AT, eltypes)
+        $(esc(fn))(AT; eltypes=supported_eltypes(AT, $(esc(fn))), testall=true) = $(esc(ex))(AT, $(trim_eltypes)(eltypes, testall))
 
         @assert !haskey(tests, $name)
         tests[$name] = $fn
