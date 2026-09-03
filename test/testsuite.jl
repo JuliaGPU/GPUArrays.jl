@@ -68,26 +68,13 @@ function compare(@nospecialize(f), AT::Type{<:Array}, @nospecialize(xs...); kwar
     return true
 end
 
-# Julia version 1.12 miscompile `Float16` on CPUs that
-# support AVX512-FP16, they should work fine everywhere else.
-const WORKING_FLOAT16_ELTYPES = if (
-        VERSION.major==1 &&
-        VERSION.minor==12 &&
-        "+avx512fp16" ∈ split(ccall(:jl_get_cpu_features, Any, ()), ",")
-    )
-    ()
-else
-    (Float16, ComplexF16)
-end
-
 # element types that are supported by the array type
 supported_eltypes(AT, test) = supported_eltypes(AT)
 supported_eltypes(AT) = supported_eltypes()
 supported_eltypes() = (Int16, Int32, Int64,
                        @static(VERSION >= v"1.12" ? (Int128,) : ())...,
-                       WORKING_FLOAT16_ELTYPES...,
-                       Float32, Float64,
-                       ComplexF32, ComplexF64,
+                       Float16, Float32, Float64,
+                       ComplexF16, ComplexF32, ComplexF64,
                        Complex{Int16}, Complex{Int32}, Complex{Int64})
 
 # derived sparse container types that are supported by the array type
