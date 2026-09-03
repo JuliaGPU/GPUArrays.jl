@@ -597,28 +597,39 @@ end
 end
 end
 
-@static if !isdefined(LinearAlgebra, Symbol("@stable_muladdmul")) # @stable_muladdmul was added in 1.12
-function LinearAlgebra.generic_matvecmul!(C::AnyStridedGPUVector, tA::AbstractChar, A::AnyStridedGPUMatrix, B::AnyStridedGPUVector, _add::MulAddMul = MulAddMul())
+# Storage-level products below LinearAlgebra's 5-argument `mul!`, used for GPU arrays whose
+# back-end does not provide a native implementation. Back-ends overload these same `mul!`
+# signatures for their own array types to route products to vendor libraries.
+function LinearAlgebra.mul!(C::AnyStridedGPUVector, tA::AbstractChar, A::AnyStridedGPUMatrix, B::AnyStridedGPUVector, a::Number, b::Number)
     Cm = reshape(C, length(C), 1)
     Bm = reshape(B, length(B), 1)
-    generic_matmatmul!(Cm, tA, 'N', A, Bm, _add)
+    LinearAlgebra.mul!(Cm, tA, 'N', A, Bm, a, b)
     return C
 end
 
-function LinearAlgebra.generic_matmatmul!(C::AnyStridedGPUVecOrMat, tA, tB, A::AnyStridedGPUVecOrMat, B::AnyStridedGPUVecOrMat, _add::MulAddMul=MulAddMul())
-    generic_matmatmul!(C, tA, tB, A, B, _add)
-end
-else
-function LinearAlgebra.generic_matvecmul!(C::AnyStridedGPUVector, tA::AbstractChar, A::AnyStridedGPUMatrix, B::AnyStridedGPUVector, a::Number, b::Number)
-    Cm = reshape(C, length(C), 1)
-    Bm = reshape(B, length(B), 1)
-    LinearAlgebra.@stable_muladdmul generic_matmatmul!(Cm, tA, 'N', A, Bm, MulAddMul(a, b))
-    return C
-end
-
-function LinearAlgebra.generic_matmatmul!(C::AnyStridedGPUVecOrMat, tA, tB, A::AnyStridedGPUVecOrMat, B::AnyStridedGPUVecOrMat, a::Number, b::Number)
+@static if isdefined(LinearAlgebra, Symbol("@stable_muladdmul")) # @stable_muladdmul was added in 1.12
+function LinearAlgebra.mul!(C::AnyStridedGPUVecOrMat, tA, tB, A::AnyStridedGPUVecOrMat, B::AnyStridedGPUVecOrMat, a::Number, b::Number)
     LinearAlgebra.@stable_muladdmul generic_matmatmul!(C, tA, tB, A, B, MulAddMul(a, b))
 end
+else
+function LinearAlgebra.mul!(C::AnyStridedGPUVecOrMat, tA, tB, A::AnyStridedGPUVecOrMat, B::AnyStridedGPUVecOrMat, a::Number, b::Number)
+    generic_matmatmul!(C, tA, tB, A, B, MulAddMul(a, b))
+end
+end
+
+# Julia < 1.13 dispatches on the non-public `generic_matvecmul!` and `generic_matmatmul!`,
+# which JuliaLang/LinearAlgebra.jl#1671 superseded by the `mul!` methods above. Forward from
+# the old names, both the alpha/beta variants (1.12) and the ones taking a final MulAddMul
+# (1.10 and 1.11).
+@static if VERSION < v"1.13.0-rc4"
+    LinearAlgebra.generic_matvecmul!(C::AnyStridedGPUVector, tA::AbstractChar, A::AnyStridedGPUMatrix, B::AnyStridedGPUVector, a::Number, b::Number) =
+        LinearAlgebra.mul!(C, tA, A, B, a, b)
+    LinearAlgebra.generic_matvecmul!(C::AnyStridedGPUVector, tA::AbstractChar, A::AnyStridedGPUMatrix, B::AnyStridedGPUVector, _add::MulAddMul = MulAddMul()) =
+        LinearAlgebra.mul!(C, tA, A, B, _add.alpha, _add.beta)
+    LinearAlgebra.generic_matmatmul!(C::AnyStridedGPUVecOrMat, tA, tB, A::AnyStridedGPUVecOrMat, B::AnyStridedGPUVecOrMat, a::Number, b::Number) =
+        LinearAlgebra.mul!(C, tA, tB, A, B, a, b)
+    LinearAlgebra.generic_matmatmul!(C::AnyStridedGPUVecOrMat, tA, tB, A::AnyStridedGPUVecOrMat, B::AnyStridedGPUVecOrMat, _add::MulAddMul = MulAddMul()) =
+        LinearAlgebra.mul!(C, tA, tB, A, B, _add.alpha, _add.beta)
 end
 
 # triangular × triangular matmul: C = α·(A·B) + β·C, with both A and B triangular.
@@ -660,23 +671,32 @@ end
 @static if VERSION ≥ v"1.12.0-rc"
     # we need to use the generic wrapper to avoid dispatch to the 2x2or3x3 method
     using LinearAlgebra: generic_matmatmul_wrapper!, BlasFlag
+    # The wrappers hand strided GPU arrays back to the storage-level product. Before Julia 1.13
+    # that is still the legacy name, which back-ends released for those versions overload.
+    @static if VERSION < v"1.13.0-rc4"
+        storage_matmatmul!(C, tA, tB, A, B, alpha, beta) =
+            LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+    else
+        storage_matmatmul!(C, tA, tB, A, B, alpha, beta) =
+            LinearAlgebra.mul!(C, tA, tB, A, B, alpha, beta)
+    end
     function LinearAlgebra.generic_matmatmul_wrapper!(C::AnyStridedGPUMatrix{T}, tA::AbstractChar, tB::AbstractChar, A::AnyStridedGPUVecOrMat{T}, B::AnyStridedGPUVecOrMat{T}, alpha::Number, beta::Number, val::LinearAlgebra.BlasFlag.SyrkHerkGemm) where {T}
-        LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+        storage_matmatmul!(C, tA, tB, A, B, alpha, beta)
     end
     # Symmetric/Hermitian inputs with BLAS eltypes would otherwise dispatch to BLAS.symm!/
     # hemm!: GPU arrays are DenseArrays, so they match the StridedMatrix{<:BlasFloat} methods
     function LinearAlgebra.generic_matmatmul_wrapper!(C::AnyStridedGPUMatrix{T}, tA::AbstractChar, tB::AbstractChar, A::AnyStridedGPUVecOrMat{T}, B::AnyStridedGPUVecOrMat{T}, alpha::Number, beta::Number, val::LinearAlgebra.BlasFlag.SymmHemmGeneric) where {T}
-        LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+        storage_matmatmul!(C, tA, tB, A, B, alpha, beta)
     end
     # need to support mixed complex/real types too
     #function LinearAlgebra.generic_matmatmul_wrapper!(C::AbstractGPUMatrix{Complex{T}}, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat{Complex{T}}, B::AbstractGPUVecOrMat{T}, alpha::Number, beta::Number, val::V) where {T<:BlasReal, V<:LinearAlgebra.BlasFlag.SyrkHerkGemm}
-    #    LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+    #    storage_matmatmul!(C, tA, tB, A, B, alpha, beta)
     #end
     function LinearAlgebra.generic_matmatmul_wrapper!(C::AnyStridedGPUMatrix{Complex{T}}, tA::AbstractChar, tB::AbstractChar, A::AnyStridedGPUVecOrMat{Complex{T}}, B::AnyStridedGPUVecOrMat{T}, alpha::Number, beta::Number, val::Val{LinearAlgebra.BlasFlag.GEMM}) where T<:Union{Float32, Float64}
-        LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+        storage_matmatmul!(C, tA, tB, A, B, alpha, beta)
     end
     function LinearAlgebra.generic_matmatmul_wrapper!(C::AnyStridedGPUMatrix{Complex{T}}, tA::AbstractChar, tB::AbstractChar, A::AnyStridedGPUVecOrMat{T}, B::AnyStridedGPUVecOrMat{Complex{T}}, alpha::Number, beta::Number, val::Val{LinearAlgebra.BlasFlag.GEMM}) where T<:Union{Float32, Float64}
-        LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+        storage_matmatmul!(C, tA, tB, A, B, alpha, beta)
     end
     # Julia 1.12 introduced generic_mul! for scalar * array operations
     function LinearAlgebra.generic_mul!(C::AbstractGPUVecOrMat, X::AbstractGPUVecOrMat, s::Number, alpha::Number, beta::Number)
