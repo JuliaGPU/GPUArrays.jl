@@ -150,6 +150,22 @@
             end
         end
 
+        @testset "istril/istriu of triangular wrappers" begin
+            n = 4
+            parents = (triu(rand(Float32, n, n)), tril(rand(Float32, n, n)),
+                       Float32.(diagm(0 => rand(n))), Float32.(diagm(1 => rand(n-1))),
+                       Float32.(diagm(-1 => rand(n-1))), zeros(Float32, n, n))
+            for A in parents, k in -2:2, f in (identity, transpose, adjoint)
+                B = AT(A)
+                # querying the opposite triangularity used to scan the wrapper with
+                # scalar indexing; these hit e.g. 2-arg ldiv!/rdiv! solver selection
+                @test istriu(LowerTriangular(f(B)), k) == istriu(LowerTriangular(f(A)), k)
+                @test istriu(UnitLowerTriangular(f(B)), k) == istriu(UnitLowerTriangular(f(A)), k)
+                @test istril(UpperTriangular(f(B)), k) == istril(UpperTriangular(f(A)), k)
+                @test istril(UnitUpperTriangular(f(B)), k) == istril(UnitUpperTriangular(f(A)), k)
+            end
+        end
+
         @testset "mul! + Triangular" begin
             @testset "trimatmul! ($TR x $T, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
                 if !(T in eltypes)
@@ -158,15 +174,15 @@
                 n = 128
                 A = AT(rand(T, n,n))
                 b = AT(rand(T, n))
-                Ct = AT(zeros(T, n))
-                C = zeros(T, n)
+                Ct = AT(fill(T(NaN), n))
+                C = fill(T(NaN), n)
                 mul!(Ct, f(TR(A)), b)
                 mul!(C, f(TR(collect(A))), collect(b))
                 @test collect(Ct) ≈ C
 
                 B = AT(rand(T, n, n))
-                Ct = AT(zeros(T, n, n))
-                C = zeros(T, n, n)
+                Ct = AT(fill(T(NaN), n, n))
+                C = fill(T(NaN), n, n)
                 mul!(Ct, f(TR(A)), B)
                 mul!(C, f(TR(collect(A))), collect(B))
                 @test collect(Ct) ≈ C
@@ -179,8 +195,8 @@
                 n = 128
                 A = AT(rand(T, n,n))
                 B = AT(rand(T, n, n))
-                Ct = AT(zeros(T, n, n))
-                C = zeros(T, n, n)
+                Ct = AT(fill(T(NaN), n, n))
+                C = fill(T(NaN), n, n)
                 mul!(Ct, A, f(TR(B)))
                 mul!(C, collect(A), f(TR(collect(B))))
                 @test collect(Ct) ≈ C
@@ -220,6 +236,49 @@
             end
         end
 
+        @testset "ldiv!/rdiv! + Triangular" begin
+            @testset "trimatdiv ($TR \\ $T, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
+                if !(T in eltypes)
+                    continue
+                end
+                n = 32
+                # strictly diagonally dominant, so the solve is well-conditioned
+                # (also keeps the unit-diagonal wrappers well-conditioned)
+                A = rand(T, n, n) / n + I
+                b = rand(T, n)
+                B = rand(T, n, 4)
+                Ad, bd, Bd = AT(A), AT(b), AT(B)
+
+                @test collect(f(TR(Ad)) \ bd) ≈ f(TR(A)) \ b
+                @test collect(f(TR(Ad)) \ Bd) ≈ f(TR(A)) \ B
+
+                Cd = ldiv!(AT(fill(T(NaN), n)), f(TR(Ad)), bd)
+                C = ldiv!(fill(T(NaN), n), f(TR(A)), b)
+                @test collect(Cd) ≈ C
+
+                # 2-arg form overwrites the right hand side
+                Cd = ldiv!(f(TR(Ad)), copy(Bd))
+                C = ldiv!(f(TR(A)), copy(B))
+                @test collect(Cd) ≈ C
+            end
+
+            @testset "mattridiv ($T / $TR, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
+                if !(T in eltypes)
+                    continue
+                end
+                n = 32
+                A = rand(T, n, n) / n + I
+                B = rand(T, 4, n)
+                Ad, Bd = AT(A), AT(B)
+
+                @test collect(Bd / f(TR(Ad))) ≈ B / f(TR(A))
+
+                Cd = rdiv!(copy(Bd), f(TR(Ad)))
+                C = rdiv!(copy(B), f(TR(A)))
+                @test collect(Cd) ≈ C
+            end
+        end
+
         @testset "mul! + Symmetric/Hermitian" begin
             # with BLAS eltypes these dispatch through generic_matmatmul_wrapper!'s
             # SymmHemmGeneric path, which must not end up in BLAS.symm!/hemm!
@@ -227,7 +286,7 @@
                 if !(T in eltypes)
                     continue
                 end
-                n = 128
+                n = 33  # not a multiple of the matmul tile size
                 A = AT(rand(T, n, n))
                 B = AT(rand(T, n, n))
                 b = AT(rand(T, n))
@@ -314,6 +373,35 @@
             A = AT(rand(elty, n, n))
             mul!(A, B, s)
             @test collect(A) ≈ collect(B_copy) .* s
+
+            # views and SubArray
+            vB = @view B[1:n, 1:n]
+            mul!(vB, 42, I)
+            mul!(B_copy, 42, I)
+            @test collect(B) ≈ collect(B_copy)
+
+            # five arg mul!
+            @test compare(mul!, AT, rand(elty, 32, 32), rand(elty), LinearAlgebra.UniformScaling(rand(elty)), rand(elty), rand(elty))
+            @test compare(mul!, AT, rand(elty, 32, 32), rand(elty), LinearAlgebra.UniformScaling(rand(elty)), rand(elty), zero(elty))
+            @test compare(mul!, AT, rand(elty, 32, 32), rand(elty), LinearAlgebra.UniformScaling(zero(elty)), rand(elty), rand(elty))
+        end
+    end
+
+    @testset "mul! + SubArray" begin
+        @testset "$elty" for elty in (Float32, ComplexF32)
+            n = 16
+            hA = rand(elty, n, 2)
+            A = AT(hA)
+            hB = zeros(elty, 2n, 2)
+            B = AT(hB)
+            vB = @view B[1:n, 1:2]
+            vhB = @view hB[1:n, 1:2]
+            mul!(vB, I, A)
+            mul!(vhB, I, hA)
+            @test collect(B) ≈ hB
+            mul!(vB, 5, A)
+            mul!(vhB, 5, hA)
+            @test collect(B) ≈ hB
         end
     end
 
@@ -365,6 +453,43 @@ end
 @testsuite "linalg/kron" (AT, eltypes) -> begin
     @testset "$T, $opa, $opb" for T in eltypes, opa in (vec, identity, transpose, adjoint), opb in (vec, identity, transpose, adjoint)
         @test compare(kron, AT, opa(rand(T, 16, 32)), opb(rand(T, 64, 8)))
+    end
+
+    # Diagonal
+    @testset "$T" for T in filter(T -> T == Float32 || T == Float64, eltypes)
+        n, m = 16, 8
+        a, b = rand(T, n), rand(T, m)
+
+        # Diagonal*Diagonal
+        R = kron(Diagonal(adapt(AT, a)), Diagonal(adapt(AT, b)))
+        @test R isa Diagonal
+        @test Array(R.diag) ≈ kron(a, b)
+
+        # Diagonal*Dense
+        B = rand(T, m, m)
+        R2 = kron(Diagonal(adapt(AT, a)), adapt(AT, B))
+        @test Array(R2) ≈ kron(Matrix(Diagonal(a)), B)
+
+        # Dense*Diagonal
+        A = rand(T, n, n)
+        R3 = kron(adapt(AT, A), Diagonal(adapt(AT, b)))
+        @test Array(R3) ≈ kron(A, Matrix(Diagonal(b)))
+
+        # kron! Diagonal*Diagonal
+        C1 = Diagonal(adapt(AT, zeros(T, n * m)))
+        kron!(C1, Diagonal(adapt(AT, a)), Diagonal(adapt(AT, b)))
+        @test C1 isa Diagonal
+        @test Array(C1.diag) ≈ kron(a, b)
+
+        # kron! Diagonal*Dense
+        C2 = adapt(AT, zeros(T, n * m, n * m))
+        kron!(C2, Diagonal(adapt(AT, a)), adapt(AT, B))
+        @test Array(C2) ≈ kron(Matrix(Diagonal(a)), B)
+
+        # kron! Dense*Diagonal
+        C3 = adapt(AT, zeros(T, n * m, n * m))
+        kron!(C3, adapt(AT, A), Diagonal(adapt(AT, b)))
+        @test Array(C3) ≈ kron(A, Matrix(Diagonal(b)))
     end
 end
 
@@ -425,7 +550,9 @@ end
             end
             n = 128
             d = AT(rand(elty, n))
+            d2 = AT(rand(elty, n))
             D = Diagonal(d)
+            D2 = Diagonal(d2)
             B = AT(rand(elty, n, n))
             X = AT(zeros(elty, n, n))
             Y = zeros(elty, n, n)
@@ -434,11 +561,17 @@ end
             mul!(X, D, B)
             mul!(Y, Diagonal(collect(d)), collect(B))
             @test collect(X) ≈ Y
+            mul!(X, D, D2)
+            mul!(Y, Diagonal(collect(d)), Diagonal(collect(d2)))
+            @test collect(X) ≈ Y
             mul!(X, D, adjoint(B))
             mul!(Y, Diagonal(collect(d)), collect(adjoint(B)))
             @test collect(X) ≈ Y
             mul!(X, D, B, α, β)
             mul!(Y, Diagonal(collect(d)), collect(B), α, β)
+            @test collect(X) ≈ Y
+            mul!(X, D, D2, α, β)
+            mul!(Y, Diagonal(collect(d)), Diagonal(collect(d2)), α, β)
             @test collect(X) ≈ Y
             mul!(X, B, D)
             mul!(Y, collect(B), Diagonal(collect(d)))
@@ -526,9 +659,16 @@ end
     end
 end
 
-@testsuite "linalg/mul!/vector-matrix" (AT, eltypes)->begin
+@testsuite "linalg/mul!/gemm" (AT, eltypes)->begin
+    # rectangular shapes that are not multiples of the tile size, so that every dimension
+    # has a partial tile and the inner dimension spans more than one tile
+    m, k, n = 33, 17, 5
+    # size of the stored array such that f(A) is m×k
+    opsize(f, m, k) = f === identity ? (m, k) : (k, m)
+
+    # vector-matrix
     @testset "$T gemv y := $f(A) * x * a + y * b" for f in (identity, transpose, adjoint), T in eltypes
-        y, A, x = rand(T, 4), rand(T, 4, 4), rand(T, 4)
+        y, A, x = rand(T, m), rand(T, opsize(f, m, k)...), rand(T, k)
 
         # workaround for https://github.com/JuliaLang/julia/issues/35163#issue-584248084
         T <: Integer && (y .%= T(10); A .%= T(10); x .%= T(10))
@@ -542,11 +682,10 @@ end
             @test compare(mul!, AT, rand(T, 2,2), rand(T, 2,1), f(rand(T, 2)))
         end
     end
-end
 
-@testsuite "linalg/mul!/matrix-matrix" (AT, eltypes)->begin
+    # matrix-matrix
     @testset "$T gemm C := $f(A) * $g(B) * a + C * b" for f in (identity, transpose, adjoint), g in (identity, transpose, adjoint), T in eltypes
-        A, B, C = rand(T, 4, 4), rand(T, 4, 4), rand(T, 4, 4)
+        A, B, C = rand(T, opsize(f, m, k)...), rand(T, opsize(g, k, n)...), rand(T, m, n)
 
         # workaround for https://github.com/JuliaLang/julia/issues/35163#issue-584248084
         T <: Integer && (A .%= T(10); B .%= T(10); C .%= T(10))
@@ -556,23 +695,96 @@ end
         @test compare(mul!, AT, C, f(A), g(B), Ref(T(4)), Ref(T(5)))
         @test typeof(AT(rand(T, 3, 3)) * AT(rand(T, 3, 3))) <: AbstractMatrix
     end
+    # empty inner dimension: C := C * b
+    @testset "$T gemm with K == 0" for T in (Float32, Int32)
+        T in eltypes || continue
+        C = rand(T, m, n)
+        @test compare(mul!, AT, C, rand(T, m, 0), rand(T, 0, n), Ref(T(4)), Ref(T(5)))
+    end
     @testset "$(complex(T)), $(complex(T)), $T gemm C := A * B * a + C * b" for T in filter(T-><:(T, Real) && <:(T, AbstractFloat), eltypes)
         Tc = complex(T)
-        A, B, C = rand(Tc, 4, 4), rand(T, 4, 4), rand(Tc, 4, 4)
+        A, B, C = rand(Tc, m, k), rand(T, k, n), rand(Tc, m, n)
 
         @test compare(*, AT, A, B)
         @test compare(mul!, AT, C, A, B)
         @test compare(mul!, AT, C, A, B, Ref(T(4)), Ref(T(5)))
         @test typeof(AT(rand(Tc, 3, 3)) * AT(rand(T, 3, 3))) <: AbstractMatrix
     end
-    @testset "$T with views" for T in eltypes
-        A = rand(T, 10, 10)
-        v1 = @view(A[:, 1:5])
-        v2 = @view(A[1:5, :])
-        dA = AT(A)
-        dv1 = @view(dA[:, 1:5])
-        dv2 = @view(dA[1:5, :])
-        @test Array(v1) * Array(v2) ≈ Array(v1 * v2)
+end
+
+@testsuite "linalg/mul!/strided-views" (AT, eltypes)->begin
+    @testset "$T" for T in (Float16, Float32, ComplexF32)
+        T in eltypes || continue
+
+        A = rand(T, 4, 3)
+        B = rand(T, 4, 5)
+        b = rand(T, 4)
+
+        @test compare((A, B) -> view(A, 1:2, :)' * view(B, 1:2, :), AT, A, B)
+        @test compare((A, B) -> transpose(view(A, 1:2, :)) * view(B, 1:2, :), AT, A, B)
+        @test compare((A, b) -> view(A, 1:2, :)' * view(b, 1:2), AT, A, b)
+        @test compare(A -> view(A, 1:2, :)' * view(A, 1:2, :), AT, A)
+
+        A2 = rand(T, 2, 3)
+        B2 = rand(T, 2, 5)
+        b2 = rand(T, 2)
+        @test compare((A, B) -> view(A, 1:2, :)' * B, AT, A, B2)
+        @test compare((A, B) -> A' * view(B, 1:2, :), AT, A2, B)
+        @test compare((A, b) -> view(A, 1:2, :)' * b, AT, A, b2)
+        @test compare((A, b) -> A' * view(b, 1:2), AT, A2, b)
+
+        C = rand(T, 4, 5)
+        @test compare(AT, C, A, B) do C, A, B
+            mul!(view(C, 1:3, :), view(A, 1:2, :)', view(B, 1:2, :), T(2), T(1))
+            C
+        end
+        @test compare(AT, C, A2, B2) do C, A, B
+            mul!(view(C, 1:3, :), A', B, T(2), T(1))
+            C
+        end
+
+        S = rand(T, 4, 4)
+        @test compare((S, B) -> Symmetric(view(S, 1:2, 1:2)) * view(B, 1:2, :), AT, S, B)
+
+        # plain (unwrapped) strided views
+        P = rand(T, 5, 5)
+        @test compare((A, P) -> view(A, 1:2, :) * view(P, 1:3, 1:4), AT, A, P)
+
+        # non-unit strides (step-range views)
+        As = rand(T, 8, 6)
+        Bs = rand(T, 6, 10)
+        bs = rand(T, 6)
+        @test compare((A, B) -> view(A, 1:2:8, :) * view(B, :, 1:2:10), AT, As, Bs)
+        @test compare(A -> view(A, 1:2:8, :)' * view(A, 1:2:8, :), AT, As)
+        @test compare((A, b) -> view(A, 1:2:8, :) * b, AT, As, bs)
+        Cs = rand(T, 8, 5)
+        @test compare(AT, Cs, As, Bs) do C, A, B
+            mul!(view(C, 1:2:8, :), view(A, 1:2:8, :), view(B, :, 1:2:10), T(2), T(1))
+            C
+        end
+
+        # strided destination with contiguous operands
+        B3 = rand(T, 3, 5)
+        @test compare(AT, C, A2, B3) do C, A, B
+            mul!(view(C, 1:2, :), A, B)
+            C
+        end
+    end
+
+    if Float32 in eltypes && ComplexF32 in eltypes
+        A = rand(ComplexF32, 4, 3)
+        B = rand(Float32, 3, 6)
+        @test compare((A, B) -> view(A, 1:2, :) * view(B, :, 1:5), AT, A, B)
+
+        A = rand(Float32, 4, 3)
+        B = rand(ComplexF32, 3, 6)
+        @test compare((A, B) -> view(A, 1:2, :) * view(B, :, 1:5), AT, A, B)
+    end
+
+    if Int16 in eltypes
+        A = reshape(Int16.(1:12), 4, 3)
+        B = reshape(Int16.(1:20), 4, 5)
+        @test compare((A, B) -> view(A, 1:2, :)' * view(B, 1:2, :), AT, A, B)
     end
 end
 
@@ -597,6 +809,35 @@ end
             c = AT(zeros(Tout, n))
             mul!(c, dA, dx)
             @test Array(c) == Tout.(Int64.(A) * Int64.(x))
+        end
+    end
+end
+
+# a container-like element type that doesn't promote with its own scalars
+struct Duo{T}
+    a::T
+    b::T
+end
+Base.zero(::Type{Duo{T}}) where {T} = Duo(zero(T), zero(T))
+Base.zero(x::Duo) = zero(typeof(x))
+Base.:(+)(x::Duo, y::Duo) = Duo(x.a + y.a, x.b + y.b)
+Base.:(*)(x::Duo, y::Number) = Duo(x.a * y, x.b * y)
+Base.:(*)(x::Number, y::Duo) = Duo(x * y.a, x * y.b)
+
+@testsuite "linalg/mul!/mixed-eltype" (AT, eltypes)->begin
+    # mixed element types that have no common promotion type
+    @testset "Duo{$T} * $T" for T in filter(isfloattype, eltypes)
+        n = 4
+        A = [Duo(T(i), T(2i)) for i in 1:n, _ in 1:n]
+        B = T.(reshape(1:n^2, n, n))
+
+        @test Array(AT(A) * AT(B)) == A * B
+        @test Array(AT(B) * AT(A)) == B * A
+
+        @testset "$W" for W in (UpperTriangular, LowerTriangular,
+                                UnitUpperTriangular, UnitLowerTriangular)
+            @test Array(W(AT(B)) * AT(A)) == W(B) * A
+            @test Array(AT(A) * W(AT(B))) == A * W(B)
         end
     end
 end
@@ -703,43 +944,5 @@ end
             y = invoke(GPUArrays.generic_matmatmul!, Tuple{AbstractArray, AbstractArray, AbstractArray, Number, Number}, adapt(AT, fill(NaN_T(T), 3, 3)), adapt(AT, fill(NaN_T(T), 3, 3)), adapt(AT, fill(NaN_T(T), 3, 3)), false, false)
             @test !any(isnan, collect(y))
         end
-    end
-end
-
-@testsuite "linalg/kron_diagonal" (AT, eltypes) -> begin
-    for T in filter(T -> T == Float32 || T == Float64, eltypes)
-        n, m = 16, 8
-        a, b = rand(T, n), rand(T, m)
-
-        # Diagonal*Diagonal
-        R = kron(Diagonal(adapt(AT, a)), Diagonal(adapt(AT, b)))
-        @test R isa Diagonal
-        @test Array(R.diag) ≈ kron(a, b)
-
-        # Diagonal*Dense
-        B = rand(T, m, m)
-        R2 = kron(Diagonal(adapt(AT, a)), adapt(AT, B))
-        @test Array(R2) ≈ kron(Matrix(Diagonal(a)), B)
-
-        # Dense*Diagonal
-        A = rand(T, n, n)
-        R3 = kron(adapt(AT, A), Diagonal(adapt(AT, b)))
-        @test Array(R3) ≈ kron(A, Matrix(Diagonal(b)))
-
-        # kron! Diagonal*Diagonal
-        C1 = Diagonal(adapt(AT, zeros(T, n * m)))
-        kron!(C1, Diagonal(adapt(AT, a)), Diagonal(adapt(AT, b)))
-        @test C1 isa Diagonal
-        @test Array(C1.diag) ≈ kron(a, b)
-
-        # kron! Diagonal*Dense
-        C2 = adapt(AT, zeros(T, n * m, n * m))
-        kron!(C2, Diagonal(adapt(AT, a)), adapt(AT, B))
-        @test Array(C2) ≈ kron(Matrix(Diagonal(a)), B)
-
-        # kron! Dense*Diagonal
-        C3 = adapt(AT, zeros(T, n * m, n * m))
-        kron!(C3, adapt(AT, A), Diagonal(adapt(AT, b)))
-        @test Array(C3) ≈ kron(A, Matrix(Diagonal(b)))
     end
 end

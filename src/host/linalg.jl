@@ -264,6 +264,63 @@ function LinearAlgebra.istril(A::AbstractGPUMatrix, k::Integer = 0)
     mapreduce(mapper, reducer, A, eachindex(IndexCartesian(), A); init=true)
 end
 
+# istriu/istril of triangular wrappers of the opposite triangularity: the generic
+# fallbacks in LinearAlgebra scan the wrapper element-by-element, which requires scalar
+# indexing. forwarding to the parent ends up in the mapreduce-based methods above, also
+# for lazily wrapped parents (via LinearAlgebra's Adjoint/Transpose forwards). needed by
+# e.g. 2-arg ldiv!/rdiv! on Julia 1.11.2+, which consult istriu/istril to select the
+# solver; LinearAlgebra provides equivalent methods on Julia 1.13+
+# (JuliaLang/LinearAlgebra.jl#1265), making these redundant there.
+@static if VERSION < v"1.13.0-"
+LinearAlgebra.istriu(A::LowerTriangular{<:Any, <:AnyGPUMatrix}, k::Integer = 0) =
+    istriu(parent(A), min(k, 1))
+LinearAlgebra.istriu(A::UnitLowerTriangular{<:Any, <:AnyGPUMatrix}, k::Integer = 0) =
+    k <= 0 && istriu(parent(A), k)
+LinearAlgebra.istril(A::UpperTriangular{<:Any, <:AnyGPUMatrix}, k::Integer = 0) =
+    istril(parent(A), max(k, -1))
+LinearAlgebra.istril(A::UnitUpperTriangular{<:Any, <:AnyGPUMatrix}, k::Integer = 0) =
+    k >= 0 && istril(parent(A), k)
+end
+
+## uniformscaling
+
+function LinearAlgebra.mul!(out::AnyGPUMatrix{T}, a::Number, B::LinearAlgebra.UniformScaling, α::Number, β::Number) where {T}
+    LinearAlgebra.checksquare(out)
+    if iszero(β)
+        fill!(out, zero(T))
+    elseif !isone(β)
+        rmul!(out, β)
+    end
+    s = convert(T, a*B.λ*α)
+    if !iszero(s)
+        view(out, diagind(out)) .+= s
+    end
+    return out
+end
+
+@static if VERSION >= v"1.12.0-rc"
+    import LinearAlgebra: _lscale_add!
+    function LinearAlgebra._lscale_add!(C::AnyGPUMatrix, s::Number, X::AnyGPUMatrix, alpha::Number, beta::Number)
+        if axes(C) == axes(X)
+            if isone(alpha)
+                if iszero(beta)
+                    @. C = s * X
+                else
+                    @. C = s * X + C * beta
+                end
+            else
+                if iszero(beta)
+                    @. C = s * X * alpha
+                else
+                    @. C = s * X * alpha + C * beta
+                end
+            end
+        else
+            generic_mul!(C, s, X, alpha, beta)
+        end
+        return C
+    end
+end
 
 ## diagonal
 
@@ -294,7 +351,36 @@ function Base.:\(D::Diagonal{<:Any, <:AbstractGPUArray}, B::AbstractGPUVecOrMat)
         return D.diag .\ B
     end
 end
+function LinearAlgebra.mul!(C::AbstractGPUArray,
+                            A::Diagonal{<:Any, <:AbstractGPUArray},
+                            B::Diagonal{<:Any, <:AbstractGPUArray})
+    C .= zero(eltype(C))
+    dc = view(C, LinearAlgebra.diagind(C))
+    da = A.diag
+    db = B.diag
+    d = length(dc)
+    length(da) == d || throw(DimensionMismatch("right hand side has $(length(da)) rows but output is $d by $d"))
+    length(db) == d || throw(DimensionMismatch("left hand side has $(length(db)) rows but output is $d by $d"))
+    @. dc = da * db
+    return C
+end
 
+function LinearAlgebra.mul!(C::AbstractGPUArray,
+                            A::Diagonal{<:Any, <:AbstractGPUArray},
+                            B::Diagonal{<:Any, <:AbstractGPUArray},
+                            α::Number,
+                            β::Number)
+    dc = view(C, LinearAlgebra.diagind(C))
+    da = A.diag
+    db = B.diag
+    d = length(dc)
+    length(da) == d || throw(DimensionMismatch("right hand side has $(length(da)) rows but output is $d by $d"))
+    length(db) == d || throw(DimensionMismatch("left hand side has $(length(db)) rows but output is $d by $d"))
+    # C may be uninitialized, so a `β` that is zero has to fill rather than scale
+    iszero(β) ? fill!(C, zero(eltype(C))) : rmul!(C, β)
+    @. dc += α * da * db
+    return C
+end
 function LinearAlgebra.mul!(C::Diagonal{<:Any, <:AbstractGPUArray},
                             A::Diagonal{<:Any, <:AbstractGPUArray},
                             B::Diagonal{<:Any, <:AbstractGPUArray})
@@ -436,57 +522,114 @@ function LinearAlgebra.ldiv!(B::AbstractGPUVecOrMat,
     B
 end
 
-
 ## matrix multiplication
-# legacy method
-generic_matmatmul!(C::AbstractArray, A::AbstractArray, B::AbstractArray, a::Number, b::Number) =
-    generic_matmatmul!(C, A, B, MulAddMul(a, b))
-function generic_matmatmul!(C::AbstractArray{R}, A::AbstractArray{T}, B::AbstractArray{S}, add::MulAddMul) where {T,S,R}
-    if size(A,2) != size(B,1)
-        throw(DimensionMismatch("matrix A has dimensions $(size(A)), matrix B has dimensions $(size(B))"))
-    end
-    if size(C,1) != size(A,1) || size(C,2) != size(B,2)
-        throw(DimensionMismatch("result C has dimensions $(size(C)), needs $((size(A,1),size(B,2)))"))
-    end
-    if isempty(A) || isempty(B)
-        return fill!(C, zero(R))
-    end
 
-    @kernel function matmatmul_kernel!(C, A, B)
-        assume.(size(C) .> 0)
-        idx = @index(Global, Linear)
-        i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
+# GPU-backed members of Base's StridedArray union match LinearAlgebra's BLAS methods,
+# but cannot be converted to host pointers. Route them to the generic GPU kernels.
+const StridedGPUSubArray{T,N} = Base.StridedSubArray{T,N,<:AbstractGPUArray}
+const AnyStridedGPUArray{T,N} = Union{AbstractGPUArray{T,N},StridedGPUSubArray{T,N}}
+const AnyStridedGPUVector{T} = AnyStridedGPUArray{T,1}
+const AnyStridedGPUMatrix{T} = AnyStridedGPUArray{T,2}
+const AnyStridedGPUVecOrMat{T} = Union{AnyStridedGPUVector{T},AnyStridedGPUMatrix{T}}
+const AnyStridedGPUMatrixOperand{T} = Union{
+    AnyStridedGPUMatrix{T},
+    Adjoint{T,<:AnyStridedGPUMatrix{T}},
+    Transpose{T,<:AnyStridedGPUMatrix{T}},
+    Symmetric{T,<:AnyStridedGPUMatrix{T}},
+    Hermitian{T,<:AnyStridedGPUMatrix{T}},
+}
+const AnyStridedGPUVecOrMatOperand{T} = Union{
+    AnyStridedGPUVector{T},
+    AnyStridedGPUMatrixOperand{T},
+}
 
-        @inbounds if i <= size(A,1) && j <= size(B,2)
-            z2 = zero(A[i, 1]*B[1, j] + A[i, 1]*B[1, j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            for k in 1:size(A,2)
-                Cij += convert(Tacc, A[i, k]) * convert(Tacc, B[k, j])
-            end
-            C[i,j] = add(Cij, C[i,j])
-        end
+has_strided_gpu_view(As...) =
+    any(A -> LinearAlgebra._unwrap(A) isa StridedGPUSubArray, As)
+
+# Intercept before LinearAlgebra unwraps operands and dispatches to backend BLAS methods. The
+# signatures also cover view-free products to avoid overlapping methods for each possible view
+# position; those calls are sent back through LinearAlgebra's original implementation.
+@static if VERSION < v"1.11"
+@inline function LinearAlgebra.mul!(C::AnyStridedGPUVector, A::AnyStridedGPUMatrixOperand,
+                            B::AnyStridedGPUVector, a::Number, b::Number)
+    if has_strided_gpu_view(C, A, B)
+        return generic_matmatmul!(C, A, B, a, b)
     end
-    matmatmul_kernel!(get_backend(C))(C, A, B; ndrange = size(C))
-    C
+    invoke(LinearAlgebra.mul!,
+           Tuple{AbstractVector,LinearAlgebra.AbstractVecOrMat,AbstractVector,Number,Number},
+           C, A, B, a, b)
+    return C
 end
 
-@static if !isdefined(LinearAlgebra, Symbol("@stable_muladdmul")) # @stable_muladdmul was added in 1.12
-function LinearAlgebra.generic_matvecmul!(C::AbstractGPUVector, tA::AbstractChar, A::AbstractGPUMatrix, B::AbstractGPUVector, _add::MulAddMul = MulAddMul())
-    generic_matmatmul!(C, wrap(A, tA), B, _add)
-end
-
-function LinearAlgebra.generic_matmatmul!(C::AbstractGPUVecOrMat, tA, tB, A::AbstractGPUVecOrMat, B::AbstractGPUVecOrMat, _add::MulAddMul=MulAddMul())
-    generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), _add)
+@inline function LinearAlgebra.mul!(C::AnyStridedGPUMatrix, A::AnyStridedGPUVecOrMatOperand,
+                            B::AnyStridedGPUVecOrMatOperand, a::Number, b::Number)
+    if has_strided_gpu_view(C, A, B)
+        return generic_matmatmul!(C, A, B, a, b)
+    end
+    invoke(LinearAlgebra.mul!,
+           Tuple{AbstractMatrix,LinearAlgebra.AbstractVecOrMat,
+                 LinearAlgebra.AbstractVecOrMat,Number,Number},
+           C, A, B, a, b)
+    return C
 end
 else
-function LinearAlgebra.generic_matvecmul!(C::AbstractGPUVector, tA::AbstractChar, A::AbstractGPUMatrix, B::AbstractGPUVector, a::Number, b::Number)
-    LinearAlgebra.@stable_muladdmul generic_matmatmul!(C, wrap(A, tA), B, MulAddMul(a, b))
+@inline function LinearAlgebra._mul!(C::AnyStridedGPUVector, A::AnyStridedGPUMatrixOperand,
+                             B::AnyStridedGPUVector, a::Number, b::Number)
+    if has_strided_gpu_view(C, A, B)
+        return generic_matmatmul!(C, A, B, a, b)
+    end
+    invoke(LinearAlgebra._mul!,
+           Tuple{AbstractVector,LinearAlgebra.AbstractVecOrMat,AbstractVector,Number,Number},
+           C, A, B, a, b)
+    return C
 end
 
-function LinearAlgebra.generic_matmatmul!(C::AbstractGPUVecOrMat, tA, tB, A::AbstractGPUVecOrMat, B::AbstractGPUVecOrMat, a::Number, b::Number)
-    LinearAlgebra.@stable_muladdmul generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), MulAddMul(a, b))
+@inline function LinearAlgebra._mul!(C::AnyStridedGPUMatrix, A::AnyStridedGPUVecOrMatOperand,
+                             B::AnyStridedGPUVecOrMatOperand, a::Number, b::Number)
+    if has_strided_gpu_view(C, A, B)
+        return generic_matmatmul!(C, A, B, a, b)
+    end
+    invoke(LinearAlgebra._mul!,
+           Tuple{AbstractMatrix,LinearAlgebra.AbstractVecOrMat,
+                 LinearAlgebra.AbstractVecOrMat,Number,Number},
+           C, A, B, a, b)
+    return C
 end
+end
+
+# Storage-level products below LinearAlgebra's 5-argument `mul!`, used for GPU arrays whose
+# back-end does not provide a native implementation. Back-ends overload these same `mul!`
+# signatures for their own array types to route products to vendor libraries.
+function LinearAlgebra.mul!(C::AnyStridedGPUVector, tA::AbstractChar, A::AnyStridedGPUMatrix, B::AnyStridedGPUVector, a::Number, b::Number)
+    Cm = reshape(C, length(C), 1)
+    Bm = reshape(B, length(B), 1)
+    LinearAlgebra.mul!(Cm, tA, 'N', A, Bm, a, b)
+    return C
+end
+
+@static if isdefined(LinearAlgebra, Symbol("@stable_muladdmul")) # @stable_muladdmul was added in 1.12
+function LinearAlgebra.mul!(C::AnyStridedGPUVecOrMat, tA, tB, A::AnyStridedGPUVecOrMat, B::AnyStridedGPUVecOrMat, a::Number, b::Number)
+    LinearAlgebra.@stable_muladdmul generic_matmatmul!(C, tA, tB, A, B, MulAddMul(a, b))
+end
+else
+function LinearAlgebra.mul!(C::AnyStridedGPUVecOrMat, tA, tB, A::AnyStridedGPUVecOrMat, B::AnyStridedGPUVecOrMat, a::Number, b::Number)
+    generic_matmatmul!(C, tA, tB, A, B, MulAddMul(a, b))
+end
+end
+
+# Julia < 1.13 dispatches on the non-public `generic_matvecmul!` and `generic_matmatmul!`,
+# which JuliaLang/LinearAlgebra.jl#1671 superseded by the `mul!` methods above. Forward from
+# the old names, both the alpha/beta variants (1.12) and the ones taking a final MulAddMul
+# (1.10 and 1.11).
+@static if VERSION < v"1.13.0-rc4"
+    LinearAlgebra.generic_matvecmul!(C::AnyStridedGPUVector, tA::AbstractChar, A::AnyStridedGPUMatrix, B::AnyStridedGPUVector, a::Number, b::Number) =
+        LinearAlgebra.mul!(C, tA, A, B, a, b)
+    LinearAlgebra.generic_matvecmul!(C::AnyStridedGPUVector, tA::AbstractChar, A::AnyStridedGPUMatrix, B::AnyStridedGPUVector, _add::MulAddMul = MulAddMul()) =
+        LinearAlgebra.mul!(C, tA, A, B, _add.alpha, _add.beta)
+    LinearAlgebra.generic_matmatmul!(C::AnyStridedGPUVecOrMat, tA, tB, A::AnyStridedGPUVecOrMat, B::AnyStridedGPUVecOrMat, a::Number, b::Number) =
+        LinearAlgebra.mul!(C, tA, tB, A, B, a, b)
+    LinearAlgebra.generic_matmatmul!(C::AnyStridedGPUVecOrMat, tA, tB, A::AnyStridedGPUVecOrMat, B::AnyStridedGPUVecOrMat, _add::MulAddMul = MulAddMul()) =
+        LinearAlgebra.mul!(C, tA, tB, A, B, _add.alpha, _add.beta)
 end
 
 # triangular × triangular matmul: C = α·(A·B) + β·C, with both A and B triangular.
@@ -512,11 +655,10 @@ function _triangular_matmatmul!(C::AbstractGPUVecOrMat{R}, A::AbstractTriangular
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i, 1]*B[1, j] + A[i, 1]*B[1, j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            Cij += convert(Tacc, A[i,i]) * convert(Tacc, B[i,j])
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Cij = muladd(A[i,i], B[i,j], Cij)
             for k in (upperA ? (i + 1) : 1):(upperA ? m : (i - 1))
-                Cij += convert(Tacc, A[i,k]) * convert(Tacc, B[k,j])
+                Cij = muladd(A[i,k], B[k,j], Cij)
             end
             # treat C as write-only when beta is zero (it may hold NaN/Inf)
             C[i,j] = iszero(beta) ? alpha * Cij : alpha * Cij + beta * C[i,j]
@@ -529,23 +671,32 @@ end
 @static if VERSION ≥ v"1.12.0-rc"
     # we need to use the generic wrapper to avoid dispatch to the 2x2or3x3 method
     using LinearAlgebra: generic_matmatmul_wrapper!, BlasFlag
-    function LinearAlgebra.generic_matmatmul_wrapper!(C::AbstractGPUMatrix{T}, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat{T}, B::AbstractGPUVecOrMat{T}, alpha::Number, beta::Number, val::LinearAlgebra.BlasFlag.SyrkHerkGemm) where {T}
-        LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+    # The wrappers hand strided GPU arrays back to the storage-level product. Before Julia 1.13
+    # that is still the legacy name, which back-ends released for those versions overload.
+    @static if VERSION < v"1.13.0-rc4"
+        storage_matmatmul!(C, tA, tB, A, B, alpha, beta) =
+            LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+    else
+        storage_matmatmul!(C, tA, tB, A, B, alpha, beta) =
+            LinearAlgebra.mul!(C, tA, tB, A, B, alpha, beta)
+    end
+    function LinearAlgebra.generic_matmatmul_wrapper!(C::AnyStridedGPUMatrix{T}, tA::AbstractChar, tB::AbstractChar, A::AnyStridedGPUVecOrMat{T}, B::AnyStridedGPUVecOrMat{T}, alpha::Number, beta::Number, val::LinearAlgebra.BlasFlag.SyrkHerkGemm) where {T}
+        storage_matmatmul!(C, tA, tB, A, B, alpha, beta)
     end
     # Symmetric/Hermitian inputs with BLAS eltypes would otherwise dispatch to BLAS.symm!/
     # hemm!: GPU arrays are DenseArrays, so they match the StridedMatrix{<:BlasFloat} methods
-    function LinearAlgebra.generic_matmatmul_wrapper!(C::AbstractGPUMatrix{T}, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat{T}, B::AbstractGPUVecOrMat{T}, alpha::Number, beta::Number, val::LinearAlgebra.BlasFlag.SymmHemmGeneric) where {T}
-        LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+    function LinearAlgebra.generic_matmatmul_wrapper!(C::AnyStridedGPUMatrix{T}, tA::AbstractChar, tB::AbstractChar, A::AnyStridedGPUVecOrMat{T}, B::AnyStridedGPUVecOrMat{T}, alpha::Number, beta::Number, val::LinearAlgebra.BlasFlag.SymmHemmGeneric) where {T}
+        storage_matmatmul!(C, tA, tB, A, B, alpha, beta)
     end
     # need to support mixed complex/real types too
     #function LinearAlgebra.generic_matmatmul_wrapper!(C::AbstractGPUMatrix{Complex{T}}, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat{Complex{T}}, B::AbstractGPUVecOrMat{T}, alpha::Number, beta::Number, val::V) where {T<:BlasReal, V<:LinearAlgebra.BlasFlag.SyrkHerkGemm}
-    #    LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+    #    storage_matmatmul!(C, tA, tB, A, B, alpha, beta)
     #end
-    function LinearAlgebra.generic_matmatmul_wrapper!(C::AbstractGPUMatrix{Complex{T}}, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat{Complex{T}}, B::AbstractGPUVecOrMat{T}, alpha::Number, beta::Number, val::Val{LinearAlgebra.BlasFlag.GEMM}) where T<:Union{Float32, Float64}
-        LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+    function LinearAlgebra.generic_matmatmul_wrapper!(C::AnyStridedGPUMatrix{Complex{T}}, tA::AbstractChar, tB::AbstractChar, A::AnyStridedGPUVecOrMat{Complex{T}}, B::AnyStridedGPUVecOrMat{T}, alpha::Number, beta::Number, val::Val{LinearAlgebra.BlasFlag.GEMM}) where T<:Union{Float32, Float64}
+        storage_matmatmul!(C, tA, tB, A, B, alpha, beta)
     end
-    function LinearAlgebra.generic_matmatmul_wrapper!(C::AbstractGPUMatrix{Complex{T}}, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat{T}, B::AbstractGPUVecOrMat{Complex{T}}, alpha::Number, beta::Number, val::Val{LinearAlgebra.BlasFlag.GEMM}) where T<:Union{Float32, Float64}
-        LinearAlgebra.generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+    function LinearAlgebra.generic_matmatmul_wrapper!(C::AnyStridedGPUMatrix{Complex{T}}, tA::AbstractChar, tB::AbstractChar, A::AnyStridedGPUVecOrMat{T}, B::AnyStridedGPUVecOrMat{Complex{T}}, alpha::Number, beta::Number, val::Val{LinearAlgebra.BlasFlag.GEMM}) where T<:Union{Float32, Float64}
+        storage_matmatmul!(C, tA, tB, A, B, alpha, beta)
     end
     # Julia 1.12 introduced generic_mul! for scalar * array operations
     function LinearAlgebra.generic_mul!(C::AbstractGPUVecOrMat, X::AbstractGPUVecOrMat, s::Number, alpha::Number, beta::Number)
@@ -589,6 +740,7 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
     upper = tfun === identity ? uploc == 'U' :  uploc != 'U'
     unit  = isunitc == 'U'
+    oA = oneunit(eltype(A))
 
     @kernel function trimatmul(C, A, B)
         idx = @index(Global, Linear)
@@ -598,13 +750,12 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            Cij += (unit ? one(Cij) : convert(Tacc, A[i,i])) * convert(Tacc, B[i,j])
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Cij = muladd(unit ? oA : A[i,i], B[i,j], Cij)
             for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
-                Cij += convert(Tacc, A[i,k]) * convert(Tacc, B[k,j])
+                Cij = muladd(A[i,k], B[k,j], Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -616,13 +767,12 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            Cij += (unit ? one(Cij) : transpose(convert(Tacc, A[i,i]))) * convert(Tacc, B[i,j])
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Cij = muladd(unit ? oA : transpose(A[i,i]), B[i,j], Cij)
             for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
-                Cij += transpose(convert(Tacc, A[k,i])) * convert(Tacc, B[k,j])
+                Cij = muladd(transpose(A[k,i]), B[k,j], Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -634,13 +784,12 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            Cij += (unit ? one(Cij) : adjoint(convert(Tacc, A[i,i]))) * convert(Tacc, B[i,j])
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Cij = muladd(unit ? oA : adjoint(A[i,i]), B[i,j], Cij)
             for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
-                Cij += adjoint(convert(Tacc, A[k,i])) * convert(Tacc, B[k,j])
+                Cij = muladd(adjoint(A[k,i]), B[k,j], Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -670,6 +819,7 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
     upper = tfun === identity ? uploc == 'U' :  uploc != 'U'
     unit  = isunitc == 'U'
+    oB = oneunit(eltype(B))
 
     @kernel function mattrimul(C, A, B)
         idx = @index(Global, Linear)
@@ -679,13 +829,12 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            Cij += convert(Tacc, A[i,j]) * (unit ? one(Cij) : convert(Tacc, B[j,j]))
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Cij = muladd(A[i,j], unit ? oB : B[j,j], Cij)
             for k in (upper ? 1 : (j + 1)):(upper ? (j - 1) : m)
-                Cij += convert(Tacc, A[i,k]) * convert(Tacc, B[k,j])
+                Cij = muladd(A[i,k], B[k,j], Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -697,13 +846,12 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            Cij += convert(Tacc, A[i,j]) * (unit ? one(Cij) : transpose(convert(Tacc, B[j,j])))
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Cij = muladd(A[i,j], unit ? oB : transpose(B[j,j]), Cij)
             for k in (upper ? 1 : (j + 1) ):(upper ? (j - 1) : m)
-                Cij += convert(Tacc, A[i,k]) * transpose(convert(Tacc, B[j,k]))
+                Cij = muladd(A[i,k], transpose(B[j,k]), Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -715,13 +863,12 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
 
         @inbounds if i <= l && j <= n
             z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Tacc = promote_type(R, typeof(z2))
-            Cij = convert(Tacc, z2)
-            Cij += convert(Tacc, A[i,j]) * (unit ? one(Cij) : adjoint(convert(Tacc, B[j,j])))
+            Cij = convert(promote_type(R, typeof(z2)), z2)
+            Cij = muladd(A[i,j], unit ? oB : adjoint(B[j,j]), Cij)
             for k in (upper ? 1 : (j + 1)):(upper ? (j - 1) : m)
-                Cij += convert(Tacc, A[i,k]) * adjoint(convert(Tacc, B[j,k]))
+                Cij = muladd(A[i,k], adjoint(B[j,k]), Cij)
             end
-            C[i,j] += Cij
+            C[i,j] = Cij
         end
     end
 
@@ -738,11 +885,92 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
     C
 end
 
+# triangular solves parallelize only across right-hand sides; each one is a sequential
+# forward/backward substitution. backends with a vendor BLAS override these with native
+# trsm calls, so these fallbacks mainly serve backends without one. unlike LinearAlgebra's
+# generic implementation, a zero diagonal element does not throw a SingularException but
+# yields Infs/NaNs, like vendor BLAS libraries.
+function generic_trimatdiv!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix{T}, B::AbstractGPUVecOrMat{S}) where {T,S,R}
+    if size(A,2) != size(B,1)
+        throw(DimensionMismatch(lazy"matrix A has dimensions $(size(A)), right hand side B has dimensions $(size(B))"))
+    end
+    if size(C) != size(B)
+        throw(DimensionMismatch(lazy"result C has dimensions $(size(C)), needs $(size(B))"))
+    end
+    isempty(B) && return C
+
+    upper = tfun === identity ? uploc == 'U' : uploc != 'U'
+    unit  = isunitc == 'U'
+
+    # C = tfun(A) \ B; safe for C === B, as B[i,j] is read before C[i,j] is written
+    @kernel function trimatdiv(C, A, B, tf)
+        j = @index(Global, Linear)
+        m, n = size(C, 1), size(C, 2)
+
+        @inbounds if j <= n
+            for ii in 1:m
+                i = upper ? m - ii + 1 : ii
+                Cij = convert(promote_type(R, S), B[i,j])
+                for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
+                    Aik = tf === identity ? A[i,k] : tf(A[k,i])
+                    Cij -= Aik * C[k,j]
+                end
+                C[i,j] = unit ? Cij : tf(A[i,i]) \ Cij
+            end
+        end
+    end
+
+    trimatdiv(get_backend(C))(C, A, B, tfun; ndrange = size(C, 2))
+
+    C
+end
+
+function generic_mattridiv!(C::AbstractGPUMatrix{R}, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix{T}, B::AbstractGPUMatrix{S}) where {T,S,R}
+    if size(A,2) != size(B,1)
+        throw(DimensionMismatch(lazy"left hand side A has dimensions $(size(A)), matrix B has dimensions $(size(B))"))
+    end
+    if size(C) != size(A)
+        throw(DimensionMismatch(lazy"result C has dimensions $(size(C)), needs $(size(A))"))
+    end
+    isempty(A) && return C
+
+    upper = tfun === identity ? uploc == 'U' : uploc != 'U'
+    unit  = isunitc == 'U'
+
+    # C = A / tfun(B); safe for C === A, as A[i,j] is read before C[i,j] is written
+    @kernel function mattridiv(C, A, B, tf)
+        i = @index(Global, Linear)
+        m, n = size(C, 1), size(C, 2)
+
+        @inbounds if i <= m
+            for jj in 1:n
+                j = upper ? jj : n - jj + 1
+                Cij = convert(promote_type(R, T), A[i,j])
+                for k in (upper ? 1 : (j + 1)):(upper ? (j - 1) : n)
+                    Bkj = tf === identity ? B[k,j] : tf(B[j,k])
+                    Cij -= C[i,k] * Bkj
+                end
+                C[i,j] = unit ? Cij : Cij / tf(B[j,j])
+            end
+        end
+    end
+
+    mattridiv(get_backend(C))(C, A, B, tfun; ndrange = size(C, 1))
+
+    C
+end
+
 function LinearAlgebra.generic_trimatmul!(C::AbstractGPUVecOrMat, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix, B::AbstractGPUVecOrMat)
     generic_trimatmul!(C, uploc, isunitc, tfun, A, B)
 end
 function LinearAlgebra.generic_mattrimul!(C::AbstractGPUMatrix, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix, B::AbstractGPUMatrix)
     generic_mattrimul!(C, uploc, isunitc, tfun, A, B)
+end
+function LinearAlgebra.generic_trimatdiv!(C::AbstractGPUVecOrMat, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix, B::AbstractGPUVecOrMat)
+    generic_trimatdiv!(C, uploc, isunitc, tfun, A, B)
+end
+function LinearAlgebra.generic_mattridiv!(C::AbstractGPUMatrix, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix, B::AbstractGPUMatrix)
+    generic_mattridiv!(C, uploc, isunitc, tfun, A, B)
 end
 
 function generic_rmul!(X::AbstractArray, s::Number)

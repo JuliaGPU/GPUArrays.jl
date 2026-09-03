@@ -1,6 +1,6 @@
 @testsuite "sparse" (AT, eltypes)->begin
     sparse_ATs = sparse_types(AT)
-    for sparse_AT in sparse_ATs
+    @testset "sparse_AT = $sparse_AT" for sparse_AT in sparse_ATs
         if sparse_AT <: AbstractSparseVector
             vector(sparse_AT, eltypes)
             vector_construction(sparse_AT, eltypes)
@@ -20,16 +20,25 @@ end
 using SparseArrays
 using SparseArrays: nonzeroinds, nonzeros, rowvals
 
+# `sprand`/`sprandn` can produce *stored* zeros: with a coarse element type like Float16,
+# `rand` returns an exact zero about once every 2048 draws, so roughly one in 60 vectors
+# here contains one. That's a valid sparse array, but CPU and GPU implementations
+# legitimately disagree on what to do with it -- `x .* 1` drops stored zeros on the CPU
+# while our kernels preserve the structure -- so the structural comparisons below fail at
+# random. Keep the inputs canonical instead.
+sprand_nozeros(args...) = dropzeros!(sprand(args...))
+sprandn_nozeros(args...) = dropzeros!(sprandn(args...))
+
 function vector(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
-    for ET in eltypes
-        @testset "Sparse vector properties($ET)" begin
+    @testset "Sparse vector properties" begin
+        @testset "$ET" for ET in eltypes
             m = 25
             n = 35
             k = 10
             p = 5
             blockdim = 5
-            x   = sprand(ET,m,0.2)
+            x   = sprand_nozeros(ET,m,0.2)
             d_x = AT(x)
             @test length(d_x) == m
             @test size(d_x)   == (m,)
@@ -66,7 +75,7 @@ function vector_construction(AT, eltypes)
         k = 10
         p = 5
         blockdim = 5
-        x = sprand(ET, m, 0.2)
+        x = sprand_nozeros(ET, m, 0.2)
         d_x = AT(x)
         @test collect(d_x) == collect(x)
         @test similar(d_x) isa AT{ET}
@@ -76,17 +85,17 @@ end
 
 function matrix(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
-    for ET in eltypes
-        @testset "Sparse matrix properties($ET)" begin
+    @testset "Sparse matrix properties" begin
+        @testset "$ET" for ET in eltypes
             m = 25
             n = 35
             k = 10
             p = 5
             blockdim = 5
-            x    = sprand(ET, m, 0.2)
+            x    = sprand_nozeros(ET, m, 0.2)
             d_x  = AT(x)
             @test size(d_x) == (m, 1)
-            x    = sprand(ET, m, n, 0.2)
+            x    = sprand_nozeros(ET, m, n, 0.2)
             d_x  = AT(x)
             d_tx = AT(transpose(x))
             d_ax = AT(adjoint(x))
@@ -139,7 +148,7 @@ function matrix_construction(AT, eltypes)
         k = 10
         p = 5
         blockdim = 5
-        x = sprand(ET, m, n, 0.2)
+        x = sprand_nozeros(ET, m, n, 0.2)
         d_x = AT(x)
         @test collect(d_x) == collect(x)
         @test similar(d_x) isa AT{ET}
@@ -153,11 +162,11 @@ end
 
 function broadcasting_vector(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
-    for ET in eltypes
-        @testset "SparseVector($ET)" begin
+    @testset "SparseVector broadcasting" begin
+        @testset "$ET" for ET in eltypes
             m  = 64
             p  = 0.5
-            x  = dropzeros(sprand(ET, m, p))
+            x  = sprand_nozeros(ET, m, p)
             dx = AT(x)
 
             # zero-preserving
@@ -184,26 +193,26 @@ function broadcasting_vector(AT, eltypes)
 
             # sparse to sparse
             dx = AT(x)
-            y  = sprand(ET, m, p)
+            y  = sprand_nozeros(ET, m, p)
             dy = AT(y)
             z  = x  .* y
             dz = dx .* dy
             @test dz isa AT{ET}
-            @test z == SparseVector(dz)
+            @test z ≈ SparseVector(dz)
 
             # multiple inputs
-            y  = sprand(ET, m, p)
-            w  = sprand(ET, m, p)
+            y  = sprand_nozeros(ET, m, p)
+            w  = sprand_nozeros(ET, m, p)
             dy = AT(y)
             dx = AT(x)
             dw = AT(w)
             z  = @. x  * y  * w
             dz = @. dx * dy * dw
             @test dz isa AT{ET}
-            @test z == SparseVector(dz)
+            @test z ≈ SparseVector(dz)
 
-            y = sprand(ET, m, p)
-            w = sprand(ET, m, p)
+            y = sprand_nozeros(ET, m, p)
+            w = sprand_nozeros(ET, m, p)
             dense_arr   = rand(ET, m)
             d_dense_arr = dense_AT(dense_arr)
             dy = AT(y)
@@ -211,15 +220,15 @@ function broadcasting_vector(AT, eltypes)
             z  = @. x  * y  * w  * dense_arr
             dz = @. dx * dy * dw * d_dense_arr
             @test dz isa dense_AT{ET}
-            @test Array(z) == Array(dz)
-            
-            y  = sprand(ET, m, p)
+            @test Array(z) ≈ Array(dz)
+
+            y  = sprand_nozeros(ET, m, p)
             dy = AT(y)
             dx = AT(x)
             z  = x  .* y  .* ET(2)
             dz = dx .* dy .* ET(2)
             @test dz isa AT{ET}
-            @test z == SparseVector(dz)
+            @test z ≈ SparseVector(dz)
 
             # type-mismatching
             ## non-zero-preserving
@@ -242,11 +251,11 @@ end
 
 function broadcasting_matrix(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
-    for ET in eltypes
-       @testset "SparseMatrix($ET)" begin
+    @testset "SparseMatrix broadcasting" begin
+        @testset "$ET" for ET in eltypes
             m, n = 5, 6
             p   = 0.5
-            x   = sprand(ET, m, n, p)
+            x   = sprand_nozeros(ET, m, n, p)
             dx  = AT(x)
             # zero-preserving
             y  = x  .* ET(1)
@@ -267,22 +276,22 @@ function broadcasting_matrix(AT, eltypes)
             dy = dx .* dense_AT(ones(ET, m, n))
             @test dy isa dense_AT{ET}
             @test Array(y) == Array(dy)
-            
+
             # multiple inputs
-            y  = sprand(ET, m, n, p)
+            y  = sprand_nozeros(ET, m, n, p)
             dy = AT(y)
             z  = x  .* y  .* ET(2)
             dz = dx .* dy .* ET(2)
             @test dz isa AT{ET}
-            @test z == SparseMatrixCSC(dz)
+            @test z ≈ SparseMatrixCSC(dz)
 
             # multiple inputs
-            w  = sprand(ET, m, n, p)
+            w  = sprand_nozeros(ET, m, n, p)
             dw = AT(w)
             z  = x  .* y  .* w
             dz = dx .* dy .* dw
             @test dz isa AT{ET}
-            @test z == SparseMatrixCSC(dz)
+            @test z ≈ SparseMatrixCSC(dz)
 
             # create a matrix with nnz < leading_dim
             x = spdiagm(m, m, 2=>rand(ET, m - 2))
@@ -302,11 +311,11 @@ end
 
 function mapreduce_matrix(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
-    for ET in eltypes
-        @testset "SparseMatrix($ET)" begin
+    @testset "SparseMatrix mapreduce" begin
+        @testset "$ET" for ET in eltypes
             m,n = 5,6
             p = 0.5
-            x = sprand(ET, m, n, p)
+            x = sprand_nozeros(ET, m, n, p)
             dx = AT(x)
 
             # dim=:
@@ -355,33 +364,35 @@ end
 
 function linalg(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
-    # sprandn only works on real or complex float types
-    @testset "Sparse matrix($ET) linear algebra" for ET in filter(isfloattype, eltypes)
-        m = 10
-        A  = sprandn(ET, m, m, 0.2)
-        B  = sprandn(ET, m, m, 0.3)
-        ZA = spzeros(ET, m, m)
-        C  = I(div(m, 2))
-        dA = AT(A)
-        dB = AT(B)
-        dZA = AT(ZA)
-        @testset "opnorm and norm" begin
-            @test opnorm(A, Inf) ≈ opnorm(dA, Inf)
-            @test opnorm(A, 1)   ≈ opnorm(dA, 1)
-            @test_throws ArgumentError opnorm(dA, 2)
+    @testset "Sparse matrix linear algebra" begin
+        # sprandn only works on real or complex float types
+        @testset "$ET" for ET in filter(isfloattype, eltypes)
+            m = 10
+            A  = sprandn_nozeros(ET, m, m, 0.2)
+            B  = sprandn_nozeros(ET, m, m, 0.3)
+            ZA = spzeros(ET, m, m)
+            C  = I(div(m, 2))
+            dA = AT(A)
+            dB = AT(B)
+            dZA = AT(ZA)
+            @testset "opnorm and norm" begin
+                @test opnorm(A, Inf) ≈ opnorm(dA, Inf)
+                @test opnorm(A, 1)   ≈ opnorm(dA, 1)
+                @test_throws ArgumentError opnorm(dA, 2)
+            end
         end
     end
 end
 
 function iszero_vector(AT, eltypes)
-    for ET in eltypes
-        @testset "iszero SparseVector($ET)" begin
+    @testset "iszero SparseVector" begin
+        @testset "$ET" for ET in eltypes
             m = 25
 
             # Test non-zero sparse vector
-            x = sprand(ET, m, 0.5)
+            x = sprand_nozeros(ET, m, 0.5)
             while iszero(x)
-                x = sprand(ET, m, 0.5)
+                x = sprand_nozeros(ET, m, 0.5)
             end
             d_x = AT(x)
             @test iszero(d_x) == iszero(x)
@@ -404,14 +415,14 @@ function iszero_vector(AT, eltypes)
 end
 
 function iszero_matrix(AT, eltypes)
-    for ET in eltypes
-        @testset "iszero SparseMatrix($ET)" begin
+    @testset "iszero SparseMatrix" begin
+        @testset "$ET" for ET in eltypes
             m, n = 10, 10
 
             # Test non-zero sparse matrix
-            A = sprand(ET, m, n, 0.5)
+            A = sprand_nozeros(ET, m, n, 0.5)
             while iszero(A)
-                A = sprand(ET, m, n, 0.5)
+                A = sprand_nozeros(ET, m, n, 0.5)
             end
             dA = AT(A)
             @test iszero(dA) == iszero(A)

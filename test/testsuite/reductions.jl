@@ -34,6 +34,18 @@ end
         # implicit singleton dimensions
         @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,2)), zeros(ET, (2,)))
         @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,3)), zeros(ET, (2,)))
+
+        # mapreducedim! into wrapper types
+        for t in [transpose, adjoint]
+            @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,2)), t(zeros(ET, (2,))))
+            @test compare((A,R)->Base.mapreducedim!(abs2, +, R, A), AT, rand(range, (3,2,10)), t(zeros(ET, (2,3))))
+
+            # TODO: reenable once https://github.com/JuliaGPU/Metal.jl/issues/907 is fixed
+            # @test compare((A,R)->sum!(abs2, R, A), AT, rand(range, (3,2,10)), t(zeros(ET, (2,3))))
+
+            A, R = AT(rand(range, (3,2,10))), t(AT(zeros(ET, (2,3))))
+            @test Base.mapreducedim!(identity, *, R, A) === R
+        end
     end
 end
 
