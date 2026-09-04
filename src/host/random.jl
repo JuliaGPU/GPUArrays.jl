@@ -324,10 +324,7 @@ end
 ## Specialized rand! kernels for common types
 
 # Each Philox4x32 call produces 4 UInt32 outputs. Specialized kernels batch
-# multiple values per work item to use all 4 outputs efficiently:
-# - ≤4-byte types (including Float16): 4 values per call
-# - 8-byte types (Int64/UInt64/Float64/Complex{Float32}): 2 values per call
-# - 16-byte types (Int128/UInt128/Complex{Float64}):     1 value per call
+# multiple values per work item to use all 4 outputs efficiently
 
 # Convert Philox UInt32 outputs to N values of type T
 @inline philox_to_vals(::Type{Float16}, a1, a2, a3, a4) =
@@ -351,6 +348,9 @@ for T in (UInt128, Int128)
     @eval @inline philox_to_vals(::Type{$T}, a1, a2, a3, a4) =
         ((UInt128(a1) | UInt128(a2) << 32 | UInt128(a3) << 64 | UInt128(a4) << 96) % $T,)
 end
+@inline philox_to_vals(::Type{Complex{Float16}}, a1, a2, a3, a4) =
+    (complex(Float16(u01(Float32, a1)), Float16(u01(Float32, a2))),
+     complex(Float16(u01(Float32, a3)), Float16(u01(Float32, a4))))
 @inline philox_to_vals(::Type{Complex{Float32}}, a1, a2, a3, a4) =
     (complex(u01(Float32, a1), u01(Float32, a2)),
      complex(u01(Float32, a3), u01(Float32, a4)))
@@ -383,7 +383,7 @@ end
 
 # Types with specialized batched kernels
 const BatchedRandTypes = Union{
-    Float16, Float32, Float64, Complex{Float32}, Complex{Float64},
+    Float16, Float32, Float64, ComplexF16, ComplexF32, ComplexF64,
     Bool, Int8, Int16, Int32, Int64, Int128,
     UInt8, UInt16, UInt32, UInt64, UInt128}
 
@@ -416,16 +416,12 @@ end
 
 @inline Random.rng_native_52(::ElementRNG) = UInt64
 
-@inline function Random.rand(rng::ElementRNG, ::Random.SamplerType{UInt64})
-    sc = unsafe_load(rng.ctr0_ptr) + rng.nthreads
-    unsafe_store!(rng.ctr0_ptr, sc)
-    a1, a2, _, _ = philox4x32_10(sc, rng.counter, rng.seed)
-    UInt64(a1) | UInt64(a2) << 32
-end
-
-@inline function Random.rand(rng::ElementRNG, ::Random.SamplerType{UInt128})
-    UInt128(rand(rng, Random.SamplerType{UInt64}())) |
-    UInt128(rand(rng, Random.SamplerType{UInt64}())) << 64
+for T in (UInt64, UInt128, Int128)
+    @eval @inline function Random.rand(rng::ElementRNG, ::Random.SamplerType{$T})
+        sc = unsafe_load(rng.ctr0_ptr) + rng.nthreads
+        unsafe_store!(rng.ctr0_ptr, sc)
+        first(philox_to_vals($T, philox4x32_10(sc, rng.counter, rng.seed)...))
+    end
 end
 
 @inline Random.rand(rng::ElementRNG, ::Random.SamplerType{T}) where T <: Union{Bool,Base.BitInteger} =
@@ -476,25 +472,15 @@ end
 # Convert Philox UInt32 outputs to N normally-distributed values of type T.
 # ≤32-bit float targets pass UInt32s to boxmuller directly. 64-bit
 # targets use UInt64s for finer sampling.
-for T in (Float16, Float32)
-    @eval @inline function philox_to_normals(::Type{$T}, a1, a2, a3, a4)
-        n1, n2 = boxmuller($T, a1, a2)
-        n3, n4 = boxmuller($T, a3, a4)
-        (n1, n2, n3, n4)
-    end
+@inline function philox_to_normals(::Type{T}, a1, a2, a3, a4) where T <: Union{Float16, Float32, ComplexF16, ComplexF32}
+    (boxmuller(T, a1, a2)...,
+     boxmuller(T, a3, a4)...)
 end
-@inline function philox_to_normals(::Type{Float64}, a1, a2, a3, a4)
-    boxmuller(Float64,
+@inline function philox_to_normals(::Type{T}, a1, a2, a3, a4) where T <: Union{Float64, ComplexF64}
+    (boxmuller(T,
         UInt64(a1) | UInt64(a2) << 32,
-        UInt64(a3) | UInt64(a4) << 32)
+        UInt64(a3) | UInt64(a4) << 32)...,)
 end
-@inline philox_to_normals(::Type{Complex{Float32}}, a1, a2, a3, a4) =
-    (boxmuller(Complex{Float32}, a1, a2),
-     boxmuller(Complex{Float32}, a3, a4))
-@inline philox_to_normals(::Type{Complex{Float64}}, a1, a2, a3, a4) =
-    (boxmuller(Complex{Float64},
-        UInt64(a1) | UInt64(a2) << 32,
-        UInt64(a3) | UInt64(a4) << 32),)
 
 @kernel function randn_batched_kernel!(seed::UInt64, counter::UInt64, A::AbstractArray{T}) where T
     gid = @index(Global, Linear)
@@ -515,7 +501,7 @@ end
 end
 
 const BatchedRandnTypes = Union{Float16, Float32, Float64,
-                                Complex{Float32}, Complex{Float64}}
+                                ComplexF16, ComplexF32, ComplexF64}
 
 function Random.randn!(rng::RNG, A::AnyGPUArray{T}) where T <: BatchedRandnTypes
     isempty(A) && return A
@@ -530,28 +516,20 @@ end
 ## Generic randn! fallback via ElementRNG
 #
 # For AbstractFloats outside BatchedRandnTypes (BFloat16, user-defined float
-# types, etc.) we route through Random's `randn(rng, T)`. The reachable methods
-# from there are:
-#
-# - `randn(rng, ::BitFloatType)` (Float16/32/64) — ziggurat, uses global `wi`
-#   /`ki`/`fi` tables that aren't device-accessible. Overridden below to use
-#   our Box-Muller directly. The direct dispatch for these types goes through
-#   the batched kernel above, but `randn(rng, Complex{Float16})` recurses into
-#   `randn(rng, Float16)` which hits this path.
-# - `randn(rng, ::Type{Complex{T}})` — recurses into `randn(rng, T)`.
-# - `randn(rng, ::Type{T}) where T<:AbstractFloat` — Marsaglia polar Box-Muller
-#   rejection loop. GPU-safe (only calls `rand(rng, T)`) but warp-divergent.
+# types, etc.) we route through Random's `randn(rng, T)`.
+# `randn(rng, T)` functions may also be called indirectly when a user type's
+# rand sampler calls `randn`, via `rand_generic_kernel!`.
 
 # Bypass Base's ziggurat-based randn(rng, Float{16,32,64}) — its `wi`/`ki`/`fi`
 # tables aren't device-accessible, and on Metal the Float64 tables can't even
-# be loaded. Reached via Base's Complex recursion when the element type is
-# e.g. Complex{Float16}.
-@inline Random.randn(rng::ElementRNG, ::Type{Float16}) =
-    first(boxmuller(Float16, rand(rng, UInt32), rand(rng, UInt32)))
-@inline Random.randn(rng::ElementRNG, ::Type{Float32}) =
-    first(boxmuller(Float32, rand(rng, UInt32), rand(rng, UInt32)))
-@inline Random.randn(rng::ElementRNG, ::Type{Float64}) =
-    first(boxmuller(Float64, rand(rng, UInt64), rand(rng, UInt64)))
+# be loaded.
+for T in (Float16, Float32, Float64, ComplexF16, ComplexF32, ComplexF64)
+    @eval @inline function Random.randn(rng::ElementRNG, ::Type{$T})
+        sc = unsafe_load(rng.ctr0_ptr) + rng.nthreads
+        unsafe_store!(rng.ctr0_ptr, sc)
+        first(philox_to_normals($T, philox4x32_10(sc, rng.counter, rng.seed)...))
+    end
+end
 
 @kernel function randn_generic_kernel!(seed::UInt64, counter::UInt64, A::AbstractArray{T}) where T
     gid = @index(Global, Linear)

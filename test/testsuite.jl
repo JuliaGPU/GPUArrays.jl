@@ -72,6 +72,7 @@ end
 supported_eltypes(AT, test) = supported_eltypes(AT)
 supported_eltypes(AT) = supported_eltypes()
 supported_eltypes() = (Int16, Int32, Int64,
+                       @static(VERSION >= v"1.12" ? (Int128,) : ())...,
                        Float16, Float32, Float64,
                        ComplexF16, ComplexF32, ComplexF64,
                        Complex{Int16}, Complex{Int32}, Complex{Int64})
