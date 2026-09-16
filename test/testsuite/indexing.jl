@@ -122,6 +122,18 @@ end
         @test compare((X,Y)->(X[1,:] = Y), AT, zeros(Float32, 2,2), ones(Float32, 2))
     end
 
+    @testset "repeated indices" begin
+        # more assignments than destination elements; each one must be performed
+        @test compare(AT, zeros(Float32, 2)) do X
+            X[[1, 1, 1, 2]] = Float32[3, 3, 3, 5]
+            X
+        end
+        @test compare(AT, zeros(Float32, 2, 2)) do X
+            X[[1, 1, 2], [1, 2]] = fill(7f0, 3, 2)
+            X
+        end
+    end
+
     @testset "Broadcasting exceptions" for T in eltypes
         x = AT(zeros(T, (10, 10, 10, 10)))
         @test_throws ArgumentError x[1, :, :, :] = 0
