@@ -106,6 +106,7 @@ steps:
         julia:
           - "1.11"
           - "1.12"
+          - "1.13"
     soft_fail:
       - exit_status: 3
 
@@ -158,6 +159,7 @@ steps:
           - "1.10"
           - "1.11"
           - "1.12"
+          - "1.13"
     soft_fail:
       - exit_status: 3
 
@@ -210,6 +212,7 @@ steps:
           - "1.10"
           - "1.11"
           - "1.12"
+          - "1.13"
     soft_fail:
       - exit_status: 3
 
