@@ -34,4 +34,10 @@ if isdefined(Test, :detect_closure_boxes)
     end
 end
 
+# a type without a COO counterpart must hit a MethodError, not recurse (#780)
+testsuite["sparse/coo_type"] = quote
+    import GPUArrays
+    @test_throws MethodError GPUArrays.coo_type(sparse([1], [1], [1.0], 2, 2))
+end
+
 runtests(GPUArrays, args; init_code, init_worker_code, testsuite)
