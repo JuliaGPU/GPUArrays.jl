@@ -197,11 +197,11 @@ function GPUArrays._sptranspose(A::JLSparseMatrixCSR)
     Aᵀ = JLSparseMatrixCSC(A.rowPtr, A.colVal, A.nzVal, reverse(size(A)))
     JLSparseMatrixCSR(Aᵀ)
 end
-function _spadjoint(A::JLSparseMatrixCSC)
+function GPUArrays._spadjoint(A::JLSparseMatrixCSC)
     Aᴴ = JLSparseMatrixCSR(A.colPtr, A.rowVal, conj(A.nzVal), reverse(size(A)))
     JLSparseMatrixCSC(Aᴴ)
 end
-function _sptranspose(A::JLSparseMatrixCSC)
+function GPUArrays._sptranspose(A::JLSparseMatrixCSC)
     Aᵀ = JLSparseMatrixCSR(A.colPtr, A.rowVal, A.nzVal, reverse(size(A)))
     JLSparseMatrixCSC(Aᵀ)
 end

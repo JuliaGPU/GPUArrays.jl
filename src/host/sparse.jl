@@ -107,6 +107,17 @@ function SparseArrays.findnz(S::MT) where {MT <: AbstractGPUSparseMatrix}
 end
 
 ### WRAPPED ARRAYS
+# Without these, `copy` of a lazy wrapper falls back to the generic `AbstractArray` method,
+# which reads the parent one element at a time and so hits scalar indexing.
+Base.copy(A::Transpose{<:Any, <:AbstractGPUSparseMatrix}) = _sptranspose(parent(A))
+Base.copy(A::Adjoint{<:Any, <:AbstractGPUSparseMatrix}) = _spadjoint(parent(A))
+
+function Base.permutedims(A::AbstractGPUSparseMatrix, (a, b)::Tuple{Int,Int})
+    (a, b) == (2, 1) && return _sptranspose(A)
+    (a, b) == (1, 2) && return copy(A)
+    throw(ArgumentError("no valid permutation of dimensions"))
+end
+
 LinearAlgebra.issymmetric(M::Union{AbstractGPUSparseMatrixCSC,AbstractGPUSparseMatrixCSR}) = size(M, 1) == size(M, 2) ? norm(M - transpose(M), Inf) == 0 : false
 LinearAlgebra.ishermitian(M::Union{AbstractGPUSparseMatrixCSC,AbstractGPUSparseMatrixCSR}) = size(M, 1) == size(M, 2) ? norm(M - adjoint(M), Inf) == 0 : false
 
