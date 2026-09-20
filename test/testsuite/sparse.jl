@@ -12,6 +12,7 @@
             broadcasting_matrix(sparse_AT, eltypes)
             mapreduce_matrix(sparse_AT, eltypes)
             linalg(sparse_AT, eltypes)
+            transpose_matrix(sparse_AT, eltypes)
             iszero_matrix(sparse_AT, eltypes)
        end
     end
@@ -380,6 +381,29 @@ function linalg(AT, eltypes)
                 @test opnorm(A, 1)   ≈ opnorm(dA, 1)
                 @test_throws ArgumentError opnorm(dA, 2)
             end
+        end
+    end
+end
+
+function transpose_matrix(AT, eltypes)
+    @testset "Sparse matrix transpose and permutedims" begin
+        @testset "$ET" for ET in eltypes
+            m = 10
+            n = 15
+            x = sprand_nozeros(ET, m, n, 0.2)
+            d_x = AT(x)
+
+            @test collect(copy(transpose(d_x)))     == collect(transpose(x))
+            @test collect(copy(adjoint(d_x)))       == collect(adjoint(x))
+            @test collect(permutedims(d_x, (2, 1))) == collect(permutedims(x, (2, 1)))
+            @test collect(permutedims(d_x, (1, 2))) == collect(x)
+
+            # the result has to stay on the device, in the format of the input
+            @test copy(transpose(d_x))     isa AT
+            @test copy(adjoint(d_x))       isa AT
+            @test permutedims(d_x, (2, 1)) isa AT
+
+            @test_throws ArgumentError permutedims(d_x, (2, 2))
         end
     end
 end
