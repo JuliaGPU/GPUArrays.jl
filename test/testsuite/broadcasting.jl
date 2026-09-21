@@ -3,6 +3,7 @@
     vec3(AT, eltypes)
     unknown_wrapper(AT, eltypes)
     composed_function(AT, eltypes)
+    aliased_view(AT)
 end
 
 test_idx(idx, A::AbstractArray{T}) where T = A[idx] * T(2)
@@ -226,6 +227,23 @@ function unknown_wrapper(AT, eltypes)
             # test for dispatch with dest's BroadcastStyle.
             WA .= ET(1)
             @test all(isequal(ET(1)), Array(A))
+        end
+    end
+end
+
+# issue #716: a strided view shares the parent's allocation, but the view's
+# parent is a reshape. In-place broadcast has to copy that view before writing.
+function aliased_view(AT)
+    @testset "aliased view" begin
+        A = AT(-ones(3, 3))
+        v = view(A, 1:4:9)
+        @test Base.mightalias(A, v)
+        @test Base.mightalias(A, reshape(A, :))
+        @test !Base.mightalias(A, AT(-ones(3, 3)))
+
+        @test compare(AT, -ones(3, 3)) do B
+            B .*= sign.(view(B, 1:4:9))
+            B
         end
     end
 end
