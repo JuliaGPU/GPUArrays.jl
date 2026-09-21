@@ -112,8 +112,10 @@ end
     Is = map(adapt(ToGPU(dest)), Is)
     @boundscheck checkbounds(dest, Is...)
 
+    # one work item per index, not per destination element: with repeated indices
+    # there can be more assignments than elements, and each of them must be performed
     setindex_kernel(get_backend(dest))(dest, adapt(ToGPU(dest), src), idims, len, Is...;
-             ndrange = length(dest))
+             ndrange = len)
     return dest
 end
 

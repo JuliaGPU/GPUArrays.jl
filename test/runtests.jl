@@ -10,12 +10,6 @@ const init_worker_code = quote
 
     TestSuite.sparse_types(::Type{<:JLArray}) = (JLSparseVector, JLSparseMatrixCSC, JLSparseMatrixCSR)
     TestSuite.sparse_types(::Type{<:Array})   = (SparseVector, SparseMatrixCSC)
-
-    # Disable Float16-related tests until JuliaGPU/KernelAbstractions#600 is resolved
-    if isdefined(JLArrays.KernelAbstractions, :POCL)
-        TestSuite.supported_eltypes(::Type{<:JLArray}) =
-            setdiff(TestSuite.supported_eltypes(), [Float16, ComplexF16])
-    end
 end
 
 const init_code = quote

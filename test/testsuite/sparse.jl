@@ -365,8 +365,8 @@ end
 function linalg(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
     @testset "Sparse matrix linear algebra" begin
-        # sprandn doesn't work nicely with these...
-        @testset "$ET" for ET in filter(T -> !(T <: Union{Int16, Int32, Int64, Complex{Int16}, Complex{Int32}, Complex{Int64}}), eltypes)
+        # sprandn only works on real or complex float types
+        @testset "$ET" for ET in filter(isfloattype, eltypes)
             m = 10
             A  = sprandn_nozeros(ET, m, m, 0.2)
             B  = sprandn_nozeros(ET, m, m, 0.3)

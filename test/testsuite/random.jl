@@ -38,10 +38,26 @@ Random.rand(rng::AbstractRNG, ::Random.SamplerType{RGBTriplet}) =
         fill!(A, true)
         rand!(rng, A)
         @test false in Array(A)
+
+        # Int128 is not supported on all backends yet
+        if Int128 ∈ eltypes
+            # Complex{Int128}
+            A = AT{Complex{Int128}}(undef, 1024)
+            rand!(rng, A)
+            out = Array(A)
+            @test count(x -> real(x) < 0, out) > 0
+            @test real(out[1]) != imag(out[1])
+        end
+        # rand support for Tuple requires at least Julia 1.11
+        if VERSION ≥ v"1.11"
+            A = AT{NTuple{5, Int64}}(undef, 1024)
+            rand!(rng, A)
+            @test allunique(collect(Iterators.flatten(Array(A))))
+        end
     end
 
     @testset "randn" begin  # normally-distributed
-        @testset "$T $d" for T in filter(isrealfloattype, eltypes),
+        @testset "$T $d" for T in filter(isfloattype, eltypes),
                               d in (2, (2,2), (2,2,2))
             A = AT{T}(undef, d)
             B = copy(A)
