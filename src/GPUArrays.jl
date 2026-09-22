@@ -17,6 +17,8 @@ using Reexport
 
 using KernelAbstractions
 
+import AcceleratedKernels as AK
+
 # device functionality
 include("device/abstractarray.jl")
 include("device/sparse.jl")
@@ -29,6 +31,7 @@ include("host/base.jl")
 include("host/indexing.jl")
 include("host/broadcast.jl")
 include("host/mapreduce.jl")
+include("host/accumulate.jl")
 include("host/gemm.jl")
 include("host/linalg.jl")
 include("host/math.jl")
