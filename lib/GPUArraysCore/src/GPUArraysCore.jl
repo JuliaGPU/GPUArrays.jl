@@ -220,8 +220,8 @@ seed partial results, e.g. `neutral_element(+, Float32) === 0.0f0` and
 `neutral_element(min, Int) === typemax(Int)`.
 
 Methods exist for the operators that Base's reductions use: `+`, `*`, `&`, `|`, `⊻`, `min`,
-`max`, `Base.add_sum`, `Base.mul_prod` and `Base._extrema_rf` (and `Base.and_all` and
-`Base.or_any` where Base defines them). For any other operator this throws an error; packages can
+`max`, `Base.add_sum` and `Base.mul_prod`, and `Base._extrema_rf`, `Base.and_all` and
+`Base.or_any` on the Julia versions that define them. For any other operator this throws an error; packages can
 add a method for an operator whose neutral element they know.
 """
 neutral_element(op, T) =
@@ -237,7 +237,9 @@ neutral_element(::typeof(Base.:(*)), T) = one(T)
 neutral_element(::typeof(Base.mul_prod), T) = one(T)
 neutral_element(::typeof(Base.min), T) = typemax(T)
 neutral_element(::typeof(Base.max), T) = typemin(T)
-neutral_element(::typeof(Base._extrema_rf), ::Type{<:NTuple{2,T}}) where {T} = typemax(T), typemin(T)
+@static if isdefined(Base, :_extrema_rf) # VERSION >= v"1.8"
+    neutral_element(::typeof(Base._extrema_rf), ::Type{<:NTuple{2,T}}) where {T} = typemax(T), typemin(T)
+end
 @static if isdefined(Base, :and_all) # VERSION >~ v"1.13-"
     neutral_element(::typeof(Base.:(and_all)), T) = ~zero(T)
 end
