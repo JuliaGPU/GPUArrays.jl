@@ -243,4 +243,8 @@ end
     @test GPUArrays.neutral_element(&, UInt8) === 0xff
     @test GPUArrays.neutral_element(Base._extrema_rf, NTuple{2,Int8}) === (typemax(Int8), typemin(Int8))
     @test_throws ErrorException GPUArrays.neutral_element((x, y) -> x, Int)
+    if isdefined(Base, :and_all)    # Julia 1.13
+        @test GPUArrays.neutral_element(Base.and_all, Bool) === true
+        @test GPUArrays.neutral_element(Base.or_any, Bool) === false
+    end
 end
