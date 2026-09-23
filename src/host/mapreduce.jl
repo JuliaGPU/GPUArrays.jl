@@ -10,26 +10,8 @@ mapreducedim!(f, op, R::AnyGPUArray, A::AbstractArrayOrBroadcasted;
 Base.mapreducedim!(f, op, R::AnyGPUArray, A::AbstractArray) = mapreducedim!(f, op, R, A)
 Base.mapreducedim!(f, op, R::AnyGPUArray, A::Broadcast.Broadcasted) = mapreducedim!(f, op, R, A)
 
-neutral_element(op, T) =
-    error("""GPUArrays.jl needs to know the neutral element for your operator `$op`.
-             Please pass it as an explicit argument to `GPUArrays.mapreducedim!`,
-             or register it globally by defining `GPUArrays.neutral_element(::typeof($op), T)`.""")
-neutral_element(::typeof(Base.:(|)), T) = zero(T)
-neutral_element(::typeof(Base.:(⊻)), T) = zero(T)
-neutral_element(::typeof(Base.:(&)), T) = ~zero(T)
-neutral_element(::typeof(Base.:(+)), T) = zero(T)
-neutral_element(::typeof(Base.add_sum), T) = zero(T)
-neutral_element(::typeof(Base.:(*)), T) = one(T)
-neutral_element(::typeof(Base.mul_prod), T) = one(T)
-neutral_element(::typeof(Base.min), T) = typemax(T)
-neutral_element(::typeof(Base.max), T) = typemin(T)
-neutral_element(::typeof(Base._extrema_rf), ::Type{<:NTuple{2,T}}) where {T} = typemax(T), typemin(T)
-@static if isdefined(Base, :and_all) # VERSION >~ v"1.13-"
-    neutral_element(::typeof(Base.:(and_all)), T) = ~zero(T)
-end
-@static if isdefined(Base, :or_any) # VERSION >~ v"1.13-"
-    neutral_element(::typeof(Base.:(or_any)), T) = zero(T)
-end
+# `neutral_element` lives in GPUArraysCore, so that packages building on GPUArraysCore share it
+import GPUArraysCore: neutral_element
 
 # resolve ambiguities
 Base.mapreduce(f, op, A::AnyGPUArray, As::AbstractArrayOrBroadcasted...;

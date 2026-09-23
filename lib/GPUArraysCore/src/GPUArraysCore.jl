@@ -209,4 +209,40 @@ macro allowscalar(ex)
     end
 end
 
+## reductions
+
+"""
+    neutral_element(op, T)
+
+Return the neutral element of the binary operator `op` for elements of type `T`: a value `n`
+with `op(n, x) == op(x, n) == x` for every `x` of type `T`. GPU reductions and scans use it to
+seed partial results, e.g. `neutral_element(+, Float32) === 0.0f0` and
+`neutral_element(min, Int) === typemax(Int)`.
+
+Methods exist for the operators that Base's reductions use: `+`, `*`, `&`, `|`, `⊻`, `min`,
+`max`, `Base.add_sum`, `Base.mul_prod` and `Base._extrema_rf` (and `Base.and_all` and
+`Base.or_any` where Base defines them). For any other operator this throws an error; packages can
+add a method for an operator whose neutral element they know.
+"""
+neutral_element(op, T) =
+    error("""The neutral element of the operator `$op` for elements of type `$T` is unknown.
+             Pass an explicit initial value to the reduction, or define
+             `GPUArraysCore.neutral_element(::typeof($op), T)`.""")
+neutral_element(::typeof(Base.:(|)), T) = zero(T)
+neutral_element(::typeof(Base.:(⊻)), T) = zero(T)
+neutral_element(::typeof(Base.:(&)), T) = ~zero(T)
+neutral_element(::typeof(Base.:(+)), T) = zero(T)
+neutral_element(::typeof(Base.add_sum), T) = zero(T)
+neutral_element(::typeof(Base.:(*)), T) = one(T)
+neutral_element(::typeof(Base.mul_prod), T) = one(T)
+neutral_element(::typeof(Base.min), T) = typemax(T)
+neutral_element(::typeof(Base.max), T) = typemin(T)
+neutral_element(::typeof(Base._extrema_rf), ::Type{<:NTuple{2,T}}) where {T} = typemax(T), typemin(T)
+@static if isdefined(Base, :and_all) # VERSION >~ v"1.13-"
+    neutral_element(::typeof(Base.:(and_all)), T) = ~zero(T)
+end
+@static if isdefined(Base, :or_any) # VERSION >~ v"1.13-"
+    neutral_element(::typeof(Base.:(or_any)), T) = zero(T)
+end
+
 end # module GPUArraysCore

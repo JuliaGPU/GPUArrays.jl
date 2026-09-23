@@ -232,3 +232,15 @@ end
     @test compare((A, B) -> A == B, AT, [missing], [missing])
     @test compare((A, B) -> isequal(A, B), AT, [missing], [missing])
 end
+
+@testsuite "reductions/neutral_element" (AT, eltypes)->begin
+    # GPUArrays extends GPUArraysCore's function, so every package shares one set of methods
+    @test GPUArrays.neutral_element === GPUArrays.GPUArraysCore.neutral_element
+    @test GPUArrays.neutral_element(+, Float32) === 0.0f0
+    @test GPUArrays.neutral_element(*, Int32) === Int32(1)
+    @test GPUArrays.neutral_element(min, Int16) === typemax(Int16)
+    @test GPUArrays.neutral_element(max, Float64) === -Inf
+    @test GPUArrays.neutral_element(&, UInt8) === 0xff
+    @test GPUArrays.neutral_element(Base._extrema_rf, NTuple{2,Int8}) === (typemax(Int8), typemin(Int8))
+    @test_throws ErrorException GPUArrays.neutral_element((x, y) -> x, Int)
+end
