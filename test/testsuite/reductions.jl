@@ -233,6 +233,193 @@ end
     @test compare((A, B) -> isequal(A, B), AT, [missing], [missing])
 end
 
+@testsuite "reductions/contract" (AT, eltypes)->begin
+    M = rand(1:10, 10, 20)
+
+    # Without `init`, `mapreducedim!` folds into the destination's values
+    @test compare((R, A) -> Base.mapreducedim!(identity, +, R, A), AT, rand(1:3, 1, 20), M)
+    @test compare((R, A) -> Base.mapreducedim!(abs2, +, R, A), AT, rand(1:3, 10), M)
+
+    # A user `init` that is not neutral is applied once
+    @test compare(A -> sum(A; init=10), AT, rand(1:10, 100_000))
+    @test compare(A -> sum(A; dims=1, init=10), AT, rand(1:10, 1000, 3))
+
+    # Operators without a known neutral element
+    @test compare(A -> reduce((a, b) -> a + b, A), AT, rand(1:10, 100_000))
+    @test compare(A -> mapreduce(abs2, (a, b) -> max(a, b), A), AT, rand(-10:10, 1000))
+    if AT <: AbstractGPUArray   # (Base cannot, along `dims`)
+        @test Array(mapreduce(abs2, (a, b) -> a + b, AT(M); dims=2)) == sum(abs2, M; dims=2)
+    end
+
+    # Tuple and named-tuple accumulators
+    @test compare(A -> findmin(A), AT, rand(Float32, 1000))
+    @test compare(A -> findmax(A), AT, rand(Float32, 100, 10))
+    @test compare((A, B) -> A == B, AT, [1, 2, 3], [1, 2, 3])
+    @test compare((A, B) -> A == B, AT, [1, 2, 3], [1, 5, 3])
+
+    # Result types follow Base (compared with Base itself, whose rules differ between Julia
+    # versions): small integers widen, a scalar result has the type the fold settles on, and a
+    # reduction along `dims` with `init` has `init`'s type
+    I = Int32[1 2; 3 5]
+    for (red, args) in ((A -> sum(A), (Int8[100, 100],)), (A -> sum(A; dims=2), (Int8[100 100],)),
+                        (A -> sum(A; init=Int8(0)), (Int32[1, 2],)),
+                        (A -> sum(A; init=1.5f0), (I,)),
+                        (A -> sum(A; dims=1, init=Int8(0)), (I,)),
+                        (A -> count(isodd, A; init=Int8(0)), (I,)),
+                        (A -> reduce((a, b) -> floor(Int32, a) + floor(Int32, b), A; init=0.5f0),
+                         (Int16[1, 2],)))
+        cpu, gpu = red(args...), red(AT(args...))
+        @test gpu isa AbstractArray ? eltype(gpu) === eltype(cpu) && Array(gpu) == cpu :
+                                      gpu === cpu
+    end
+    # An explicit `init=nothing` is an initial value
+    @test_throws Exception sum(AT(Int32[1, 2]); init=nothing)
+    something_add(a, b) = something(a, Int32(0)) + something(b, Int32(0))
+    @test reduce(something_add, AT(Int32[1, 2]); init=nothing) === Int32(3)
+    # Base's checks of `dims`
+    @test_throws ArgumentError sum(AT(Int32[1, 2]); dims=0)
+    @test_throws ArgumentError sum(AT(Int32[1 2; 3 4]); dims=1.5)
+
+    # Empty reductions follow Base
+    @test sum(AT(Int[])) === 0
+    @test prod(AT(Float32[])) === 1f0
+    @test sum(AT(Int[]); init=Int8(0)) === Int8(0)
+    @test reduce((a, b) -> a + b, AT(Int[]); init=0) === 0
+    # (the same error as Base's, whose type differs between Julia versions)
+    errtype(f) = try f(); nothing catch err; typeof(err) end
+    @test errtype(() -> maximum(AT(Int[]))) === errtype(() -> maximum(Int[])) !== nothing
+    @test errtype(() -> reduce((a, b) -> a + b, AT(Int[]))) ===
+          errtype(() -> reduce((a, b) -> a + b, Int[])) !== nothing
+    @test compare(A -> sum(A; dims=1), AT, zeros(Int, 0, 3))
+    @test compare(A -> sum(A; dims=2), AT, zeros(Int, 0, 3))
+    @test_throws ArgumentError maximum(AT(zeros(Int, 0, 3)); dims=1)
+
+    # `Broadcasted` sources, and several arrays
+    @test compare((A, B) -> sum(Broadcast.instantiate(Broadcast.broadcasted(*, A, B))), AT,
+                  rand(Float32, 100), rand(Float32, 100))
+    @test compare((A, B) -> mapreduce(*, +, A, B), AT, rand(Float32, 100), rand(Float32, 100))
+    @test compare((A, B) -> mapreduce(*, +, A, B), AT, rand(Float32, 100), rand(Float32, 50))
+    @test compare((A, B) -> mapreduce(*, +, A, B; dims=1), AT, rand(Float32, 10, 10), rand(Float32, 10, 10))
+    # ... including arrays without a backend, such as the indices `findfirst` reduces with
+    @test compare(A -> mapreduce(+, (a, b) -> a + b, A, GPUArrays.EachIndex(A)), AT, Int32[1, 2])
+    @test compare(A -> mapreduce(+, +, A, GPUArrays.EachIndex(A); init=10), AT, Int32[1, 2])
+end
+
+@testsuite "reductions/base" (AT, eltypes)->begin
+    # Base's exact results (see `compare_exact`), which AcceleratedKernels leaves to GPUArrays
+    same(f, xs...) = compare_exact(f, AT, xs...)
+
+    # empty inputs: Base's value, else its error
+    for (f, x) in ((sum, Int32[]), (prod, Int32[]), (count, Bool[]), (minimum, Int32[]),
+                   (A -> reduce(max, A), Int32[]), (A -> reduce((a, b) -> a + b, A), Int32[]),
+                   (A -> sum(A; init=1), Float32[]), (A -> maximum(A; init=Int32(-1)), Int32[]),
+                   (A -> reduce(+, A; init=nothing), Int32[]),
+                   (A -> mapreduce(x -> error("never called"), +, A; init=7), Int32[]))
+        @test same(f, x)
+    end
+    # one element: Base's `mapreduce_first`, or `op(init, x)`
+    for (f, x) in ((A -> reduce((a, b) -> a + b, A), [true]), (sum, [true]), (sum, Int8[3]),
+                   (A -> reduce(+, A; init=Int8(0)), [true]), (A -> mapreduce(x -> x + 1, +, A), Int8[1]),
+                   (maximum, Int8[3]), (A -> reduce(*, A; init=0.5f0), Int32[3]))
+        @test same(f, x)
+    end
+    # ... whose map may index device arrays
+    w = AT(Int32[11, 22])
+    @test mapreduce(x -> w[x], +, AT(Int32[2])) === Int32(22)
+    # scalar result types
+    h8 = Int8[100, 100, 27]
+    for f in (sum, A -> reduce(+, A), A -> reduce(+, A; init=0), A -> sum(A; init=Int16(0)),
+              A -> reduce((a, b) -> Base.add_sum(a, b), A), maximum, A -> count(>(50), A))
+        @test same(f, h8)
+    end
+    @test same(A -> sum(A; init=Int8(0)), [1, 2])
+    if VERSION >= v"1.13-"   # (Julia 1.10's Base wraps these in the small type)
+        @test same(A -> sum(A; init=UInt8(0)), Int8[-1, -2])
+        @test same(A -> count(A; init=UInt8(0)), [true, true])
+    end
+
+    # along `dims`: `typeof(init)`, else the fold type
+    m8 = rand(Int8(-9):Int8(9), 40, 30)
+    for dims in (1, 2, (1, 2), 3)
+        for f in (A -> sum(A; dims), A -> sum(A; dims, init=Int16(1)), A -> maximum(A; dims),
+                  A -> count(x -> x > 0, A; dims))
+            @test same(f, m8)
+        end
+        # (Base's pairwise path reduces `Int8`s in `Int8`, which the values here do not overflow)
+        @test same(A -> reduce(+, A; dims, init=0.5), Int16.(m8))
+    end
+    # ... and empty reduced dimensions: `init`, else Base's initial value or error
+    e8 = zeros(Int8, 0, 3)
+    for (f, x) in ((A -> sum(A; dims=1), e8), (A -> prod(A; dims=1), e8),
+                   (A -> minimum(A; dims=1, init=Int8(7)), e8), (A -> minimum(A; dims=1), e8),
+                   (A -> maximum(A; dims=1), zeros(Int8, 3, 0)),
+                   (A -> minimum(A; dims=1), zeros(Int32, 0, 0)),
+                   (A -> mapreduce(x -> x + 1, +, A; dims=1), zeros(Int32, 0, 2)),
+                   (A -> mapreduce(x -> x + 1, *, A; dims=1), zeros(Int32, 0, 2)),
+                   (A -> count(A; dims=2), zeros(Bool, 3, 0)))
+        @test same(f, x)
+    end
+    # ... whose map may index device arrays
+    wh = Int32[11, 22]
+    @test Array(mapreduce(x -> w[x + 1], +, AT(zeros(Int32, 0, 2)); dims=1)) ==
+          mapreduce(x -> wh[x + 1], +, zeros(Int32, 0, 2); dims=1)
+
+    # signed zeros: Base's sums along `dims` start from zero, whole-array sums do not
+    z = fill(-0.0f0, 40, 3)
+    for f in (sum, A -> sum(A; dims=1), A -> sum(A; dims=2), A -> sum(A; init=0.0f0),
+              A -> prod(A; dims=1), A -> maximum(A; dims=1), A -> reduce(+, A; dims=(1, 2)))
+        @test same(f, z)
+    end
+
+    # the in-place reductions, with `init=true` and `false`, into destinations of another type
+    A = rand(1:9, 20, 30)
+    B = rand(Bool, 20, 30)
+    for init in (true, false), dims in (1, 2)
+        sz = dims == 1 ? (1, 30) : (20, 1)
+        for (f!, r, x) in ((sum!, rand(1:3, sz), A), (sum!, Float32.(rand(1:3, sz)), A),
+                           (prod!, rand(1.0f0:2.0f0, sz), A .% 2 .+ 1),
+                           (maximum!, rand(1:3, sz), A), (minimum!, rand(Int16(1):Int16(3), sz), A),
+                           (any!, rand(Bool, sz), B), (all!, rand(Bool, sz), B),
+                           (count!, rand(1:3, sz), B),
+                           (extrema!, fill((5, 5), sz), A))
+            @test same((r, x) -> f!(r, x; init), r, x)
+        end
+        @test same((r, x) -> sum!(abs2, r, x; init), rand(1:3, sz), A)
+    end
+    # ... of empty inputs
+    for (f!, r) in ((sum!, ones(Float32, 1, 3)), (prod!, zeros(Float32, 1, 3)),
+                    (maximum!, zeros(Float32, 1, 3)), (count!, ones(Int, 1, 3))), init in (true, false)
+        @test same((r, x) -> f!(r, x; init), r, zeros(f! === count! ? Bool : Float32, 0, 3))
+    end
+    # ... and `Base.mapreducedim!`, which folds into the destination
+    @test same((r, x) -> Base.mapreducedim!(abs2, +, r, x), rand(1:3, 1, 30), A)
+
+    # findmin and findmax: Base's indices, without an `init`
+    for (f, x) in ((findmin, Float32[3, 1, 2]), (findmax, Float32[3, 1, 2]),
+                   (A -> findmax(A; dims=1), Float32[3, 1, 2]),
+                   (A -> findmin(A; dims=2), rand(Float32, 20, 30)),
+                   (A -> findmax(A; dims=(1, 2)), rand(Float32, 20, 30)),
+                   (A -> findmax(x -> (x > 0.5f0, -x), A), rand(Float32, 100)),
+                   (argmin, rand(Float32, 100)), (A -> argmax(A; dims=1), rand(Float32, 20, 30)),
+                   (findmin, Int[]), (A -> findmax(A; dims=1), zeros(Float32, 0, 3)),
+                   (A -> findmax(A; dims=1), zeros(Float32, 3, 0)),
+                   (A -> findmin(A; dims=1), fill(3.0f0)), (A -> findmax(A; dims=2), fill(3.0f0)),
+                   (A -> argmin(abs, A), Int32[-4, 2, 1, -1]), (A -> argmax(abs, A), Int32[-4, 2, 1, -1]),
+                   (A -> argmax(abs, A), Int32[]))
+        @test same(f, x)
+    end
+
+    # 0-dimensional arrays, views and reshapes
+    for (f, x) in ((sum, fill(3)), (A -> sum(A; dims=1), fill(3)), (A -> mapreduce(abs2, +, A; init=1), fill(3)),
+                   (findmax, fill(3.0f0)),
+                   (A -> sum(view(A, 2:9, :); dims=1), rand(1:9, 10, 4)),
+                   (A -> maximum(view(A, 1:2:9)), rand(1:9, 10)),
+                   (A -> sum(reshape(A, 4, 5); dims=2), rand(1:9, 20)))
+        @test same(f, x)
+    end
+    @test same((r, x) -> sum!(view(r, 1:1, :), x), zeros(Int, 2, 4), rand(1:9, 3, 4))
+end
+
 @testsuite "reductions/neutral_element" (AT, eltypes)->begin
     # GPUArrays extends GPUArraysCore's function, so every package shares one set of methods
     @test GPUArrays.neutral_element === GPUArrays.GPUArraysCore.neutral_element

@@ -1180,11 +1180,8 @@ function Base.isone(x::AbstractGPUMatrix{T}) where {T}
     bc = Broadcast.broadcasted(x, CartesianIndices(x)) do _x, inds
         _x - (inds[1] == inds[2] ? one(_x) : zero(_x))
     end
-    # call `GPUArrays.mapreducedim!` directly, which supports Broadcasted inputs
-    y = similar(x, Bool, 1)
-    GPUArrays.mapreducedim!(iszero, &, y, Broadcast.instantiate(bc); init=true)
-
-    Array(y)[]
+    # reduce the Broadcasted object directly
+    _ak_mapreduce(iszero, &, Broadcast.instantiate(bc); backend=get_backend(x), init=true)
 end
 
 ## Kronecker product

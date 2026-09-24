@@ -232,10 +232,15 @@ end
 Base.findfirst(A::AnyGPUArray{Bool}) = findfirst(identity, A)
 Base.findlast(A::AnyGPUArray{Bool})  = findlast(identity, A)
 
-function findminmax(binop, f, A::AnyGPUArray; init, dims)
-    indices = EachIndex(A)
-    dummy_index = firstindex(A)
+# `findmin` and `findmax` reduce `(f(x), i)` pairs, with `i` the position of `x`: without an
+# `init`, as partial results start from their first element. Indices are Base's, `keys(A)`; so are
+# the errors of empty inputs, from a host stand-in.
+struct _FindPair{F}
+    f::F
+end
+(p::_FindPair)(x, i) = (p.f(x), i)
 
+function findminmax(binop, f, A::AnyGPUArray; dims)
     function reduction(t1, t2)
         (x, i), (y, j) = t1, t2
 
@@ -243,25 +248,33 @@ function findminmax(binop, f, A::AnyGPUArray; init, dims)
         isequal(x, y) && return (x, min(i, j))
         return t1
     end
-    
-    fA = f.(A)
 
-    if dims == Colon()
-        res = mapreduce(tuple, reduction, fA, indices; init = (init, dummy_index))
+    if isempty(A)
+        h = (binop === Base.isless ? findmax : findmin)(f, Array{eltype(A)}(undef, size(A)); dims)
+        return dims === Colon() ? h : (copyto!(similar(A, eltype(h[1]), size(h[1])), h[1]),
+                                       copyto!(similar(A, eltype(h[2]), size(h[2])), h[2]))
+    end
 
-        # out of consistency with Base.findarray, return a CartesianIndex
-        # when the input is a multidimensional array
-        return (res[1], ndims(A) == 1 ? res[2] : CartesianIndices(A)[res[2]])
+    # (along valid `dims`, a 0-dimensional array reduces nothing; Julia 1.10's `reduced_indices`
+    # cannot take it)
+    rdims = ndims(A) == 0 && !(dims isa Colon) && all(d -> d isa Integer && d >= 1, dims) ? () : dims
+    res = mapreduce(_FindPair(f), reduction, A, LinearIndices(A); dims=rdims)
+    I = keys(A)
+    if dims === Colon()
+        return (res[1], I[res[2]])
     else
-        res = mapreduce(tuple, reduction, fA, indices;
-                        init = (init, dummy_index), dims=dims)
-        vals = map(x->x[1], res)
-        inds = map(x->ndims(A) == 1 ? x[2] : CartesianIndices(A)[x[2]], res)
+        # (`map!`, as `map` of a 0-dimensional array would give a scalar)
+        vals = map!(first, similar(res, fieldtype(eltype(res), 1)), res)
+        inds = map!(x -> I[x[2]], similar(res, eltype(I)), res)
         return (vals, inds)
     end
 end
 
-Base.findmax(a::AnyGPUArray; dims=:) = findminmax(Base.isless, identity, a; init=typemin(eltype(a)), dims)
-Base.findmin(a::AnyGPUArray; dims=:) = findminmax(Base.isgreater, identity, a; init=typemax(eltype(a)), dims)
-Base.findmax(f::Function, a::AnyGPUArray; dims=:) = findminmax(Base.isless, f, a; init=typemin(f(zero(eltype(a)))), dims)
-Base.findmin(f::Function, a::AnyGPUArray; dims=:) = findminmax(Base.isgreater, f, a; init=typemax(f(zero(eltype(a)))), dims)
+Base.findmax(a::AnyGPUArray; dims=:) = findminmax(Base.isless, identity, a; dims)
+Base.findmin(a::AnyGPUArray; dims=:) = findminmax(Base.isgreater, identity, a; dims)
+Base.findmax(f::Function, a::AnyGPUArray; dims=:) = findminmax(Base.isless, f, a; dims)
+Base.findmin(f::Function, a::AnyGPUArray; dims=:) = findminmax(Base.isgreater, f, a; dims)
+
+# the element that minimizes or maximizes `f` (Base iterates)
+Base.argmax(f::Function, a::AnyGPUArray) = @allowscalar a[findmax(f, a)[2]]
+Base.argmin(f::Function, a::AnyGPUArray) = @allowscalar a[findmin(f, a)[2]]

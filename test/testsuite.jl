@@ -68,6 +68,25 @@ function compare(@nospecialize(f), AT::Type{<:Array}, @nospecialize(xs...); kwar
     return true
 end
 
+# Base's exact result, for rules that `compare`'s approximate comparison does not check: the
+# value (with `isequal`, so signed zeros count) and type of a scalar, the element type, size and
+# values of an array (or of each array of a tuple), or the type of the error Base throws
+function exact_result(@nospecialize(f), @nospecialize(xs...))
+    r = try
+        f(xs...)
+    catch err
+        return typeof(err)
+    end
+    exact(x::AbstractArray) = (eltype(x), size(x), collect(x))
+    exact(x::Tuple) = map(exact, x)
+    exact(x) = (typeof(x), x)
+    return exact(r)
+end
+compare_exact(@nospecialize(f), AT::Type{<:AbstractGPUArray}, @nospecialize(xs...)) =
+    isequal(exact_result(f, map(deepcopy, xs)...),
+            exact_result(f, map(x -> x isa AbstractArray ? adapt(AT, x) : x, xs)...))
+compare_exact(@nospecialize(f), AT::Type{<:Array}, @nospecialize(xs...)) = true
+
 # element types that are supported by the array type
 supported_eltypes(AT, test) = supported_eltypes(AT)
 supported_eltypes(AT) = supported_eltypes()
