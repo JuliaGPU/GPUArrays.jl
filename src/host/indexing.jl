@@ -148,6 +148,11 @@ const IndexGPUArray{T} = Union{AbstractGPUArray{T},
         Base.checkindex(Bool, inds, i)
     end)
 end
+# ... except for a logical mask, which must have the indexed axes (Base's rule)
+Base.checkindex(::Type{Bool}, inds::AbstractUnitRange, I::IndexGPUArray{Bool}) =
+    ndims(I) == 1 && Base.axes1(I) == inds
+Base.checkindex(::Type{Bool}, inds::Tuple, I::IndexGPUArray{Bool}) =
+    length(inds) == ndims(I) && all(map(==, inds, axes(I)))
 
 @inline function Base.checkindex(::Type{Bool}, inds::Tuple,
                                  I::IndexGPUArray{<:CartesianIndex})
@@ -232,6 +237,38 @@ end
 Base.findfirst(A::AnyGPUArray{Bool}) = findfirst(identity, A)
 Base.findlast(A::AnyGPUArray{Bool})  = findlast(identity, A)
 
+# findall, implemented by AcceleratedKernels, which selects `items` of the array's length: Base's
+# indices, `keys(A)`, which are linear for vectors and Cartesian otherwise, except that Base's
+# predicate form makes those of a 0-dimensional array linear
+Base.findall(bools::AnyGPUArray{Bool}) = AK.findall(bools)
+Base.findall(f::Function, A::AnyGPUArray) = AK.findall(f, A; items=_findall_items(A))
+Base.findall(f::Base.Fix2{typeof(in)}, A::AnyGPUArray) =                    # (Base: `keys(A)`)
+    AK.findall(f, A)
+_findall_items(A) = ndims(A) == 0 ? LinearIndices(A) : keys(A)
+
+# logical indexing: Base's `LogicalIndex` iterates, so the mask becomes the indices it selects.
+# Those no longer carry the mask's shape, so a single mask is checked against the array first, as
+# Base does; a mask mixed with other indices is not (as before).
+Base.to_index(::AnyGPUArray, I::AbstractArray{Bool}) = findall(I)
+@static if VERSION >= v"1.11.0-DEV.1157"
+    Base.to_indices(A::AnyGPUArray, I::Tuple{AbstractArray{Bool}}) =
+        (checkbounds(A, I[1]); (Base.to_index(A, I[1]),))
+else
+    # (also reached for the last of several indices, whose `inds` are then not all of `A`'s)
+    _check_mask(A, inds, mask) = length(inds) == ndims(A) ? checkbounds(A, mask) : nothing
+    Base.to_indices(A::AnyGPUArray, inds,
+                    I::Tuple{Union{Array{Bool,N}, BitArray{N}}}) where {N} =
+        (_check_mask(A, inds, I[1]); (Base.to_index(A, I[1]),))
+    Base.to_indices(A::AnyGPUArray, inds, I::Tuple{AbstractArray{Bool}}) =
+        (_check_mask(A, inds, I[1]); (Base.to_index(A, I[1]),))
+end
+# ... except that a mask of the array's shape selects the values themselves, in one pass
+function Base.getindex(A::AbstractGPUArray, mask::AnyGPUArray{Bool})
+    checkbounds(A, mask)
+    axes(mask) == axes(A) || return invoke(getindex, Tuple{AbstractGPUArray, Vararg{Any}}, A, mask)
+    return AK.findall(mask; items=A)
+end
+
 # `findmin` and `findmax` reduce `(f(x), i)` pairs, with `i` the position of `x`: without an
 # `init`, as partial results start from their first element. Indices are Base's, `keys(A)`; so are
 # the errors of empty inputs, from a host stand-in.
@@ -239,6 +276,7 @@ struct _FindPair{F}
     f::F
 end
 (p::_FindPair)(x, i) = (p.f(x), i)
+
 
 function findminmax(binop, f, A::AnyGPUArray; dims)
     function reduction(t1, t2)
