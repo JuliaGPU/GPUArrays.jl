@@ -6,6 +6,7 @@ version = "11.5.14"
 projects = ["lib/GPUArraysCore", "lib/JLArrays", "test", "docs"]
 
 [deps]
+AcceleratedKernels = "6a4ca0a5-0e36-4168-a932-d9be78d558f1"
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
@@ -25,7 +26,11 @@ JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 [extensions]
 JLD2Ext = "JLD2"
 
+[sources]
+AcceleratedKernels = {url = "https://github.com/JuliaGPU/AcceleratedKernels.jl", rev = "tb/api"}
+
 [compat]
+AcceleratedKernels = "0.4.3"
 Adapt = "4.6.1"
 GPUArraysCore = "= 0.2.1"
 JLD2 = "0.4, 0.5, 0.6"
