@@ -36,6 +36,7 @@ include("array.jl")
 include("sparse.jl")
 include("broadcast.jl")
 include("mapreduce.jl")
+include("sorting.jl")
 
 # KernelAbstractions
 include("JLKernels.jl")
