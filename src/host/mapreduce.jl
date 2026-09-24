@@ -148,11 +148,51 @@ function _fold_type(op, ::Type{I}, ::Type{M}) where {I, M}
     return T
 end
 
-Base.any(A::AnyGPUArray{Bool}) = mapreduce(identity, |, A)
-Base.all(A::AnyGPUArray{Bool}) = mapreduce(identity, &, A)
+# `any` and `all` follow Base. A scalar call with a predicate that returns a `Bool` uses
+# AcceleratedKernels' short-circuiting implementation; one that can return `missing` reduces a code
+# of each value (`false` < `missing` < `true`) with `max` or `min`, which gives Base's three-valued
+# logic without storing `missing`. Along `dims`, as in Base, the predicate must return a `Bool`.
+# Values the predicate cannot return (by inference) are an error before launching, and nothing is
+# checked for an empty array, whose elements Base never passes to the predicate.
+struct _Bool3{F} <: Function
+    f::F
+end
+@inline (c::_Bool3)(x) = _bool3(c.f(x))
+@inline _bool3(x::Bool) = x ? 0x02 : 0x00
+@inline _bool3(::Missing) = 0x01
+@inline _bool3(x) = throw(TypeError(:any, "", Union{Bool, Missing}, x))
+_unbool3(c::UInt8) = c == 0x01 ? missing : c == 0x02
 
-Base.any(f::Function, A::AnyGPUArray) = mapreduce(f, |, A)
-Base.all(f::Function, A::AnyGPUArray) = mapreduce(f, &, A)
+struct _BoolOnly{F} <: Function
+    f::F
+end
+@inline function (b::_BoolOnly)(x)
+    y = b.f(x)
+    y isa Bool || throw(TypeError(:any, "", Bool, y))
+    return y
+end
+
+for (fname, op, op3, empty3) in ((:any, :|, :max, 0x00), (:all, :&, :min, 0x02))
+    @eval function Base.$fname(f::Function, A::AnyGPUArray; dims=:)
+        T = Base.promote_op(f, eltype(A))
+        if dims === Colon()
+            isempty(A) && return $(fname === :all)
+            T === Union{} || Bool <: T || T <: Union{Bool, Missing} || throw(ArgumentError(
+                "the predicate of `$($fname)` must return a `Bool` or `missing`, not `$T`"))
+            T <: Bool && return AK.$fname(f, A)
+            return _unbool3(mapreduce(_Bool3(f), $op3, A; init=$empty3))
+        else
+            # (`reduced_indices` checks `dims` as Base does)
+            isempty(A) && return fill!(similar(A, Bool, length.(Base.reduced_indices(axes(A), dims))),
+                                       $(fname === :all))
+            T === Union{} || Bool <: T || throw(ArgumentError(
+                "the predicate of `$($fname)` along `dims` must return a `Bool`, not `$T`"))
+            return mapreduce(_BoolOnly(f), $op, A; dims)
+        end
+    end
+end
+Base.any(A::AnyGPUArray{<:Union{Bool, Missing}}; dims=:) = any(identity, A; dims)
+Base.all(A::AnyGPUArray{<:Union{Bool, Missing}}; dims=:) = all(identity, A; dims)
 
 Base.count(pred::Function, A::AnyGPUArray; dims=:, init=0) =
     mapreduce(Base._bool(pred), Base.add_sum, A; init=init, dims=dims)
