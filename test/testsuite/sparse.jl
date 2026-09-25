@@ -22,6 +22,7 @@ using GPUArrays: GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO, GPU
     sparse_structure(AT, eltypes)
     sparse_slicing(AT, eltypes)
     sparse_misc(AT, eltypes)
+    sparse_spgemm(AT, eltypes)
     broadcasting_vector(AT, eltypes)
     broadcasting_matrix(AT, eltypes)
     broadcasting_mixed(AT, eltypes)
@@ -29,6 +30,7 @@ using GPUArrays: GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO, GPU
     sparse_linalg(AT, eltypes)
     iszero_sparse(AT, eltypes)
     sparse_bool(AT)
+    sparse_generic(AT, eltypes)
 end
 
 const sparse_matrix_formats = (GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO)
@@ -1397,6 +1399,130 @@ function sparse_misc(AT, eltypes)
                 @test all(dA) == all(A)
                 @test !all(gpu_sparse(AT, S, sparse(trues(3, 3))) .& false)
             end
+        end
+    end
+end
+
+function sparse_spgemm(AT, eltypes)
+    @testset "sparse × sparse" begin
+        @testset "$S{$ET}" for S in sparse_matrix_formats, ET in eltypes
+            A = sprand_awkward(ET, 8, 6; Ti=Int32)
+            B = SparseMatrixCSC{ET,Int32}(sprand_nozeros(ET, 6, 7, 0.4))
+            dA = gpu_sparse(AT, S, A)
+            for S′ in sparse_matrix_formats
+                dB = gpu_sparse(AT, S′, B)
+                C = dA * dB
+                @test C isa S{Base.promote_op(LinearAlgebra.matprod, ET, ET),Int32}
+                check_structure(C)
+                @test SparseMatrixCSC(C) ≈ A * B
+            end
+            dB = gpu_sparse(AT, S, B)
+            @test SparseMatrixCSC(transpose(dB) * transpose(dA)) ≈ transpose(B) * transpose(A)
+            @test SparseMatrixCSC(dA' * dA) ≈ A' * A
+            Q = sprand_nozeros(ET, 6, 6, 0.4)
+            dQ = gpu_sparse(AT, S, Q)
+            @test SparseMatrixCSC(Symmetric(dQ) * dB) ≈ Symmetric(Matrix(Q)) * B
+            if ET <: Complex
+                @test SparseMatrixCSC(Hermitian(dQ, :L) * dB) ≈ Hermitian(Matrix(Q), :L) * B
+            end
+            @test nnz(dA * gpu_sparse(AT, S, spzeros(ET, Int32, 6, 3))) == 0
+            @test size(gpu_sparse(AT, S, spzeros(ET, Int32, 0, 4)) * gpu_sparse(AT, S, spzeros(ET, Int32, 4, 2))) == (0, 2)
+            @test_throws DimensionMismatch dA * dA
+
+            # the sparse-output mul! takes the union of both structures
+            if ET <: Union{AbstractFloat, Complex{<:AbstractFloat}}
+                α, β = ET(2), ET(3)
+                C = SparseMatrixCSC{ET,Int32}(sprand_nozeros(ET, 8, 7, 0.3))
+                dC = gpu_sparse(AT, S, C)
+                @test mul!(dC, dA, dB, α, β) === dC
+                check_structure(dC)
+                @test SparseMatrixCSC(dC) ≈ α * (A * B) + β * C
+                # a destination with as many entries as the product, but elsewhere
+                P = A * B
+                D = copy(P)
+                D.rowval .= mod1.(D.rowval .+ 1, 8)
+                D = sparse(findnz(D)..., 8, 7)
+                dD = gpu_sparse(AT, S, D)
+                mul!(dD, dA, dB, true, true)
+                @test SparseMatrixCSC(dD) ≈ P + D
+                # with β = 0, the structure of the product
+                dD = gpu_sparse(AT, S, SparseMatrixCSC{ET,Int32}(D))
+                mul!(dD, dA, dB)
+                @test SparseMatrixCSC(dD) ≈ P
+                @test nnz(dD) == nnz(dA * dB)
+            end
+        end
+
+        @testset "$T" for T in (Int, Bool)
+            A = sprand(T, 6, 5, 0.5)
+            B = sprand(T, 5, 4, 0.5)
+            for S in sparse_matrix_formats
+                @test SparseMatrixCSC(gpu_sparse(AT, S, A) * gpu_sparse(AT, S, B)) == A * B
+            end
+        end
+
+        @testset "exp" begin
+            # of an integer matrix (which gives Float64 values)
+            if Float64 in eltypes
+                A = sparse([1, 2], [1, 2], [1, 2], 2, 2)
+                @test Array(exp(gpu_sparse(AT, GPUSparseMatrixCSR, A))) ≈ exp(Matrix{Float64}(A))
+            end
+            for ET in filter(T -> T <: Union{AbstractFloat, Complex{<:AbstractFloat}} &&
+                                  real(T) != Float16, eltypes)
+                for scale in (0.25, 4)
+                    A = sprand(ET, 7, 7, 0.4) * real(ET)(scale)
+                    for S in sparse_matrix_formats
+                        E = exp(gpu_sparse(AT, S, A))
+                        @test E isa S{ET}
+                        @test Array(E) ≈ exp(Matrix(A)) rtol=1e-4
+                    end
+                end
+            end
+        end
+    end
+end
+
+# the generic implementations, which back-ends with vendor libraries do not reach through
+# the LinearAlgebra interface
+function sparse_generic(AT, eltypes)
+    @testset "generic implementations" begin
+        ET = first(filter(isrealfloattype, eltypes))
+        A = sprand_awkward(ET, 6, 7)
+        B = sprand_awkward(ET, 7, 5)
+        x = rand(ET, 7)
+        X = rand(ET, 7, 4)
+        Y = rand(ET, 4, 7)
+        @testset "$S" for S in sparse_matrix_formats
+            dA = gpu_sparse(AT, S, A)
+            dB = gpu_sparse(AT, S, B)
+            for t in ('N', 'T', 'C')
+                y = AT(rand(ET, t == 'N' ? 6 : 7))
+                y0 = Array(y)
+                GPUArrays.generic_spmv!(y, t, dA, AT(t == 'N' ? x : x[1:6]), ET(2), ET(3))
+                @test Array(y) ≈ 2 * LinearAlgebra.wrap(A, t) * (t == 'N' ? x : x[1:6]) + 3 * y0
+                C = AT(rand(ET, t == 'N' ? 6 : 7, 4))
+                D = Array(C)
+                GPUArrays.generic_spmm!(C, t, 'N', dA, AT(t == 'N' ? X : X[1:6, :]), ET(2), ET(3))
+                @test Array(C) ≈ 2 * LinearAlgebra.wrap(A, t) * (t == 'N' ? X : X[1:6, :]) + 3 * D
+                C = AT(rand(ET, 4, t == 'N' ? 7 : 6))
+                D = Array(C)
+                GPUArrays.generic_spmm!(C, 'N', t, AT(t == 'N' ? Y[:, 1:6] : Y), dA, ET(2), ET(3))
+                @test Array(C) ≈ 2 * (t == 'N' ? Y[:, 1:6] : Y) * LinearAlgebra.wrap(A, t) + 3 * D
+            end
+            for t in ('S', 'H')
+                Q = A[1:6, 1:6]
+                dQ = gpu_sparse(AT, S, Q)
+                y = AT(zeros(ET, 6))
+                GPUArrays.generic_spmv!(y, t, dQ, AT(x[1:6]), ET(1), ET(0))
+                @test Array(y) ≈ LinearAlgebra.wrap(Q, t) * x[1:6]
+            end
+            dC = GPUArrays.generic_spgemm(dA, dB)
+            @test dC isa S
+            @test Array(check_structure(dC)) ≈ Array(A * B)
+            dC = gpu_sparse(AT, S, sprand_awkward(ET, 6, 5))
+            C = SparseMatrixCSC(dC)
+            GPUArrays.generic_spgemm!(dC, 'N', 'N', dA, dB, ET(2), ET(3))
+            @test Array(check_structure(dC)) ≈ 2 * Array(A * B) + 3 * Array(C)
         end
     end
 end
