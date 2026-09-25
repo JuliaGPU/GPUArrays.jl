@@ -26,6 +26,8 @@
         @test compare(x -> permutedims(x, (2, 1)), AT, rand(Float32, 2, 3))
         @test compare(x -> permutedims(x, (2, 1, 3)), AT, rand(Float32, 4, 5, 6))
         @test compare(x -> permutedims(x, (3, 1, 2)), AT, rand(Float32, 4, 5, 6))
+        @test compare(x -> permutedims(x, (2, 1)), AT, rand(Float32, 0, 3))
+        @test compare(x -> permutedims(x, (3, 1, 2)), AT, rand(Float32, 4, 0, 6))
         if ComplexF32 in eltypes
             @test compare(x -> permutedims(x, [2,1,4,3]), AT, randn(ComplexF32,3,4,5,1))
             # test UInt64 version to make sure it works properly when array length is larger than typemax of UInt32.
