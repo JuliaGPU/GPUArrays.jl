@@ -39,6 +39,16 @@ Base.Array{T}(A::GPUSparseArray) where {T} = Array{T}(host_sparse(A))
 Base.Array{T,1}(x::GPUSparseVector) where {T} = Array{T,1}(host_sparse(x))
 Base.Array{T,2}(A::GPUSparseMatrix) where {T} = Array{T,2}(host_sparse(A))
 Base.collect(A::GPUSparseArray) = Array(A)
+# (SparseArrays has a scalar loop for any sparse vector)
+Base.Vector(x::GPUSparseVector) = Vector(SparseVector(x))
+
+# a dense GPU matrix becomes sparse on the device before its buffers are transferred
+# (SparseArrays' constructor would index every element)
+SparseArrays.SparseMatrixCSC(A::AbstractGPUMatrix) = SparseMatrixCSC(sparse(A))
+SparseArrays.SparseMatrixCSC{T}(A::AbstractGPUMatrix) where {T} =
+    SparseMatrixCSC(GPUSparseMatrixCSC{T}(A))
+SparseArrays.SparseMatrixCSC{T,Ti}(A::AbstractGPUMatrix) where {T,Ti} =
+    SparseMatrixCSC(GPUSparseMatrixCSC{T,Ti}(A))
 
 
 ## `adapt`
@@ -448,3 +458,18 @@ function SparseArrays.findnz(A::GPUSparseMatrix)
     return C.rowVal, expand_ptr(C.colPtr, nnz(C)), C.nzVal
 end
 SparseArrays.findnz(x::GPUSparseVector) = (copy(x.nzInd), copy(x.nzVal))
+
+
+## element types
+
+Base.float(A::GPUSparseArray) =
+    eltype(A) <: AbstractFloat ? A : with_eltypes(A, float(eltype(A)), indtype(A))
+Base.complex(A::GPUSparseArray) =
+    eltype(A) <: Complex ? A : with_eltypes(A, complex(eltype(A)), indtype(A))
+Base.real(A::GPUSparseArray) = eltype(A) <: Real ? A : real.(A)
+Base.imag(A::GPUSparseArray) = eltype(A) <: Real ? zero(A) : imag.(A)
+
+# a sparse array is already sparse; the matrix format can be chosen as for dense arrays
+SparseArrays.sparse(A::GPUSparseMatrix; fmt::Symbol=:csc) = sparse_format(fmt)(A)
+SparseArrays.sparse(x::GPUSparseVector) = copy(x)
+SparseArrays.sparsevec(A::GPUSparseMatrix) = vec(A)
