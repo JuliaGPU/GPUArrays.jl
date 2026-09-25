@@ -1,3 +1,8 @@
+# Tests of the GPU back-ends against this version of GPUArrays. The JLArray tests on GitHub
+# Actions cover every supported Julia version, so the back-ends are only tested on the oldest
+# and newest release. Draft pull requests skip them, unless selected by name in the last commit
+# message: `[only cuda]`, `[only metal, oneapi]` or `[only tests]` for all of them. `[skip amdgpu]`
+# or `[skip tests]` does the opposite.
 steps:
   # Julia 1.10 doesn't support [sources] in Project.toml,
   # so we need to manually dev CUDA.jl's workspace packages.
@@ -53,7 +58,10 @@ steps:
                 Pkg.test(; coverage=true)'
     agents:
       queue: "cuda"
-    if: build.message !~ /\[skip tests\]/
+    if: |
+      build.message !~ /\[skip [^\]]*(tests|cuda)/ &&
+      (build.message =~ /\[only [^\]]*(tests|cuda)/ ||
+       build.message !~ /\[only / && !build.pull_request.draft)
     timeout_in_minutes: 120
     soft_fail:
       - exit_status: 3
@@ -99,13 +107,14 @@ steps:
                 Pkg.test(; coverage=true)'
     agents:
       queue: "cuda"
-    if: build.message !~ /\[skip tests\]/
+    if: |
+      build.message !~ /\[skip [^\]]*(tests|cuda)/ &&
+      (build.message =~ /\[only [^\]]*(tests|cuda)/ ||
+       build.message !~ /\[only / && !build.pull_request.draft)
     timeout_in_minutes: 120
     matrix:
       setup:
         julia:
-          - "1.11"
-          - "1.12"
           - "1.13"
     soft_fail:
       - exit_status: 3
@@ -151,14 +160,15 @@ steps:
     agents:
       queue: "rocm"
       rocmgpu: "*"
-    if: build.message !~ /\[skip tests\]/
+    if: |
+      build.message !~ /\[skip [^\]]*(tests|amdgpu)/ &&
+      (build.message =~ /\[only [^\]]*(tests|amdgpu)/ ||
+       build.message !~ /\[only / && !build.pull_request.draft)
     timeout_in_minutes: 120
     matrix:
       setup:
         julia:
           - "1.10"
-          - "1.11"
-          - "1.12"
           - "1.13"
     soft_fail:
       - exit_status: 3
@@ -204,14 +214,15 @@ steps:
                 Pkg.test(; coverage=true)'
     agents:
       queue: "oneapi"
-    if: build.message !~ /\[skip tests\]/
+    if: |
+      build.message !~ /\[skip [^\]]*(tests|oneapi)/ &&
+      (build.message =~ /\[only [^\]]*(tests|oneapi)/ ||
+       build.message !~ /\[only / && !build.pull_request.draft)
     timeout_in_minutes: 60
     matrix:
       setup:
         julia:
           - "1.10"
-          - "1.11"
-          - "1.12"
           - "1.13"
     soft_fail:
       - exit_status: 3
@@ -256,14 +267,15 @@ steps:
                 Pkg.test(; coverage=true, test_args=`--all`)'
     agents:
       queue: "metal"
-    if: build.message !~ /\[skip tests\]/
+    if: |
+      build.message !~ /\[skip [^\]]*(tests|metal)/ &&
+      (build.message =~ /\[only [^\]]*(tests|metal)/ ||
+       build.message !~ /\[only / && !build.pull_request.draft)
     timeout_in_minutes: 60
     matrix:
       setup:
         julia:
           - "1.10"
-          - "1.11"
-          - "1.12"
           - "1.13"
     soft_fail:
       - exit_status: 3
