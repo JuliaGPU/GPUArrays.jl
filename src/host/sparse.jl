@@ -582,32 +582,29 @@ iter_type(::Type{<:GPUSparseDeviceMatrixCSR}, ::Type{Ti}) where {Ti} = CSRIterat
 
 _has_row(A, offsets, row, fpreszeros::Bool) = fpreszeros ? 0 : row
 _has_row(A::AbstractDeviceArray, offsets, row, ::Bool) = row
+# the position of `row` among the stored indices of a sparse vector, or 0 if it isn't stored
 function _has_row(A::GPUSparseDeviceVector, offsets, row, ::Bool)
-    for row_ix in 1:length(A.iPtr)
-        arg_row = @inbounds A.iPtr[row_ix]
-        arg_row == row && return row_ix
-        arg_row > row && break
-    end
-    return 0
+    ptr = searchsortedfirst(A.iPtr, row)
+    return (ptr <= length(A.iPtr) && @inbounds(A.iPtr[ptr]) == row) ? ptr : 0
 end
 
-@kernel function compute_offsets_kernel(::Type{<:AbstractGPUSparseVector}, first_row::Ti, last_row::Ti,
-                                        fpreszeros::Bool, offsets::AbstractVector{Pair{Ti, NTuple{N, Ti}}},
+# for every row, determine which arguments have an entry there (see `_has_row`), and whether
+# the output has one (`key` is the row, or `typemax(Ti)` if not)
+@kernel function compute_offsets_kernel(::Type{<:AbstractGPUSparseVector}, fpreszeros::Bool,
+                                        offsets::AbstractVector{Pair{Ti, NTuple{N, Ti}}},
                                         args...) where {Ti, N}
-    my_ix = @index(Global, Linear)
-    row = my_ix + first_row - one(eltype(my_ix))
-    if row ≤ last_row
-        # TODO load arg.iPtr slices into shared memory
+    row = @index(Global, Linear)
+    if row ≤ length(offsets)
         arg_row_is_nnz = ntuple(Val(N)) do i
             arg = @inbounds args[i]
-            _has_row(arg, offsets, row, fpreszeros)
+            _has_row(arg, offsets, row, fpreszeros) % Ti
         end
-        row_is_nnz = 0
+        row_is_nnz = false
         for i in 1:N
-            row_is_nnz |= @inbounds arg_row_is_nnz[i]
+            row_is_nnz |= @inbounds(arg_row_is_nnz[i]) != 0
         end
-        key = (row_is_nnz == 0) ? typemax(Ti) : row
-        @inbounds offsets[my_ix] = key => arg_row_is_nnz
+        key = row_is_nnz ? row % Ti : typemax(Ti)
+        @inbounds offsets[row] = key => arg_row_is_nnz
     end
 end
 
@@ -636,25 +633,28 @@ end
     end
 end
 
+# `positions` is the inclusive prefix count of output entries, so an output entry for `row`
+# goes to `positions[row]`.
 @kernel function sparse_to_sparse_broadcast_kernel(f::F, output::GPUSparseDeviceVector{Tv,Ti},
                                                    offsets::AbstractVector{Pair{Ti, NTuple{N, Ti}}},
+                                                   positions::AbstractVector{Ti},
                                                    args...) where {Tv, Ti, N, F}
-    row_ix = @index(Global, Linear)
-    if row_ix ≤ output.nnz
-        row_and_ptrs = @inbounds offsets[row_ix]
-        row          = @inbounds row_and_ptrs[1]
-        arg_ptrs     = @inbounds row_and_ptrs[2]
-        vals = ntuple(Val(N)) do i
-            @inline
-            arg = @inbounds args[i]
-            # ptr is 0 if the sparse vector doesn't have an element at this row
-            # ptr is 0 if the arg is a scalar AND f preserves zeros
-            ptr = @inbounds arg_ptrs[i]
-            _getindex(arg, row, ptr)
+    row = @index(Global, Linear)
+    if row ≤ length(offsets)
+        key, arg_ptrs = @inbounds offsets[row]
+        if key != typemax(Ti)
+            vals = ntuple(Val(N)) do i
+                @inline
+                arg = @inbounds args[i]
+                # ptr is 0 if the sparse vector doesn't have an element at this row
+                # ptr is 0 if the arg is a scalar AND f preserves zeros
+                ptr = @inbounds arg_ptrs[i]
+                _getindex(arg, row, ptr)
+            end
+            output_ix = @inbounds positions[row]
+            @inbounds output.iPtr[output_ix]  = row
+            @inbounds output.nzVal[output_ix] = f(vals...)
         end
-        output_val = f(vals...)
-        @inbounds output.iPtr[row_ix]  = row
-        @inbounds output.nzVal[row_ix] = output_val
     end
 end
 
@@ -722,12 +722,9 @@ end
                                                   output::AbstractArray{Tv},
                                                   offsets::AbstractVector{Pair{Ti, NTuple{N, Ti}}},
                                                   args...) where {Tv, F, N, Ti}
-    # every thread processes an entire row
-    row_ix = @index(Global, Linear)
-    if row_ix ≤ length(output)
-        row_and_ptrs = @inbounds offsets[row_ix]
-        row          = @inbounds row_and_ptrs[1]
-        arg_ptrs     = @inbounds row_and_ptrs[2]
+    row = @index(Global, Linear)
+    if row ≤ length(output)
+        arg_ptrs = @inbounds offsets[row][2]
         vals = ntuple(Val(length(args))) do i
             @inline
             arg = @inbounds args[i]
@@ -785,13 +782,8 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
     # we'll launch many threads. to maximize utilization, parallelize across blocks first.
     rows, cols = get(size(bc), 1, 1), get(size(bc), 2, 1)
     # `size(bc, ::Int)` is missing
-    # for AbstractGPUSparseVec, figure out the actual row range we need to address, e.g. if m = 2^20
-    # but the only rows present in any sparse vector input are between 2 and 128, no need to
-    # launch massive threads.
-    # TODO: use the difference here to set the thread count
-    overall_first_row = one(Ti)
-    overall_last_row = Ti(rows)
     offsets = nothing
+    positions = nothing
     # allocate the output container
     sparse_arg = bc.args[first(sparse_args)]
     if !fpreszeros && sparse_typ <: Union{AbstractGPUSparseMatrixCSR, AbstractGPUSparseMatrixCSC}
@@ -836,23 +828,11 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
             similar(ptr_array, Ti, cols+1)
         elseif sparse_typ <: AbstractGPUSparseVector
             ptr_array = sparse_arg.iPtr
-            @allowscalar begin
-                arg_first_rows = ntuple(Val(length(bc.args))) do i
-                    bc.args[i] isa AbstractGPUSparseVector && return bc.args[i].iPtr[1]
-                    return one(Ti)
-                end
-                arg_last_rows = ntuple(Val(length(bc.args))) do i
-                    bc.args[i] isa AbstractGPUSparseVector && return bc.args[i].iPtr[end]
-                    return Ti(rows)
-                end
-            end
-            overall_first_row = min(arg_first_rows...)
-            overall_last_row  = max(arg_last_rows...)
-            similar(ptr_array, Pair{Ti, NTuple{length(bc.args), Ti}}, overall_last_row - overall_first_row + 1)
+            similar(ptr_array, Pair{Ti, NTuple{length(bc.args), Ti}}, rows)
         end
         let
             args = if sparse_typ <: AbstractGPUSparseVector
-                (sparse_typ, overall_first_row, overall_last_row, fpreszeros, offsets, bc.args...)
+                (sparse_typ, fpreszeros, offsets, bc.args...)
             else
                 (sparse_typ, offsets, bc.args...)
             end
@@ -865,9 +845,12 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
         if !(sparse_typ <: AbstractGPUSparseVector)
             @allowscalar accumulate!(Base.add_sum, offsets, offsets)
             total_nnz = @allowscalar last(offsets[end]) - 1
-        else
-            @allowscalar sort!(offsets; by=first)
-            total_nnz = mapreduce(x->first(x) != typemax(first(x)), +, offsets)
+        elseif fpreszeros
+            # number the rows that have an output entry, which gives each its output position
+            positions = similar(offsets, Ti)
+            positions .= first.(offsets) .!= typemax(Ti)
+            @allowscalar accumulate!(Base.add_sum, positions, positions)
+            total_nnz = rows == 0 ? 0 : Int(@allowscalar positions[end])
         end
         output = if sparse_typ <: Union{AbstractGPUSparseMatrixCSR,AbstractGPUSparseMatrixCSC}
             ixVal = similar(offsets, Ti, total_nnz)
@@ -896,10 +879,11 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
     end
     # perform the actual broadcast
     if output isa AbstractGPUSparseArray
-        args   = (bc.f, output, offsets, bc.args...)
+        args   = sparse_typ <: AbstractGPUSparseVector ? (bc.f, output, offsets, positions, bc.args...) :
+                                                         (bc.f, output, offsets, bc.args...)
         kernel = sparse_to_sparse_broadcast_kernel(get_backend(bc.args[first(sparse_args)]))
         ndrange = if sparse_typ <: AbstractGPUSparseVector
-                    output.nnz
+                    rows
                   elseif sparse_typ <: AbstractGPUSparseMatrixCSC
                     size(output, 2)
                   else

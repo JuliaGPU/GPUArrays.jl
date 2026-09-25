@@ -245,7 +245,32 @@ function broadcasting_vector(AT, eltypes)
             @test collect(SparseArrays.nonzeroinds(dy))  == SparseArrays.nonzeroinds(y)
             @test collect(SparseArrays.nonzeros(dy)) == SparseArrays.nonzeros(y)
             @test y == SparseVector(dy)
+
+            # without stored entries
+            x  = spzeros(ET, m)
+            dx = AT(x)
+            y  = sprand_nozeros(ET, m, p)
+            dy = AT(y)
+            @test SparseVector(dx .* ET(2)) == x .* ET(2)
+            @test SparseVector(dx .* dy) == x .* y
+            @test Array(dx .+ dy) == Array(x .+ y)
+            @test length(AT(spzeros(ET, 0)) .* AT(spzeros(ET, 0))) == 0
         end
+    end
+
+    # several sparse arguments, long enough that host-side processing of the combined
+    # structure (e.g. sorting it through scalar indexing) would be noticeable
+    @testset "long vectors" begin
+        ET = first(filter(isrealfloattype, eltypes))
+        m  = 10^4
+        x  = sprand_nozeros(ET, m, 0.1)
+        y  = sprand_nozeros(ET, m, 0.1)
+        dx = AT(x)
+        dy = AT(y)
+        dz = dx .* dy
+        @test dz isa AT{ET}
+        @test SparseVector(dz) == x .* y
+        @test Array(dx .+ dy) == Array(x .+ y)
     end
 end
 
