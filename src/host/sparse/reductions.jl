@@ -88,9 +88,12 @@ function reduce_all(f, op, A::GPUSparseArray, init)
     end
 end
 
-Base.mapreduce(f, op, x::GPUSparseVector; dims=:, init=nothing) =
-    dims === Colon() ? reduce_all(f, op, x, init) :
-                       error("only dims=: is supported for sparse vectors")
+function Base.mapreduce(f, op, x::GPUSparseVector; dims=:, init=nothing)
+    dims === Colon() && return reduce_all(f, op, x, init)
+    dims == 1 || error("only dims=: or dims=1 is supported for sparse vectors")
+    r = reduce_all(f, op, x, init)
+    return fill!(similar(x.nzVal, typeof(r), 1), r)
+end
 
 function Base.mapreduce(f, op, A::GPUSparseMatrix; dims=:, init=nothing)
     dims === Colon() && return reduce_all(f, op, A, init)
@@ -139,3 +142,39 @@ function LinearAlgebra.opnorm(A::GPUSparseMatrix, p::Real=2)
         throw(ArgumentError("p=$p is not supported"))
     end
 end
+
+# `f` of the stored values, and of the implicit zeros if there are any
+function Base.count(f, A::GPUSparseArray)
+    n = nnz(A) == 0 ? 0 : count(f, nonzeros(A))
+    return nnz(A) < length(A) && f(zero(eltype(A))) ? n + length(A) - nnz(A) : n
+end
+# (separate methods for functions, to be more specific than Base's)
+for F in (:Function, :Any)
+    @eval begin
+        Base.any(f::$F, A::GPUSparseArray) =
+            (nnz(A) > 0 && any(f, nonzeros(A))) || (nnz(A) < length(A) && f(zero(eltype(A))))
+        Base.all(f::$F, A::GPUSparseArray) =
+            (nnz(A) == 0 || all(f, nonzeros(A))) && (nnz(A) == length(A) || f(zero(eltype(A))))
+    end
+end
+Base.any(A::GPUSparseArray) = any(identity, A)
+Base.all(A::GPUSparseArray) = all(identity, A)
+
+
+## dot products
+
+function LinearAlgebra.dot(x::GPUSparseVector, y::GPUSparseVector)
+    length(x) == length(y) ||
+        throw(DimensionMismatch("x has length $(length(x)), y has length $(length(y))"))
+    # `+` rather than `sum`, which would widen small integers
+    return reduce(+, conj.(x) .* y)
+end
+function LinearAlgebra.dot(x::GPUSparseVector, y::AnyGPUVector)
+    length(x) == length(y) ||
+        throw(DimensionMismatch("x has length $(length(x)), y has length $(length(y))"))
+    T = typeof(dot(zero(eltype(x)), zero(eltype(y))))
+    nnz(x) == 0 && return zero(T)
+    return mapreduce((a, b) -> dot(a, b), +, x.nzVal, y[x.nzInd])
+end
+LinearAlgebra.dot(y::AnyGPUVector, x::GPUSparseVector) = conj(dot(x, y))
+LinearAlgebra.dot(x::AnyGPUVector, A::GPUSparseMatrix, y::AnyGPUVector) = dot(x, A * y)

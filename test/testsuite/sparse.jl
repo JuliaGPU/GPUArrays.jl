@@ -21,6 +21,7 @@ using GPUArrays: GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO, GPU
     sparse_products(AT, eltypes)
     sparse_structure(AT, eltypes)
     sparse_slicing(AT, eltypes)
+    sparse_misc(AT, eltypes)
     broadcasting_vector(AT, eltypes)
     broadcasting_matrix(AT, eltypes)
     broadcasting_mixed(AT, eltypes)
@@ -1295,6 +1296,58 @@ function sparse_slicing(AT, eltypes)
                 @test same_sparse(y, x[I])
             end
             @test_throws BoundsError dx[0:3]
+        end
+    end
+end
+
+function sparse_misc(AT, eltypes)
+    @testset "dot, count and conversions" begin
+        @testset "$ET" for ET in eltypes
+            x = sprand_nozeros(ET, 30, 0.4)
+            y = sprand_nozeros(ET, 30, 0.4)
+            dx, dy = gpu_sparse(AT, x), gpu_sparse(AT, y)
+            v = rand(ET, 30)
+            @test dot(dx, dy) ≈ dot(x, y)
+            @test dot(dx, AT(v)) ≈ dot(x, v)
+            @test dot(AT(v), dx) ≈ dot(v, x)
+            @test dot(gpu_sparse(AT, spzeros(ET, 30)), AT(v)) == zero(ET)
+            @test_throws DimensionMismatch dot(dx, AT(rand(ET, 29)))
+            A = sprand_awkward(ET, 30, 30)
+            for S in sparse_matrix_formats
+                dA = gpu_sparse(AT, S, A)
+                w = rand(ET, 30)
+                @test dot(AT(w), dA, AT(v)) ≈ dot(w, A, v)
+                @test count(!iszero, dA) == count(!iszero, A)
+                @test count(iszero, dA) == count(iszero, A)
+                @test any(iszero, dA) == any(iszero, A)
+                @test all(iszero, dA) == all(iszero, A)
+                @test sparse(dA) isa GPUSparseMatrixCSC{ET}
+                @test same_sparse(sparse(dA), A)
+                @test sparse(dA; fmt=:coo) isa GPUSparseMatrixCOO{ET}
+                @test SparseVector(sparsevec(dA)) == vec(A)
+            end
+            @test Array(sum(dx; dims=1)) ≈ sum(x; dims=1)
+            @test Vector(dx) == Vector(x)
+            @test same_sparse(sparse(dx), x)
+            # (which may give an element type the back-end does not support)
+            if float(ET) in eltypes
+                @test SparseVector(float(dx)) == float(x)
+            end
+            if complex(ET) in eltypes
+                @test SparseVector(complex(dx)) == complex(x)
+            end
+            @test SparseVector(imag(dx)) == imag(x)
+            @test SparseVector(real(dx)) == real(x)
+        end
+        @testset "Bool" begin
+            A = sprand(Bool, 8, 9, 0.3)
+            for S in sparse_matrix_formats
+                dA = gpu_sparse(AT, S, A)
+                @test count(dA) == count(A)
+                @test any(dA) == any(A)
+                @test all(dA) == all(A)
+                @test !all(gpu_sparse(AT, S, sparse(trues(3, 3))) .& false)
+            end
         end
     end
 end
