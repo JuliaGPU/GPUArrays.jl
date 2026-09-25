@@ -17,6 +17,7 @@ using GPUArrays: GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO, GPU
     sparse_indexing(AT, eltypes)
     sparse_conversions(AT, eltypes)
     sparse_dense_conversions(AT, eltypes)
+    sparse_assembly(AT, eltypes)
     broadcasting_vector(AT, eltypes)
     broadcasting_matrix(AT, eltypes)
     mapreduce_matrix(AT, eltypes)
@@ -890,5 +891,96 @@ function sparse_dense_conversions(AT, eltypes)
         dI, dV = findnz(gpu_sparse(AT, x))
         @test (Array(dI), Array(dV)) == findnz(x)
         @test all(isempty, findnz(gpu_sparse(AT, GPUSparseMatrixCOO, spzeros(ET, 3, 3))))
+    end
+end
+
+# a callable that is not a `Function`
+struct SparseSubtract end
+(::SparseSubtract)(a, b) = a - b
+
+function sparse_assembly(AT, eltypes)
+    @testset "assembly" begin
+        @testset "$ET" for ET in eltypes
+            m, n = 7, 9
+            N = 60
+            # unordered, with many repeated coordinates
+            I = rand(1:m, N)
+            J = rand(1:n, N)
+            V = rand(ET, N)
+            dI, dJ, dV = AT(I), AT(J), AT(V)
+
+            A = sparse(I, J, V, m, n)
+            for fmt in (:csc, :csr, :coo)
+                B = sparse(dI, dJ, dV, m, n; fmt)
+                @test B isa GPUArrays.sparse_format(fmt){ET,Int}
+                check_structure(B)
+                @test SparseMatrixCSC(B) ≈ A
+            end
+            if ET <: Real
+                @test same_sparse(sparse(dI, dJ, dV, m, n, max), sparse(I, J, V, m, n, max))
+            end
+            # a combine function that depends on the order of the repeated entries
+            noncommutative(a, b) = a + a - b
+            B = sparse(dI, dJ, dV, m, n, noncommutative)
+            @test same_sparse(B, sparse(I, J, V, m, n, noncommutative))
+            B = sparse(dI, dJ, dV, m, n, noncommutative; fmt=:csr)
+            @test same_sparse(B, sparse(I, J, V, m, n, noncommutative))
+
+            # repeated entries are folded in input order, also for `+`, which is not
+            # associative in floating point
+            if ET <: AbstractFloat
+                big = ET(2)^(precision(ET) + 1)
+                Is, Js, Vs = [2, 2, 2, 1], [3, 3, 3, 1], [big, -big, one(ET), one(ET)]
+                @test same_sparse(sparse(AT(Is), AT(Js), AT(Vs), 2, 3), sparse(Is, Js, Vs, 2, 3))
+                @test same_sparse(sparsevec(AT(Is), AT(Vs), 2), sparsevec(Is, Vs, 2))
+            end
+            # any callable
+            @test same_sparse(sparse(dI, dJ, dV, m, n, SparseSubtract()), sparse(I, J, V, m, n, -))
+            @test same_sparse(sparsevec(dI, dV, m, SparseSubtract()), sparsevec(I, V, m, -))
+
+            # the dimensions follow from the coordinates
+            @test size(sparse(dI, dJ, dV)) == size(sparse(I, J, V))
+            # a single value, and index types
+            @test same_sparse(sparse(dI, dJ, one(ET), m, n), sparse(I, J, one(ET), m, n))
+            B = sparse(AT(Int32.(I)), AT(Int32.(J)), dV, m, n)
+            @test B isa GPUSparseMatrixCSC{ET,Int32}
+            @test SparseMatrixCSC(B) ≈ A
+            # explicit zeros are kept, as in SparseArrays
+            @test nnz(sparse(AT([1, 2]), AT([1, 2]), AT(zeros(ET, 2)), 2, 2)) == 2
+            # nothing to assemble
+            @test nnz(sparse(AT(Int[]), AT(Int[]), AT(ET[]), 3, 4)) == 0
+            @test_throws ArgumentError sparse(dI, dJ, dV, m - 1, n)
+            @test_throws ArgumentError sparse(dI, AT(J[1:end-1]), dV, m, n)
+
+            # vectors
+            x = sparsevec(I, V, m)
+            dx = sparsevec(dI, dV, m)
+            @test dx isa GPUSparseVector{ET,Int}
+            check_structure(dx)
+            @test SparseVector(dx) ≈ x
+            @test same_sparse(sparsevec(dI, dV, m, noncommutative), sparsevec(I, V, m, noncommutative))
+            @test length(sparsevec(dI, dV)) == length(sparsevec(I, V))
+            @test same_sparse(sparsevec(dI, dV, noncommutative), sparsevec(I, V, noncommutative))
+
+            # diagonals
+            v = rand(ET, 5)
+            w = rand(ET, 4)
+            @test same_sparse(spdiagm(0 => AT(v), -1 => AT(w)), spdiagm(0 => v, -1 => w))
+            @test same_sparse(spdiagm(7, 6, 1 => AT(w)), spdiagm(7, 6, 1 => w))
+            @test same_sparse(spdiagm(AT(v)), spdiagm(v))
+            @test_throws DimensionMismatch spdiagm(3, 3, 1 => AT(v))
+            # without diagonals, SparseArrays applies
+            @test which(spdiagm, Tuple{Int,Int}).module === SparseArrays
+        end
+
+        @testset "Bool" begin
+            I = rand(1:5, 40)
+            J = rand(1:6, 40)
+            V = rand(Bool, 40)
+            # repeated entries are combined with `|` by default
+            @test same_sparse(sparse(AT(I), AT(J), AT(V), 5, 6), sparse(I, J, V, 5, 6))
+            @test same_sparse(sparse(AT(I), AT(J), true, 5, 6), sparse(I, J, true, 5, 6))
+            @test same_sparse(sparsevec(AT(I), AT(V), 5), sparsevec(I, V, 5))
+        end
     end
 end
