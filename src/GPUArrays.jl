@@ -45,6 +45,7 @@ include("host/sparse/indexing.jl")
 include("host/sparse/broadcast.jl")
 include("host/sparse/reductions.jl")
 include("host/sparse/linalg.jl")
+include("host/sparse/structure.jl")
 include("host/alloc_cache.jl")
 
 include("deprecated.jl")

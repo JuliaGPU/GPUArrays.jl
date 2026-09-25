@@ -19,6 +19,7 @@ using GPUArrays: GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO, GPU
     sparse_dense_conversions(AT, eltypes)
     sparse_assembly(AT, eltypes)
     sparse_products(AT, eltypes)
+    sparse_structure(AT, eltypes)
     broadcasting_vector(AT, eltypes)
     broadcasting_matrix(AT, eltypes)
     broadcasting_mixed(AT, eltypes)
@@ -1155,6 +1156,110 @@ function sparse_products(AT, eltypes)
             for S in sparse_matrix_formats
                 @test Array(gpu_sparse(AT, S, A) * AT(x)) == ref
             end
+        end
+    end
+end
+
+function sparse_structure(AT, eltypes)
+    @testset "structure" begin
+        @testset "$S{$ET}" for S in sparse_matrix_formats, ET in eltypes
+            A = sprand_awkward(ET, 7, 6; Ti=Int32)
+            dA = gpu_sparse(AT, S, A)
+
+            # removing entries, in place
+            B = dropzeros!(copy(dA))
+            @test B isa S{ET,Int32}
+            check_structure(B)
+            @test same_sparse(B, dropzeros(A))
+            @test same_sparse(dropzeros(dA), dropzeros(A))
+            @test nnz(dA) == nnz(A)
+            if ET <: Real
+                B = copy(dA)
+                z = zero(ET)
+                @test fkeep!((i, j, v) -> i != j && v > z, B) === B
+                check_structure(B)
+                @test same_sparse(B, fkeep!((i, j, v) -> i != j && v > z, copy(A)))
+            end
+            if !(ET <: Integer) && !(ET <: Complex{<:Integer})
+                tol = real(ET)(0.5)
+                @test same_sparse(droptol!(copy(dA), tol), droptol!(copy(A), tol))
+            end
+
+            # triangular parts
+            for k in (-2, 0, 1)
+                @test same_sparse(triu(dA, k), triu(A, k))
+                @test same_sparse(tril(dA, k), tril(A, k))
+                @test triu(dA, k) isa S{ET,Int32}
+                @test same_sparse(triu(transpose(dA), k), triu(copy(transpose(A)), k))
+                @test same_sparse(tril(adjoint(dA), k), tril(copy(adjoint(A)), k))
+            end
+            @test same_sparse(triu(dA), triu(A))
+            @test istriu(triu(dA)) && !istriu(dA)
+            @test istril(tril(dA, -1), -1) && !istril(triu(dA, 1))
+            @test isdiag(gpu_sparse(AT, S, spdiagm(0 => rand(ET, 4))))
+            @test !isdiag(dA)
+            dQ = gpu_sparse(AT, S, A[1:6, 1:6])
+            @test istriu(UpperTriangular(dQ)) && !istril(UpperTriangular(dQ))
+            @test istril(LowerTriangular(dQ)) && !istriu(LowerTriangular(dQ))
+            dD = gpu_sparse(AT, S, spdiagm(0 => rand(ET, 4)))
+            @test istril(UpperTriangular(dD)) && istriu(LowerTriangular(dD))
+
+            # symmetry, also with a stored zero on one side only
+            @test !issymmetric(dA) && !ishermitian(dA)
+            H = sparse(Matrix(A[1:6, 1:6]) + Matrix(A[1:6, 1:6])')
+            @test ishermitian(gpu_sparse(AT, S, H))
+            @test issymmetric(gpu_sparse(AT, S, H)) == issymmetric(H)
+            Z = sparse([1, 2], [2, 1], ET[1, 0], 2, 2)
+            @test issymmetric(gpu_sparse(AT, S, Z)) == issymmetric(Z)
+            if ET <: AbstractFloat
+                Z = sparse([1, 2], [2, 1], ET[Inf, Inf], 2, 2)
+                @test issymmetric(gpu_sparse(AT, S, Z))
+            end
+
+            # diagonals
+            for k in (-3, 0, 2, 6, -7)
+                d = diag(dA, k)
+                @test d isa AT{ET}
+                @test Array(d) == diag(A, k)
+            end
+            @test_throws ArgumentError diag(dA, 7)
+            @test tr(gpu_sparse(AT, S, A[1:6, 1:6])) ≈ tr(A[1:6, 1:6])
+
+            # reshaping (SparseArrays gives a lazy wrapper), keeping the stored zero
+            B = reshape(dA, 14, 3)
+            @test B isa S{ET,Int32}
+            check_structure(B)
+            @test SparseMatrixCSC(B) == reshape(A, 14, 3)
+            @test nnz(B) == nnz(A)
+            @test SparseMatrixCSC(reshape(dA, (3, :))) == reshape(A, (3, :))
+            @test_throws DimensionMismatch reshape(dA, 5, 5)
+            x = vec(dA)
+            @test x isa GPUSparseVector{ET,Int32}
+            check_structure(x)
+            @test SparseVector(x) == vec(A)
+            @test nnz(x) == nnz(A)
+
+            # Kronecker products
+            B = SparseMatrixCSC{ET,Int32}(sprand_nozeros(ET, 3, 4, 0.5))
+            dB = gpu_sparse(AT, S, B)
+            @test same_sparse(kron(dA, dB), kron(A, B))
+            @test kron(dA, dB) isa S{ET,Int32}
+            @test same_sparse(kron(transpose(dA), dB), kron(copy(transpose(A)), B))
+            v = rand(ET, 3)
+            @test same_sparse(kron(dA, Diagonal(AT(v))), kron(A, Diagonal(v)))
+            @test same_sparse(kron(Diagonal(AT(v)), dB), kron(Diagonal(v), B))
+            huge = gpu_sparse(AT, GPUSparseMatrixCSC, spzeros(ET, 2^32, 0))
+            @test_throws ArgumentError kron(huge, huge)
+        end
+
+        @testset "vector $ET" for ET in eltypes
+            x = SparseVector{ET,Int32}(sprand_nozeros(ET, 30, 0.4))
+            nonzeros(x)[1] = zero(ET)
+            dx = gpu_sparse(AT, x)
+            @test same_sparse(dropzeros(dx), dropzeros(x))
+            @test same_sparse(dropzeros!(copy(dx)), dropzeros(x))
+            B = fkeep!((i, v) -> isodd(i), copy(dx))
+            @test same_sparse(B, fkeep!((i, v) -> isodd(i), copy(x)))
         end
     end
 end
