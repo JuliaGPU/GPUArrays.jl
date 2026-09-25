@@ -101,10 +101,28 @@ A back-end will usually add the following, all optional:
 
    | operation | public function | generic implementation |
    |:--|:--|:--|
+   | sparse × dense vector | `mul!(y, tA, A, x, α, β)` | `GPUArrays.generic_spmv!` |
+   | sparse × dense, dense × sparse | `mul!(C, tA, tB, A, B, α, β)` | `GPUArrays.generic_spmm!` |
    | CSR ↔ CSC | the target format's constructor | `GPUArrays.generic_regroup` |
    | CSR ↔ COO | the target format's constructor | `GPUArrays.generic_expand`, `GPUArrays.generic_compress` |
    | assembly from coordinates | `sparse(I, J, V, m, n, combine)`, `sparsevec` | `GPUArrays.generic_assemble` |
 
+   The product methods are LinearAlgebra's storage-level `mul!`, which it calls on Julia
+   1.13 and later with a character per operand ('N', 'T', 'C', or 'S'/'s'/'H'/'h' for the
+   upper or lower triangle of a Symmetric or Hermitian matrix); on older versions GPUArrays
+   forwards LinearAlgebra's internal `generic_matvecmul!` and `generic_matmatmul!` to
+   them. A vendor method looks like:
+
+   ```julia
+   function LinearAlgebra.mul!(y::CuVector{T}, tA::AbstractChar, A::CuSparseMatrixCSR{T},
+                               x::DenseCuVector{T}, α::Number, β::Number) where {T<:BlasFloat}
+       tA in ('N', 'T', 'C') || return GPUArrays.generic_spmv!(y, tA, A, x, α, β)
+       # call the vendor library
+   end
+   ```
+
+   The generic implementations make no promise of bitwise reproducibility across versions
+   or back-ends.
 5. **Formats that GPUArrays does not implement** (block-sparse formats, batched matrices)
    as back-end structs subtyping `AbstractGPUSparseArray`, with constructors to and from
    the generic formats.
@@ -156,6 +174,8 @@ GPUArrays.check_structure
 GPUArrays.generic_regroup
 GPUArrays.generic_expand
 GPUArrays.generic_assemble
+GPUArrays.generic_spmv!
+GPUArrays.generic_spmm!
 ```
 
 ## Caching Allocator
