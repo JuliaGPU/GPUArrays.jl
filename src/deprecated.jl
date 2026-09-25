@@ -16,3 +16,9 @@ end
 # (Metal.jl, etc.) continue to load. The interface itself is gone — `RNG{AT}()`
 # is now constructed directly — so any extension of this is dead code.
 function default_rng end
+
+# The per-format abstract types are replaced by the concrete, storage-parametric types.
+# The aliases keep `isa` checks and dispatch working, but cannot be subtyped.
+Base.@deprecate_binding AbstractGPUSparseMatrixCSR GPUSparseMatrixCSR false
+Base.@deprecate_binding AbstractGPUSparseMatrixCSC GPUSparseMatrixCSC false
+Base.@deprecate_binding AbstractGPUSparseMatrixCOO GPUSparseMatrixCOO false
