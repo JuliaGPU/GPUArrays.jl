@@ -103,6 +103,7 @@ A back-end will usually add the following, all optional:
    |:--|:--|:--|
    | sparse × dense vector | `mul!(y, tA, A, x, α, β)` | `GPUArrays.generic_spmv!` |
    | sparse × dense, dense × sparse | `mul!(C, tA, tB, A, B, α, β)` | `GPUArrays.generic_spmm!` |
+   | sparse × sparse | `*`, `mul!(C, tA, tB, A, B, α, β)` with a sparse `C` | `GPUArrays.generic_spgemm`, `GPUArrays.generic_spgemm!` |
    | CSR ↔ CSC | the target format's constructor | `GPUArrays.generic_regroup` |
    | CSR ↔ COO | the target format's constructor | `GPUArrays.generic_expand`, `GPUArrays.generic_compress` |
    | assembly from coordinates | `sparse(I, J, V, m, n, combine)`, `sparsevec` | `GPUArrays.generic_assemble` |
@@ -176,6 +177,8 @@ GPUArrays.generic_expand
 GPUArrays.generic_assemble
 GPUArrays.generic_spmv!
 GPUArrays.generic_spmm!
+GPUArrays.generic_spgemm
+GPUArrays.generic_spgemm!
 ```
 
 ## Caching Allocator

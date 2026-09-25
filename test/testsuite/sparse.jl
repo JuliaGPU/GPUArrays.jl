@@ -22,6 +22,7 @@ using GPUArrays: GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO, GPU
     sparse_structure(AT, eltypes)
     sparse_slicing(AT, eltypes)
     sparse_misc(AT, eltypes)
+    sparse_spgemm(AT, eltypes)
     broadcasting_vector(AT, eltypes)
     broadcasting_matrix(AT, eltypes)
     broadcasting_mixed(AT, eltypes)
@@ -1347,6 +1348,85 @@ function sparse_misc(AT, eltypes)
                 @test any(dA) == any(A)
                 @test all(dA) == all(A)
                 @test !all(gpu_sparse(AT, S, sparse(trues(3, 3))) .& false)
+            end
+        end
+    end
+end
+
+function sparse_spgemm(AT, eltypes)
+    @testset "sparse × sparse" begin
+        @testset "$S{$ET}" for S in sparse_matrix_formats, ET in eltypes
+            A = sprand_awkward(ET, 8, 6; Ti=Int32)
+            B = SparseMatrixCSC{ET,Int32}(sprand_nozeros(ET, 6, 7, 0.4))
+            dA = gpu_sparse(AT, S, A)
+            for S′ in sparse_matrix_formats
+                dB = gpu_sparse(AT, S′, B)
+                C = dA * dB
+                @test C isa S{Base.promote_op(LinearAlgebra.matprod, ET, ET),Int32}
+                check_structure(C)
+                @test SparseMatrixCSC(C) ≈ A * B
+            end
+            dB = gpu_sparse(AT, S, B)
+            @test SparseMatrixCSC(transpose(dB) * transpose(dA)) ≈ transpose(B) * transpose(A)
+            @test SparseMatrixCSC(dA' * dA) ≈ A' * A
+            Q = sprand_nozeros(ET, 6, 6, 0.4)
+            dQ = gpu_sparse(AT, S, Q)
+            @test SparseMatrixCSC(Symmetric(dQ) * dB) ≈ Symmetric(Matrix(Q)) * B
+            if ET <: Complex
+                @test SparseMatrixCSC(Hermitian(dQ, :L) * dB) ≈ Hermitian(Matrix(Q), :L) * B
+            end
+            @test nnz(dA * gpu_sparse(AT, S, spzeros(ET, Int32, 6, 3))) == 0
+            @test size(gpu_sparse(AT, S, spzeros(ET, Int32, 0, 4)) * gpu_sparse(AT, S, spzeros(ET, Int32, 4, 2))) == (0, 2)
+            @test_throws DimensionMismatch dA * dA
+
+            # the sparse-output mul! takes the union of both structures
+            if ET <: Union{AbstractFloat, Complex{<:AbstractFloat}}
+                α, β = ET(2), ET(3)
+                C = SparseMatrixCSC{ET,Int32}(sprand_nozeros(ET, 8, 7, 0.3))
+                dC = gpu_sparse(AT, S, C)
+                @test mul!(dC, dA, dB, α, β) === dC
+                check_structure(dC)
+                @test SparseMatrixCSC(dC) ≈ α * (A * B) + β * C
+                # a destination with as many entries as the product, but elsewhere
+                P = A * B
+                D = copy(P)
+                D.rowval .= mod1.(D.rowval .+ 1, 8)
+                D = sparse(findnz(D)..., 8, 7)
+                dD = gpu_sparse(AT, S, D)
+                mul!(dD, dA, dB, true, true)
+                @test SparseMatrixCSC(dD) ≈ P + D
+                # with β = 0, the structure of the product
+                dD = gpu_sparse(AT, S, SparseMatrixCSC{ET,Int32}(D))
+                mul!(dD, dA, dB)
+                @test SparseMatrixCSC(dD) ≈ P
+                @test nnz(dD) == nnz(dA * dB)
+            end
+        end
+
+        @testset "$T" for T in (Int, Bool)
+            A = sprand(T, 6, 5, 0.5)
+            B = sprand(T, 5, 4, 0.5)
+            for S in sparse_matrix_formats
+                @test SparseMatrixCSC(gpu_sparse(AT, S, A) * gpu_sparse(AT, S, B)) == A * B
+            end
+        end
+
+        @testset "exp" begin
+            # of an integer matrix (which gives Float64 values)
+            if Float64 in eltypes
+                A = sparse([1, 2], [1, 2], [1, 2], 2, 2)
+                @test Array(exp(gpu_sparse(AT, GPUSparseMatrixCSR, A))) ≈ exp(Matrix{Float64}(A))
+            end
+            for ET in filter(T -> T <: Union{AbstractFloat, Complex{<:AbstractFloat}} &&
+                                  real(T) != Float16, eltypes)
+                for scale in (0.25, 4)
+                    A = sprand(ET, 7, 7, 0.4) * real(ET)(scale)
+                    for S in sparse_matrix_formats
+                        E = exp(gpu_sparse(AT, S, A))
+                        @test E isa S{ET}
+                        @test Array(E) ≈ exp(Matrix(A)) rtol=1e-4
+                    end
+                end
             end
         end
     end
