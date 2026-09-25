@@ -378,7 +378,12 @@ function linalg(AT, eltypes)
             @testset "opnorm and norm" begin
                 @test opnorm(A, Inf) ≈ opnorm(dA, Inf)
                 @test opnorm(A, 1)   ≈ opnorm(dA, 1)
-                @test_throws ArgumentError opnorm(dA, 2)
+                # SparseArrays.jl#859 implemented the 2-norm for SparseMatrixCSC
+                if dA isa SparseMatrixCSC && isdefined(SparseArrays, :opnorm2est)
+                    @test opnorm(Matrix(A), 2) ≈ opnorm(dA, 2)
+                else
+                    @test_throws ArgumentError opnorm(dA, 2)
+                end
             end
         end
     end
