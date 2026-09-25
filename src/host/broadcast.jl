@@ -87,7 +87,20 @@ allequal(x) = true
 allequal(x, y, z...) = x == y && allequal(y, z...)
 
 function Base.map(f, x1::AnyGPUArray, xrest::AnyGPUArray...)
-    xs = (x1, xrest...)
+    return _map(f, (x1, xrest...))
+end
+
+# Narrower than both the all-GPU method and the mixed method.
+function Base.map(f, x1::AbstractGPUArray, x2::AnyGPUArray, xrest::AnyGPUArray...)
+    return _map(f, (x1, x2, xrest...))
+end
+
+# GPU plus CPU iterators such as `1:n` (#580).
+function Base.map(f, x1::AbstractGPUArray, x2::AbstractArray, xrest::AbstractArray...)
+    return _map(f, (x1, x2, xrest...))
+end
+
+function _map(f, xs)
     # if argument sizes match, their shape needs to be preserved
     if allequal(size.(xs)...)
         return Broadcast.broadcast_preserving_zero_d(f, xs...)
