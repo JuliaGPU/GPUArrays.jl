@@ -386,6 +386,15 @@ SparseArrays.sparse(A::AbstractGPUMatrix; fmt::Symbol=:csc) = sparse_format(fmt)
 SparseArrays.sparse(x::AbstractGPUVector) = GPUSparseVector(x)
 SparseArrays.sparsevec(x::AbstractGPUVector) = GPUSparseVector(x)
 
+# a diagonal matrix, like `SparseMatrixCSC(::Diagonal)`
+for S in (:GPUSparseMatrixCSR, :GPUSparseMatrixCSC, :GPUSparseMatrixCOO)
+    @eval begin
+        $S(D::Diagonal{<:Any,<:AnyGPUVector}) = convert($S, spdiagm(D.diag))
+        $S{Tv}(D::Diagonal{<:Any,<:AnyGPUVector}) where {Tv} = $S{Tv,Int}(D)
+        $S{Tv,Ti}(D::Diagonal{<:Any,<:AnyGPUVector}) where {Tv,Ti} = with_eltypes($S(D), Tv, Ti)
+    end
+end
+
 
 ## transposes
 
