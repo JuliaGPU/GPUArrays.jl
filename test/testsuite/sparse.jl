@@ -16,6 +16,7 @@ using GPUArrays: GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO, GPU
     sparse_display(AT, eltypes)
     sparse_indexing(AT, eltypes)
     sparse_conversions(AT, eltypes)
+    sparse_dense_conversions(AT, eltypes)
     broadcasting_vector(AT, eltypes)
     broadcasting_matrix(AT, eltypes)
     mapreduce_matrix(AT, eltypes)
@@ -804,5 +805,90 @@ function sparse_bool(AT)
             @test reduced(mapreduce(identity, |, dA; dims=2)) == mapreduce(identity, |, A; dims=2)
             @test same_sparse(GPUSparseMatrixCSC(gpu_sparse(AT, GPUSparseMatrixCSR, A)), A)
         end
+    end
+end
+
+function sparse_dense_conversions(AT, eltypes)
+    @testset "format and dense conversions" begin
+        @testset "$ET" for ET in eltypes
+            A = sprand_awkward(ET, 9, 7; Ti=Int32)
+            # every pair of formats, exactly, including the stored zero
+            for S in sparse_matrix_formats, S′ in sparse_matrix_formats
+                dA = gpu_sparse(AT, S, A)
+                B = S′(dA)
+                @test B isa S′{ET,Int32}
+                check_structure(B)
+                @test same_sparse(B, A)
+                # no hidden sharing with the source
+                fill!(nonzeros(B), zero(ET))
+                @test same_sparse(dA, A)
+            end
+
+            # transposes, into the same and the other formats
+            for S in sparse_matrix_formats
+                dA = gpu_sparse(AT, S, A)
+                B = copy(transpose(dA))
+                @test B isa S{ET,Int32}
+                check_structure(B)
+                @test same_sparse(B, copy(transpose(A)))
+                B = copy(adjoint(dA))
+                @test same_sparse(B, copy(adjoint(A)))
+                @test same_sparse(permutedims(dA), permutedims(A))
+                @test same_sparse(permutedims(dA, (1, 2)), A)
+                for S′ in sparse_matrix_formats
+                    @test same_sparse(S′(transpose(dA)), copy(transpose(A)))
+                    @test same_sparse(S′(adjoint(dA)), copy(adjoint(A)))
+                end
+            end
+
+            # dense to sparse drops the zeros, like `sparse`
+            D = Array(A)
+            dD = AT(D)
+            for S in sparse_matrix_formats
+                B = S(dD)
+                @test B isa S{ET,Int}
+                check_structure(B)
+                @test same_sparse(B, sparse(D))
+                B = S{ET,Int32}(dD)
+                @test B isa S{ET,Int32}
+                @test same_sparse(B, SparseMatrixCSC{ET,Int32}(sparse(D)))
+            end
+            @test sparse(dD) isa GPUSparseMatrixCSC{ET,Int}
+            @test same_sparse(sparse(dD), sparse(D))
+            @test sparse(dD; fmt=:csr) isa GPUSparseMatrixCSR{ET,Int}
+            @test sparse(dD; fmt=:coo) isa GPUSparseMatrixCOO{ET,Int}
+            @test_throws ArgumentError sparse(dD; fmt=:bsr)
+            for (m, n) in ((0, 0), (0, 3), (3, 0), (3, 4))
+                Z = zeros(ET, m, n)
+                for S in sparse_matrix_formats
+                    @test same_sparse(S(AT(Z)), sparse(Z))
+                end
+            end
+
+            x = Vector(sprand_nozeros(ET, 30, 0.3))
+            dx = sparse(AT(x))
+            @test dx isa GPUSparseVector{ET,Int}
+            check_structure(dx)
+            @test same_sparse(dx, sparse(x))
+            @test GPUSparseVector{ET,Int32}(AT(x)) isa GPUSparseVector{ET,Int32}
+            @test same_sparse(sparsevec(AT(x)), sparse(x))
+            @test nnz(sparse(AT(zeros(ET, 0)))) == 0
+        end
+    end
+
+    @testset "findnz" begin
+        ET = first(eltypes)
+        A = sprand_awkward(ET, 9, 7; Ti=Int32)
+        I, J, V = findnz(A)
+        # in particular for COO, whose conversion once recursed without end (CUDA.jl#3189)
+        for S in sparse_matrix_formats
+            dI, dJ, dV = findnz(gpu_sparse(AT, S, A))
+            @test dI isa AT{Int32} && dJ isa AT{Int32} && dV isa AT{ET}
+            @test Array(dI) == I && Array(dJ) == J && Array(dV) == V
+        end
+        x = SparseVector{ET,Int32}(sprand_nozeros(ET, 20, 0.3))
+        dI, dV = findnz(gpu_sparse(AT, x))
+        @test (Array(dI), Array(dV)) == findnz(x)
+        @test all(isempty, findnz(gpu_sparse(AT, GPUSparseMatrixCOO, spzeros(ET, 3, 3))))
     end
 end
