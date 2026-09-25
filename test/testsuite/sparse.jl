@@ -20,6 +20,7 @@ using GPUArrays: GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO, GPU
     sparse_assembly(AT, eltypes)
     sparse_products(AT, eltypes)
     sparse_structure(AT, eltypes)
+    sparse_slicing(AT, eltypes)
     broadcasting_vector(AT, eltypes)
     broadcasting_matrix(AT, eltypes)
     broadcasting_mixed(AT, eltypes)
@@ -1260,6 +1261,40 @@ function sparse_structure(AT, eltypes)
             @test same_sparse(dropzeros!(copy(dx)), dropzeros(x))
             B = fkeep!((i, v) -> isodd(i), copy(dx))
             @test same_sparse(B, fkeep!((i, v) -> isodd(i), copy(x)))
+        end
+    end
+end
+
+function sparse_slicing(AT, eltypes)
+    @testset "slicing" begin
+        @testset "$S{$ET}" for S in sparse_matrix_formats, ET in eltypes
+            A = sprand_awkward(ET, 9, 8; Ti=Int32)
+            dA = gpu_sparse(AT, S, A)
+            for (I, J) in ((2:5, 1:3:8), (:, 2:4), (3:3, :), (1:0, :), (9:-1:9, 2:2), (2:-1:2, 3:-5:3))
+                B = dA[I, J]
+                @test B isa S{ET,Int32}
+                check_structure(B)
+                @test same_sparse(B, A[I, J])
+            end
+            for (I, J) in ((:, 3), (4, :), (2:6, 2), (1, 2:2:8), (3, :))
+                x = dA[I, J]
+                @test x isa GPUSparseVector{ET,Int32}
+                check_structure(x)
+                @test same_sparse(x, A[I, J])
+            end
+            @test_throws BoundsError dA[1:10, :]
+            @test_throws BoundsError dA[:, 9]
+            @test_throws ArgumentError dA[5:-1:1, :]
+        end
+        @testset "vector $ET" for ET in eltypes
+            x = SparseVector{ET,Int32}(sprand_nozeros(ET, 30, 0.4))
+            dx = gpu_sparse(AT, x)
+            for I in (3:17, 1:4:30, 31:30, 3:-1:3)
+                y = dx[I]
+                @test y isa GPUSparseVector{ET,Int32}
+                @test same_sparse(y, x[I])
+            end
+            @test_throws BoundsError dx[0:3]
         end
     end
 end
