@@ -103,6 +103,7 @@ A back-end will usually add the following, all optional:
    |:--|:--|:--|
    | CSR ↔ CSC | the target format's constructor | `GPUArrays.generic_regroup` |
    | CSR ↔ COO | the target format's constructor | `GPUArrays.generic_expand`, `GPUArrays.generic_compress` |
+   | assembly from coordinates | `sparse(I, J, V, m, n, combine)`, `sparsevec` | `GPUArrays.generic_assemble` |
 
 5. **Formats that GPUArrays does not implement** (block-sparse formats, batched matrices)
    as back-end structs subtyping `AbstractGPUSparseArray`, with constructors to and from
@@ -154,6 +155,7 @@ GPUArrays.GPUSparseVector
 GPUArrays.check_structure
 GPUArrays.generic_regroup
 GPUArrays.generic_expand
+GPUArrays.generic_assemble
 ```
 
 ## Caching Allocator

@@ -102,3 +102,54 @@ function regroup(ptr::AbstractVector{Ti}, ind::AbstractVector{Ti}, val::Abstract
     free_buffer!(new_major)
     return new_ptr, new_ind, new_val
 end
+
+## COV_EXCL_START
+@kernel function run_heads_kernel(heads, keys)
+    k = @index(Global, Linear)
+    if k <= length(keys)
+        @inbounds heads[k] = k == 1 || keys[k] != keys[k-1]
+    end
+end
+
+# every thread folds one run of equal keys, in order
+@kernel function reduce_runs_kernel(out_keys, out_vals, op, starts, keys, vals)
+    r = @index(Global, Linear)
+    if r <= length(starts)
+        first = @inbounds starts[r]
+        last = r == length(starts) ? length(vals) : @inbounds(starts[r+1]) - 1
+        acc = @inbounds vals[first]
+        for k in first+1:last
+            acc = convert(eltype(out_vals), op(acc, @inbounds vals[k]))
+        end
+        @inbounds out_keys[r] = keys[first]
+        @inbounds out_vals[r] = acc
+    end
+end
+## COV_EXCL_STOP
+
+# whether each of the sorted `keys` starts a run of equal keys
+function run_heads(keys::AbstractVector)
+    heads = similar(keys, Bool)
+    isempty(keys) || run_heads_kernel(get_backend(keys))(heads, keys; ndrange=length(keys))
+    return heads
+end
+
+"""
+    reduce_by_key(op, keys, vals)
+
+Combine the values of every run of equal, sorted `keys` with `op`, folding each run from
+left to right. Returns the unique keys and the combined values. Every run is folded by
+one thread, so many repetitions of a key serialize; a tiled segmented scan would not.
+"""
+function reduce_by_key(op, keys::AbstractVector, vals::AbstractVector)
+    starts = findall(run_heads(keys))
+    n = length(starts)
+    out_keys = similar(keys, n)
+    out_vals = similar(vals, n)
+    if n > 0
+        reduce_runs_kernel(get_backend(vals))(out_keys, out_vals, op, starts, keys, vals;
+                                              ndrange=n)
+    end
+    free_buffer!(starts)
+    return out_keys, out_vals
+end
