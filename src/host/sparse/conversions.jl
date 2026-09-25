@@ -281,3 +281,124 @@ end
 
 Base.copyto!(dst::Array, src::GPUSparseArray) = copyto!(dst, Array(src))
 
+
+## from dense arrays
+
+## COV_EXCL_START
+@kernel function split_linear_kernel(rows, cols, lin, m)
+    k = @index(Global, Linear)
+    if k <= length(lin)
+        l = @inbounds lin[k] - 1
+        @inbounds rows[k] = (l % m + 1) % eltype(rows)
+        @inbounds cols[k] = (l ÷ m + 1) % eltype(cols)
+    end
+end
+## COV_EXCL_STOP
+
+# The nonzeros of a dense matrix, in column-major (`major = :col`) or row-major order:
+# the sorted major and minor index of every entry, and its value. `findall` visits the
+# elements in column-major order, so row-major order comes from a dense transpose.
+function dense_entries(A::AbstractGPUMatrix, ::Type{Tv}, ::Type{Ti}, major::Symbol) where {Tv,Ti}
+    check_sparse_dims(Ti, size(A))
+    B = major === :col ? A : permutedims(A)
+    lin = findall(!iszero, vec(B))
+    n = length(lin)
+    check_sparse_nnz(Ti, n)
+    minor_ind = similar(lin, Ti, n)
+    major_ind = similar(lin, Ti, n)
+    if n > 0
+        split_linear_kernel(get_backend(lin))(minor_ind, major_ind, lin, size(B, 1); ndrange=n)
+    end
+    vals = vec(B)[lin]
+    B === A || free_buffer!(B)
+    free_buffer!(lin)
+    return major_ind, minor_ind, eltype(vals) == Tv ? vals : convert_buffer(Tv, vals)
+end
+
+function GPUSparseMatrixCSC{Tv,Ti}(A::AbstractGPUMatrix) where {Tv,Ti}
+    cols, rows, vals = dense_entries(A, Tv, Ti, :col)
+    GPUSparseMatrixCSC(compress(cols, size(A, 2)), rows, vals, size(A))
+end
+function GPUSparseMatrixCSR{Tv,Ti}(A::AbstractGPUMatrix) where {Tv,Ti}
+    rows, cols, vals = dense_entries(A, Tv, Ti, :row)
+    GPUSparseMatrixCSR(compress(rows, size(A, 1)), cols, vals, size(A))
+end
+function GPUSparseMatrixCOO{Tv,Ti}(A::AbstractGPUMatrix) where {Tv,Ti}
+    rows, cols, vals = dense_entries(A, Tv, Ti, :row)
+    GPUSparseMatrixCOO(rows, cols, vals, size(A))
+end
+function GPUSparseVector{Tv,Ti}(x::AbstractGPUVector) where {Tv,Ti}
+    check_sparse_dims(Ti, size(x))
+    lin = findall(!iszero, x)
+    check_sparse_nnz(Ti, length(lin))
+    vals = x[lin]
+    GPUSparseVector(convert_buffer(Ti, lin), eltype(vals) == Tv ? vals : convert_buffer(Tv, vals),
+                    length(x))
+end
+
+# like SparseArrays, the index type defaults to `Int`
+for (S, D) in ((:GPUSparseMatrixCSR, :AbstractGPUMatrix), (:GPUSparseMatrixCSC, :AbstractGPUMatrix),
+               (:GPUSparseMatrixCOO, :AbstractGPUMatrix), (:GPUSparseVector, :AbstractGPUVector))
+    @eval begin
+        $S(A::$D) = $S{eltype(A),Int}(A)
+        $S{Tv}(A::$D) where {Tv} = $S{Tv,Int}(A)
+    end
+end
+
+# the format selected by a `fmt` keyword, as CUDA.jl and AMDGPU.jl accept it
+sparse_format(fmt::Symbol) =
+    fmt === :csc ? GPUSparseMatrixCSC :
+    fmt === :csr ? GPUSparseMatrixCSR :
+    fmt === :coo ? GPUSparseMatrixCOO :
+    throw(ArgumentError("unknown sparse format :$fmt, expected :csc, :csr or :coo"))
+
+"""
+    sparse(A::AbstractGPUMatrix; fmt=:csc)
+    sparse(x::AbstractGPUVector)
+
+The nonzero entries of a dense GPU array as a sparse array on the same device, in CSC
+format (like SparseArrays) or the format selected by `fmt` (`:csc`, `:csr` or `:coo`).
+"""
+SparseArrays.sparse(A::AbstractGPUMatrix; fmt::Symbol=:csc) = sparse_format(fmt)(A)
+SparseArrays.sparse(x::AbstractGPUVector) = GPUSparseVector(x)
+SparseArrays.sparsevec(x::AbstractGPUVector) = GPUSparseVector(x)
+
+
+## transposes
+
+# The transpose with new storage, in the same format: the other compressed layout of `A`,
+# read with reversed dimensions.
+materialize_transpose(A::GPUSparseMatrixCSR) = transpose_view(GPUSparseMatrixCSC(A))
+materialize_transpose(A::GPUSparseMatrixCSC) = transpose_view(GPUSparseMatrixCSR(A))
+materialize_transpose(A::GPUSparseMatrixCOO) =
+    GPUSparseMatrixCOO(transpose_view(GPUSparseMatrixCSC(A)))
+
+Base.copy(A::Transpose{<:Any,<:GPUSparseMatrix}) = materialize_transpose(parent(A))
+function Base.copy(A::Adjoint{<:Any,<:GPUSparseMatrix})
+    B = materialize_transpose(parent(A))
+    eltype(B) <: Real || (B.nzVal .= conj.(B.nzVal))
+    return B
+end
+
+# into any format; the cheap cases (CSR ↔ CSC) are defined above
+for S in (:GPUSparseMatrixCSR, :GPUSparseMatrixCSC, :GPUSparseMatrixCOO)
+    @eval $S(A::Union{Transpose{<:Any,<:GPUSparseMatrix},Adjoint{<:Any,<:GPUSparseMatrix}}) =
+        convert($S, copy(A))
+end
+
+Base.permutedims(A::GPUSparseMatrix) = copy(transpose(A))
+function Base.permutedims(A::GPUSparseMatrix, perm)
+    Tuple(perm) == (2, 1) && return copy(transpose(A))
+    Tuple(perm) == (1, 2) && return copy(A)
+    throw(ArgumentError("no valid permutation of dimensions"))
+end
+
+
+## coordinates
+
+# the coordinates and values of the stored entries, in column-major order like SparseArrays
+function SparseArrays.findnz(A::GPUSparseMatrix)
+    C = A isa GPUSparseMatrixCSC ? copy(A) : GPUSparseMatrixCSC(A)
+    return C.rowVal, expand_ptr(C.colPtr, nnz(C)), C.nzVal
+end
+SparseArrays.findnz(x::GPUSparseVector) = (copy(x.nzInd), copy(x.nzVal))

@@ -129,7 +129,12 @@ Conversions:
   `GPUSparseMatrixCSC{Tv,Ti}(A)` to also change the element and index types;
   `convert(GPUSparseMatrixCSC, A)` returns `A` itself if it already has that format;
 - to the host, with `SparseMatrixCSC(A)`, `SparseVector(x)` or `Array(A)`;
+- from a dense GPU array, dropping its zeros, with `sparse(A; fmt=:csc)` or the format's
+  constructor (`GPUSparseMatrixCSR(A)`); the index type defaults to `Int`;
 - to a dense array on the device, with `copyto!(similar(nonzeros(A), T, size(A)), A)`;
+- transposes: `transpose(A)` and `adjoint(A)` stay lazy, `copy(transpose(A))` and
+  `permutedims(A)` materialize them in the same format, and a format constructor
+  (`GPUSparseMatrixCSC(transpose(A))`) in another one;
 - between host and device, with `adapt`. `adapt(MtlArray, S)` and `adapt(Array, A)` move
   the storage and keep the format, element and index type (a CSC matrix stays CSC, and
   comes back as a `SparseMatrixCSC`); adapting never densifies. `adapt(T, S)` with a
