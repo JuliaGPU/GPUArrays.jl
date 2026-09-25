@@ -452,19 +452,42 @@ end
 end
 ## COV_EXCL_STOP
 
+# the CSR layout of a COO matrix, borrowing its buffers
+csr_view(A::GPUSparseMatrixCOO) =
+    GPUSparseMatrixCSR(compress(A.rowInd, size(A, 1)), A.colInd, A.nzVal, size(A))
+
 function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatStyle}})
-    # find the sparse inputs
     bc = Broadcast.flatten(bc)
+    sparse_inputs = filter(arg -> arg isa AbstractGPUSparseArray, bc.args)
+    all(arg -> arg isa GPUSparseArray, sparse_inputs) ||
+        error("broadcast is only implemented for the sparse formats of GPUArrays")
+    (all(arg -> arg isa GPUSparseVector, sparse_inputs) ||
+     all(arg -> arg isa GPUSparseMatrix, sparse_inputs)) ||
+        error("broadcast with both sparse vectors and sparse matrices is not supported")
+
+    # The kernels iterate a single compressed format: that of the first sparse matrix, with
+    # COO matrices read as CSR (which has the same order of entries). Other formats are
+    # converted, and a COO result is converted back.
+    lead = first(sparse_inputs)
+    if lead isa GPUSparseMatrix && !all(arg -> typeof(arg).name === typeof(lead).name &&
+                                               !(arg isa GPUSparseMatrixCOO), sparse_inputs)
+        S = lead isa GPUSparseMatrixCSC ? GPUSparseMatrixCSC : GPUSparseMatrixCSR
+        args = map(bc.args) do arg
+            arg isa GPUSparseMatrixCOO && S === GPUSparseMatrixCSR ? csr_view(arg) :
+            arg isa GPUSparseMatrix ? convert(S, arg) : arg
+        end
+        out = copy(Broadcasted(bc.f, args, bc.axes))
+        if lead isa GPUSparseMatrixCOO && out isa GPUSparseMatrixCSR
+            out = GPUSparseMatrixCOO(expand_ptr(out.rowPtr, nnz(out)), out.colVal, out.nzVal,
+                                     size(out))
+        end
+        return out
+    end
+
     sparse_args = findall(bc.args) do arg
         arg isa GPUSparseArray
     end
-    sparse_types = unique(map(i->nameof(typeof(bc.args[i])), sparse_args))
-    if length(sparse_types) > 1
-        error("broadcast with multiple types of sparse arrays ($(join(sparse_types, ", "))) is not supported")
-    end
     sparse_typ = typeof(bc.args[first(sparse_args)])
-    sparse_typ <: Union{GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseVector} ||
-        error("broadcast with sparse arrays is currently only implemented for vectors and CSR and CSC matrices")
     Ti = if sparse_typ <: GPUSparseMatrixCSR
         reduce(promote_type, map(i->eltype(bc.args[i].rowPtr), sparse_args))
     elseif sparse_typ <: GPUSparseMatrixCSC
@@ -612,3 +635,24 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
     ndrange == 0 || kernel(args...; ndrange)
     return output
 end
+
+# like SparseArrays, `map` over sparse arrays of the same size is a broadcast
+function sparse_map(f, A, Bs...)
+    all(B -> size(B) == size(A), Bs) ||
+        throw(DimensionMismatch("map requires arrays of the same size"))
+    return broadcast(f, A, Bs...)
+end
+Base.map(f, A::GPUSparseArray, Bs::Union{GPUSparseArray,AnyGPUArray}...) = sparse_map(f, A, Bs...)
+Base.map(f, A::AnyGPUArray, B::GPUSparseArray, Cs::Union{GPUSparseArray,AnyGPUArray}...) =
+    sparse_map(f, A, B, Cs...)
+
+# SparseArrays implements these for any sparse vector, through scalar indexing
+for f in (:+, :-, :*, :min, :max)
+    @eval begin
+        Base.map(::typeof($f), x::GPUSparseVector, y::GPUSparseVector) = sparse_map($f, x, y)
+        Base.broadcast(::typeof($f), x::GPUSparseVector, y::GPUSparseVector) =
+            Broadcast.materialize(Broadcast.broadcasted($f, x, y))
+    end
+end
+Base.:(+)(x::GPUSparseVector, y::GPUSparseVector) = sparse_map(+, x, y)
+Base.:(-)(x::GPUSparseVector, y::GPUSparseVector) = sparse_map(-, x, y)

@@ -21,6 +21,7 @@ using GPUArrays: GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO, GPU
     sparse_products(AT, eltypes)
     broadcasting_vector(AT, eltypes)
     broadcasting_matrix(AT, eltypes)
+    broadcasting_mixed(AT, eltypes)
     mapreduce_matrix(AT, eltypes)
     sparse_linalg(AT, eltypes)
     iszero_sparse(AT, eltypes)
@@ -629,6 +630,56 @@ function broadcasting_matrix(AT, eltypes)
             x = sprand_awkward(ET, 6, 7)
             dx = gpu_sparse(AT, S, x)
             @test nnz(dx .* ET(2)) == nnz(x)
+        end
+    end
+end
+
+function broadcasting_mixed(AT, eltypes)
+    @testset "mixed-format broadcasting" begin
+        @testset "$ET" for ET in eltypes
+            A = sprand_awkward(ET, 6, 7)
+            B = sprand_nozeros(ET, 6, 7, 0.4)
+            # the result has the format of the first sparse argument
+            for S in sparse_matrix_formats, S′ in sparse_matrix_formats
+                dA = gpu_sparse(AT, S, A)
+                dB = gpu_sparse(AT, S′, B)
+                dC = dA .* dB
+                @test dC isa S{ET}
+                check_structure(dC)
+                @test SparseMatrixCSC(dC) ≈ A .* B
+                dC = dA .+ dB
+                @test dC isa S{ET}
+                @test SparseMatrixCSC(dC) ≈ A .+ B
+                @test SparseMatrixCSC(dA + dB) ≈ A + B
+                @test SparseMatrixCSC(dA - dB) ≈ A - B
+                @test Array(dA .+ dB .+ ET(1)) ≈ Array(A .+ B .+ ET(1))
+            end
+            for S in sparse_matrix_formats
+                dA = gpu_sparse(AT, S, A)
+                @test SparseMatrixCSC(ET(2) * dA) == ET(2) * A
+                @test SparseMatrixCSC(-dA) == -A
+                three = ET(3)
+                @test SparseMatrixCSC(map(v -> v * three, dA)) == map(v -> v * three, A)
+                @test Array(map(+, AT(Matrix(B)), dA)) ≈ Matrix(B) + A
+                @test SparseMatrixCSC(conj(dA)) == conj(A)
+                @test Array(dA .* AT(Matrix(B))) ≈ Array(A .* Matrix(B))
+            end
+            @test_throws ErrorException gpu_sparse(AT, GPUSparseMatrixCSR, A) .* gpu_sparse(AT, sprand_nozeros(ET, 6, 0.5))
+
+            # SparseArrays' own methods for sparse vectors are replaced
+            x = sprand_nozeros(ET, 30, 0.3)
+            y = sprand_nozeros(ET, 30, 0.3)
+            dx, dy = gpu_sparse(AT, x), gpu_sparse(AT, y)
+            @test SparseVector(dx + dy) ≈ x + y
+            @test SparseVector(dx - dy) ≈ x - y
+            for f in (+, -, *)
+                @test SparseVector(map(f, dx, dy)) ≈ map(f, x, y)
+                @test SparseVector(broadcast(f, dx, dy)) ≈ broadcast(f, x, y)
+            end
+            if ET <: Real
+                @test SparseVector(map(max, dx, dy)) == map(max, x, y)
+            end
+            @test_throws DimensionMismatch dx + gpu_sparse(AT, sprand_nozeros(ET, 31, 0.3))
         end
     end
 end
