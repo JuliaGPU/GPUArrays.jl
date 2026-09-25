@@ -18,6 +18,7 @@ using GPUArrays: GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO, GPU
     sparse_conversions(AT, eltypes)
     sparse_dense_conversions(AT, eltypes)
     sparse_assembly(AT, eltypes)
+    sparse_products(AT, eltypes)
     broadcasting_vector(AT, eltypes)
     broadcasting_matrix(AT, eltypes)
     mapreduce_matrix(AT, eltypes)
@@ -981,6 +982,128 @@ function sparse_assembly(AT, eltypes)
             @test same_sparse(sparse(AT(I), AT(J), AT(V), 5, 6), sparse(I, J, V, 5, 6))
             @test same_sparse(sparse(AT(I), AT(J), true, 5, 6), sparse(I, J, true, 5, 6))
             @test same_sparse(sparsevec(AT(I), AT(V), 5), sparsevec(I, V, 5))
+        end
+    end
+end
+
+# the operand wrappers LinearAlgebra encodes as characters in the storage-level `mul!`
+function sparse_operands(A::AbstractMatrix)
+    ops = Any[identity, transpose, adjoint]
+    if size(A, 1) == size(A, 2)
+        append!(ops, [x -> Symmetric(x, :U), x -> Symmetric(x, :L)])
+        eltype(A) <: Complex && append!(ops, [x -> Hermitian(x, :U), x -> Hermitian(x, :L)])
+    end
+    return ops
+end
+
+function sparse_products(AT, eltypes)
+    @testset "products" begin
+        @testset "$S{$ET}" for S in sparse_matrix_formats, ET in eltypes
+            # every operand character for one real and one complex element type, a few for
+            # the others
+            all_ops = ET == first(eltypes) || ET == first(filter(iscomplextype, eltypes))
+            A = sprand_awkward(ET, 7, 7; Ti=Int32)
+            R = sprand_awkward(ET, 7, 5; Ti=Int32)    # rectangular
+            dA = gpu_sparse(AT, S, A)
+            dR = gpu_sparse(AT, S, R)
+            α, β = ET(2), ET(3)
+
+            # sparse × dense vector (with dense references: SparseArrays lacks some of
+            # these products for some element types)
+            for (M, dM) in ((A, dA), (R, dR)), op in (all_ops ? sparse_operands(M) : [identity, adjoint])
+                x = rand(ET, size(op(M), 2))
+                y = rand(ET, size(op(M), 1))
+                @test Array(op(dM) * AT(x)) ≈ op(Matrix(M)) * x
+                dy = AT(copy(y))
+                @test mul!(dy, op(dM), AT(x), α, β) === dy
+                @test Array(dy) ≈ α * (op(Matrix(M)) * x) + β * y
+            end
+
+            # sparse × dense matrix, and dense × sparse
+            dense_ops = all_ops ? [identity, transpose, adjoint] : [identity]
+            for (M, dM) in ((A, dA), (R, dR)), op in (all_ops ? sparse_operands(M) : [identity, transpose]), dop in dense_ops
+                B = rand(ET, 4, size(op(M), 2))
+                B = dop === identity ? permutedims(B) : B   # op(M) * dop(B)
+                ref = op(Matrix(M)) * dop(B)
+                @test Array(op(dM) * dop(AT(B))) ≈ ref
+                C = rand(ET, size(ref))
+                dC = AT(copy(C))
+                mul!(dC, op(dM), dop(AT(B)), α, β)
+                @test Array(dC) ≈ α * ref + β * C
+
+                D = rand(ET, size(op(M), 1), 4)
+                D = dop === identity ? permutedims(D) : D   # dop(D) * op(M)
+                ref = dop(D) * op(Matrix(M))
+                @test Array(dop(AT(D)) * op(dM)) ≈ ref
+                @test dop(AT(D)) * op(dM) isa AT
+                C = rand(ET, size(ref))
+                dC = AT(copy(C))
+                mul!(dC, dop(AT(D)), op(dM), α, β)
+                @test Array(dC) ≈ α * ref + β * C
+            end
+            if all_ops
+                # dense Symmetric and Hermitian operands
+                B = rand(ET, 7, 7)
+                for wrap in (Symmetric, Hermitian), uplo in (:U, :L)
+                    @test Array(dA * wrap(AT(B), uplo)) ≈ A * wrap(B, uplo)
+                    @test Array(wrap(AT(B), uplo) * dA) ≈ wrap(B, uplo) * A
+                end
+            end
+
+            # with β = 0 the destination is write-only
+            if ET <: AbstractFloat
+                dy = AT(fill(ET(NaN), 7))
+                mul!(dy, dA, AT(ones(ET, 7)), true, false)
+                @test Array(dy) ≈ A * ones(ET, 7)
+                dC = AT(fill(ET(NaN), 7, 3))
+                mul!(dC, dA, AT(ones(ET, 7, 3)), true, false)
+                @test Array(dC) ≈ A * ones(ET, 7, 3)
+                dC = AT(fill(ET(NaN), 3, 7))
+                mul!(dC, AT(ones(ET, 3, 7)), dA, true, false)
+                @test Array(dC) ≈ ones(ET, 3, 7) * A
+            end
+
+            # sparse vector operands are densified
+            x = sprand_nozeros(ET, 7, 0.5)
+            dx = gpu_sparse(AT, x)
+            @test dA * dx isa AT{ET,1}
+            @test Array(dA * dx) ≈ A * Vector(x)
+            @test Array(AT(Matrix(A)) * dx) ≈ Matrix(A) * Vector(x)
+            dy = AT(ones(ET, 7))
+            mul!(dy, dA, dx, α, β)
+            @test Array(dy) ≈ α * (A * Vector(x)) + β * ones(ET, 7)
+
+            # empty operands
+            Z = spzeros(ET, 3, 0)
+            @test Array(gpu_sparse(AT, S, Z) * AT(zeros(ET, 0))) == zeros(ET, 3)
+            @test Array(gpu_sparse(AT, S, spzeros(ET, 0, 3)) * AT(ones(ET, 3))) == zeros(ET, 0)
+            @test Array(gpu_sparse(AT, S, spzeros(ET, 3, 4)) * AT(ones(ET, 4, 2))) == zeros(ET, 3, 2)
+            @test Array(AT(ones(ET, 2, 3)) * gpu_sparse(AT, S, spzeros(ET, 3, 4))) == zeros(ET, 2, 4)
+            @test_throws DimensionMismatch dR * AT(ones(ET, 7))
+        end
+
+        @testset "$T" for T in (Int, Bool)
+            A = sprand(T, 6, 5, 0.5)
+            x = rand(T, 5)
+            B = rand(T, 5, 3)
+            D = rand(T, 3, 6)
+            for S in sparse_matrix_formats
+                dA = gpu_sparse(AT, S, A)
+                @test Array(dA * AT(x)) == A * x
+                @test Array(transpose(dA) * AT(rand(T, 6))) isa Vector
+                @test Array(dA * AT(B)) == A * B
+                @test Array(AT(D) * dA) == D * A
+            end
+        end
+
+        # Float16 products accumulate in Float32
+        if Float16 in eltypes
+            A = sprand(Float16, 50, 200, 0.5)
+            x = rand(Float16, 200)
+            ref = Float16.(Float32.(A) * Float32.(x))
+            for S in sparse_matrix_formats
+                @test Array(gpu_sparse(AT, S, A) * AT(x)) == ref
+            end
         end
     end
 end
