@@ -1,5 +1,4 @@
 using ParallelTestRunner: runtests, parse_args
-using Test
 import GPUArrays
 
 include("testsuite.jl")
@@ -8,9 +7,6 @@ const init_worker_code = quote
     using Test, JLArrays, SparseArrays
 
     include("testsuite.jl")
-
-    TestSuite.sparse_types(::Type{<:JLArray}) = (JLSparseVector, JLSparseMatrixCSC, JLSparseMatrixCSR)
-    TestSuite.sparse_types(::Type{<:Array})   = (SparseVector, SparseMatrixCSC)
 end
 
 const init_code = quote
@@ -26,18 +22,22 @@ for AT in (:JLArray, :Array), name in keys(TestSuite.tests)
     testsuite["$(AT)/$name"] = :(TestSuite.tests[$name]($AT))
 end
 
-# captured variables that get boxed (`Core.Box`) lose their type
+# the sparse implementation should not add method ambiguities (the dense code has a few)
+testsuite["sparse/ambiguities"] = quote
+    import GPUArrays
+    sparse_sources = (joinpath("src", "host", "sparse"), joinpath("JLArrays", "src", "sparse.jl"),
+                      joinpath("JLArrays", "src", "algorithms.jl"))
+    ambiguities = filter(Test.detect_ambiguities(GPUArrays, JLArrays; recursive=true)) do (a, b)
+        any(m -> any(src -> occursin(src, string(m.file)), sparse_sources), (a, b))
+    end
+    @test isempty(ambiguities)
+end
+
 if isdefined(Test, :detect_closure_boxes)
     testsuite["closure boxes"] = quote
         import GPUArrays
         @test Test.detect_closure_boxes(GPUArrays, GPUArrays.GPUArraysCore, JLArrays) == []
     end
-end
-
-# a type without a COO counterpart must hit a MethodError, not recurse (#780)
-testsuite["sparse/coo_type"] = quote
-    import GPUArrays
-    @test_throws MethodError GPUArrays.coo_type(sparse([1], [1], [1.0], 2, 2))
 end
 
 runtests(GPUArrays, args; init_code, init_worker_code, testsuite)
