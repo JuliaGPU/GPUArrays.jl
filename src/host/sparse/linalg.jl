@@ -298,3 +298,159 @@ function Base.:(*)(A::Union{AnyGPUMatrix,GPUSparseMatrixOperand}, x::GPUSparseVe
     T = Base.promote_op(LinearAlgebra.matprod, eltype(A), eltype(x))
     return mul!(similar(x.nzVal, T, size(A, 1)), A, x)
 end
+
+
+## sparse × sparse
+
+## COV_EXCL_START
+# the number of products every stored entry `A[i, l]` contributes: the length of row `l`
+# of `B`
+@kernel function spgemm_counts_kernel(counts, Aind, Bptr)
+    e = @index(Global, Linear)
+    if e <= length(counts)
+        l = @inbounds Aind[e]
+        @inbounds counts[e] = Int64(Bptr[l+1]) - Int64(Bptr[l])
+    end
+end
+
+# every thread computes one product `A[i, l] * B[l, j]`, finding its entry of `A` by binary
+# search over the running total of the counts
+@kernel function spgemm_expand_kernel(I, J, V, offsets, Arow, Aind, Aval, Bptr, Bind, Bval)
+    p = @index(Global, Linear)
+    if p <= length(I)
+        e = searchsortedfirst(offsets, Int64(p))
+        q = p - (e == 1 ? 0 : @inbounds(offsets[e-1]))
+        l = @inbounds Aind[e]
+        k = @inbounds(Bptr[l]) + q - 1
+        @inbounds I[p] = Arow[e]
+        @inbounds J[p] = Bind[k]
+        @inbounds V[p] = convert(eltype(V), Aval[e]) * convert(eltype(V), Bval[k])
+    end
+end
+## COV_EXCL_STOP
+
+"""
+    GPUArrays.generic_spgemm(A, B)
+
+The product of two sparse matrices, in the format of `A`, computed on the device by
+expansion, sorting and compression (ESC): every product of a stored entry of `A` with one
+of `B` is materialized, then the products are summed per coordinate as in
+`sparse(I, J, V, m, n, +)`. The memory needed grows with the number of products. The
+generic implementation behind `A * B`; hash-based accumulation with atomic insertion would
+avoid materializing all products.
+"""
+function generic_spgemm(A::GPUSparseMatrix, B::GPUSparseMatrix)
+    size(A, 2) == size(B, 1) ||
+        throw(DimensionMismatch("A has dimensions $(size(A)), B has dimensions $(size(B))"))
+    m, n = size(A, 1), size(B, 2)
+    T = Base.promote_op(LinearAlgebra.matprod, eltype(A), eltype(B))
+    Ti = promote_type(indtype(A), indtype(B))
+    Aptr, Aind, Aval = csr_operand(A, 'N')
+    Bptr, Bind, Bval = csr_operand(B, 'N')
+    Arow = expand_ptr(Aptr, length(Aval))
+
+    counts = similar(Aval, Int64, length(Aval))
+    if !isempty(counts)
+        spgemm_counts_kernel(get_backend(counts))(counts, Aind, Bptr; ndrange=length(counts))
+    end
+    offsets = accumulate(+, counts)
+    free_buffer!(counts)
+    total = isempty(offsets) ? 0 : Int(@allowscalar offsets[end])
+
+    I = similar(Aind, Ti, total)
+    J = similar(Aind, Ti, total)
+    V = similar(Aval, product_accumulator(eltype(A), eltype(B)), total)
+    if total > 0
+        spgemm_expand_kernel(get_backend(V))(I, J, V, offsets, Arow, Aind, Aval, Bptr, Bind,
+                                             Bval; ndrange=total)
+    end
+    free_buffer!(offsets)
+    free_buffer!(Arow)
+    fmt = A isa GPUSparseMatrixCSC ? :csc : A isa GPUSparseMatrixCSR ? :csr : :coo
+    C = assemble_matrix(I, J, V, m, n, +, fmt)
+    return eltype(C) == T ? C : with_eltypes(C, T, Ti)
+end
+
+# a sparse operand without a lazy wrapper
+function materialize(S::Symmetric{<:Any,<:GPUSparseMatrix})
+    A = parent(S)
+    T = S.uplo == 'U' ? triu(A) : tril(A)
+    strict = S.uplo == 'U' ? triu(A, 1) : tril(A, -1)
+    return T .+ copy(transpose(strict))
+end
+function materialize(H::Hermitian{<:Any,<:GPUSparseMatrix})
+    A = parent(H)
+    strict = H.uplo == 'U' ? triu(A, 1) : tril(A, -1)
+    return strict .+ copy(adjoint(strict)) .+ real.(band(A, 0, 0))
+end
+
+Base.:(*)(A::GPUSparseMatrixOperand, B::GPUSparseMatrixOperand) =
+    generic_spgemm(materialize(A), materialize(B))
+
+"""
+    GPUArrays.generic_spgemm!(C, tA, tB, A, B, α, β)
+
+Compute `C = α op(A) op(B) + β C` for sparse matrices, where `C` gets the union of the
+structures of both terms (that of the product if `β` is zero). The buffers of `C` are
+resized, so `C` must not share them with another array. The generic implementation behind
+the sparse-output `mul!`.
+"""
+function generic_spgemm!(C::GPUSparseMatrix, tA::AbstractChar, tB::AbstractChar,
+                         A::GPUSparseMatrix, B::GPUSparseMatrix, α::Number, β::Number)
+    P = generic_spgemm(materialize(LinearAlgebra.wrap(A, tA)),
+                       materialize(LinearAlgebra.wrap(B, tB)))
+    size(P) == size(C) ||
+        throw(DimensionMismatch("C has dimensions $(size(C)), needs $(size(P))"))
+    R = iszero(β) ? α .* P : α .* P .+ β .* C
+    return copyto!(C, convert(matrix_format(C), R))
+end
+
+LinearAlgebra.mul!(C::GPUSparseMatrix, tA::AbstractChar, tB::AbstractChar,
+                   A::GPUSparseMatrix, B::GPUSparseMatrix, α::Number, β::Number) =
+    generic_spgemm!(C, tA, tB, A, B, α, β)
+@static if VERSION < v"1.13.0-rc4"
+    LinearAlgebra.generic_matmatmul!(C::GPUSparseMatrix, tA::AbstractChar, tB::AbstractChar,
+                                     A::GPUSparseMatrix, B::GPUSparseMatrix, a::Number, b::Number) =
+        LinearAlgebra.mul!(C, tA, tB, A, B, a, b)
+    LinearAlgebra.generic_matmatmul!(C::GPUSparseMatrix, tA::AbstractChar, tB::AbstractChar,
+                                     A::GPUSparseMatrix, B::GPUSparseMatrix,
+                                     _add::MulAddMul=MulAddMul()) =
+        LinearAlgebra.mul!(C, tA, tB, A, B, _add.alpha, _add.beta)
+end
+
+
+## matrix exponential
+
+"""
+    exp(A::GPUSparseMatrix; threshold=1e-7, nonzero_tol=1e-14)
+
+The matrix exponential of a square sparse matrix, by scaling and squaring a truncated
+Taylor series, dropping entries below `nonzero_tol` as it goes. The series is truncated
+when a term's largest magnitude falls below `threshold`.
+"""
+function LinearAlgebra.exp(A::GPUSparseMatrix; threshold=1e-7, nonzero_tol=1e-14)
+    n = LinearAlgebra.checksquare(A)
+    A = float(A)
+    T = eltype(A)
+    # scale A to norm at most 1 by a power of two
+    scaling = max(one(real(T)), nextpow(2, max(norm(A, Inf), floatmin(real(T)))))
+    A = A ./ T(scaling)
+    Id = spdiagm(0 => fill!(similar(nonzeros(A), n), one(T)))
+    P = convert(matrix_format(A), Id)
+    term = P
+    k = 1
+    while true
+        term = (T(1 / k) * A) * term
+        droptol!(term, nonzero_tol)
+        P = P + term
+        norm(term, Inf) > threshold || break
+        k += 1
+    end
+    for _ in 1:Int(log2(scaling))
+        P = P * P
+        if nnz(P) / length(P) < 0.25
+            droptol!(P, nonzero_tol)
+        end
+    end
+    return P
+end
