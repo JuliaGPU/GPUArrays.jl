@@ -898,71 +898,65 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
     kernel(args...; ndrange)
     return output
 end
+# `op` folded over `n ≥ 1` copies of `x`, as the implicit zeros of a sparse array contribute
+# to a reduction: by repeated squaring for an associative `op` (e.g. `n * x` for `+`), and a
+# single `x` for idempotent ones.
+@inline function _fold_repeated(op, x, n::Integer)
+    _isidempotent(op) && return x
+    result = x
+    power = x
+    n -= one(n)
+    while n > 0
+        if isodd(n)
+            result = op(result, power)
+        end
+        power = op(power, power)
+        n >>= 1
+    end
+    return result
+end
+_isidempotent(op) = false
+_isidempotent(::Union{typeof(max), typeof(min), typeof(|), typeof(&)}) = true
+
 ## COV_EXCL_START
-@kernel function csr_reduce_kernel(f::F, op::OP, neutral, zeros_preserved::Bool, output::DenseArray, args...) where {F, OP}
-    # every thread processes an entire row
-    row = @index(Global, Linear)
-    if row ≤ size(output, 1)
-        iter = @inbounds CSRIterator{Int}(row, args...)
-
-        val = op(neutral, neutral)
-
-        # reduce the values for this row
-        for (col, ptrs) in iter
-            I = CartesianIndex(row, col)
-            vals = ntuple(Val(length(args))) do i
-                arg = @inbounds args[i]
-                ptr = @inbounds ptrs[i]
-                _getindex(arg, I, ptr)
-            end
-            val = op(val, f(vals...))
+# reduce the stored values `nzVal[first_ptr:last_ptr]` of a slice that also contains
+# `nzeros` implicit zeros, and has at least one element. As in SparseArrays, the stored
+# values are reduced first and the implicit zeros folded in afterwards, so `op` is assumed
+# to be commutative as well as associative.
+@inline function _reduce_slice(f, op, ::Type{T}, nzVal, first_ptr, last_ptr, nzeros) where {T}
+    if first_ptr <= last_ptr
+        val = convert(T, f(@inbounds nzVal[first_ptr]))
+        for ptr in first_ptr+one(first_ptr):last_ptr
+            val = convert(T, op(val, f(@inbounds nzVal[ptr])))
         end
-        if !zeros_preserved
-            f_zero_val   = f(zero(neutral))
-            next_row_ind = row+1
-            nzs_this_row = ntuple(Val(length(args))) do i
-                max_n_zeros = size(args[i], 2)
-                arg_row_ptr = args[i].rowPtr
-                nz_this_row = max_n_zeros - (@inbounds(arg_row_ptr[next_row_ind]) - @inbounds(arg_row_ptr[row]))
-                nz_this_row * f_zero_val
-            end
-            val = op(val, nzs_this_row...)
+        if nzeros > 0
+            val = convert(T, op(val, _fold_repeated(op, convert(T, f(zero(eltype(nzVal)))), nzeros)))
         end
-
-        @inbounds output[row] = val
+        val
+    else
+        _fold_repeated(op, convert(T, f(zero(eltype(nzVal)))), nzeros)
     end
 end
 
-@kernel function csc_reduce_kernel(f::F, op::OP, neutral, zeros_preserved::Bool, output::DenseArray, args...) where {F, OP}
+@kernel function csr_reduce_kernel(f::F, op::OP, output::AbstractArray{T}, A) where {F, OP, T}
+    # every thread processes an entire row
+    row = @index(Global, Linear)
+    if row ≤ size(A, 1)
+        first_ptr = @inbounds A.rowPtr[row]
+        last_ptr = @inbounds A.rowPtr[row+1] - one(first_ptr)
+        nzeros = size(A, 2) - (last_ptr - first_ptr + 1)
+        @inbounds output[row] = _reduce_slice(f, op, T, A.nzVal, first_ptr, last_ptr, nzeros)
+    end
+end
+
+@kernel function csc_reduce_kernel(f::F, op::OP, output::AbstractArray{T}, A) where {F, OP, T}
     # every thread processes an entire column
     col = @index(Global, Linear)
-    if col ≤ size(output, 2)
-        iter = @inbounds CSCIterator{Int}(col, args...)
-
-        val = op(neutral, neutral)
-
-        # reduce the values for this col
-        for (row, ptrs) in iter
-            I = CartesianIndex(row, col)
-            vals = ntuple(Val(length(args))) do i
-                arg = @inbounds args[i]
-                ptr = @inbounds ptrs[i]
-                _getindex(arg, I, ptr)
-            end
-            val = op(val, f(vals...))
-        end
-        if !zeros_preserved
-            f_zero_val   = f(zero(neutral))
-            next_col_ind = col+1
-            nzs_this_col = ntuple(Val(length(args))) do i
-                max_n_zeros = size(args[i], 1)
-                arg_col_ptr = args[i].colPtr
-                nz_this_col = max_n_zeros - (@inbounds(arg_col_ptr[next_col_ind]) - @inbounds(arg_col_ptr[col]))
-                nz_this_col * f_zero_val
-            end
-            val = op(val, nzs_this_col...)
-        end
-        @inbounds output[col] = val
+    if col ≤ size(A, 2)
+        first_ptr = @inbounds A.colPtr[col]
+        last_ptr = @inbounds A.colPtr[col+1] - one(first_ptr)
+        nzeros = size(A, 1) - (last_ptr - first_ptr + 1)
+        @inbounds output[col] = _reduce_slice(f, op, T, A.nzVal, first_ptr, last_ptr, nzeros)
     end
 end
 ## COV_EXCL_STOP
@@ -971,49 +965,53 @@ csc_type(A::AbstractGPUSparseMatrix) = csc_type(typeof(A))
 csr_type(A::AbstractGPUSparseMatrix) = csr_type(typeof(A))
 
 # TODO: implement mapreducedim!
-function Base.mapreduce(f, op, A::AbstractGPUSparseMatrix; dims=:, init=nothing)
-    # figure out the destination container type by looking at the initializer element,
-    # or by relying on inference to reason through the map and reduce functions
-    if init === nothing
-        ET = Broadcast.combine_eltypes(f, (A,))
-        ET = Base.promote_op(op, ET, ET)
-        (ET === Union{} || ET === Any) &&
-            error("mapreduce cannot figure the output element type, please pass an explicit init value")
-
-        init = zero(ET)
-    else
-        ET = typeof(init)
-    end
-
-    f_preserves_zeros = ( f(zero(ET)) == zero(ET) )
-    # we only handle reducing along one of the two dimensions,
-    # or a complete reduction (requiring an additional pass)
+function Base.mapreduce(f, op, A::AbstractGPUSparseMatrix{Tv}; dims=:, init=nothing) where {Tv}
     in(dims, [Colon(), 1, 2]) || error("only dims=:, dims=1 or dims=2 is supported")
+
+    # every slice reduction `r` becomes `op(init, r)`; empty slices give `init`, or the
+    # reduction of an empty collection as in Base
+    empty_result() = init === nothing ? Base.mapreduce_empty(f, op, Tv) : init
+
+    # figure out the destination element type by relying on inference to reason through
+    # the map and reduce functions, or by looking at the initializer
+    ET = Broadcast.combine_eltypes(f, (A,))
+    ET = Base.promote_op(op, ET, ET)
+    if init !== nothing
+        ET = Base.promote_op(op, typeof(init), ET)
+    end
+    (ET === Union{} || ET === Any) &&
+        error("mapreduce cannot figure the output element type, please pass an explicit init value")
+
+    if dims == Colon()
+        # reduce the stored values, then fold in the implicit zeros
+        length(A) == 0 && return empty_result()
+        nzeros = length(A) - nnz(A)
+        zeros = nzeros > 0 ? _fold_repeated(op, convert(ET, f(zero(Tv))), nzeros) : nothing
+        if nnz(A) > 0
+            stored = init === nothing ? mapreduce(f, op, nonzeros(A)) :
+                                        mapreduce(f, op, nonzeros(A); init)
+            return zeros === nothing ? stored : op(stored, zeros)
+        else
+            return init === nothing ? zeros : op(init, zeros)
+        end
+    end
 
     if A isa AbstractGPUSparseMatrixCSR && dims == 1
         A = csc_type(A)(A)
     elseif A isa AbstractGPUSparseMatrixCSC && dims == 2
         A = csr_type(A)(A)
     end
-    m, n      = size(A)
-    val_array = nonzeros(A)
-    backend   = get_backend(A)
-    output_dim = 0
-    ndrange    = 0
-    if A isa AbstractGPUSparseMatrixCSR
-        output_dim = m
-        ndrange = m
-        kernel = csr_reduce_kernel(backend)
-    elseif A isa AbstractGPUSparseMatrixCSC
-        output_dim = (1, n)
-        ndrange = n
-        kernel = csc_reduce_kernel(backend)
+    m, n = size(A)
+    output = similar(nonzeros(A), ET, dims == 1 ? (1, n) : (m, 1))
+    isempty(output) && return output
+    if size(A, dims) == 0
+        return fill!(output, empty_result())
     end
-    output = similar(val_array, ET, output_dim)
-    kernel(f, op, init, f_preserves_zeros, output, A; ndrange = ndrange)
-    if dims == Colon()
-        return mapreduce(identity, op, output; init)
-    else
-        return output
+    kernel = A isa AbstractGPUSparseMatrixCSR ? csr_reduce_kernel(get_backend(A)) :
+                                                csc_reduce_kernel(get_backend(A))
+    kernel(f, op, output, A; ndrange=length(output))
+    if init !== nothing
+        output .= op.(init, output)
     end
+    return output
 end

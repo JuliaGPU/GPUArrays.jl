@@ -334,6 +334,10 @@ function broadcasting_matrix(AT, eltypes)
     end
 end
 
+# the result of a reduction on the host, whether it is a scalar or an array
+reduced(x::Number) = x
+reduced(x::AbstractArray) = Array(x)
+
 function mapreduce_matrix(AT, eltypes)
     dense_AT = GPUArrays.dense_array_type(AT)
     @testset "SparseMatrix mapreduce" begin
@@ -383,6 +387,61 @@ function mapreduce_matrix(AT, eltypes)
             y  = mapreduce(abs, max, x)
             dy = mapreduce(abs, max, dx)
             @test y ≈ dy
+
+            # result shapes follow Base
+            @test size(sum(dx; dims=1)) == (1, n)
+            @test size(sum(dx; dims=2)) == (m, 1)
+
+            # functions that don't preserve zeros, with operators other than `+`
+            o = one(ET)
+            x  = sprand_nozeros(ET, m, n, p)
+            dx = AT(x)
+            for dims in (:, 1, 2)
+                @test mapreduce(v -> v + o, *, x; dims) ≈ reduced(mapreduce(v -> v + o, *, dx; dims))
+                if ET <: Real
+                    @test mapreduce(v -> v + o, max, x; dims) ≈ reduced(mapreduce(v -> v + o, max, dx; dims))
+                    @test mapreduce(v -> v - o, min, x; dims) ≈ reduced(mapreduce(v -> v - o, min, dx; dims))
+                end
+                @test mapreduce(v -> v + o, +, x; dims, init=zero(ET)) ≈ reduced(mapreduce(v -> v + o, +, dx; dims, init=zero(ET)))
+                @test mapreduce(v -> v + o, *, x; dims, init=o) ≈ reduced(mapreduce(v -> v + o, *, dx; dims, init=o))
+            end
+            # an operator without a known neutral element, relying on `init`
+            @test mapreduce(identity, (a, b) -> a + b, dx; init=zero(ET)) ≈ mapreduce(identity, (a, b) -> a + b, x; init=zero(ET))
+            y = sparse([1, 2], [1, 3], ET[1, 2], 3, 3)
+            dy = AT(y)
+            @test mapreduce(v -> v + o, +, dy) == mapreduce(v -> v + o, +, y)
+            @test mapreduce(v -> v + o, *, dy) == mapreduce(v -> v + o, *, y)
+            if ET <: Real
+                @test mapreduce(v -> v + o, max, dy) == mapreduce(v -> v + o, max, y)
+            end
+
+            # the stored values of a row or column don't start from zero
+            if ET <: Real && !(ET <: Unsigned)
+                x  = sparse(-rand(ET(1):ET(10), m, n))
+                dx = AT(x)
+                @test nnz(dx) == m * n
+                for dims in (:, 1, 2)
+                    @test maximum(x; dims) == reduced(maximum(dx; dims))
+                    @test minimum(-x; dims) == reduced(minimum(-dx; dims))
+                end
+                # the same with some implicit zeros
+                x[1, :] .= 0
+                dropzeros!(x)
+                dx = AT(x)
+                for dims in (:, 1, 2)
+                    @test maximum(x; dims) == reduced(maximum(dx; dims))
+                end
+            end
+
+            # empty dimensions
+            for (k, l) in ((0, n), (m, 0), (0, 0))
+                x  = spzeros(ET, k, l)
+                dx = AT(x)
+                @test sum(dx) == sum(x)
+                @test collect(sum(dx; dims=1)) == sum(x; dims=1)
+                @test collect(sum(dx; dims=2)) == sum(x; dims=2)
+                @test collect(mapreduce(abs, +, dx; dims=1, init=zero(real(ET)))) == mapreduce(abs, +, x; dims=1, init=zero(real(ET)))
+            end
         end
     end
 end
