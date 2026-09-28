@@ -132,6 +132,9 @@ function broadcasting(AT, eltypes)
             @test compare(A -> A .* ET(10), AT, rand(ET, 40, 40))
             @test compare((A, B) -> A .* B, AT, rand(ET, 40, 40), rand(ET, 40, 40))
             @test compare((A, B) -> A .* B .+ ET(10), AT, rand(ET, 40, 40), rand(ET, 40, 40))
+
+            # broadcasting a type, which isn't a valid kernel argument by itself
+            @test compare(A -> ET.(A), AT, rand(ET, 2, 3))
         end
 
         @testset "map! $ET" begin
