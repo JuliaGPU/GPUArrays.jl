@@ -112,7 +112,7 @@ end
 Base.copy(A::Transpose{<:Any, <:AbstractGPUSparseMatrix}) = _sptranspose(parent(A))
 Base.copy(A::Adjoint{<:Any, <:AbstractGPUSparseMatrix}) = _spadjoint(parent(A))
 
-function Base.permutedims(A::AbstractGPUSparseMatrix, (a, b)::Tuple{Int,Int})
+function Base.permutedims(A::AbstractGPUSparseMatrix, (a, b))
     (a, b) == (2, 1) && return _sptranspose(A)
     (a, b) == (1, 2) && return copy(A)
     throw(ArgumentError("no valid permutation of dimensions"))

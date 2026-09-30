@@ -402,6 +402,7 @@ function transpose_matrix(AT, eltypes)
             @test collect(copy(adjoint(d_x)))       == collect(adjoint(x))
             @test collect(permutedims(d_x, (2, 1))) == collect(permutedims(x, (2, 1)))
             @test collect(permutedims(d_x, (1, 2))) == collect(x)
+            @test collect(permutedims(d_x, [2, 1])) == collect(permutedims(x, [2, 1]))
 
             # the result has to stay on the device, in the format of the input
             @test copy(transpose(d_x))     isa AT
