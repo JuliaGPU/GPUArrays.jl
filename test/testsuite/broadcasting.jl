@@ -136,6 +136,21 @@ function broadcasting(AT, eltypes)
 
             # broadcasting a type, which isn't a valid kernel argument by itself
             @test compare(A -> ET.(A), AT, rand(ET, 2, 3))
+
+            # `+` and `-` require matching shapes and do not broadcast, even when back-ends
+            # implement them with a library call (e.g., CUBLAS geam; see CUDA.jl#2812)
+            @testset "mismatched sizes" begin
+                a = AT(rand(ET, 10, 1))
+                b = AT(rand(ET, 3, 1))
+                c = AT(rand(ET, 10, 3))
+                @test_throws DimensionMismatch a + b
+                @test_throws DimensionMismatch b + a
+                @test_throws DimensionMismatch a - b
+                @test_throws DimensionMismatch a + c
+                @test_throws DimensionMismatch c - a
+                @test_throws DimensionMismatch a .+ b
+                @test compare((x, y) -> x .+ y, AT, rand(ET, 10, 1), rand(ET, 10, 3))
+            end
         end
 
         @testset "map! $ET" begin
