@@ -114,6 +114,18 @@
             @test A isa AT{T,1}
             @test Array(A) == fill(b, 3)
 
+            A = AT(rand(T, 3))
+            fill!(A, big(1))
+            @test Array(A) == fill(one(T), 3)
+
+            A = AT(rand(T, 3))
+            if real(T) <: Integer
+                @test_throws InexactError fill!(A, 1.5)
+            else
+                fill!(A, 1.5)
+                @test Array(A) == fill(T(1.5), 3)
+            end
+
             A = zero(AT(rand(T, 2)))
             @test A isa AT{T,1}
             @test Array(A) == zero(rand(T, 2))

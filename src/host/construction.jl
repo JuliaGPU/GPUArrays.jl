@@ -29,7 +29,7 @@ function Base.fill!(A::AnyGPUArray{T}, x) where T
     len = length(A)
     ndrange = cld(len, cld(len, typemax(UInt32) - 1024))
 
-    kernel(A, x; ndrange)
+    kernel(A, convert(T, x); ndrange)
     A
 end
 
