@@ -101,6 +101,15 @@ function unsafe_free!(ref::DataRef)
     return
 end
 
+# `copy(::DataRef)` shares `rc`. Views and reshapes are built that way, so
+# alias detection has to key off the shared record rather than the wrapper.
+Base.dataids(ref::DataRef) = (objectid(ref.rc),)
+
+function Base.dataids(A::AbstractGPUArray)
+    ids = Base.dataids(storage(A))
+    isempty(ids) ? (objectid(A),) : ids
+end
+
 # array methods
 
 storage(x::AbstractGPUArray) = error("Not implemented") # COV_EXCL_LINE
