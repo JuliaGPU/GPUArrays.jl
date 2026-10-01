@@ -20,19 +20,6 @@ Base.mapreducedim!(f, op, R::AnyGPUArray, A::AbstractArray) =
 Base.mapreducedim!(f, op, R::AnyGPUArray, A::Broadcast.Broadcasted) =
     _ak_mapreducedim!(f, op, R, A; backend=get_backend(R))
 
-# GPUArrays used to route its reductions through this function, which back-ends overrode. It is
-# no longer called, and kept (with AcceleratedKernels' implementation: `init` is applied once,
-# else `R` is folded into) only so that back-ends that still extend it keep loading.
-function mapreducedim!(f, op, R::AnyGPUArray, A::AbstractArrayOrBroadcasted; init=nothing)
-    backend = get_backend(R)
-    if init === nothing
-        _ak_mapreducedim!(f, op, R, A; backend)
-    else
-        _ak_mapreducedim!(f, op, R, A; backend, init)
-    end
-    return R
-end
-
 # `neutral_element` lives in GPUArraysCore, so that packages building on GPUArraysCore share it
 import GPUArraysCore: neutral_element
 
