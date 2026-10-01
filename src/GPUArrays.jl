@@ -10,7 +10,7 @@ using LinearAlgebra.BLAS
 using Base.Cartesian
 
 using Adapt
-using LLVM.Interop
+using LLVM.Interop: assume
 
 using Reexport
 @reexport using GPUArraysCore
