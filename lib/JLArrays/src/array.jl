@@ -44,6 +44,20 @@ mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
 end
 
 GPUArrays.storage(a::JLArray) = a.data
+
+## alias detection
+
+# Keep the shared allocation's dataids for conservative alias detection involving
+# wrappers, but distinguish disjoint byte ranges for dense arrays, as CUDA does.
+function Base.mightalias(A::JLArray, B::JLArray)
+    nA, nB = sizeof(A), sizeof(B)
+    (iszero(nA) || iszero(nB)) && return false
+    GC.@preserve A B begin
+        pA, pB = UInt(pointer(A)), UInt(pointer(B))
+        return pA <= pB < pA + nA || pB <= pA < pB + nB
+    end
+end
+
 GPUArrays.dense_array_type(a::JLArray{T, N}) where {T, N} = JLArray{T, N}
 GPUArrays.dense_array_type(::Type{JLArray{T, N}}) where {T, N} = JLArray{T, N}
 GPUArrays.dense_vector_type(a::JLArray{T, N}) where {T, N} = JLArray{T, 1}
