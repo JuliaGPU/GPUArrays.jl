@@ -47,8 +47,9 @@ GPUArrays.storage(a::JLArray) = a.data
 
 ## alias detection
 
-# Keep the shared allocation's dataids for conservative alias detection involving
-# wrappers, but distinguish disjoint byte ranges for dense arrays, as CUDA does.
+# Byte-range overlap follows CUDA's Base.mightalias(::CuArray, ::CuArray):
+# https://github.com/JuliaGPU/CUDA.jl/blob/main/CUDACore/src/array.jl#L113-L116
+# Keep shared-allocation dataids for conservative alias detection involving wrappers.
 function Base.mightalias(A::JLArray, B::JLArray)
     nA, nB = sizeof(A), sizeof(B)
     (iszero(nA) || iszero(nB)) && return false
