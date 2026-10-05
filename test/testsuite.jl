@@ -125,6 +125,7 @@ end
 include("testsuite/construction.jl")
 include("testsuite/indexing.jl")
 include("testsuite/base.jl")
+include("testsuite/aliasing.jl")
 include("testsuite/vector.jl")
 include("testsuite/reductions.jl")
 include("testsuite/sorting.jl")

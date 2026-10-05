@@ -21,7 +21,6 @@ end
 args = parse_args(ARGS)
 
 testsuite = Dict{String, Expr}()
-testsuite["JLArray/aliasing"] = :(include($(joinpath(@__DIR__, "jlarrays", "aliasing.jl"))))
 for AT in (:JLArray, :Array), name in keys(TestSuite.tests)
     testsuite["$(AT)/$name"] = :(TestSuite.tests[$name]($AT))
 end
