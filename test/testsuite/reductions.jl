@@ -41,7 +41,9 @@ end
             @test compare((A,R)->Base.mapreducedim!(abs2, +, R, A), AT, rand(range, (3,2,10)), t(zeros(ET, (2,3))))
             # ... and from them (LinearAlgebra has methods for these sources)
             @test compare((A,R)->Base.mapreducedim!(identity, +, R, t(A)), AT, rand(range, (3,4)), zeros(ET, (4,)))
-            @test compare((A,R)->Base.mapreducedim!(abs2, max, R, t(A)), AT, rand(range, (3,4)), zeros(real(ET), (1,3)))
+            # (small values: Intel's compiler gets `abs2` of an overflowing `Complex{Int16}` wrong)
+            small = ET <: Complex ? ET.(complex.(rand(-9:9, 3, 4), rand(-9:9, 3, 4))) : rand(range, (3,4))
+            @test compare((A,R)->Base.mapreducedim!(abs2, max, R, t(A)), AT, small, zeros(real(ET), (1,3)))
             @test compare((A,R)->Base.mapreducedim!(identity, *, R, t(A)), AT, rand(range, (3,4)), ones(ET, (4,)))
 
             # TODO: reenable once https://github.com/JuliaGPU/Metal.jl/issues/907 is fixed
