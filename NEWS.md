@@ -23,7 +23,7 @@ errors.
 - `GPUArrays.default_rng` and the deprecated `RNG(state::AbstractGPUArray)` and
   `seed!(rng, ::Vector{UInt32})` methods are removed. Construct the RNG with `RNG{AT}()`
   and seed it with an integer.
-- KernelAbstractions 0.9.43 or later and Adapt 4.7.2 or later are required.
+- KernelAbstractions 0.9.43 or later and Adapt 4.7.3 or later are required.
 
 *What back-ends should delete*:
 
