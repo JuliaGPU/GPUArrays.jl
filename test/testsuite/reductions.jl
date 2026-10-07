@@ -50,6 +50,12 @@ end
             A, R = AT(rand(range, (3,2,10))), t(AT(zeros(ET, (2,3))))
             @test Base.mapreducedim!(identity, *, R, A) === R
         end
+
+        # ... and from permuted arrays (Base has methods for these sources)
+        p(A) = PermutedDimsArray(A, (3, 1, 2))
+        @test compare((A,R)->Base.mapreducedim!(identity, +, R, p(A)), AT, rand(range, (3,2,4)), zeros(ET, (4,1,1)))
+        ET <: Real && @test compare((A,R)->Base.mapreducedim!(identity, max, R, p(A)), AT, rand(range, (3,2,4)), fill(typemin(ET), (1,3,1)))
+        @test compare((A,R)->Base.mapreducedim!(identity, *, R, p(A)), AT, rand(range, (3,2,4)), ones(ET, (4,1,2)))
     end
 end
 

@@ -19,15 +19,18 @@ Base.mapreducedim!(f, op, R::AnyGPUArray, A::AbstractArray) =
     _ak_mapreducedim!(f, op, R, A; backend=get_backend(R))
 Base.mapreducedim!(f, op, R::AnyGPUArray, A::Broadcast.Broadcasted) =
     _ak_mapreducedim!(f, op, R, A; backend=get_backend(R))
-# (LinearAlgebra's methods for adjoint and transposed matrices are ambiguous with these)
-for W in (:Adjoint, :Transpose)
+# (LinearAlgebra's methods for adjoint and transposed matrices, and Base's for permuted
+# arrays, are ambiguous with these)
+for (W, Wnum) in ((:(Adjoint{<:Any, <:AbstractMatrix}), :(Adjoint{<:Union{Real, Complex}, <:AbstractMatrix})),
+                  (:(Transpose{<:Any, <:AbstractMatrix}), :(Transpose{<:Union{Real, Complex}, <:AbstractMatrix})),
+                  (:PermutedDimsArray, :(PermutedDimsArray{<:Union{Real, Complex}})))
     @eval begin
         Base.mapreducedim!(f, op::Union{typeof(&), typeof(|), typeof(+), typeof(Base.add_sum),
                                         typeof(max), typeof(min), typeof(Base._extrema_rf)},
-                           R::AnyGPUArray, A::$W{<:Any, <:AbstractMatrix}) =
+                           R::AnyGPUArray, A::$W) =
             _ak_mapreducedim!(f, op, R, A; backend=get_backend(R))
         Base.mapreducedim!(f::typeof(identity), op::Union{typeof(*), typeof(Base.mul_prod)},
-                           R::AnyGPUArray, A::$W{<:Union{Real, Complex}, <:AbstractMatrix}) =
+                           R::AnyGPUArray, A::$Wnum) =
             _ak_mapreducedim!(f, op, R, A; backend=get_backend(R))
     end
 end
