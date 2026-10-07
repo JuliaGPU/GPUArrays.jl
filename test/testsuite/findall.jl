@@ -50,8 +50,8 @@ end
         @test compare_exact((A, m) -> A[m], AT, a, m)
     end
     @test compare_exact((A, m) -> view(A, 1:5, :)[m], AT, rand(Float32, 10, 4), rand(Bool, 5, 4))
-    # ... and a mask that does not fit the array
-    for (a, m) in ((rand(Float32, 3), rand(Bool, 2)), (rand(Float32, 2, 3), rand(Bool, 3, 2)))
+    # ... and a mask that does not fit the array, though every index it selects is in bounds
+    for (a, m) in ((rand(Float32, 3), Bool[1, 0]), (rand(Float32, 2, 3), Bool[1 0; 1 0; 0 0]))
         @test compare_exact((A, m) -> A[m], AT, a, m)
         @test compare_exact(A -> A[m], AT, a)                   # (a host mask)
         @test compare_exact(A -> A[view(m, :)], AT, a)          # (a host view as the mask)

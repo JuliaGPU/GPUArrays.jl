@@ -250,17 +250,13 @@ _findall_items(A) = ndims(A) == 0 ? LinearIndices(A) : keys(A)
 # Those no longer carry the mask's shape, so a single mask is checked against the array first, as
 # Base does; a mask mixed with other indices is not (as before).
 Base.to_index(::AnyGPUArray, I::AbstractArray{Bool}) = findall(I)
-@static if VERSION >= v"1.11.0-DEV.1157"
-    Base.to_indices(A::AnyGPUArray, I::Tuple{AbstractArray{Bool}}) =
-        (checkbounds(A, I[1]); (Base.to_index(A, I[1]),))
-else
-    # (also reached for the last of several indices, whose `inds` are then not all of `A`'s)
-    _check_mask(A, inds, mask) = length(inds) == ndims(A) ? checkbounds(A, mask) : nothing
+Base.to_indices(A::AnyGPUArray, I::Tuple{AbstractArray{Bool}}) =
+    (checkbounds(A, I[1]); (Base.to_index(A, I[1]),))
+@static if VERSION < v"1.11.0-DEV.1157"
+    # Base turns a trailing mask into a `LogicalIndex`, bypassing `to_index`
     Base.to_indices(A::AnyGPUArray, inds,
                     I::Tuple{Union{Array{Bool,N}, BitArray{N}}}) where {N} =
-        (_check_mask(A, inds, I[1]); (Base.to_index(A, I[1]),))
-    Base.to_indices(A::AnyGPUArray, inds, I::Tuple{AbstractArray{Bool}}) =
-        (_check_mask(A, inds, I[1]); (Base.to_index(A, I[1]),))
+        (Base.to_index(A, I[1]),)
 end
 # ... except that a mask of the array's shape selects the values themselves, in one pass
 function Base.getindex(A::AbstractGPUArray, mask::AnyGPUArray{Bool})
