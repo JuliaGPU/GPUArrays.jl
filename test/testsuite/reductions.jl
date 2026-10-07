@@ -39,6 +39,10 @@ end
         for t in [transpose, adjoint]
             @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,2)), t(zeros(ET, (2,))))
             @test compare((A,R)->Base.mapreducedim!(abs2, +, R, A), AT, rand(range, (3,2,10)), t(zeros(ET, (2,3))))
+            # ... and from them (LinearAlgebra has methods for these sources)
+            @test compare((A,R)->Base.mapreducedim!(identity, +, R, t(A)), AT, rand(range, (3,4)), zeros(ET, (4,)))
+            @test compare((A,R)->Base.mapreducedim!(abs2, max, R, t(A)), AT, rand(range, (3,4)), zeros(real(ET), (1,3)))
+            @test compare((A,R)->Base.mapreducedim!(identity, *, R, t(A)), AT, rand(range, (3,4)), ones(ET, (4,)))
 
             # TODO: reenable once https://github.com/JuliaGPU/Metal.jl/issues/907 is fixed
             # @test compare((A,R)->sum!(abs2, R, A), AT, rand(range, (3,2,10)), t(zeros(ET, (2,3))))

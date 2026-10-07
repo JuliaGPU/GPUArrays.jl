@@ -19,6 +19,18 @@ Base.mapreducedim!(f, op, R::AnyGPUArray, A::AbstractArray) =
     _ak_mapreducedim!(f, op, R, A; backend=get_backend(R))
 Base.mapreducedim!(f, op, R::AnyGPUArray, A::Broadcast.Broadcasted) =
     _ak_mapreducedim!(f, op, R, A; backend=get_backend(R))
+# (LinearAlgebra's methods for adjoint and transposed matrices are ambiguous with these)
+for W in (:Adjoint, :Transpose)
+    @eval begin
+        Base.mapreducedim!(f, op::Union{typeof(&), typeof(|), typeof(+), typeof(Base.add_sum),
+                                        typeof(max), typeof(min), typeof(Base._extrema_rf)},
+                           R::AnyGPUArray, A::$W{<:Any, <:AbstractMatrix}) =
+            _ak_mapreducedim!(f, op, R, A; backend=get_backend(R))
+        Base.mapreducedim!(f::typeof(identity), op::Union{typeof(*), typeof(Base.mul_prod)},
+                           R::AnyGPUArray, A::$W{<:Union{Real, Complex}, <:AbstractMatrix}) =
+            _ak_mapreducedim!(f, op, R, A; backend=get_backend(R))
+    end
+end
 
 # `neutral_element` lives in GPUArraysCore, so that packages building on GPUArraysCore share it
 import GPUArraysCore: neutral_element
