@@ -22,34 +22,40 @@
         @test y == 42
     end
 
-    @allowscalar @testset "getindex with $T" for T in eltypes
-        x = rand(T, 32)
-        src = AT(x)
-        for (i, xi) in enumerate(x)
-            @test src[i] == xi
+    @allowscalar @testset "getindex" begin
+        @testset "$T" for T in eltypes
+            x = rand(T, 32)
+            src = AT(x)
+            for (i, xi) in enumerate(x)
+                @test src[i] == xi
+            end
+            @test Array(src[1:3]) == x[1:3]
+            @test Array(src[3:end]) == x[3:end]
         end
-        @test Array(src[1:3]) == x[1:3]
-        @test Array(src[3:end]) == x[3:end]
     end
 
-    @allowscalar @testset "setindex! with $T" for T in eltypes
-        x = fill(zero(T), 7)
-        src = AT(x)
-        for i = 1:7
-            src[i] = i
+    @allowscalar @testset "setindex!" begin
+        @testset "$T" for T in eltypes
+            x = fill(zero(T), 7)
+            src = AT(x)
+            for i = 1:7
+                src[i] = i
+            end
+            @test Array(src) == T[1:7;]
+            src[1:3] = T[77, 22, 11]
+            @test Array(src[1:3]) == T[77, 22, 11]
+            src[1] = T(0)
         end
-        @test Array(src) == T[1:7;]
-        src[1:3] = T[77, 22, 11]
-        @test Array(src[1:3]) == T[77, 22, 11]
-        src[1] = T(0)
     end
 
-    @allowscalar @testset "issue #42 with $T" for T in eltypes
-        Ac = rand(Float32, 2, 2)
-        A = AT(Ac)
-        @test A[1] == Ac[1]
-        @test A[end] == Ac[end]
-        @test A[1, 1] == Ac[1, 1]
+    @allowscalar @testset "issue #42" begin
+        @testset "$T" for T in eltypes
+            Ac = rand(Float32, 2, 2)
+            A = AT(Ac)
+            @test A[1] == Ac[1]
+            @test A[end] == Ac[end]
+            @test A[1, 1] == Ac[1, 1]
+        end
     end
 
     @allowscalar @testset "get/setindex!" begin
@@ -63,18 +69,22 @@
 end
 
 @testsuite "indexing multidimensional" (AT, eltypes)->begin
-    @testset "sliced setindex" for T in eltypes
-        x = AT(zeros(T, (10, 10, 10, 10)))
-        y = AT(rand(T, (5, 5, 10, 10)))
-        x[2:6, 2:6, :, :] = y
-        @test Array(x[2:6, 2:6, :, :]) == Array(y)
+    @testset "sliced setindex" begin
+        @testset "$T" for T in eltypes
+            x = AT(zeros(T, (10, 10, 10, 10)))
+            y = AT(rand(T, (5, 5, 10, 10)))
+            x[2:6, 2:6, :, :] = y
+            @test Array(x[2:6, 2:6, :, :]) == Array(y)
+        end
     end
 
-    @testset "sliced setindex, CPU source" for T in eltypes
-        x = AT(zeros(T, (2,3,4)))
-        y = AT(rand(T, (2,3)))
-        x[:, :, 2] = y
-        @test Array(x[:, :, 2]) == Array(y)
+    @testset "sliced setindex, CPU source" begin
+        @testset "$T" for T in eltypes
+            x = AT(zeros(T, (2,3,4)))
+            y = AT(rand(T, (2,3)))
+            x[:, :, 2] = y
+            @test Array(x[:, :, 2]) == Array(y)
+        end
     end
 
     @allowscalar @testset "empty array" begin
@@ -134,11 +144,13 @@ end
         end
     end
 
-    @testset "Broadcasting exceptions" for T in eltypes
-        x = AT(zeros(T, (10, 10, 10, 10)))
-        @test_throws ArgumentError x[1, :, :, :] = 0
-        y = AT(rand(T, (5, 5, 5, 5)))
-        @test_throws DimensionMismatch x[1:9,1:9,:,:] = y
+    @testset "Broadcasting exceptions" begin
+        @testset "$T" for T in eltypes
+            x = AT(zeros(T, (10, 10, 10, 10)))
+            @test_throws ArgumentError x[1, :, :, :] = 0
+            y = AT(rand(T, (5, 5, 5, 5)))
+            @test_throws DimensionMismatch x[1:9,1:9,:,:] = y
+        end
     end
 
     @testset "mismatching axes/indices" begin
@@ -156,13 +168,15 @@ end
         @test compare(a->Symmetric(a, :U)[a .> 0], AT, a)
     end
 
-    @testset "setindex! for WrapperGPUArray" for T in eltypes
-        x = AT(zeros(T, (10, 10)))'
-        y = AT(rand(T, (5, 5)))
-        x[2:6, 2:6] = y
-        @test Array(parent(x)[2:6, 2:6]) == Array(y)'
-        x[2:6, 2:6] = 1:25
-        @test Array(parent(x)[2:6, 2:6]) == reshape(1:25, 5, 5)'
+    @testset "setindex! for WrapperGPUArray" begin
+        @testset "$T" for T in eltypes
+            x = AT(zeros(T, (10, 10)))'
+            y = AT(rand(T, (5, 5)))
+            x[2:6, 2:6] = y
+            @test Array(parent(x)[2:6, 2:6]) == Array(y)'
+            x[2:6, 2:6] = 1:25
+            @test Array(parent(x)[2:6, 2:6]) == reshape(1:25, 5, 5)'
+        end
     end
 end
 
