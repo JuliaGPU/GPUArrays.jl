@@ -29,7 +29,7 @@ struct CustomBackend <: KernelAbstractions.GPU
 KernelAbstractions.get_backend(a::CA) where CA <: CustomArray = CustomBackend()
 ```
 
-There are numerous examples of potential interfaces for GPUArrays, such as with [JLArrays](https://github.com/JuliaGPU/GPUArrays.jl/blob/main/lib/JLArrays/src/JLArrays.jl), [CuArrays](https://github.com/JuliaGPU/CUDA.jl/blob/main/src/gpuarrays.jl), and [ROCArrays](https://github.com/JuliaGPU/AMDGPU.jl/blob/main/src/gpuarrays.jl).
+There are numerous examples of potential interfaces for GPUArrays, such as with [JLArrays](https://github.com/JuliaGPU/GPUArrays.jl/blob/main/lib/JLArrays/src/JLArrays.jl), [CuArrays](https://github.com/JuliaGPU/CUDA.jl/blob/main/CUDACore/src/array.jl), and [ROCArrays](https://github.com/JuliaGPU/AMDGPU.jl/blob/main/src/array.jl).
 
 ## Caching Allocator
 
