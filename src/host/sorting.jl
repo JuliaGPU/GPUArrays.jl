@@ -31,6 +31,7 @@ function Base.sort!(v::AnyGPUVector; alg=nothing, lt=isless, by=identity, rev=no
     return v
 end
 function Base.sort!(A::AnyGPUArray; dims::Integer, alg=nothing, scratch=nothing, kwargs...)
+    size(A, dims)   # Base's error for `dims < 1` (AcceleratedKernels throws an ArgumentError)
     AK.sort!(A; dims, alg=_akalg(alg), kwargs...)
     return A
 end

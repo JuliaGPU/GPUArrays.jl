@@ -63,6 +63,12 @@ end
     @test_throws UndefKeywordError sort(AT(rand(Float32, 4, 4)))
     @test_throws UndefKeywordError sort!(AT(rand(Float32, 4, 4)))
     @test_throws UndefKeywordError sortperm(AT(rand(Float32, 4, 4)))
+    # Base's errors for a `dims` out of range
+    for (f, dims) in ((sort!, 0), (sort, 0), (sort!, 3), (sortperm, 0), (sortperm, 3))
+        A = rand(Float32, 4, 4)
+        err = try f(copy(A); dims); nothing catch e; typeof(e) end
+        @test_throws err f(AT(A); dims)
+    end
 end
 
 @testsuite "sorting/sortperm" (AT, eltypes)->begin
