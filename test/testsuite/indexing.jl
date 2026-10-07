@@ -171,6 +171,12 @@ end
         # 1D
         @test compare(findfirst, AT, rand(Bool, 100))
         @test compare(x->findfirst(>(0.5f0), x), AT, rand(Float32, 100))
+        # predicates with fields, which the kernel's closure captures
+        let c = 0.5f0
+            @test compare(x->findfirst(y -> y > c, x), AT, rand(Float32, 100))
+        end
+        @test compare(x->findfirst(!isnan, x), AT, Float32[NaN, NaN, 1, NaN])
+        @test compare(x->findfirst(Base.Fix2(>, 0.5f0) ∘ abs, x), AT, rand(Float32, 100))
         @test compare(findfirst, AT, fill(false, 10))
         let x = fill(false, 10)
             @test findfirst(x) == findfirst(AT(x))
@@ -192,6 +198,12 @@ end
         # 1D
         @test compare(findlast, AT, rand(Bool, 100))
         @test compare(x->findlast(>(0.5f0), x), AT, rand(Float32, 100))
+        # predicates with fields, which the kernel's closure captures
+        let c = 0.5f0
+            @test compare(x->findlast(y -> y > c, x), AT, rand(Float32, 100))
+        end
+        @test compare(x->findlast(!isnan, x), AT, Float32[NaN, NaN, 1, NaN])
+        @test compare(x->findlast(Base.Fix2(>, 0.5f0) ∘ abs, x), AT, rand(Float32, 100))
         let x = fill(false, 10)
             @test findlast(x) == findlast(AT(x))
         end
