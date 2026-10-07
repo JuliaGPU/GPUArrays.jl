@@ -85,14 +85,17 @@ jobs:
                     println("--- :julia: Installing OpenCL.jl")
                     withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
                             "JULIA_PKG_DEVDIR" => devdir) do
-                      Pkg.develop("OpenCL")
-                      Pkg.activate(package)
-
                       try
+                        Pkg.develop("OpenCL")
+                        Pkg.activate(package)
                         Pkg.develop([PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore)])
                         TestEnv.activate()
                       catch err
+                        # OpenCL.jl may not support this GPUArrays version yet (e.g. after a
+                        # breaking release): skip, like Buildkite soft-fails, but annotate
+                        # the run so the skip is visible
                         @error "Could not install OpenCL.jl" exception=(err,catch_backtrace())
+                        println("::warning title=OpenCL.jl not tested::Could not install OpenCL.jl with this version of GPUArrays")
                         exit(0)
                       finally
                         Pkg.activate(package)

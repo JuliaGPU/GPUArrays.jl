@@ -39,6 +39,10 @@ end
         for t in [transpose, adjoint]
             @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, (2,2)), t(zeros(ET, (2,))))
             @test compare((A,R)->Base.mapreducedim!(abs2, +, R, A), AT, rand(range, (3,2,10)), t(zeros(ET, (2,3))))
+            # ... and from them (LinearAlgebra has methods for these sources)
+            @test compare((A,R)->Base.mapreducedim!(identity, +, R, t(A)), AT, rand(range, (3,4)), zeros(ET, (4,)))
+            @test compare((A,R)->Base.mapreducedim!(abs2, max, R, t(A)), AT, rand(range, (3,4)), zeros(real(ET), (1,3)))
+            @test compare((A,R)->Base.mapreducedim!(identity, *, R, t(A)), AT, rand(range, (3,4)), ones(ET, (4,)))
 
             # TODO: reenable once https://github.com/JuliaGPU/Metal.jl/issues/907 is fixed
             # @test compare((A,R)->sum!(abs2, R, A), AT, rand(range, (3,2,10)), t(zeros(ET, (2,3))))
@@ -346,7 +350,7 @@ end
             @test same(f, m8)
         end
         # (Base's pairwise path reduces `Int8`s in `Int8`, which the values here do not overflow)
-        @test same(A -> reduce(+, A; dims, init=0.5), Int16.(m8))
+        @test same(A -> reduce(+, A; dims, init=0.5f0), Int16.(m8))
     end
     # ... and empty reduced dimensions: `init`, else Base's initial value or error
     e8 = zeros(Int8, 0, 3)

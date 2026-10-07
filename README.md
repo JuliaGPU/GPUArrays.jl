@@ -39,6 +39,14 @@ Some (CPU based) examples can be see in the testing library `JLArrays` (located 
 
 ### Dense array support
 
+Define an array type that subtypes `AbstractGPUArray`, a device-side counterpart with
+`Adapt.adapt_structure` rules to convert to it, and a KernelAbstractions back-end returned
+by `KernelAbstractions.get_backend`. Broadcasting, `mapreduce` and the other reductions,
+sorting, scans, `findall`, logical indexing, `reverse` and most of linear algebra then work
+without further methods. See the [interface
+documentation](https://juliagpu.github.io/GPUArrays.jl/dev/interface/) and `JLArrays` for a
+complete example.
+
 ### Sparse array support (optional)
 
 `GPUArrays.jl` provides **device-side** array types for `CSC`, `CSR`, `COO`, and `BSR` matrices, as well as sparse vectors.
@@ -53,8 +61,6 @@ For **host-side** types, your custom sparse types should implement:
 - `csc_type(::Type{T})` - the compressed sparse column type for your backend. A `CuSparseMatrixCSR` would have a `csc_type` of `CuSparseMatrixCSC`. 
 - `csr_type(::Type{T})` - the compressed sparse row type for your backend. A `CuSparseMatrixCSC` would have a `csr_type` of `CuSparseMatrixCSR`. 
 - `coo_type(::Type{T})` - the coordinate sparse matrix type for your backend. A `CuSparseMatrixCSC` would have a `coo_type` of `CuSparseMatrixCOO`.
-
-To use `SparseArrays.findnz`, your host-side type **must** implement `sortperm`. This can be done with scalar indexing, but will be very slow.
 
 Additionally, you need to teach `GPUArrays.jl` how to translate your backend's specific types onto the device. `GPUArrays.jl` provides the device-side types:
 

@@ -63,6 +63,10 @@ end
     @test_throws UndefKeywordError sort(AT(rand(Float32, 4, 4)))
     @test_throws UndefKeywordError sort!(AT(rand(Float32, 4, 4)))
     @test_throws UndefKeywordError sortperm(AT(rand(Float32, 4, 4)))
+    # a `dims` out of range (Base's error for `sort(A; dims=0)` differs between versions)
+    for (f, dims) in ((sort!, 3), (sort, 3), (sortperm, 0), (sortperm, 3))
+        @test_throws ArgumentError f(AT(rand(Float32, 4, 4)); dims)
+    end
 end
 
 @testsuite "sorting/sortperm" (AT, eltypes)->begin

@@ -29,10 +29,9 @@ steps:
                 println("--- :julia: Installing CUDA.jl")
                 withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
                         "JULIA_PKG_DEVDIR" => devdir) do
-                  Pkg.develop("CUDA")
-                  Pkg.activate(package)
-
                   try
+                    Pkg.develop("CUDA")
+                    Pkg.activate(package)
                     Pkg.develop([
                       PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore),
                       PackageSpec(path=joinpath(package, "CUDACore")),
@@ -89,10 +88,9 @@ steps:
                 println("--- :julia: Installing CUDA.jl")
                 withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
                         "JULIA_PKG_DEVDIR" => devdir) do
-                  Pkg.develop("CUDA")
-                  Pkg.activate(package)
-
                   try
+                    Pkg.develop("CUDA")
+                    Pkg.activate(package)
                     Pkg.develop([PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore)])
                     TestEnv.activate()
                   catch err
@@ -141,10 +139,9 @@ steps:
                 println("--- :julia: Installing AMDGPU.jl")
                 withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
                         "JULIA_PKG_DEVDIR" => devdir) do
-                  Pkg.develop("AMDGPU")
-                  Pkg.activate(package)
-
                   try
+                    Pkg.develop("AMDGPU")
+                    Pkg.activate(package)
                     Pkg.develop([PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore)])
                     TestEnv.activate()
                   catch err
@@ -195,11 +192,10 @@ steps:
                 println("--- :julia: Installing oneAPI.jl")
                 withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
                         "JULIA_PKG_DEVDIR" => devdir) do
-                  Pkg.develop("oneAPI")
-                  include(joinpath(package, "deps", "build_ci.jl"))
-                  Pkg.activate(package)
-
                   try
+                    Pkg.develop("oneAPI")
+                    include(joinpath(package, "deps", "build_ci.jl"))
+                    Pkg.activate(package)
                     Pkg.develop([PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore)])
                     TestEnv.activate()
                   catch err
@@ -249,10 +245,9 @@ steps:
                 println("--- :julia: Installing Metal.jl")
                 withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
                         "JULIA_PKG_DEVDIR" => devdir) do
-                  Pkg.develop("Metal")
-                  Pkg.activate(package)
-
                   try
+                    Pkg.develop("Metal")
+                    Pkg.activate(package)
                     Pkg.develop([PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore)])
                     TestEnv.activate()
                   catch err

@@ -43,6 +43,5 @@ include("host/statistics.jl")
 include("host/sparse.jl")
 include("host/alloc_cache.jl")
 
-include("deprecated.jl")
 
 end # module

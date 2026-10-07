@@ -61,4 +61,14 @@
     # Associative operators need not be commutative
     @test compare(A -> accumulate((a, b) -> a, A), AT, rand(1:10, 1000))
     @test compare(A -> accumulate((a, b) -> a, A; dims=2), AT, rand(1:10, 10, 100))
+    # composing affine maps x -> a*x + b is exact and sensitive to operand order, also in the
+    # combination of block aggregates
+    compose((a1, b1), (a2, b2)) = (a2 * a1, a2 * b1 + b2)
+    affine(dims...) = [(rand(-1:1), rand(-3:3)) for _ in CartesianIndices(dims)]
+    for n in (4, 1_000, 100_000)
+        @test compare(A -> accumulate(compose, A), AT, affine(n))
+        @test compare(A -> accumulate(compose, A; init=(1, 0)), AT, affine(n))
+    end
+    @test compare(A -> accumulate(compose, A; dims=2, init=(1, 0)), AT, affine(7, 10_000))
+    @test compare(A -> accumulate(compose, A; dims=1), AT, affine(10_000, 7))
 end
