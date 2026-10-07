@@ -346,7 +346,7 @@ end
             @test same(f, m8)
         end
         # (Base's pairwise path reduces `Int8`s in `Int8`, which the values here do not overflow)
-        @test same(A -> reduce(+, A; dims, init=0.5), Int16.(m8))
+        @test same(A -> reduce(+, A; dims, init=0.5f0), Int16.(m8))
     end
     # ... and empty reduced dimensions: `init`, else Base's initial value or error
     e8 = zeros(Int8, 0, 3)
