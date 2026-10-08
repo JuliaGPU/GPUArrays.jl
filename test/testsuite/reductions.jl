@@ -15,12 +15,20 @@
     end
 end
 
+# The shapes to reduce elements of type `ET` in: `all` for one real and one complex type, and
+# `few` for the others, covering the code paths that differ by shape (a whole-array reduction, one
+# along some dimensions, an empty one). Every element type and operator compiles its own kernels
+# and host code, so sweeping every shape for every element type adds much test time but little
+# coverage.
+test_shapes(ET, all, few) = ET in (Float32, ComplexF32) ? all : few
+
 @testsuite "reductions/mapreducedim!" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
-        for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
-                         (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1),
-                         (0,)=>(1,)]
+        for (sz,red) in test_shapes(ET, [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
+                                         (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1),
+                                         (0,)=>(1,)],
+                                    [(10,)=>(1,), (10,10,10)=>(10,1,10), (0,)=>(1,)])
             # mapreducedim!
             @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, sz), zeros(ET, red))
             @test compare((A,R)->Base.mapreducedim!(identity, *, R, A), AT, rand(range, sz), ones(ET, red))
@@ -64,10 +72,11 @@ end
 @testsuite "reductions/mapreduce" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
-        for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
-                          (10,)=>:, (10,10)=>:, (10,10,10)=>:,
-                          (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
-                          (0,)=>[1]]
+        for (sz,dims) in test_shapes(ET, [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
+                                          (10,)=>:, (10,10)=>:, (10,10,10)=>:,
+                                          (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
+                                          (0,)=>[1]],
+                                     [(10,)=>:, (10,10,10)=>[2], (0,)=>[1]])
             # mapreduce
             @test compare(A->mapreduce(identity, +, A; dims=dims, init=zero(ET)), AT, rand(range, sz))
             @test compare(A->mapreduce(identity, *, A; dims=dims, init=one(ET)), AT, rand(range, sz))
@@ -93,7 +102,7 @@ end
         range = ET <: Real ? (ET(1):ET(10)) : ET
 
         # whole-array reductions: exercise each unique shape only once
-        for sz in ((10,), (10,10), (10,10,10), (0,))
+        for sz in test_shapes(ET, ((10,), (10,10), (10,10,10), (0,)), ((10,10), (0,)))
             @test compare(A->sum(A), AT, rand(range, sz))
             @test compare(A->prod(A), AT, rand(range, sz))
             if typeof(abs(rand(range))) in eltypes
@@ -104,18 +113,20 @@ end
         end
 
         # reductions along specific dims
-        for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
-                            (10,)=>:, (10,10)=>:, (10,10,10)=>:,
-                            (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
-                            (0,)=>[1]]
+        for (sz,dims) in test_shapes(ET, [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
+                                          (10,)=>:, (10,10)=>:, (10,10,10)=>:,
+                                          (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3],
+                                          (0,)=>[1]],
+                                     [(10,)=>:, (10,10,10)=>[2], (0,)=>[1]])
             @test compare(A->sum(A; dims=dims), AT, rand(range, sz))
             @test compare(A->prod(A; dims=dims), AT, rand(range, sz))
         end
 
         if ET in (Float32, Float64, Int64, ComplexF32, ComplexF64)
             # smaller-scale test to avoid very large values and roundoff issues
-            for (sz,red) in [(2,)=>(1,), (2,2)=>(1,1), (2,2,2)=>(1,1,1), (2,2,2)=>(2,2,2),
-                                (2,2,2)=>(1,2,2), (2,2,2)=>(2,1,2), (2,2,2)=>(2,2,1)]
+            for (sz,red) in test_shapes(ET, [(2,)=>(1,), (2,2)=>(1,1), (2,2,2)=>(1,1,1), (2,2,2)=>(2,2,2),
+                                             (2,2,2)=>(1,2,2), (2,2,2)=>(2,1,2), (2,2,2)=>(2,2,1)],
+                                        [(2,2,2)=>(2,1,2)])
                 @test compare((A,R)->sum!(R, A), AT, rand(range, sz), rand(ET, red))
                 @test compare((A,R)->prod!(R, A), AT, rand(range, sz), rand(ET, red))
             end
@@ -143,7 +154,7 @@ end
         range = ET <: Real ? (ET(1):ET(10)) : ET
 
         # whole-array reductions: exercise each unique shape only once
-        for sz in ((10,), (10,10), (10,10,10))
+        for sz in test_shapes(ET, ((10,), (10,10), (10,10,10)), ((10,10),))
             @test compare(A->minimum(A), AT, rand(range, sz))
             @test compare(A->minimum(x->x*x, A), AT, rand(range, sz))
             @test compare(A->maximum(A), AT, rand(range, sz))
@@ -153,16 +164,18 @@ end
         end
 
         # reductions along specific dims
-        for (sz,dims) in [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
-                          (10,)=>:, (10,10)=>:, (10,10,10)=>:,
-                          (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3]]
+        for (sz,dims) in test_shapes(ET, [(10,)=>[1], (10,10)=>[1,2], (10,10,10)=>[1,2,3], (10,10,10)=>[],
+                                          (10,)=>:, (10,10)=>:, (10,10,10)=>:,
+                                          (10,10,10)=>[1], (10,10,10)=>[2], (10,10,10)=>[3]],
+                                     [(10,)=>:, (10,10,10)=>[2]])
             @test compare(A->minimum(A; dims=dims), AT, rand(range, sz))
             @test compare(A->maximum(A; dims=dims), AT, rand(range, sz))
             @test compare(A->extrema(A; dims=dims), AT, rand(range, sz))
         end
 
-        for (sz,red) in [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
-                         (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1)]
+        for (sz,red) in test_shapes(ET, [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
+                                         (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1)],
+                                    [(10,10,10)=>(10,1,10)])
             @test compare((A,R)->minimum!(R, A), AT, rand(range, sz), fill(typemax(ET), red))
             @test compare((A,R)->maximum!(R, A), AT, rand(range, sz), fill(typemin(ET), red))
             @test compare((A,R)->extrema!(R, A), AT, rand(range, sz), fill((typemax(ET),typemin(ET)), red))
