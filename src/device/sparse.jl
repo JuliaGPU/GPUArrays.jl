@@ -156,7 +156,7 @@ end
 
 function Base.show(io::IO, ::MIME"text/plain", A::GPUSparseDeviceMatrixCOO)
     println(io, "$(length(A))-element device sparse matrix COO at:")
-    println(io, "  rowPtr: $(A.rowPtr)")
+    println(io, "  rowInd: $(A.rowInd)")
     println(io, "  colInd: $(A.colInd)")
     print(io,   "  nzVal:  $(A.nzVal)")
 end
