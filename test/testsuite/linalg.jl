@@ -634,13 +634,14 @@ end
         @test_throws SingularException ldiv!(D, B)
     end
 
-    @testset "$f with diagonal $d" for f in (triu, triu!, tril, tril!),
-                                        d in -2:2
-        A = randn(Float32, 10, 10)
-        @test compare(f, AT, A, d)
+    @testset "$f" for f in (triu, triu!, tril, tril!)
+        @testset "with diagonal $d" for d in -2:2
+            A = randn(Float32, 10, 10)
+            @test compare(f, AT, A, d)
 
-        A_empty = randn(Float32, 0, 0)
-        @test compare(f, AT, A_empty, d)
+            A_empty = randn(Float32, 0, 0)
+            @test compare(f, AT, A_empty, d)
+        end
     end
 
     @testset "rmul!/lmul! with diagonal and number" begin
@@ -843,74 +844,59 @@ Base.:(*)(x::Number, y::Duo) = Duo(x * y.a, x * y.b)
 end
 
 @testsuite "linalg/norm" (AT, eltypes)->begin
-    @testset "$p-norm($sz x $T)" for sz in [(2,), (2,0), (2,2,2)],
-                                     p in Any[0, 0.5, 1, 1.5, 2, Inf, -Inf],
-                                     T in eltypes
-        if T == Int8
-            continue
-        end
-        if !in(float(real(T)), eltypes)
-            # norm promotes to float, so make sure that type is supported
-            continue
-        end
-        range = real(T) <: Integer ? (T.(1:10)) : T # prevent integer overflow
-        arr = rand(range, sz)
-        @test compare(norm, AT, arr, Ref(p))
-        @test isrealfloattype(typeof(norm(AT(arr), p)))
-        if !isempty(arr) && real(T) <: AbstractFloat && !iszero(p) && !isinf(p)
-            # Hit anti-under/overflow rescaling
-            @allowscalar arr[1] = floatmax(real(T)) / 2
+    # norm promotes to float, so make sure that type is supported
+    valid_eltypes = filter(T -> in(float(real(T)), eltypes), eltypes)
+    valid_eltypes_noint8 = filter(T -> T !== Int8, valid_eltypes)
+
+    @testset "$p-norm" for p in Any[0, 0.5, 1, 1.5, 2, Inf, -Inf]
+        @testset "$sz x $T" for sz in [(2,), (2,0), (2,2,2)],
+                                T in filter(T -> T !== Int8, valid_eltypes)
+            range = real(T) <: Integer ? (T.(1:10)) : T # prevent integer overflow
+            arr = rand(range, sz)
             @test compare(norm, AT, arr, Ref(p))
-            arr .= floatmin(real(T)) * 2
-            @test compare(norm, AT, arr, Ref(p))
+            @test isrealfloattype(typeof(norm(AT(arr), p)))
+            if !isempty(arr) && real(T) <: AbstractFloat && !iszero(p) && !isinf(p)
+                # Hit anti-under/overflow rescaling
+                @allowscalar arr[1] = floatmax(real(T)) / 2
+                @test compare(norm, AT, arr, Ref(p))
+                arr .= floatmin(real(T)) * 2
+                @test compare(norm, AT, arr, Ref(p))
+            end
         end
     end
-    @testset "$p-opnorm($sz x $T)" for sz in [(2, 0), (2, 3)],
-                                     p in Any[1, Inf],
-                                     T in eltypes
-        if T == Int8
-            continue
+    @testset "$p-opnorm" for p in Any[1, Inf]
+        @testset "$sz x $T" for sz in [(2, 0), (2, 3)],
+                                T in filter(T -> T !== Int8, valid_eltypes)
+            range = real(T) <: Integer ? (T.(1:10)) : T # prevent integer overflow
+            mat = rand(range, sz)
+            @test compare(opnorm, AT, mat, Ref(p))
+            @test isrealfloattype(typeof(opnorm(AT(mat), p)))
         end
-        if !in(float(real(T)), eltypes)
-            # norm promotes to float, so make sure that type is supported
-            continue
-        end
-        range = real(T) <: Integer ? (T.(1:10)) : T # prevent integer overflow
-        mat = rand(range, sz)
-        @test compare(opnorm, AT, mat, Ref(p))
-        @test isrealfloattype(typeof(opnorm(AT(mat), p)))
     end
-    @testset "normalize($T)" for T in eltypes
-        if !in(float(real(T)), eltypes)
-            continue
-        end
-        range = real(T) <: Integer ? (T.(1:10)) : T
-        arr = rand(range, 10)
-        @test compare(normalize, AT, arr)
-        @test compare(normalize, AT, arr, Ref(1))
+    @testset "normalize" begin
+       @testset "$T" for T in valid_eltypes
+            range = real(T) <: Integer ? (T.(1:10)) : T
+            arr = rand(range, 10)
+            @test compare(normalize, AT, arr)
+            @test compare(normalize, AT, arr, Ref(1))
+       end
     end
     # Wrapped GPU arrays (e.g. SubArray) must also avoid scalar iteration.
-    @testset "$p-norm(view, $sz x $T)" for sz in [(5,), (5, 5), (4, 4, 4)],
-                                           p in Any[0, 1, 2, Inf],
-                                           T in eltypes
-        if T == Int8
-            continue
+    @testset "$p-norm(view)" for p in Any[0, 1, 2, Inf]
+        @testset "$sz x $T" for sz in [(5,), (5, 5), (4, 4, 4)],
+                                T in filter(T -> T !== Int8, valid_eltypes)
+            range = real(T) <: Integer ? (T.(1:10)) : T
+            arr = rand(range, sz)
+            indices = map(d -> 2:d-1, sz)
+            @test compare(x -> norm(view(x, indices...), p), AT, arr)
         end
-        if !in(float(real(T)), eltypes)
-            continue
-        end
-        range = real(T) <: Integer ? (T.(1:10)) : T
-        arr = rand(range, sz)
-        indices = map(d -> 2:d-1, sz)
-        @test compare(x -> norm(view(x, indices...), p), AT, arr)
     end
-    @testset "normalize(view, $T)" for T in eltypes
-        if !in(float(real(T)), eltypes)
-            continue
+    @testset "normalize(view)" begin
+        @testset "$T" for T in valid_eltypes
+            range = real(T) <: Integer ? (T.(1:10)) : T
+            arr = rand(range, 10)
+            @test compare(x -> normalize(view(x, 2:9)), AT, arr)
         end
-        range = real(T) <: Integer ? (T.(1:10)) : T
-        arr = rand(range, 10)
-        @test compare(x -> normalize(view(x, 2:9)), AT, arr)
     end
 end
 
