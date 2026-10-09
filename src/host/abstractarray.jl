@@ -101,14 +101,96 @@ function unsafe_free!(ref::DataRef)
     return
 end
 
+
+## alias detection
+
+"""
+    GPUArrays.memory_location(A::AbstractGPUArray) -> Union{Nothing, Tuple{UInt, Int}}
+
+Where the elements of `A` are stored: a coordinate `base` that identifies the allocation
+holding them (normally its address), and the byte `offset` of the first element from it.
+GPUArrays defines `Base.dataids`, `Base.mightalias` and the check Base uses to compare two
+`SubArray`s of the same parent for every `AbstractGPUArray`; with this hook, they compare the
+byte ranges arrays cover instead of the allocations they share.
+
+Two arrays are taken to share memory when their byte ranges, `sizeof(A)` bytes from
+`base + offset`, overlap. For that to be sound:
+
+- Every array derived from an allocation (a view, reshape or reinterpretation, which are
+  built with `derive`) must report the same `base`, and a nonnegative `offset` into it.
+  Memory wrapped from a pointer into the middle of an allocation (`unsafe_wrap`) reports a
+  `base` of its own: it is still compared by byte range against arrays that implement this
+  hook, but against wrapped arrays (e.g. a `SubArray`) and arrays of other types (e.g. an
+  `Array`), only when both start at the same address.
+- Arrays that share memory must report it in the same coordinates. That holds for
+  addresses in a single address space, but not for memory that is reachable at two
+  addresses (such as a host buffer and its device mapping) or that is wrapped twice with
+  separate identities (such as two handles for one buffer): the hook cannot express such
+  aliases, so a back-end that creates them has to detect them itself.
+- Memory without an address may be identified by any other value that is unique to its
+  allocation, such as a handle. Overlap with the coordinates of other memory only causes
+  false positives.
+- For valid, live arrays it must not have side effects (taking stream ownership,
+  synchronizing) and must not throw, as Base checks for aliasing in many operations,
+  including `copyto!` and broadcasting.
+
+The default, `nothing`, keeps alias detection at the level of allocations: arrays alias
+when they share the `DataRef` returned by `GPUArrays.storage`.
+"""
+memory_location(::AbstractGPUArray) = nothing
+
 # `copy(::DataRef)` shares `rc`. Views and reshapes are built that way, so
 # alias detection has to key off the shared record rather than the wrapper.
 Base.dataids(ref::DataRef) = (objectid(ref.rc),)
 
+# Base compares `dataids` whenever one of the arrays is wrapped (e.g., a `SubArray`), so they
+# identify the allocation rather than the part of it the array covers: the shared `DataRef`,
+# which arrays of a type without `memory_location` are compared by, and the allocation's
+# coordinate. The start of the array is included too, to match an array wrapped around
+# memory starting at the same address (whose `dataids` are that address). Empty arrays alias
+# nothing, which Julia 1.10's `mightalias` does not check.
 function Base.dataids(A::AbstractGPUArray)
+    isempty(A) && return ()
     ids = Base.dataids(storage(A))
-    isempty(ids) ? (objectid(A),) : ids
+    loc = memory_location(A)
+    if loc === nothing
+        return isempty(ids) ? (objectid(A),) : ids
+    end
+    base, offset = loc
+    return (ids..., base, base + offset)
 end
+
+function Base.mightalias(A::AbstractGPUArray, B::AbstractGPUArray)
+    (isempty(A) || isempty(B)) && return false
+    a, b = memory_location(A), memory_location(B)
+    # the selector bytes of isbits-union arrays are stored outside the elements' byte range
+    if a === nothing || b === nothing ||
+       Base.isbitsunion(eltype(A)) || Base.isbitsunion(eltype(B))
+        return !Base._isdisjoint(Base.dataids(A), Base.dataids(B))
+    end
+    # nonempty arrays without bytes (of a zero-size element type) can't be written to
+    nA, nB = sizeof(A), sizeof(B)
+    (iszero(nA) || iszero(nB)) && return false
+    # widened, so that coordinates near `typemax(UInt)` (e.g. handles) don't wrap around
+    startA, startB = widen(a[1]) + a[2], widen(b[1]) + b[2]
+    return startA <= startB ? startB - startA < nA : startA - startB < nB
+end
+
+# Base only compares the indices of two `SubArray`s when their parents are the same memory,
+# which it checks for dense arrays by comparing pointers. Converting a GPU array to a pointer
+# can have side effects or throw, so compare their locations instead, or only their identity
+# for arrays without one. Locations don't establish where the selector bytes of isbits-union
+# arrays are, so those only match themselves too. When parents don't match, Base compares
+# their `dataids`, so returning false is always sound.
+function Base._parentsmatch(A::AbstractGPUArray, B::AbstractGPUArray)
+    A === B && return true
+    a, b = memory_location(A), memory_location(B)
+    (a === nothing || b === nothing) && return false
+    (Base.isbitsunion(eltype(A)) || Base.isbitsunion(eltype(B))) && return false
+    return a == b && Base.elsize(A) == Base.elsize(B) && size(A) == size(B)
+end
+Base._parentsmatch(::AbstractGPUArray, ::DenseArray) = false
+Base._parentsmatch(::DenseArray, ::AbstractGPUArray) = false
 
 # array methods
 
