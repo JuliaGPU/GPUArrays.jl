@@ -362,6 +362,18 @@ end
     unsafe_view(A, J_gpu, GPUIndexStyle(I...))
 end
 
+# A view of a non-contiguous view stays a `SubArray`, so the method above does not apply
+# and the index arrays are never uploaded. Let Base compose the indices, which it does on
+# the host, and upload the composed ones.
+@inline function Base.view(A::WrappedGPUArray, I::Vararg{Any,N}) where {N}
+    V = invoke(Base.view, Tuple{AbstractArray, Vararg{Any,N}}, A, I...)
+    V isa SubArray || return V
+    P = parent(V)
+    I_composed = parentindices(V)
+    J = map(j->adapt(ToGPU(P), j), I_composed)
+    J === I_composed ? V : SubArray(P, J)
+end
+
 @inline function unsafe_view(A, I, ::Contiguous)
     unsafe_contiguous_view(Base._maybe_reshape_parent(A, Base.index_ndims(I...)), I, viewlength(I...))
 end
