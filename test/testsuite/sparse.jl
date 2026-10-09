@@ -1,5 +1,9 @@
 @testsuite "sparse" (AT, eltypes)->begin
     sparse_ATs = sparse_types(AT)
+    @testset "coo_type of a type without a COO sibling" begin
+        # must report a plain MethodError instead of recursing until the stack overflows
+        @test_throws MethodError GPUArrays.coo_type(sparse([1], [1], [1.0], 2, 2))
+    end
     @testset "sparse_AT = $sparse_AT" for sparse_AT in sparse_ATs
         if sparse_AT <: AbstractSparseVector
             vector(sparse_AT, eltypes)
