@@ -1030,6 +1030,8 @@ function _permutedims!(::Type{IT}, dest::AbstractGPUArray,
                        src::AbstractGPUArray, perm::NTuple{N}) where {IT,N}
     @assert length(src) <= typemax(IT)
     Base.checkdims_perm(dest, src, perm)
+    # not every back-end supports launching an empty kernel (JuliaGPU/Metal.jl#980)
+    isempty(dest) && return dest
     dest_strides = ntuple(k->k==1 ? 1 : prod(i->size(dest, i), 1:k-1), N)
     dest_strides_perm = ntuple(i->IT(dest_strides[findfirst(==(i), perm)]), N)
     size_src = IT.(size(src))
