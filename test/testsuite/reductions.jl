@@ -122,6 +122,13 @@ end
             @test compare(A->prod(A; dims=dims), AT, rand(range, sz))
         end
 
+        # the result type infers, so that code calling a reduction stays type-stable
+        A, B = AT(rand(range, 10, 10)), AT(rand(range, 10, 10))
+        @inferred sum(A)
+        @inferred sum(A; dims=1)
+        @inferred prod(A)
+        @inferred mapreduce(*, +, A, B)
+
         if ET in (Float32, Float64, Int64, ComplexF32, ComplexF64)
             # smaller-scale test to avoid very large values and roundoff issues
             for (sz,red) in test_shapes(ET, [(2,)=>(1,), (2,2)=>(1,1), (2,2,2)=>(1,1,1), (2,2,2)=>(2,2,2),

@@ -99,7 +99,9 @@ function _mapreduce(f::F, op::OP, As::Vararg{Any,N}; dims::D, init) where {F,OP,
         _ak_mapreducedim!(f, op, R, A; backend, init)
         return R
     end
-    if any(d -> d <= ndims(A) && size(A)[d] == 0, dims)
+    # (`A` is assigned on several paths, so a closure capturing it would box it and lose its type)
+    sz = size(A)
+    if any(d -> d <= length(sz) && sz[d] == 0, dims)
         # Base's values for an empty reduction (or its error), from a host stand-in; `f` may be
         # called, and may index device arrays
         h = @allowscalar Base.reducedim_init(f, op, Array{S}(undef, size(A)), dims)
