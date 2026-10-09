@@ -1,9 +1,20 @@
 # GPUArrays.jl release history
 
-This document lists the noteworthy changes in every breaking release of GPUArrays.jl,
+This document lists the noteworthy changes in GPUArrays.jl releases that back-ends act on,
 newest first, aimed at the authors of back-end packages. For the complete list of merged
 pull requests, see the [GitHub releases](https://github.com/JuliaGPU/GPUArrays.jl/releases).
 
+
+## v12.1
+
+GPUArrays defines `Base.dataids` and `Base.mightalias` for every `AbstractGPUArray`. A
+back-end that implements the new `GPUArrays.memory_location` hook (the coordinate of an
+array's allocation, normally its address, and its byte offset into it) gets precise alias
+detection: disjoint views of one buffer don't alias, empty arrays alias nothing on every
+Julia version, and `SubArray`s of two such arrays are compared without converting their
+parents to pointers. Arrays wrapped in a `SubArray` or other wrapper are still compared by
+allocation, which is conservative. Back-ends should implement the hook and delete their own
+`dataids` and `mightalias` methods, which would keep winning dispatch.
 
 ## v12.0
 

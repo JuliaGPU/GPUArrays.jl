@@ -31,6 +31,17 @@ KernelAbstractions.get_backend(a::CA) where CA <: CustomArray = CustomBackend()
 
 There are numerous examples of potential interfaces for GPUArrays, such as with [JLArrays](https://github.com/JuliaGPU/GPUArrays.jl/blob/main/lib/JLArrays/src/JLArrays.jl), [CuArrays](https://github.com/JuliaGPU/CUDA.jl/blob/main/CUDACore/src/array.jl), and [ROCArrays](https://github.com/JuliaGPU/AMDGPU.jl/blob/main/src/array.jl).
 
+## Alias detection
+
+Without the hook below, all views of one buffer are treated as aliasing each other, so Base
+and GPUArrays copy one of them before operations that write to the other (e.g. `copyto!`,
+broadcasting, `accumulate!`). Report where an array's elements are stored to make that check
+precise:
+
+```@docs
+GPUArrays.memory_location
+```
+
 ## Caching Allocator
 
 ```@docs
