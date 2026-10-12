@@ -77,11 +77,11 @@ function exact_result(@nospecialize(f), @nospecialize(xs...))
     catch err
         return typeof(err)
     end
-    exact(x::AbstractArray) = (eltype(x), size(x), collect(x))
-    exact(x::Tuple) = map(exact, x)
-    exact(x) = (typeof(x), x)
     return exact(r)
 end
+exact(x::AbstractArray) = (eltype(x), size(x), collect(x))
+exact(x::Tuple) = map(exact, x)
+exact(x) = (typeof(x), x)
 compare_exact(@nospecialize(f), AT::Type{<:AbstractGPUArray}, @nospecialize(xs...)) =
     isequal(exact_result(f, map(deepcopy, xs)...),
             exact_result(f, map(x -> x isa AbstractArray ? adapt(AT, x) : x, xs)...))
