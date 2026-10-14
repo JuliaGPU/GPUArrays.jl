@@ -55,6 +55,15 @@ end
         @test Array(maximum(a; dims = 1)) ≈ maximum(host; dims = 1)
     end
 
+    @testset "linear indices" begin
+        # static and dynamic dimensions in any order
+        for dims in ((static(2), 3, static(4)), (2, static(3), 4), (2, 3, 4),
+                     (static(2), static(3), static(4)))
+            d = StaticDimsDeviceArray(collect(1:24), dims)
+            @test all(d[I] == LinearIndices((2, 3, 4))[I] for I in CartesianIndices((2, 3, 4)))
+        end
+    end
+
     @testset "indexing" begin
         @test (@allowscalar a[2, 3, 4]) == host[2, 3, 4]
         @test Array(a[:, 2, :]) == host[:, 2, :]

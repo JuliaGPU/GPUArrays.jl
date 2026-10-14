@@ -6,13 +6,22 @@ export StaticDimsDeviceArray
 # `Int`. E.g. `Tuple{StaticInt{4}, Int}` for an array of size `(4, n)`.
 const MixedDims{N} = NTuple{N, Union{Int, StaticInt}}
 
-# Column-major linear index of the (in-bounds) indices `I`, in Horner form:
-# `i1 + d1 * ((i2 - 1) + d2 * (i3 - 1))` for the dimensions `(d1, d2, d3)`. Static dimensions
-# appear as constants, so with all leading dimensions static the multiplications fold.
-@inline static_linear_index(::Tuple{Any}, I::Tuple{Int}) = only(I)
-@inline function static_linear_index(dims::Tuple{Any, Any, Vararg{Any}},
-                                     I::Tuple{Int, Int, Vararg{Int}})
-    first(I) + dynamic(first(dims)) * (static_linear_index(Base.tail(dims), Base.tail(I)) - 1)
+# Column-major linear index of the (in-bounds) indices `I`, as a sum of strided terms:
+# `1 + (i1 - 1) + d1 * (i2 - 1) + (d1 * d2) * (i3 - 1)` for the dimensions `(d1, d2, d3)`.
+# The strides are products of `StaticInt`s as long as the dimensions are, i.e. constants.
+# (Unlike the Horner form `i1 + d1 * ((i2 - 1) + d2 * (i3 - 1))`, the terms of indices that
+# don't change in a loop can be hoisted out of it when the dimensions are dynamic.)
+# (Unrolled, as recursing over the dimensions with strides of growing types would not infer.)
+@inline @generated function static_linear_index(dims::Tuple, I::NTuple{N, Int}) where {N}
+    ex = quote
+        stride_1 = StaticInt(1)
+    end
+    for k in 2:N
+        push!(ex.args, :($(Symbol(:stride_, k)) = $(Symbol(:stride_, k - 1)) * dims[$(k - 1)]))
+    end
+    terms = [:(dynamic($(Symbol(:stride_, k))) * (I[$k] - 1)) for k in 1:N]
+    push!(ex.args, :(+(1, $(terms...))))
+    return ex
 end
 
 """
