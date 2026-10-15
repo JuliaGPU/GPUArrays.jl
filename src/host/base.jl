@@ -349,6 +349,10 @@ struct ToGPU
     array::AbstractGPUArray
 end
 ToGPU(A::WrappedArray) = ToGPU(parent(A))
+# these wrappers have no `parent`, so `parent(A) === A`
+ToGPU(A::Bidiagonal) = ToGPU(A.dv)
+ToGPU(A::Tridiagonal) = ToGPU(A.d)
+ToGPU(A::Base.LogicalIndex) = ToGPU(A.mask)
 function Adapt.adapt_storage(to::ToGPU, xs::Array)
     arr = similar(to.array, eltype(xs), size(xs))
     copyto!(arr, xs)

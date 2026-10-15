@@ -164,6 +164,16 @@ end
         x[2:6, 2:6] = 1:25
         @test Array(parent(x)[2:6, 2:6]) == reshape(1:25, 5, 5)'
     end
+
+    # Julia 1.10's `setindex!(::Tridiagonal, ...)` builds its error message eagerly, which
+    # doesn't compile for the GPU (fixed in 1.11 by JuliaLang/julia#53976)
+    VERSION >= v"1.11" && @testset "setindex! for Tridiagonal" begin
+        # `parent` of a Tridiagonal is the array itself
+        x = Tridiagonal(AT(zeros(Float32, 3)), AT(zeros(Float32, 4)), AT(zeros(Float32, 3)))
+        x[[1, 2], 1] = AT(Float32[1, 2])
+        @test Array(x.d) == Float32[1, 0, 0, 0]
+        @test Array(x.dl) == Float32[2, 0, 0]
+    end
 end
 
 @testsuite "indexing find" (AT, eltypes)->begin
