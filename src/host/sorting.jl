@@ -81,8 +81,23 @@ function Base.reverse!(v::AnyGPUVector, start::Integer, stop::Integer=lastindex(
     n > s || return v       # as Base, a trivial interval is not checked
     checkbounds(v, s)
     checkbounds(v, n)
-    AK.reverse!(view(v, s:n))
+    if s == firstindex(v) && n == lastindex(v)
+        AK.reverse!(v)
+    else
+        AK.reverse!(view(v, s:n))
+    end
     return v
 end
-Base.reverse(v::AnyGPUVector, start::Integer, stop::Integer=lastindex(v)) =
-    reverse!(copy(v), start, stop)
+# In one pass over `v`: the reversed range from it, and the rest copied
+function Base.reverse(v::AnyGPUVector, start::Integer, stop::Integer=lastindex(v))
+    s, n = Int(start), Int(stop)
+    s == firstindex(v) && n == lastindex(v) && return AK.reverse(v)
+    n > s || return copy(v)
+    checkbounds(v, s)
+    checkbounds(v, n)
+    w = similar(v)
+    copyto!(w, firstindex(v), v, firstindex(v), s - firstindex(v))
+    AK.reverse!(view(w, s:n), view(v, s:n))
+    copyto!(w, n + 1, v, n + 1, lastindex(v) - n)
+    return w
+end

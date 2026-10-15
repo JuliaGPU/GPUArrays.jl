@@ -133,6 +133,11 @@ end
         @test compare(A -> reverse!(A, 3), AT, rand(ET, 10))
         @test compare(A -> reverse!(A, 3, 8), AT, rand(ET, 10))
         @test compare(A -> reverse(A, 3, 8), AT, rand(ET, 10))
+        # ranges at either end, and trivial ones
+        for (start, stop) in ((1, 10), (1, 4), (6, 10), (5, 5), (7, 3))
+            @test compare(A -> reverse(A, start, stop), AT, rand(ET, 10))
+            @test compare(A -> reverse!(A, start, stop), AT, rand(ET, 10))
+        end
 
         # along dimensions
         for dims in (1, 2, (1, 2), :)
