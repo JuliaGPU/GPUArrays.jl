@@ -1182,7 +1182,7 @@ end
 ## reflect
 
 function LinearAlgebra.reflect!(x::AbstractGPUArray, y::AbstractGPUArray, c::Number, s::Number)
-    @kernel function  reflect_kernel!(x, y, c, s)
+    @kernel function reflect_kernel!(x, y, c, s)
         i = @index(Global, Linear)
         @inbounds xi = x[i]
         @inbounds yi = y[i]
