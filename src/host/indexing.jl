@@ -195,42 +195,49 @@ struct EachIndex{T,N,IS} <: AbstractArray{T,N}
     indices::IS
 end
 EachIndex(A::AbstractArray) =
-    EachIndex{typeof(firstindex(A)), ndims(A), typeof(eachindex(A))}(
+    EachIndex{eltype(eachindex(A)), ndims(A), typeof(eachindex(A))}(
               size(A), eachindex(A))
 Base.size(ei::EachIndex) = ei.dims
 Base.getindex(ei::EachIndex, i::Int) = ei.indices[i]
 Base.IndexStyle(::Type{<:EachIndex}) = Base.IndexLinear()
 
-function findfirstlast_reduction(op_and_dummy, t1, t2)
-    op, dummy_index = op_and_dummy
-    (x, i), (y, j) = t1, t2
-    if op(i, j)
-        t1, t2 = t2, t1
-        (x, i), (y, j) = t1, t2
-    end
-    x && return t1
-    y && return t2
-    return (false, dummy_index)
-end
+# `findfirst` and `findlast` reduce the index of each element for which `f` holds, or a sentinel
+# beyond every index for the others, to the first or last in memory order: an integer, or a
+# `CartesianIndex` for arrays indexed that way (`eachindex`), whose `min` and `max` are
+# elementwise, so they are ordered by `isless`
+_findfirst_sentinel(::Type{I}) where {I <: Integer} = typemax(I)
+_findfirst_sentinel(::Type{CartesianIndex{N}}) where {N} =
+    CartesianIndex(ntuple(_ -> typemax(Int), Val(N)))
+_findlast_sentinel(::Type{I}) where {I <: Integer} = typemin(I)
+_findlast_sentinel(::Type{CartesianIndex{N}}) where {N} =
+    CartesianIndex(ntuple(_ -> typemin(Int), Val(N)))
+_findfirst_op(::Type{<:Integer}) = min
+_findfirst_op(::Type{<:CartesianIndex}) = (a, b) -> isless(b, a) ? b : a
+_findlast_op(::Type{<:Integer}) = max
+_findlast_op(::Type{<:CartesianIndex}) = (a, b) -> isless(a, b) ? b : a
 
-for (find_f, op, dummy_f) in ((:(Base.findfirst), :>, :first), (:(Base.findlast), :<, :last))
+struct _IndexIf{F, I} <: Function
+    f::F
+    sentinel::I
+end
+@inline (m::_IndexIf)(x, i) = m.f(x) ? i : m.sentinel
+
+for (find_f, sentinel_f, op_f) in ((:(Base.findfirst), :_findfirst_sentinel, :_findfirst_op),
+                                   (:(Base.findlast), :_findlast_sentinel, :_findlast_op))
     @eval begin
         function $find_f(f::Function, A::AnyGPUArray)
             isempty(A) && return nothing
+            # (the sentinel would be the only index of a zero-dimensional array)
+            ndims(A) == 0 && return @allowscalar(f(A[])) ? CartesianIndex() : nothing
             indices = EachIndex(A)
-            dummy_index = $dummy_f(indices)
-
-            # given two pairs of (istrue, index), return the one with the smallest index
-            res = mapreduce((x, y)->(f(x), y), (a, b)->findfirstlast_reduction(($op, dummy_index), a, b), A, indices;
-                            init = (false, dummy_index))
-            if res[1]
-                # out of consistency with Base.findarray, return a CartesianIndex
-                # when the input is a multidimensional array
-                ndims(A) == 1 && return res[2]
-                return CartesianIndices(A)[res[2]]
-            else
-                return nothing
-            end
+            I = eltype(indices)
+            sentinel = $sentinel_f(I)
+            i = mapreduce(_IndexIf(f, sentinel), $op_f(I), A, indices; init=sentinel)
+            i == sentinel && return nothing
+            # out of consistency with Base.findarray, return a CartesianIndex
+            # when the input is a multidimensional array
+            ndims(A) == 1 && return i
+            return CartesianIndices(A)[i]
         end
     end
 end

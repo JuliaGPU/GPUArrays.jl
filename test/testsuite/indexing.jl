@@ -189,6 +189,18 @@ end
         let x = rand(Float32, 10, 10)
             @test findfirst(>(0.5f0), x) == findfirst(>(0.5f0), AT(x))
         end
+        # Cartesian indices, of a view that cannot be indexed linearly
+        let x = rand(Float32, 10, 10)
+            @test findfirst(>(0.5f0), view(x, 1:2:9, :)) == findfirst(>(0.5f0), view(AT(x), 1:2:9, :))
+            @test findfirst(>(2f0), view(x, 1:2:9, :)) === findfirst(>(2f0), view(AT(x), 1:2:9, :))
+        end
+        # zero-dimensional, also indexed by Cartesian indices
+        let x = fill(1f0)
+            @test findfirst(>(0.5f0), x) === findfirst(>(0.5f0), AT(x))
+            @test findfirst(>(2f0), x) === findfirst(>(2f0), AT(x))
+            @test findfirst(>(0.5f0), PermutedDimsArray(x, ())) ===
+                  findfirst(>(0.5f0), PermutedDimsArray(AT(x), ()))
+        end
 
         # empty
         @test compare(findfirst, AT, Bool[])
@@ -214,6 +226,18 @@ end
         end
         let x = rand(Float32, 10, 10)
             @test findlast(>(0.5f0), x) == findlast(>(0.5f0), AT(x))
+        end
+        # Cartesian indices, of a view that cannot be indexed linearly
+        let x = rand(Float32, 10, 10)
+            @test findlast(>(0.5f0), view(x, 1:2:9, :)) == findlast(>(0.5f0), view(AT(x), 1:2:9, :))
+            @test findlast(>(2f0), view(x, 1:2:9, :)) === findlast(>(2f0), view(AT(x), 1:2:9, :))
+        end
+        # zero-dimensional, also indexed by Cartesian indices
+        let x = fill(1f0)
+            @test findlast(>(0.5f0), x) === findlast(>(0.5f0), AT(x))
+            @test findlast(>(2f0), x) === findlast(>(2f0), AT(x))
+            @test findlast(>(0.5f0), PermutedDimsArray(x, ())) ===
+                  findlast(>(0.5f0), PermutedDimsArray(AT(x), ()))
         end
 
         # empty
