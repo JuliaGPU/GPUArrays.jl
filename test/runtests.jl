@@ -1,4 +1,5 @@
 using ParallelTestRunner: runtests, parse_args
+using Test
 import GPUArrays
 
 include("testsuite.jl")
@@ -23,6 +24,14 @@ args = parse_args(ARGS)
 testsuite = Dict{String, Expr}()
 for AT in (:JLArray, :Array), name in keys(TestSuite.tests)
     testsuite["$(AT)/$name"] = :(TestSuite.tests[$name]($AT))
+end
+
+# captured variables that get boxed (`Core.Box`) lose their type
+if isdefined(Test, :detect_closure_boxes)
+    testsuite["closure boxes"] = quote
+        import GPUArrays
+        @test Test.detect_closure_boxes(GPUArrays, GPUArrays.GPUArraysCore, JLArrays) == []
+    end
 end
 
 runtests(GPUArrays, args; init_code, init_worker_code, testsuite)

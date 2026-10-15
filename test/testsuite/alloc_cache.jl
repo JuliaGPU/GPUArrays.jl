@@ -59,7 +59,7 @@
         end
         @test sizeof(cache) == sizeof(cached4) + sizeof(cached5)
         _keys = collect(keys(cache.free))
-        key2 = _keys[findfirst(i -> i != key, _keys)]
+        key2 = _keys[findfirst(!=(key), _keys)]
         @test length(cache.free[key]) == 1
         @test length(cache.free[key2]) == 1
         @test cache.free[key2][1] === GPUArrays.storage(cached5)
