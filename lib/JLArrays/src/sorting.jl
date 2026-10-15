@@ -47,3 +47,5 @@ function Base.reverse!(v::AnyJLVector, start::Integer, stop::Integer=lastindex(v
     reverse!(_host(v), start, stop)
     return v
 end
+Base.reverse(v::AnyJLVector, start::Integer, stop::Integer=lastindex(v)) =
+    reverse!(copy(v), start, stop)
