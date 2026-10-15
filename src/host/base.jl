@@ -345,8 +345,8 @@ viewlength() = ()
 @inline viewlength(i1::AbstractUnitRange, ::Base.ScalarIndex...) = (Base.length(i1),)
 
 # adaptor to upload an array to the GPU
-struct ToGPU
-    array::AbstractGPUArray
+struct ToGPU{A<:AbstractGPUArray}
+    array::A
 end
 ToGPU(A::WrappedArray) = ToGPU(parent(A))
 # these wrappers have no `parent`, so `parent(A) === A`

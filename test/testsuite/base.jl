@@ -399,6 +399,10 @@ end
       @test compare(x->view(x, :, 1:4, 3), AT, rand(Float32, 5, 4, 3))
       @test compare(x->view(x, Base.Slice(Base.OneTo(5)), 1:4, 3), AT, rand(Float32, 5, 4, 3))
 
+      let x = AT(rand(Float32, 4, 4))
+        @test first(parentindices(@inferred(view(x, [1, 2], 1)))) isa AT
+      end
+
       let x = AT(rand(Float32, 5, 4, 3))
         @test_throws BoundsError view(x, :, :, 1:10)
       end
