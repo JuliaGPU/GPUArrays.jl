@@ -366,14 +366,43 @@ end
             # # result of e.g. `print` differs on 32bit and 64bit machines
             # due to different definition of `Int` type
             # print([1]) shows as [1] on 64bit but Int64[1] on 32bit
+            # GPU arrays show as a constructor call around their contents
+            wrap(str) = AT <: AbstractGPUArray ? "$(nameof(AT))($str)" : str
             msg = showstr(A)
-            @test msg == "[1]" || msg == "Int64[1]"
+            @test msg == wrap("[1]") || msg == wrap("Int64[1]")
 
             msg = replstr(B)
             @test occursin(Regex("^2×2 $AT{Int64,\\s?2.*}:\n 1  2\n 3  4\$"), msg)
 
             msg = showstr(B)
-            @test msg == "[1 2; 3 4]" || msg == "Int64[1 2; 3 4]"
+            @test msg == wrap("[1 2; 3 4]") || msg == wrap("Int64[1 2; 3 4]")
+
+            @test showstr(AT(Int64[])) == wrap("Int64[]")
+            @test showstr(AT(fill(1))) == wrap("fill(1)")
+
+            # wrapped arrays are named after their storage, with materialized contents
+            msg = showstr(B')
+            @test msg == wrap("[1 3; 2 4]") || msg == wrap("Int64[1 3; 2 4]")
+            msg = showstr(view(B, 1, :))
+            @test msg == wrap("[1, 2]") || msg == wrap("Int64[1, 2]")
+
+            # the type is omitted when the context already implies it
+            @test endswith(showstr([A, A]), "[[1], [1]]")
+            @test endswith(showstr([B]), "[[1 2; 3 4]]")
+            @test endswith(showstr([AT(Float32[1])]), "[[1.0]]")
+            @test endswith(showstr(AbstractVector{Int64}[A]), "[$(wrap("[1]"))]")
+
+            if AT <: AbstractGPUArray
+                @test showstr(AT(zeros(Int64, 0, 2))') == wrap("Matrix{Int64}(undef, 2, 0)")
+                # an abstract `:typeinfo` names no constructor
+                @test endswith(showstr(AbstractGPUArray[A]), "[$(wrap("[1]"))]")
+            end
+
+            # wrappers with a printer of their own (LinearAlgebra's are new in 1.12) keep it
+            if VERSION >= v"1.12"
+                T = Tridiagonal(AT(Int64[3]), AT(Int64[1, 2]), AT(Int64[4]))
+                @test showstr(T) == "Tridiagonal($(wrap("[3]")), $(wrap("[1, 2]")), $(wrap("[4]")))"
+            end
 
             # the printing of Adjoint depends on global state
             msg = replstr(A')

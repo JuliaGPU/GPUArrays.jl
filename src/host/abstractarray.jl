@@ -232,13 +232,33 @@ Adapt.adapt_storage(::ToArray, xs::AbstractGPUArray) = convert(Array, xs)
 Base.print_array(io::IO, @nospecialize(X::AnyGPUArray)) =
     Base.print_array(io, adapt(ToArray(), X))
 
-# show
+# show: a call to the storage type around the materialized CPU copy, e.g. `CuArray([1, 2])`,
+# so that wrapped arrays like an `Adjoint` also show as an expression for an equal array.
+function show_storage(show_cpu, io::IO, @nospecialize(X::AnyGPUArray), args...)
+    print(io, nameof(Adapt.unwrap_type(typeof(X))), "(")
+    show_cpu(io, convert(Array, adapt(ToArray(), X)), args...)
+    print(io, ")")
+    return
+end
+# Like Base's eltype prefix, the call is left out when the context's `:typeinfo` is exactly
+# the array's type, e.g. for the elements of a `Vector{CuArray{Float32, 1, DeviceMemory}}`.
+# This is decided here because Base replaces `:typeinfo` before calling the matrix helpers.
+function Base.show(io::IO, @nospecialize(X::AbstractGPUArray))
+    if get(io, :typeinfo, Any) === typeof(X)
+        cpu = adapt(ToArray(), X)
+        show(IOContext(io, :typeinfo => typeof(cpu)), cpu)
+    else
+        show_storage(show, io, X)
+    end
+end
+# wrapped arrays reach these through Base's `show`, unless the wrapper has its own printer
+# (e.g. LinearAlgebra's `Diagonal` on Julia 1.12+, which then shows its GPU parents as above)
 Base._show_nonempty(io::IO, @nospecialize(X::AnyGPUArray), prefix::String) =
-    Base._show_nonempty(io, adapt(ToArray(), X), prefix)
+    show_storage(Base._show_nonempty, io, X, prefix)
 Base._show_empty(io::IO, @nospecialize(X::AnyGPUArray)) =
-    Base._show_empty(io, adapt(ToArray(), X))
+    show_storage(Base._show_empty, io, X)
 Base.show_vector(io::IO, @nospecialize(v::AnyGPUArray), args...) =
-    Base.show_vector(io, adapt(ToArray(), v), args...)
+    show_storage(Base.show_vector, io, v, args...)
 
 ## collect to CPU (discarding wrapper type)
 
