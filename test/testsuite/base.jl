@@ -399,6 +399,45 @@ end
       @test compare(x->view(x, :, 1:4, 3), AT, rand(Float32, 5, 4, 3))
       @test compare(x->view(x, Base.Slice(Base.OneTo(5)), 1:4, 3), AT, rand(Float32, 5, 4, 3))
 
+      let x = AT(rand(Float32, 4, 4))
+        @test first(parentindices(@inferred(view(x, [1, 2], 1)))) isa AT
+      end
+
+      # a view of a non-contiguous view is a SubArray, so its indices need uploading too
+      let x = AT(rand(Float32, 8, 8))
+        v = view(view(x, diagind(x)), [1, 3, 4, 6])
+        @test only(parentindices(v)) isa AT
+      end
+
+      @test compare(AT, rand(Float32, 8, 8), rand(Float32, 4)) do x, y
+        d = view(x, diagind(x))
+        view(d, [1, 3, 4, 6]) .= view(y, [1, 2, 3, 4])
+        x
+      end
+
+      @test compare(AT, rand(Float32, 8, 8)) do x
+        view(view(x, diagind(x)), [2, 5]) .= 1
+        x
+      end
+
+      @test compare(AT, rand(Float32, 8, 8)) do x
+        collect(view(view(x, diagind(x)), [1, 3, 5]))
+      end
+
+      # LinearAlgebra 1.12+ forwards views of a real adjoint to its parent, bypassing the
+      # `view` method on the parent
+      let x = AT(rand(Float32, 4, 4))
+        @test any(i -> i isa AT, parentindices(view(adjoint(x), [1, 2], 1)))
+      end
+
+      # wrappers whose `parent` is themselves
+      let x = Tridiagonal(AT(rand(Float32, 3)), AT(rand(Float32, 4)), AT(rand(Float32, 3)))
+        @test view(x, 1:2, 1:2) isa SubArray
+      end
+      let x = Bidiagonal(AT(rand(Float32, 4)), AT(rand(Float32, 3)), :U)
+        @test view(x, :) isa SubArray
+      end
+
       let x = AT(rand(Float32, 5, 4, 3))
         @test_throws BoundsError view(x, :, :, 1:10)
       end

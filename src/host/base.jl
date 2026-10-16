@@ -345,10 +345,14 @@ viewlength() = ()
 @inline viewlength(i1::AbstractUnitRange, ::Base.ScalarIndex...) = (Base.length(i1),)
 
 # adaptor to upload an array to the GPU
-struct ToGPU
-    array::AbstractGPUArray
+struct ToGPU{A<:AbstractGPUArray}
+    array::A
 end
 ToGPU(A::WrappedArray) = ToGPU(parent(A))
+# these wrappers have no `parent`, so `parent(A) === A`
+ToGPU(A::Bidiagonal) = ToGPU(A.dv)
+ToGPU(A::Tridiagonal) = ToGPU(A.d)
+ToGPU(A::Base.LogicalIndex) = ToGPU(A.mask)
 function Adapt.adapt_storage(to::ToGPU, xs::Array)
     arr = similar(to.array, eltype(xs), size(xs))
     copyto!(arr, xs)
@@ -360,6 +364,18 @@ end
     J_gpu = map(j->adapt(ToGPU(A), j), J)
     @boundscheck checkbounds(A, J...)
     unsafe_view(A, J_gpu, GPUIndexStyle(I...))
+end
+
+# A view of a non-contiguous view stays a `SubArray`, so the method above does not apply
+# and the index arrays are never uploaded. Let Base compose the indices, which it does on
+# the host, and upload the composed ones.
+@inline function Base.view(A::WrappedGPUArray, I::Vararg{Any,N}) where {N}
+    V = invoke(Base.view, Tuple{AbstractArray, Vararg{Any,N}}, A, I...)
+    V isa SubArray || return V
+    P = parent(V)
+    I_composed = parentindices(V)
+    J = map(j->adapt(ToGPU(P), j), I_composed)
+    J === I_composed ? V : SubArray(P, J)
 end
 
 @inline function unsafe_view(A, I, ::Contiguous)
