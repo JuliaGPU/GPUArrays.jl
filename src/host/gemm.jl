@@ -38,37 +38,26 @@ const TILE_DIM = 16
         M, N, K, ::Val{TA}, ::Val{TB},
         ::Val{TILE},
     ) where {TA, TB, TILE}
-    @uniform TAT = eltype(A); @uniform TBT = eltype(B); @uniform R = eltype(C)
+    TAT = eltype(A); TBT = eltype(B); R = eltype(C)
 
-    # li, lj, _ = KI.get_local_id()
     li, lj = @index(Local, NTuple)
-
-    # grow, gcol, _ = KI.get_group_id()
     grow, gcol = @index(Group, NTuple)
-    # Uncomment once moved to KernelInterface
-    # gi = (grow - 1) * TILE + li
-    # gj = (gcol - 1) * TILE + lj
+    gi = (grow - 1) * TILE + li
+    gj = (gcol - 1) * TILE + lj
 
     # padded by one row to avoid bank conflicts on shared memory
     tile1 = @localmem TAT (TILE + 1, TILE)
     tile2 = @localmem TBT (TILE + 1, TILE)
 
     # private variable for tile C
-    @uniform Tacc = promote_type(R, typeof(zero(TAT) * zero(TBT) + zero(TAT) * zero(TBT)))
-    # acc = -zero(Tacc) #Use this when KernelInterface
-    acc = @private Tacc 1
-    @inbounds acc[1] = zero(Tacc)
+    Tacc = promote_type(R, typeof(zero(TAT) * zero(TBT) + zero(TAT) * zero(TBT)))
+    acc = zero(Tacc)
 
     # number of tiles depends on inner dimension
-    # NUM_TILES = div(K + TILE - 1, TILE)
-    @uniform NUM_TILES = cld(K, TILE)
+    NUM_TILES = cld(K, TILE)
 
     # loop over all tiles needed for this calculation
     for t in 0:(NUM_TILES - 1)
-        # Remove once moved to KernelInterface
-        gi = (grow - 1) * TILE + li
-        gj = (gcol - 1) * TILE + lj
-
         # load inputs into tiles, with bounds checking for non-square matrices
         k0 = t * TILE
         ac = k0 + lj
@@ -85,28 +74,19 @@ const TILE_DIM = 16
         end
 
         # wait for all tiles to be loaded
-         @synchronize()
-
-        # Remove once moved to KernelInterface
-         gi = (grow - 1) * TILE + li
-         gj = (gcol - 1) * TILE + lj
+        @synchronize()
 
         @inbounds for k in 1:TILE
-            acc[1] = muladd(tile1[li, k], tile2[k, lj], acc[1])
+            acc = muladd(tile1[li, k], tile2[k, lj], acc)
         end
 
-         @synchronize()
+        @synchronize()
     end
-
-    # Remove once moved to KernelInterface
-    gi = (grow - 1) * TILE + li
-    gj = (gcol - 1) * TILE + lj
 
     # save if inbounds
     if gi <= M && gj <= N
-        @inbounds C[gi, gj] = add(acc[1], C[gi, gj])
+        @inbounds C[gi, gj] = add(acc, C[gi, gj])
     end
-    # return
 end
 
 @inline function check_matmul_shapes(C, A, B, cA='N', cB='N')
@@ -144,8 +124,6 @@ function generic_matmatmul!(C::AbstractArray{R}, cA::AbstractChar, cB::AbstractC
     workgroupsize=(TILE_DIM, TILE_DIM)
     numworkgroups=(cld(M, TILE_DIM), cld(N, TILE_DIM))
 
-    # KI.@kernel KI.get_backend(C) workgroupsize=workgroupsize numworkgroups=numworkgroups coalesced_matmul_kernel!(
-            # C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(TILE_DIM))
     coalesced_matmul_kernel!(get_backend(C), workgroupsize)(
             C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(TILE_DIM); ndrange=numworkgroups .* workgroupsize)
     C
