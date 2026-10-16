@@ -60,7 +60,7 @@ jobs:
   opencl:
     name: OpenCL.jl
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
       - uses: julia-actions/setup-julia@v3
@@ -103,7 +103,9 @@ jobs:
                     end
 
                     println("+++ :julia: Running tests")
-                    Pkg.test(; coverage=true)'
+                    # `poclc/` repeats every test through the OpenCL C back-end, which exercises
+                    # the compiler of OpenCL.jl rather than GPUArrays
+                    Pkg.test(; coverage=true, test_args=`pocl/`)'
       - uses: julia-actions/julia-processcoverage@v1
         with:
           directories: src,lib
