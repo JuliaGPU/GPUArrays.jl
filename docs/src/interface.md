@@ -21,12 +21,12 @@ end
 ```
 
 This will allow your defined type (in this case `JLArray`) to use the GPUArrays interface where available.
-To be able to actually use the functionality that is defined for `AbstractGPUArray`s, you need to define the backend, like so:
+To be able to actually use the functionality that is defined for `AbstractGPUArray`s, you need to define a [KernelInterface](https://github.com/JuliaGPU/KernelAbstractions.jl/tree/main/lib/KernelInterface) back-end, which compiles and launches kernels, like so:
 
 ```julia
-import KernelAbstractions: Backend
-struct CustomBackend <: KernelAbstractions.GPU
-KernelAbstractions.get_backend(a::CA) where CA <: CustomArray = CustomBackend()
+import KernelInterface as KI
+struct CustomBackend <: KI.Backend end
+KI.get_backend(a::CA) where CA <: CustomArray = CustomBackend()
 ```
 
 There are numerous examples of potential interfaces for GPUArrays, such as with [JLArrays](https://github.com/JuliaGPU/GPUArrays.jl/blob/main/lib/JLArrays/src/JLArrays.jl), [CuArrays](https://github.com/JuliaGPU/CUDA.jl/blob/main/CUDACore/src/array.jl), and [ROCArrays](https://github.com/JuliaGPU/AMDGPU.jl/blob/main/src/array.jl).
