@@ -54,7 +54,7 @@ steps:
                 end
 
                 println("+++ :julia: Running tests")
-                Pkg.test(; coverage=true)'
+                Pkg.test(; coverage="@" * gpuarrays)'
     agents:
       queue: "cuda"
     if: |
@@ -102,7 +102,7 @@ steps:
                 end
 
                 println("+++ :julia: Running tests")
-                Pkg.test(; coverage=true)'
+                Pkg.test(; coverage="@" * gpuarrays)'
     agents:
       queue: "cuda"
     if: |
@@ -153,7 +153,7 @@ steps:
                 end
 
                 println("+++ :julia: Running tests")
-                Pkg.test(; coverage=true)'
+                Pkg.test(; coverage="@" * gpuarrays)'
     agents:
       queue: "rocm"
       rocmgpu: "*"
@@ -207,7 +207,7 @@ steps:
                 end
 
                 println("+++ :julia: Running tests")
-                Pkg.test(; coverage=true)'
+                Pkg.test(; coverage="@" * gpuarrays)'
     agents:
       queue: "oneapi"
     if: |
@@ -259,7 +259,7 @@ steps:
                 end
 
                 println("+++ :julia: Running tests")
-                Pkg.test(; coverage=true, test_args=`--all`)'
+                Pkg.test(; coverage="@" * gpuarrays, test_args=`--all`)'
     agents:
       queue: "metal"
     if: |
