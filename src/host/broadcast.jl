@@ -109,14 +109,14 @@ function Base.map(f, x1::AnyGPUArray, xrest::Union{AnyGPUArray, AbstractRange}..
     return map!(f, dest, xs...)
 end
 
-function Base.map!(f, dest::AnyGPUArray, xs::AbstractArray...)
+function Base.map!(f, dest::AnyGPUArray, x::AbstractArray, xs::AbstractArray...)
     # custom broadcast, ignoring the container size mismatches
     # (avoids the reshape + view that our mapreduce impl has to do)
-    indices = LinearIndices.((dest, xs...))
+    indices = LinearIndices.((dest, x, xs...))
     common_length = minimum(length.(indices))
     common_length==0 && return
 
-    bc = Broadcast.instantiate(Broadcast.broadcasted(f, xs...))
+    bc = Broadcast.instantiate(Broadcast.broadcasted(f, x, xs...))
     if bc isa Broadcast.Broadcasted
         bc = Broadcast.preprocess(dest, bc)
     end
