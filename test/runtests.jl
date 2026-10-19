@@ -11,6 +11,12 @@ const init_worker_code = quote
 
     TestSuite.sparse_types(::Type{<:JLArray}) = (JLSparseVector, JLSparseMatrixCSC, JLSparseMatrixCSR)
     TestSuite.sparse_types(::Type{<:Array})   = (SparseVector, SparseMatrixCSC)
+
+    # KA v0.10 runs JLArray kernels through POCL, whose SPIR-V back-end lacks 128-bit integers
+    if isdefined(JLArrays.KernelAbstractions, :POCL)
+        TestSuite.supported_eltypes(::Type{<:JLArray}) =
+            filter(!=(Int128), TestSuite.supported_eltypes())
+    end
 end
 
 const init_code = quote
