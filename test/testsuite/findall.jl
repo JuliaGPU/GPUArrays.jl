@@ -40,6 +40,16 @@ end
     @test compare((A, m) -> A[:, m], AT, rand(Float32, 5, 10), rand(Bool, 10))
     # assignment
     @test compare((A, m) -> (A[m] .= 0; A), AT, rand(Float32, 100), rand(Bool, 100))
+    @test compare((A, m) -> (A[m] .= 0; A), AT, rand(Float32, 10, 10), rand(Bool, 10, 10))
+    @test compare(A -> (A[A .> 0.5f0] .= 1; A), AT, rand(Float32, 10, 10))
+    @test compare((A, m) -> (A[:, m] .= 0; A), AT, rand(Float32, 5, 10), rand(Bool, 10))
+    @test compare((A, B, m) -> (A[m] = B[m]; A), AT, rand(Float32, 10, 10), rand(Float32, 10, 10),
+                  rand(Bool, 10, 10))
+    # a view keeps the selected indices on the device, so it can be passed to a kernel
+    if AT <: AbstractGPUArray
+        @test parentindices(view(AT(rand(Float32, 4, 5)), AT(rand(Bool, 4, 5))))[1] isa AT
+        @test parentindices(view(AT(rand(Float32, 4, 5)), rand(Bool, 4, 5)))[1] isa AT
+    end
     # views and reshaped arrays
     @test compare((A, m) -> view(A, 1:50)[m], AT, rand(Float32, 100), rand(Bool, 50))
     @test compare((A, m) -> reshape(A, 10, 10)[m], AT, rand(Float32, 100), rand(Bool, 10, 10))
