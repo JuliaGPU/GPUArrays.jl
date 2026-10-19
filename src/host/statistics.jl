@@ -22,20 +22,25 @@ Statistics._std(A::AbstractGPUArray, corrected::Bool, mean, dims) =
 Statistics._std(A::AbstractGPUArray, corrected::Bool, mean, ::Colon) =
     sqrt.(Statistics.var(A; corrected=corrected, mean=mean, dims=:))
 
-# Revert https://github.com/JuliaLang/Statistics.jl/pull/25
-Statistics._mean(A::AbstractGPUArray, ::Colon)    = sum(A) / length(A)
-Statistics._mean(f, A::AbstractGPUArray, ::Colon) = sum(f, A) / length(A)
-
-function Statistics._mean(A::AbstractGPUArray, dims)
-    T = float(eltype(A))
-    λ = convert(T, inv(_mean_denom(A, dims)))
-    sum(Base.Fix1(*,λ), A; dims)
-end
+# Like Statistics.jl, accumulate in the floating-point type of the result and divide
+# afterwards: summing integers overflows, and scaling each term first loses precision.
+# The accumulator type is inferred, as computing it from `first(A)` would need scalar indexing.
 function Statistics._mean(f, A::AbstractGPUArray, dims)
-    T = float(eltype(A))
-    λ = convert(T, inv(_mean_denom(A, dims)))
-    sum(Base.Fix1(*,λ) ∘ f, A; dims)
+    isempty(A) && return sum(f, A; dims) / 0
+    S = Base.promote_op(f, eltype(A))
+    T = promote_type(Base.promote_op(/, S, Int), S)
+    result = sum(_mean_convert(f, T), A; dims)
+    if dims isa Colon
+        result / length(A)
+    else
+        result ./= _mean_denom(A, dims)
+    end
 end
+
+# `f` and `T` are static parameters rather than captured values, so the closure stays isbits
+# when `f` is a type (e.g. `mean(Float32, A)`) and can be passed to a kernel.
+_mean_convert(f::F, ::Type{T}) where {F,T} = x -> convert(T, f(x))
+_mean_convert(::Type{F}, ::Type{T}) where {F,T} = x -> convert(T, F(x))
 
 function Statistics.covzm(x::AbstractGPUMatrix, vardim::Int=1; corrected::Bool=true)
     C = Statistics.unscaled_covzm(x, vardim)
