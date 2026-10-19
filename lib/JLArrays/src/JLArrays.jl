@@ -16,11 +16,7 @@ using Random
 
 import GPUArrays: dense_array_type
 
-import KernelAbstractions
-
-@static if isdefined(JLArrays.KernelAbstractions, :POCL) # KA v0.10
-    import KernelAbstractions: POCL
-end
+import KernelAbstractions: KernelAbstractions, POCL
 
 module AS
 

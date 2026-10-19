@@ -14,7 +14,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 [compat]
 Adapt = "2.0, 3.0, 4.0"
 GPUArrays = "12.1"
-KernelAbstractions = "0.9"
+KernelAbstractions = "0.10"
 LinearAlgebra = "1"
 Random = "1"
 SparseArrays = "1"
