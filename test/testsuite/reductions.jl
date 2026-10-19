@@ -268,6 +268,54 @@ end
     @test compare((A, B) -> isequal(A, B), AT, [missing], [missing])
 end
 
+# Associative operators that do not commute: the elements are combined in their order, as in Base
+@testsuite "reductions/order" (AT, eltypes)->begin
+    # The first maximum and its index (#164 in AcceleratedKernels.jl): ties far apart, and in
+    # neighbouring blocks' or threads' elements
+    function first_max((xmax, imax), (x, i))
+        xmax < x ? (x, i) : (xmax, imax)
+    end
+    for js in ((2, 163841), (2, 257), (300, 4097, 70_000))
+        xs = zeros(Float32, 1_000_000)
+        xs[collect(js)] .= 1
+        @test mapreduce(tuple, first_max, AT(xs), AT(collect(eachindex(xs)));
+                        init=(-Inf32, -1)) == (1f0, first(js))
+    end
+
+    # The last non-zero value
+    last_nonzero(a, b) = iszero(b) ? a : b
+    @test compare(A -> reduce(last_nonzero, A), AT, rand(Int32(-2):Int32(2), 100_000))
+    @test compare(A -> reduce(last_nonzero, A; dims=1, init=Int32(0)), AT,
+                  rand(Int32(-2):Int32(2), 3000, 30))
+    @test compare(A -> reduce(last_nonzero, A; dims=2, init=Int32(0)), AT,
+                  rand(Int32(-2):Int32(2), 30, 3000))
+
+    # Products of 2x2 matrices over UInt32 (as tuples), random products of SL(2, Z) generators so
+    # that long products do not collapse to zero
+    matmul((a, b, c, d), (e, f, g, h)) = (a * e + b * g, a * f + b * h, c * e + d * g, c * f + d * h)
+    o, z, m = UInt32(1), UInt32(0), typemax(UInt32)
+    gens = ((o, o, z, o), (o, z, o, o), (o, m, z, o), (o, z, m, o))
+    I2 = (o, z, z, o)
+    randmat() = foldl(matmul, rand(gens, 3); init=I2)
+    M = [randmat() for _ in 1:200_000]
+    @test compare(A -> reduce(matmul, A), AT, M)
+    init = randmat()
+    @test compare(A -> reduce(matmul, A; init), AT, M)
+    for (sz, dims) in (((40, 5000), 2), ((5000, 40), 1), ((300, 300), 1), ((300, 300), 2),
+                       ((20, 30, 40), (1, 3)))
+        @test compare(A -> reduce(matmul, A; dims, init=I2), AT,
+                      [randmat() for _ in CartesianIndices(sz)])
+    end
+
+    # Base's operators on Base's number types commute; on other types they need not
+    @test GPUArrays._commutative(+, Float32, Union{})
+    @test GPUArrays._commutative(Base.add_sum, Int8, Int)
+    @test GPUArrays._commutative(max, Float64, Float64)
+    @test !GPUArrays._commutative(*, NTuple{4, UInt32}, Union{})
+    @test !GPUArrays._commutative(+, Float32, Any)
+    @test !GPUArrays._commutative((a, b) -> a + b, Float32, Float32)
+end
+
 @testsuite "reductions/contract" (AT, eltypes)->begin
     M = rand(1:10, 10, 20)
 

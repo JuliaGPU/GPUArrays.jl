@@ -212,9 +212,13 @@ _findlast_sentinel(::Type{I}) where {I <: Integer} = typemin(I)
 _findlast_sentinel(::Type{CartesianIndex{N}}) where {N} =
     CartesianIndex(ntuple(_ -> typemin(Int), Val(N)))
 _findfirst_op(::Type{<:Integer}) = min
-_findfirst_op(::Type{<:CartesianIndex}) = (a, b) -> isless(b, a) ? b : a
+_findfirst_op(::Type{<:CartesianIndex}) = _first_index
 _findlast_op(::Type{<:Integer}) = max
-_findlast_op(::Type{<:CartesianIndex}) = (a, b) -> isless(a, b) ? b : a
+_findlast_op(::Type{<:CartesianIndex}) = _last_index
+_first_index(a, b) = isless(b, a) ? b : a
+_last_index(a, b) = isless(a, b) ? b : a
+_commutative(::Union{typeof(_first_index), typeof(_last_index)}, Ts::Type...) =
+    _commutes_on(CartesianIndex, Ts)
 
 struct _IndexIf{F, I} <: Function
     f::F
@@ -280,16 +284,22 @@ struct _FindPair{F}
 end
 (p::_FindPair)(x, i) = (p.f(x), i)
 
+# The pair with the greater value by `binop` (`isless` for `findmax`), or of equal values the one
+# with the smaller index. It commutes where `binop` is a total order, as for real numbers.
+struct _FindReduction{B} <: Function
+    binop::B
+end
+function (r::_FindReduction)(t1, t2)
+    (x, i), (y, j) = t1, t2
+    r.binop(x, y) && return t2
+    isequal(x, y) && return (x, min(i, j))
+    return t1
+end
+_commutative(::_FindReduction, Ts::Type...) =
+    _commutes_on(Tuple{_CommutativeReal, Integer}, Ts)
+
 
 function findminmax(binop, f, A::AnyGPUArray; dims)
-    function reduction(t1, t2)
-        (x, i), (y, j) = t1, t2
-
-        binop(x, y) && return t2
-        isequal(x, y) && return (x, min(i, j))
-        return t1
-    end
-
     if isempty(A)
         h = (binop === Base.isless ? findmax : findmin)(f, Array{eltype(A)}(undef, size(A)); dims)
         return dims === Colon() ? h : (copyto!(similar(A, eltype(h[1]), size(h[1])), h[1]),
@@ -299,7 +309,7 @@ function findminmax(binop, f, A::AnyGPUArray; dims)
     # (along valid `dims`, a 0-dimensional array reduces nothing; Julia 1.10's `reduced_indices`
     # cannot take it)
     rdims = ndims(A) == 0 && !(dims isa Colon) && all(d -> d isa Integer && d >= 1, dims) ? () : dims
-    res = mapreduce(_FindPair(f), reduction, A, LinearIndices(A); dims=rdims)
+    res = mapreduce(_FindPair(f), _FindReduction(binop), A, LinearIndices(A); dims=rdims)
     I = keys(A)
     if dims === Colon()
         return (res[1], I[res[2]])

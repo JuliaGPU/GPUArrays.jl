@@ -242,10 +242,7 @@ function LinearAlgebra.istriu(A::AbstractGPUMatrix, k::Integer = 0)
             true
         end
     end
-    function reducer(a, b)
-        a && b
-    end
-    mapreduce(mapper, reducer, A, eachindex(IndexCartesian(), A); init=true)
+    mapreduce(mapper, &, A, eachindex(IndexCartesian(), A); init=true)
 end
 
 # check if lower triangular starting from the kth subdiagonal.
@@ -258,10 +255,7 @@ function LinearAlgebra.istril(A::AbstractGPUMatrix, k::Integer = 0)
             true
         end
     end
-    function reducer(a, b)
-        a && b
-    end
-    mapreduce(mapper, reducer, A, eachindex(IndexCartesian(), A); init=true)
+    mapreduce(mapper, &, A, eachindex(IndexCartesian(), A); init=true)
 end
 
 # istriu/istril of triangular wrappers of the opposite triangularity: the generic
