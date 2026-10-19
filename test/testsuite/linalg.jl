@@ -763,6 +763,19 @@ end
             mul!(view(C, 1:2:8, :), view(A, 1:2:8, :), view(B, :, 1:2:10), T(2), T(1))
             C
         end
+        # storage-level matrix-vector product (public since Julia 1.13) with step-range vectors
+        if AT <: AbstractGPUArray
+            xs, ys = rand(T, 16), rand(T, 16)
+            @testset "$tA" for tA in ('N', 'T', 'C')
+                M = tA == 'N' ? As : copy(As')
+                opM = tA == 'N' ? M : tA == 'T' ? transpose(M) : M'
+                ref = mul!(copy(ys)[1:2:16], opM, xs[1:2:12], T(2), T(1))
+                y = AT(ys)
+                mul!(view(y, 1:2:16), tA, AT(M), view(AT(xs), 1:2:12), T(2), T(1))
+                @test Array(y)[1:2:16] ≈ ref
+                @test Array(y)[2:2:16] == ys[2:2:16]
+            end
+        end
 
         # reversed columns (negative stride along the second dimension)
         @test compare((A, B) -> view(A, :, 6:-1:1) * view(B, 6:-1:1, :), AT, As, Bs)
