@@ -44,6 +44,9 @@ function broadcasting(AT, eltypes)
                 gres .= test_idx.(gidx, Base.RefValue(gy))
                 cres .= test_idx.(cidx, Base.RefValue(cy))
                 @test Array(gres) == cres
+
+                # a `Ref` of a type, as passed by `convert.(T, A)`
+                @test compare(a -> convert.(ET, a), AT, rand(ET, N))
             end
 
             @testset "Tuple" begin
