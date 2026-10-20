@@ -1,5 +1,5 @@
 using LinearAlgebra: MulAddMul, wrapper_char, _unwrap
-
+import KernelInterface as KI
 ## Matmul kernel
 
 # A[i, j] of a symmetric/hermitian matrix with only one triangle stored
@@ -38,21 +38,21 @@ end
 @inline accumulator_zero(::Type{T}) where {T} = zero(T)
 
 const TILE_DIM = 16
-@kernel unsafe_indices = true function coalesced_matmul_kernel!(
+function coalesced_matmul_kernel!(
         C, A, B, add,
         M, N, K, ::Val{TA}, ::Val{TB},
         ::Val{TILE},
     ) where {TA, TB, TILE}
     TAT = eltype(A); TBT = eltype(B); R = eltype(C)
 
-    li, lj = @index(Local, NTuple)
-    grow, gcol = @index(Group, NTuple)
+    li, lj, _ = KI.get_local_id()
+    grow, gcol, _ = KI.get_group_id()
     gi = (grow - 1) * TILE + li
     gj = (gcol - 1) * TILE + lj
 
     # padded by one row to avoid bank conflicts on shared memory
-    tile1 = @localmem TAT (TILE + 1, TILE)
-    tile2 = @localmem TBT (TILE + 1, TILE)
+    tile1 = KI.localmemory(TAT, (TILE + 1, TILE))
+    tile2 = KI.localmemory(TBT, (TILE + 1, TILE))
 
     # private variable for tile C
     Tacc = promote_type(R, typeof(zero(TAT) * zero(TBT) + zero(TAT) * zero(TBT)))
@@ -79,20 +79,21 @@ const TILE_DIM = 16
         end
 
         # wait for all tiles to be loaded
-        @synchronize()
+        KI.barrier()
 
         # skip the zero padding past K: adding its +0.0 products would turn a -0.0 into +0.0
         @inbounds for k in 1:min(TILE, K - k0)
             acc = muladd(tile1[li, k], tile2[k, lj], acc)
         end
 
-        @synchronize()
+         KI.barrier()
     end
 
     # save if inbounds
     if gi <= M && gj <= N
         @inbounds C[gi, gj] = add(acc, C[gi, gj])
     end
+    return
 end
 
 @inline function check_matmul_shapes(C, A, B, cA='N', cB='N')
@@ -130,7 +131,7 @@ function generic_matmatmul!(C::AbstractArray{R}, cA::AbstractChar, cB::AbstractC
     workgroupsize=(TILE_DIM, TILE_DIM)
     numworkgroups=(cld(M, TILE_DIM), cld(N, TILE_DIM))
 
-    coalesced_matmul_kernel!(get_backend(C), workgroupsize)(
-            C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(TILE_DIM); ndrange=numworkgroups .* workgroupsize)
+    KI.@launch KI.get_backend(C) workgroupsize=workgroupsize numgroups=numworkgroups coalesced_matmul_kernel!(
+            C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(TILE_DIM))
     C
 end
