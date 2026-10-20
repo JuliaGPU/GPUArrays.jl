@@ -153,6 +153,7 @@ function JLSparseMatrixCSC(xs::SparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
     return JLSparseMatrixCSC{Tv, Ti}(colPtr, rowVal, nzVal, (xs.m, xs.n))
 end
 JLSparseMatrixCSC(xs::SparseVector) = JLSparseMatrixCSC(SparseMatrixCSC(xs))
+
 Base.length(x::JLSparseMatrixCSC) = prod(x.dims)
 Base.size(x::JLSparseMatrixCSC) = x.dims
 

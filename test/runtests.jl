@@ -30,6 +30,32 @@ for AT in (:JLArray, :Array), name in keys(TestSuite.tests)
     testsuite["$(AT)/$name"] = :(TestSuite.tests[$name]($AT))
 end
 
+testsuite["JLArray/kernelabstractions"] = quote
+    import KernelAbstractions
+    import KernelAbstractions as KA
+    using JLArrays.JLKernels
+
+    include(joinpath(dirname(pathof(KernelAbstractions)), "..", "test", "testsuite.jl"))
+
+    # JLArrays don't convert dense arrays to sparse ones, and the other two tests only run
+    # kernels on KernelAbstractions' own CPU back end
+    skip_tests = Set(["sparse", "CPU synchronization", "fallback test: callable types"])
+    # JLArray kernels are compiled by POCL, like the CPU back end's, so check them the same way
+    Testsuite.testsuite(JLBackend, "CPU", KernelAbstractions.POCL, JLArray,
+                        KernelAbstractions.POCL.CLDeviceArray; skip_tests)
+end
+
+testsuite["JLArray/kernelinterface"] = quote
+    import KernelInterface
+    import KernelInterface as KI
+    using JLArrays.JLKernels
+    import Adapt
+
+    include(joinpath(dirname(pathof(KernelInterface)), "..", "test", "testsuite.jl"))
+
+    Testsuite.testsuite(JLBackend(), JLArray)
+end
+
 # captured variables that get boxed (`Core.Box`) lose their type
 if isdefined(Test, :detect_closure_boxes)
     testsuite["closure boxes"] = quote
