@@ -32,6 +32,27 @@ for AT in (:JLArray, :Array), name in keys(TestSuite.tests)
     testsuite["$(AT)/$name"] = :(TestSuite.tests[$name]($AT))
 end
 
+testsuite["JLArray/kernelabstractions"] = quote
+    import KernelAbstractions
+    import KernelAbstractions as KA
+    using JLArrays.JLKernels
+
+    include(joinpath(dirname(pathof(KernelAbstractions)), "..", "test", "testsuite.jl"))
+
+    Testsuite.testsuite(JLBackend, "JLArrays", JLArrays, JLArray, KernelAbstractions.POCL.CLDeviceArray)
+end
+
+testsuite["JLArray/kernelinterface"] = quote
+    import KernelInterface
+    import KernelInterface as KI
+    using JLArrays.JLKernels
+    import Adapt
+
+    include(joinpath(dirname(pathof(KernelInterface)), "..", "test", "testsuite.jl"))
+
+    Testsuite.testsuite(JLBackend(), JLArray)
+end
+
 # captured variables that get boxed (`Core.Box`) lose their type
 if isdefined(Test, :detect_closure_boxes)
     testsuite["closure boxes"] = quote
