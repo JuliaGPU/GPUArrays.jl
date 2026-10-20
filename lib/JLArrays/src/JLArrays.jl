@@ -40,4 +40,7 @@ include("findall.jl")
 include("JLKernels.jl")
 import .JLKernels: JLBackend
 
+# code reflection: JLArray kernels are compiled by POCL, for the device-side argument types
+import .POCL: code_typed, code_warntype, code_llvm, code_native
+
 end
