@@ -4,6 +4,9 @@ using GPUArrays: UnsupportedSparseVendor
 using AMDGPU.rocSPARSE: ROCCanonicalMatrix,ROCSparseMatrix,ROCSparseMatrixCSR,
     ROCSparseMatrixCSC,ROCSparseMatrixCOO,ROCSparseMatrixBSR
 const SP=AMDGPU.rocSPARSE
+GPUArrays.default_sparse_indtype(::ROCMatrix) = Cint
+GPUArrays.sparse_format(fmt::Symbol,A::ROCMatrix) = fmt===:bsr ? ROCSparseMatrixBSR :
+    invoke(GPUArrays.sparse_format,Tuple{Symbol,GPUArrays.AbstractGPUMatrix},fmt,A)
 struct ROCSpMV end
 struct ROCSpMM end
 struct ROCSpGEMM end

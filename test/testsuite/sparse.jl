@@ -936,11 +936,17 @@ function sparse_dense_conversions(AT, eltypes)
                 @test B isa S{ET,Int32}
                 @test same_sparse(B, SparseMatrixCSC{ET,Int32}(sparse(D)))
             end
-            @test sparse(dD) isa GPUSparseMatrixCSC{ET,Int}
+            default_Ti=GPUArrays.default_sparse_indtype(dD)
+            @test sparse(dD) isa GPUSparseMatrixCSC{ET,default_Ti}
             @test same_sparse(sparse(dD), sparse(D))
-            @test sparse(dD; fmt=:csr) isa GPUSparseMatrixCSR{ET,Int}
-            @test sparse(dD; fmt=:coo) isa GPUSparseMatrixCOO{ET,Int}
-            @test_throws ArgumentError sparse(dD; fmt=:bsr)
+            for (fmt,S) in ((:csc,GPUSparseMatrixCSC),(:csr,GPUSparseMatrixCSR),(:coo,GPUSparseMatrixCOO))
+                result=sparse(dD;fmt)
+                @test result isa S{ET,default_Ti}
+                S===GPUSparseMatrixCOO || @test eltype(GPUArrays.compressed_ptr(result))===default_Ti
+                check_structure(result)
+                @test same_sparse(result,sparse(D))
+            end
+            @test_throws ArgumentError sparse(dD; fmt=:unknown_format)
             for (m, n) in ((0, 0), (0, 3), (3, 0), (3, 4))
                 Z = zeros(ET, m, n)
                 for S in sparse_matrix_formats
