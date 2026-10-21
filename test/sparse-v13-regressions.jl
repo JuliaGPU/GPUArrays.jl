@@ -71,15 +71,29 @@ Base.resize!(::FixedSparseStorage, ::Integer) = throw(ArgumentError("fixed stora
             @test eltype(1.0*cancel*rhs)===Float64
             @test Array(1.0*cancel*rhs)==ones(1,1)
             @test Array(1.0*transpose(copy(transpose(cancel)))*rhs)==ones(1,1)
-            for dims in ((2,3),(3,2))
+            for dims in ((2,3),(3,2),(0,3),(3,0))
                 host=sparse(reshape(Float32.(1:prod(dims)),dims))
                 A=S(adapt(JLArray,host))
-                for op in (+,-)
-                    @test Array(op(A,I)) == Matrix(op(host,I))
-                    @test Array(op(I,A)) == Matrix(op(I,host))
+                # Preserve the existing GPU rectangular diagonal operation even
+                # when newer SparseArrays versions restrict UniformScaling to square.
+                for J in (I,2.5f0*I,-3f0*I), op in (+,-)
+                    identity=zeros(Float32,dims)
+                    for i in 1:min(dims...)
+                        identity[i,i]=J.λ
+                    end
+                    @test Array(op(A,J)) == op(Matrix(host),identity)
+                    @test Array(op(J,A)) == op(identity,Matrix(host))
                 end
                 @test_throws DimensionMismatch one(A)
                 @test_throws DimensionMismatch oneunit(A)
+            end
+            for dims in ((0,0),(2,2))
+                host=sparse(reshape(Float32.(1:prod(dims)),dims))
+                A=S(adapt(JLArray,host))
+                for J in (I,2.5f0*I,-3f0*I), op in (+,-)
+                    @test Array(op(A,J)) == Matrix(op(host,J))
+                    @test Array(op(J,A)) == Matrix(op(J,host))
+                end
             end
             host=sparse(Float32[1.1 2.3;0 3.7])
             A=S(adapt(JLArray,host))

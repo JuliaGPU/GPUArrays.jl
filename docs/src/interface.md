@@ -185,6 +185,10 @@ concatenation and blockdiag are not implemented; reshape and linearization copy.
 Arbitrary sparse views and complete SparseArrays compatibility are not promised.
 Diagonal extraction follows the dense-array convention of returning an empty device
 vector for offsets outside the matrix, including extreme signed offsets.
+`A ± λI` and `λI ± A` remain supported for rectangular GPU sparse matrices: the
+identity contributes through `min(size(A)...)`. This preserves existing CUDA/AMD
+functionality independently of Julia version; newer SparseArrays restricts these
+operations to square matrices. Square results follow SparseArrays.
 
 For `*(α, A, B)` with a canonical sparse matrix (or its transpose/adjoint) on
 the left, GPUArrays scales `A` with normal element-type promotion before the
