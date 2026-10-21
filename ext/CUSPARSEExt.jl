@@ -167,6 +167,15 @@ end
 vendor_values(A::CuCanonicalMatrix,T) = eltype(A) === T ? A : GPUArrays.with_values(A,T)
 vendor_values(A::cuSPARSE.CuSparseMatrixBSR,T) = eltype(A) === T ? A : cuSPARSE.CuSparseMatrixBSR{T}(A)
 
+# Backend-only formats normalize once, then use centrally owned arithmetic.
+for op in (:+,:-)
+    @eval begin
+        Base.$op(A::cuSPARSE.CuSparseMatrixBSR,B::GPUArrays.GPUSparseMatrix)=Base.$op(cuSPARSE.CuSparseMatrixCSR(A),B)
+        Base.$op(A::GPUArrays.GPUSparseMatrix,B::cuSPARSE.CuSparseMatrixBSR)=Base.$op(A,cuSPARSE.CuSparseMatrixCSR(B))
+        Base.$op(A::cuSPARSE.CuSparseMatrixBSR,B::cuSPARSE.CuSparseMatrixBSR)=Base.$op(cuSPARSE.CuSparseMatrixCSR(A),cuSPARSE.CuSparseMatrixCSR(B))
+    end
+end
+
 include("CUSPARSEExt/solves.jl")
 
 end

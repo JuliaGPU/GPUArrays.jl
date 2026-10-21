@@ -1,4 +1,20 @@
 # Vendor triangular solves remain accelerated after replacing the ordinary containers.
+# BSR identities preserve block layout, including padded final blocks.
+function bsr_identity(unit,A::CuSparseMatrixBSR{<:Any,Ti}) where {Ti}
+    n=LinearAlgebra.checksquare(A)
+    b=Int(A.blockDim); mb=cld(n,b)
+    GPUArrays.check_sparse_nnz(Ti,mb)
+    p=GPUArrays.sparse_similar(A.rowPtr,Ti,Base.checked_add(mb,1)); p .= 1:mb+1
+    i=GPUArrays.sparse_similar(A.colVal,Ti,mb); i .= 1:mb
+    values=fill!(GPUArrays.sparse_similar(A.nzVal,typeof(unit),Base.checked_mul(mb,Base.checked_mul(b,b))),zero(unit))
+    diagonal=view(reshape(values,b*b,mb),1:b+1:b*b,:)
+    diagonal .= unit
+    pad=mb*b-n
+    pad>0 && (diagonal[end-pad+1:end,end] .= zero(unit))
+    CuSparseMatrixBSR{typeof(unit),Ti}(p,i,values,size(A),b,A.dir,mb)
+end
+Base.one(A::CuSparseMatrixBSR)=bsr_identity(one(eltype(A)),A)
+Base.oneunit(A::CuSparseMatrixBSR)=bsr_identity(oneunit(eltype(A)),A)
 using LinearAlgebra: BlasFloat, AdjOrTrans
 using cuSPARSE: CuSparseMatrixCSR,CuSparseMatrixCSC,CuSparseMatrixCOO,CuSparseMatrixBSR,
                 sv!,sm!,sv2!,sm2!
