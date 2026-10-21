@@ -76,7 +76,7 @@ if haskey(ENV,"GPUARRAYS_V13_STACK_PREFERENCES")
                              joinpath(package,"LocalPreferences.toml");force=true)
 end
 
-if !setup_only && backend == "oneAPI"
+if backend == "oneAPI" && (!setup_only || get(ENV,"GPUARRAYS_V13_STACK_BUILD_SUPPORT","false")=="true")
     # This branch changes the support C++ wrappers. Build them for stack validation;
     # the registered JLL has not incorporated those changes yet.
     Pkg.activate(package)
@@ -106,11 +106,7 @@ if !setup_only && backend == "oneAPI"
     ENV["GPUARRAYS_V13_STACK_SUPPORT"]=support
     println("STACK_SUPPORT_LIBRARY ",support)
 end
-if !setup_only
-    # CUDA defaults omit library suites; Metal defaults omit GPUArrays' suite.
-    test_args = backend in ("CUDA","Metal") ? ["--all","--verbose"] :
-                backend == "OpenCL" ? ["--platform=pocl","--verbose"] : ["--verbose"]
-    length(ARGS)>1 && (test_args=ARGS[2:end])
+function stack_prepare_tests()
     # CUDA's runner switches into each library test project. Julia 1.10 ignores
     # [sources] and workspaces, so developing the libraries in `active` alone does
     # not resolve test-only imports such as SparseMatricesCSR. Resolve every actual
@@ -133,30 +129,19 @@ if !setup_only
         println("STACK_TEST_PROJECT ",project)
     end
     Pkg.activate(active)
-    if VERSION<v"1.12" && package!=gpuarrays
-        # Older Pkg cannot merge a developed root-test manifest with the same
-        # developed packages already in the active manifest (even at identical
-        # paths). Keep it as evidence, and let Pkg.test construct its sandbox from
-        # `active`. Library test manifests remain in place for the runner switches.
-        manifest=joinpath(package,"test","Manifest.toml")
-        isfile(manifest) && mv(manifest,joinpath(scratch,"root-test-Manifest.toml"))
-    end
-    # A backend runner may otherwise skip unavailable hardware/libraries and exit 0.
+end
+
+# Custom CI jobs (minimum dependencies, Enzyme) can prepare the pinned stack,
+# change dependencies in its disposable checkout, then run the same checked runner.
+function stack_load_backend(test_args)
     if backend=="CUDA"
         @eval using CUDA,cuSPARSE,cuSOLVER
-        CUDA.functional() && cuSPARSE.functional() && cuSOLVER.functional() ||
-            error("CUDA/cuSPARSE/cuSOLVER must be functional for stack validation")
     elseif backend=="AMDGPU"
         @eval using AMDGPU
-        all(AMDGPU.functional,(:hip,:rocsparse,:rocblas,:rocsolver)) ||
-            error("HIP/rocSPARSE/rocBLAS/rocSOLVER must be functional for stack validation")
     elseif backend=="Metal"
         @eval using Metal
-        Metal.functional() || error("Metal must be functional for stack validation")
     elseif backend=="oneAPI"
         @eval using oneAPI
-        oneAPI.functional() || error("oneAPI must be functional for stack validation")
-        oneAPI.Support._check_sparse_abi()
     elseif backend=="OpenCL"
         requested=findfirst(arg->startswith(arg,"--platform="),test_args)
         request=requested===nothing ? "pocl" : split(test_args[requested],'=';limit=2)[2]
@@ -165,6 +150,29 @@ if !setup_only
         Pkg.add(string(driver))
         @eval using OpenCL
         @eval import $driver
+    end
+end
+function stack_run_tests(test_args)
+    stack_load_backend(test_args)
+    # Imports above can install new extension methods; enter their world explicitly.
+    Base.invokelatest(stack_run_loaded_tests,test_args)
+end
+function stack_run_loaded_tests(test_args)
+    # A backend runner may otherwise skip unavailable hardware/libraries and exit 0.
+    if backend=="CUDA"
+        CUDA.functional() && cuSPARSE.functional() && cuSOLVER.functional() ||
+            error("CUDA/cuSPARSE/cuSOLVER must be functional for stack validation")
+    elseif backend=="AMDGPU"
+        all(AMDGPU.functional,(:hip,:rocsparse,:rocblas,:rocsolver)) ||
+            error("HIP/rocSPARSE/rocBLAS/rocSOLVER must be functional for stack validation")
+    elseif backend=="Metal"
+        Metal.functional() || error("Metal must be functional for stack validation")
+    elseif backend=="oneAPI"
+        oneAPI.functional() || error("oneAPI must be functional for stack validation")
+        oneAPI.Support._check_sparse_abi()
+    elseif backend=="OpenCL"
+        requested=findfirst(arg->startswith(arg,"--platform="),test_args)
+        request=requested===nothing ? "pocl" : split(test_args[requested],'=';limit=2)[2]
         any(OpenCL.cl.platforms()) do candidate_platform
             name=lowercase(candidate_platform.name*" "*candidate_platform.vendor)
             matches=request in ("pocl","pocl_next") ? occursin("portable",name) :
@@ -176,6 +184,17 @@ if !setup_only
     julia_args=Cmd(Base.shell_split(get(ENV,"GPUARRAYS_V13_STACK_JULIA_ARGS","")))
     allow_reresolve=parse(Bool,get(ENV,"GPUARRAYS_V13_STACK_ALLOW_RERESOLVE","true"))
     try
+        if VERSION<v"1.12" && package!=gpuarrays
+            # Run after custom dependency changes, which can recreate this manifest.
+            # Older Pkg rejects repeated fixed UUIDs even at identical paths. Keep
+            # each generated root-test manifest as evidence; library test manifests
+            # remain for runner switches. Pkg.test builds its sandbox from `active`.
+            manifest=joinpath(package,"test","Manifest.toml")
+            if isfile(manifest)
+                evidence=mktempdir(scratch;prefix="root-test-manifest-")
+                mv(manifest,joinpath(evidence,"Manifest.toml"))
+            end
+        end
         Pkg.test([backend == "JLArrays" ? "GPUArrays" : backend];
                  coverage,test_args,julia_args,allow_reresolve)
     finally
@@ -191,4 +210,15 @@ if !setup_only
             end
         end
     end
+end
+
+if !setup_only || get(ENV,"GPUARRAYS_V13_STACK_PREPARE_TESTS","false")=="true"
+    stack_prepare_tests()
+end
+if !setup_only
+    # CUDA defaults omit library suites; Metal defaults omit GPUArrays' suite.
+    test_args = backend in ("CUDA","Metal") ? ["--all","--verbose"] :
+                backend == "OpenCL" ? ["--platform=pocl","--verbose"] : ["--verbose"]
+    length(ARGS)>1 && (test_args=ARGS[2:end])
+    stack_run_tests(test_args)
 end
