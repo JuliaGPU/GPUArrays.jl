@@ -28,7 +28,7 @@ function check_sparse_product(C, tA, tB, A, B)
     check_product_dims(size(C), op_size(A, tA), op_size(B, tB))
     check_storage_compatibility(map(storage_parent, (C, product_buffers(A)..., product_buffers(B)...))...)
     for input in (A, B)
-        Base.mightalias(C, input) &&
+        any(buffer -> Base.mightalias(C,buffer),product_buffers(input)) &&
             throw(ArgumentError("sparse mul! requires a destination independent of its inputs"))
     end
     return nothing
@@ -37,6 +37,13 @@ end
 product_buffers(A::GPUSparseArray) = sparse_buffers(A)
 product_buffers(A::AbstractGPUSparseArray) = (nonzeros(A),)
 product_buffers(A::AbstractArray) = (A,)
+
+const GPUSparseRootOperand = Union{AbstractGPUSparseMatrix,
+    Transpose{<:Any,<:AbstractGPUSparseMatrix},Adjoint{<:Any,<:AbstractGPUSparseMatrix}}
+# Preserve the wrapper's chosen triangle. LinearAlgebra's two-argument fallback can
+# wrap an already triangular diagonal operand again and miss the vendor executor.
+LinearAlgebra.ldiv!(A::LinearAlgebra.UpperOrLowerTriangular{<:Any,<:GPUSparseRootOperand},
+                   B::Union{AnyGPUVector,AnyGPUMatrix}) = LinearAlgebra._ldiv!(B,A,B)
 
 """
     GPUArrays.spmv!(y, tA, A, x, α, β; algorithm=GPUArrays.Automatic())
