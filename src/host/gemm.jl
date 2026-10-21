@@ -50,9 +50,9 @@ function coalesced_matmul_kernel!(
     gi = (grow - 1) * TILE + li
     gj = (gcol - 1) * TILE + lj
 
-    # padded by one row to avoid bank conflicts on shared memory
-    tile1 = KI.localmemory(TAT, (TILE + 1, TILE))
-    tile2 = KI.localmemory(TBT, (TILE + 1, TILE))
+    # Revisit potentially padding if value of `TILE_DIM` ever changed
+    tile1 = KI.localmemory(TAT, (TILE, TILE))
+    tile2 = KI.localmemory(TBT, (TILE, TILE))
 
     # private variable for tile C
     Tacc = promote_type(R, typeof(zero(TAT) * zero(TBT) + zero(TAT) * zero(TBT)))
