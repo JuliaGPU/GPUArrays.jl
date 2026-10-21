@@ -119,18 +119,10 @@ end
 # `nnz(A) == 0` means nothing is stored, otherwise check the stored values
 Base.iszero(A::GPUSparseArray) = nnz(A) == 0 || all(iszero, nonzeros(A))
 
-# the norm of the stored values, as in SparseArrays (which makes the -Inf norm the smallest
-# stored magnitude)
+# Implicit zeros participate in negative-order norms; min preserves a NaN magnitude.
 function LinearAlgebra.norm(A::GPUSparseArray, p::Real=2)
-    if p == Inf
-        return maximum(abs, nonzeros(A); init=zero(real(eltype(A))))
-    elseif p == -Inf
-        return nnz(A) == 0 ? zero(real(eltype(A))) : minimum(abs, nonzeros(A))
-    elseif p == 0
-        return float(real(eltype(A)))(count(!iszero, nonzeros(A)))
-    else
-        return norm(nonzeros(A), p)
-    end
+    r = norm(nonzeros(A), p)
+    return p < 0 && nnz(A) < length(A) ? min(r, zero(r)) : r
 end
 
 function LinearAlgebra.opnorm(A::GPUSparseMatrix, p::Real=2)
