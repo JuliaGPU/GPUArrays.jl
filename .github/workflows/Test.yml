@@ -46,7 +46,6 @@ jobs:
           TEST_ARGS=(--verbose)
           echo "runtest_test_args=${TEST_ARGS[@]}" >> "${GITHUB_ENV}"
       - uses: julia-actions/julia-runtest@v1
-        continue-on-error: ${{ matrix.version == 'nightly' }}
         with:
           test_args: ${{ env.runtest_test_args }}
       - uses: julia-actions/julia-processcoverage@v1
@@ -91,12 +90,8 @@ jobs:
                         Pkg.develop([PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore)])
                         TestEnv.activate()
                       catch err
-                        # OpenCL.jl may not support this GPUArrays version yet (e.g. after a
-                        # breaking release): skip, like Buildkite soft-fails, but annotate
-                        # the run so the skip is visible
                         @error "Could not install OpenCL.jl" exception=(err,catch_backtrace())
-                        println("::warning title=OpenCL.jl not tested::Could not install OpenCL.jl with this version of GPUArrays")
-                        exit(0)
+                        exit(3)
                       finally
                         Pkg.activate(package)
                       end
