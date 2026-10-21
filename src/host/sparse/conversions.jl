@@ -153,7 +153,8 @@ GPUSparseMatrixCOO(x::GPUSparseVector) = generic_expand(GPUSparseMatrixCSR(x))
 # Typed forms preflight the requested widths before format conversion allocates.
 for S in (:GPUSparseMatrixCSR, :GPUSparseMatrixCSC, :GPUSparseMatrixCOO, :GPUSparseVector)
     @eval begin
-        $S{Tv}(A::AbstractGPUSparseArray) where {Tv} = with_values($S(A), Tv)
+        $S{Tv}(A::AbstractGPUSparseArray) where {Tv} =
+            (check_sparse_values(Tv,nonzeros(A));with_values($S(A),Tv))
         function $S{Tv,Ti}(A::AbstractGPUSparseArray) where {Tv,Ti}
             check_sparse_dims(Ti,size(A))
             $S <: GPUSparseMatrixCompressed && check_sparse_nnz(Ti,nnz(A))
@@ -400,8 +401,15 @@ SparseArrays.sparsevec(x::AbstractGPUVector) = GPUSparseVector(x)
 for S in (:GPUSparseMatrixCSR,:GPUSparseMatrixCSC,:GPUSparseMatrixCOO)
     @eval begin
         $S(D::Diagonal{<:Any,<:AnyGPUVector})=convert($S,spdiagm(D.diag))
-        $S{T}(D::Diagonal{<:Any,<:AnyGPUVector}) where {T}=with_values($S(D),T)
-        $S{T,Ti}(D::Diagonal{<:Any,<:AnyGPUVector}) where {T,Ti}=with_eltypes($S(D),T,Ti)
+        $S{T}(D::Diagonal{<:Any,<:AnyGPUVector}) where {T}=
+            (check_sparse_values(T,D.diag);with_values($S(D),T))
+        function $S{T,Ti}(D::Diagonal{<:Any,<:AnyGPUVector}) where {T,Ti}
+            check_sparse_dims(Ti,size(D))
+            # spdiagm retains every diagonal entry, including stored zeros.
+            $S <: GPUSparseMatrixCompressed && check_sparse_nnz(Ti,length(D.diag))
+            check_sparse_values(T,D.diag)
+            with_eltypes($S(D),T,Ti)
+        end
     end
 end
 
@@ -435,9 +443,13 @@ for S in (:GPUSparseMatrixCSR, :GPUSparseMatrixCSC, :GPUSparseMatrixCOO)
         $S(A::Union{Transpose{<:Any,<:GPUSparseMatrix},Adjoint{<:Any,<:GPUSparseMatrix}}) =
             convert($S, copy(A))
         $S{T}(A::Union{Transpose{<:Any,<:GPUSparseMatrix},Adjoint{<:Any,<:GPUSparseMatrix}}) where {T} =
-            with_values($S(A),T)
-        $S{T,Ti}(A::Union{Transpose{<:Any,<:GPUSparseMatrix},Adjoint{<:Any,<:GPUSparseMatrix}}) where {T,Ti} =
+            (check_sparse_values(T,nonzeros(parent(A)));with_values($S(A),T))
+        function $S{T,Ti}(A::Union{Transpose{<:Any,<:GPUSparseMatrix},Adjoint{<:Any,<:GPUSparseMatrix}}) where {T,Ti}
+            check_sparse_dims(Ti,size(A))
+            $S <: GPUSparseMatrixCompressed && check_sparse_nnz(Ti,nnz(parent(A)))
+            check_sparse_values(T,nonzeros(parent(A)))
             with_eltypes($S(A),T,Ti)
+        end
     end
 end
 
