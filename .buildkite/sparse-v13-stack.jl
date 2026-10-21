@@ -107,6 +107,10 @@ if !setup_only && backend == "oneAPI"
     println("STACK_SUPPORT_LIBRARY ",support)
 end
 if !setup_only
+    # CUDA defaults omit library suites; Metal defaults omit GPUArrays' suite.
+    test_args = backend in ("CUDA","Metal") ? ["--all","--verbose"] :
+                backend == "OpenCL" ? ["--platform=pocl","--verbose"] : ["--verbose"]
+    length(ARGS)>1 && (test_args=ARGS[2:end])
     # CUDA's runner switches into each library test project. Julia 1.10 ignores
     # [sources] and workspaces, so developing the libraries in `active` alone does
     # not resolve test-only imports such as SparseMatricesCSR. Resolve every actual
@@ -154,16 +158,37 @@ if !setup_only
         oneAPI.functional() || error("oneAPI must be functional for stack validation")
         oneAPI.Support._check_sparse_abi()
     elseif backend=="OpenCL"
-        Pkg.add("pocl_jll")
-        @eval using OpenCL,pocl_jll
-        any(OpenCL.cl.platforms()) do platform
-            occursin("portable",lowercase(platform.name)) && !isempty(OpenCL.cl.devices(platform))
-        end || error("PoCL must expose a device for stack validation")
+        requested=findfirst(arg->startswith(arg,"--platform="),test_args)
+        request=requested===nothing ? "pocl" : split(test_args[requested],'=';limit=2)[2]
+        driver=request=="pocl_next" ? :pocl_next_jll :
+               request=="intel_cpu" ? :intel_opencl_rt_jll : :pocl_jll
+        Pkg.add(string(driver))
+        @eval using OpenCL
+        @eval import $driver
+        any(OpenCL.cl.platforms()) do candidate_platform
+            name=lowercase(candidate_platform.name*" "*candidate_platform.vendor)
+            matches=request in ("pocl","pocl_next") ? occursin("portable",name) :
+                    request=="intel_cpu" ? candidate_platform.name=="Intel(R) OpenCL" : occursin(lowercase(request),name)
+            matches && !isempty(OpenCL.cl.devices(candidate_platform))
+        end || error("requested OpenCL platform must expose a device for stack validation")
     end
-    # CUDA defaults omit library suites; Metal defaults omit GPUArrays' suite.
-    test_args = backend in ("CUDA","Metal") ? ["--all","--verbose"] :
-                backend == "OpenCL" ? ["pocl/"] : ["--verbose"]
-    length(ARGS)>1 && (test_args=ARGS[2:end])
     coverage=haskey(ENV,"GPUARRAYS_V13_STACK_BACKEND") ? "user" : "@"*gpuarrays
-    Pkg.test([backend == "JLArrays" ? "GPUArrays" : backend]; coverage,test_args)
+    julia_args=Cmd(Base.shell_split(get(ENV,"GPUARRAYS_V13_STACK_JULIA_ARGS","")))
+    allow_reresolve=parse(Bool,get(ENV,"GPUARRAYS_V13_STACK_ALLOW_RERESOLVE","true"))
+    try
+        Pkg.test([backend == "JLArrays" ? "GPUArrays" : backend];
+                 coverage,test_args,julia_args,allow_reresolve)
+    finally
+        if haskey(ENV,"GPUARRAYS_V13_STACK_BACKEND") && package!=gpuarrays
+            # Coverage is emitted next to the disposable clone's sources. Preserve it
+            # for the backend's normal post-command coverage uploader before cleanup.
+            destination=realpath(ENV["GPUARRAYS_V13_STACK_BACKEND"])
+            for (root,dirs,files) in walkdir(package), file in files
+                endswith(file,".cov") || continue
+                target=joinpath(destination,relpath(joinpath(root,file),package))
+                mkpath(dirname(target))
+                cp(joinpath(root,file),target;force=true)
+            end
+        end
+    end
 end
