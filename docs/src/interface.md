@@ -181,6 +181,12 @@ sparse destination and nonzero fill throw before mutation. Individual insertion,
 concatenation and blockdiag are not implemented; reshape and linearization copy.
 Arbitrary sparse views and complete SparseArrays compatibility are not promised.
 
+For `*(α, A, B)` with a canonical sparse matrix (or its transpose/adjoint) on
+the left, GPUArrays scales `A` with normal element-type promotion before the
+matrix product, including dense GPU right-hand sides. This is equivalent to
+`(α*A)*B`; Julia's fused CPU method may instead accumulate in the input type
+before scaling. The evaluation order can change rounding, overflow and underflow.
+
 Assembly preserves duplicate operand order with unspecified parenthesization. Custom
 combiners must be associative; commutativity is not required. Floating-point rounding
 can vary across algorithms, backends and releases. Stable sorting uses checked packed

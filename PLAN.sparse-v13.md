@@ -123,6 +123,17 @@ Audit inherited paths including `hcat`, `vcat`, `blockdiag`, `UniformScaling`, `
 
 Keep these deliberate differences explicit: non-zero-preserving broadcast and dimensional reductions may return dense GPU arrays; stored zeros may be retained; individual sparse insertion is unsupported; reshape currently copies. Avoid a broader claim of complete SparseArrays compatibility.
 
+Implementation refinement (Astra architecture review, turn12; Sol review, turn16):
+`*(α,A,B)` with a canonical sparse/transpose/adjoint left operand and sparse or
+dense matrix RHS scales and promotes A before multiplication, equivalent to
+`(α*A)*B`. The inherited fused method can instead accumulate Float32 products
+before applying a Float64 scalar. This is an explicit numerical compatibility
+change, not a consequence of the duplicate-combination contract. It can change
+rounding/overflow/underflow and vendor eligibility through promotion; it is not
+universally more accurate. Vector RHS, structured wrappers and five-argument
+`mul!` are outside this refinement. Tests assert cancellation behavior and
+promoted result type; backend comparisons use the same explicit association.
+
 ## Implementation work packages
 
 Make each completed logical change reviewable and independently testable. Preserve the original author's commits where they still express the resulting design; avoid combining dependency reconciliation, interface changes and algorithm improvements into one commit.

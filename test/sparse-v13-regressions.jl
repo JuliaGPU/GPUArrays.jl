@@ -17,6 +17,7 @@ Base.resize!(::FixedSparseStorage, ::Integer) = throw(ArgumentError("fixed stora
             host_cancel=sparse(reshape(Float32[16777216,1,-16777216],1,3))
             cancel=S(adapt(JLArray,host_cancel))
             rhs=JLArray(ones(Float32,3,1))
+            @test eltype(1.0*cancel*rhs)===Float64
             @test Array(1.0*cancel*rhs)==ones(1,1)
             @test Array(1.0*transpose(copy(transpose(cancel)))*rhs)==ones(1,1)
             for dims in ((2,3),(3,2))
