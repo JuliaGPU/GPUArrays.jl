@@ -106,7 +106,8 @@ if !setup_only
             occursin("portable",lowercase(platform.name)) && !isempty(OpenCL.cl.devices(platform))
         end || error("PoCL must expose a device for stack validation")
     end
-    # CUDA's default test group omits all library suites.
-    test_args = backend == "CUDA" ? ["--all"] : backend == "OpenCL" ? ["pocl/"] : ["--verbose"]
+    # CUDA defaults omit library suites; Metal defaults omit GPUArrays' suite.
+    test_args = backend in ("CUDA","Metal") ? ["--all","--verbose"] :
+                backend == "OpenCL" ? ["pocl/"] : ["--verbose"]
     Pkg.test([backend == "JLArrays" ? "GPUArrays" : backend]; coverage="@" * gpuarrays, test_args)
 end
