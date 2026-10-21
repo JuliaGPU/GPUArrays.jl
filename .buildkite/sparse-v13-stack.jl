@@ -6,7 +6,8 @@ gpuarrays = normpath(joinpath(@__DIR__, ".."))
 pins = TOML.parsefile(joinpath(@__DIR__, "sparse-v13-stack.toml"))
 backend = isempty(ARGS) ? "JLArrays" : first(ARGS)
 setup_only = "--setup-only" in ARGS
-scratch = mktempdir(get(ENV,"GPUARRAYS_V13_STACK_PARENT",tempdir());prefix="gpuarrays-v13-stack-")
+scratch = mktempdir(get(ENV,"GPUARRAYS_V13_STACK_PARENT",tempdir());
+                     prefix="gpuarrays-v13-stack-",cleanup=!setup_only)
 
 function checkout(name)
     pin = pins[name]
@@ -123,5 +124,6 @@ if !setup_only
     test_args = backend in ("CUDA","Metal") ? ["--all","--verbose"] :
                 backend == "OpenCL" ? ["pocl/"] : ["--verbose"]
     length(ARGS)>1 && (test_args=ARGS[2:end])
-    Pkg.test([backend == "JLArrays" ? "GPUArrays" : backend]; coverage="@" * gpuarrays, test_args)
+    coverage=haskey(ENV,"GPUARRAYS_V13_STACK_BACKEND") ? "user" : "@"*gpuarrays
+    Pkg.test([backend == "JLArrays" ? "GPUArrays" : backend]; coverage,test_args)
 end
