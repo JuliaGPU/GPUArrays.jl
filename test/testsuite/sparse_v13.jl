@@ -26,6 +26,17 @@ function sparse_v13(AT, eltypes)
             @test_throws ErrorException 2f0 .* A .+ v
             @test_throws ErrorException A .* v .+ dense_v
             @test_throws ErrorException dense_v .+ v .* A
+            scalar = AT(fill(0f0))
+            @test_throws r"both sparse vectors and sparse matrices" (A .* v) .+ scalar
+            @test_throws r"both sparse vectors and sparse matrices" scalar .+ (A .* v)
+            @test_throws r"both sparse vectors and sparse matrices" A .* (scalar .+ v)
+            @test_throws r"both sparse vectors and sparse matrices" (v .+ scalar) .* A
+            @test_throws r"zero-dimensional GPU arrays" A .+ scalar
+            @test_throws r"zero-dimensional GPU arrays" scalar .+ A
+            @test_throws r"zero-dimensional GPU arrays" A .+ view(dense_v,1)
+            @test_throws r"zero-dimensional GPU arrays" (A .= A .+ scalar)
+            @test_throws r"zero-dimensional GPU arrays" v .+ scalar
+            @test_throws r"zero-dimensional GPU arrays" scalar .+ v
             @test_throws ErrorException (A .= A .* v)
             @test A == before
             @test Array(A .* dense_v) == Array(host) .* Float32[2,3,4]
