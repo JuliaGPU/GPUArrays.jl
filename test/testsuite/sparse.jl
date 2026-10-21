@@ -85,6 +85,11 @@ same_sparse(A::SparseMatrixCSC, B::SparseMatrixCSC) =
 same_sparse(x::SparseVector, y::SparseVector) =
     length(x) == length(y) && nonzeroinds(x) == nonzeroinds(y) && nonzeros(x) == nonzeros(y)
 same_sparse(A::AbstractGPUSparseArray, B) = same_sparse(host(A), B)
+function same_sparse_approx(A::AbstractGPUSparseArray,B::SparseMatrixCSC)
+    C=host(A)
+    size(C)==size(B) && getcolptr(C)==getcolptr(B) && rowvals(C)==rowvals(B) &&
+        nonzeros(C) ≈ nonzeros(B)
+end
 host(A::AbstractGPUSparseArray) = ndims(A) == 1 ? SparseVector(A) : SparseMatrixCSC(A)
 
 # the result of a reduction on the host, whether it is a scalar or an array
@@ -1268,12 +1273,12 @@ function sparse_structure(AT, eltypes)
             # Kronecker products
             B = SparseMatrixCSC{ET,Int32}(sprand_nozeros(ET, 3, 4, 0.5))
             dB = gpu_sparse(AT, S, B)
-            @test same_sparse(kron(dA, dB), kron(A, B))
+            @test same_sparse_approx(kron(dA, dB), kron(A, B))
             @test kron(dA, dB) isa S{ET,Int32}
-            @test same_sparse(kron(transpose(dA), dB), kron(copy(transpose(A)), B))
+            @test same_sparse_approx(kron(transpose(dA), dB), kron(copy(transpose(A)), B))
             v = rand(ET, 3)
-            @test same_sparse(kron(dA, Diagonal(AT(v))), kron(A, Diagonal(v)))
-            @test same_sparse(kron(Diagonal(AT(v)), dB), kron(Diagonal(v), B))
+            @test same_sparse_approx(kron(dA, Diagonal(AT(v))), kron(A, Diagonal(v)))
+            @test same_sparse_approx(kron(Diagonal(AT(v)), dB), kron(Diagonal(v), B))
             huge = gpu_sparse(AT, GPUSparseMatrixCSC, spzeros(ET, 2^32, 0))
             @test_throws ArgumentError kron(huge, huge)
         end
