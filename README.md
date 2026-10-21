@@ -54,6 +54,6 @@ complete example.
 types are parametrized on the dense vectors that store their indices and values, so they
 work with any back-end's arrays, and the same structs are used inside kernels. A back-end
 needs no sparse-specific code; it can add aliases for its storage (e.g.
-`const MtlSparseMatrixCSR{Tv,Ti} = GPUSparseMatrixCSR{Tv,Ti,<:MtlVector{Ti},<:MtlVector{Tv}}`),
-a transfer policy for its adaptor, and vendor library overrides. See the
+`const MtlSparseMatrixCSR{Tv,Ti} = GPUSparseMatrixCSR{Tv,Ti,<:MtlVector{<:Integer},<:MtlVector{Ti},<:MtlVector{Tv}}`),
+a transfer policy for its adaptor, and vendor bindings used by GPUArrays-owned extensions. See the
 [interface documentation](https://juliagpu.github.io/GPUArrays.jl/dev/interface/) for details.

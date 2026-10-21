@@ -51,11 +51,12 @@ all of them subtypes of `AbstractGPUSparseArray{Tv,Ti,N}` (which subtypes Sparse
 | type | layout | fields |
 |:--|:--|:--|
 | `GPUSparseVector{Tv,Ti,Vi,Vv}` | like `SparseVector` | `nzInd`, `nzVal`, `len` |
-| `GPUSparseMatrixCSC{Tv,Ti,Vi,Vv}` | compressed sparse columns, like `SparseMatrixCSC` | `colPtr`, `rowVal`, `nzVal`, `dims` |
-| `GPUSparseMatrixCSR{Tv,Ti,Vi,Vv}` | compressed sparse rows | `rowPtr`, `colVal`, `nzVal`, `dims` |
+| `GPUSparseMatrixCSC{Tv,Ti,Vp,Vi,Vv}` | compressed sparse columns, like `SparseMatrixCSC` | `colPtr`, `rowVal`, `nzVal`, `dims` |
+| `GPUSparseMatrixCSR{Tv,Ti,Vp,Vi,Vv}` | compressed sparse rows | `rowPtr`, `colVal`, `nzVal`, `dims` |
 | `GPUSparseMatrixCOO{Tv,Ti,Vi,Vv}` | coordinates, sorted in row-major order | `rowInd`, `colInd`, `nzVal`, `dims` |
 
-`Tv` is the element type and `Ti` the index type. `Vi` and `Vv` are the types of the
+`Tv` is the value type and `Ti` the coordinate type (`indtype(A)`). Compressed pointers
+have their own storage `Vp` and integer type `eltype(compressed_ptr(A))`. `Vi` and `Vv` are the types of the
 dense vectors that store the indices and values, typically the back-end's GPU vectors
 (`MtlVector{Int32,Metal.PrivateStorage}`, `CuVector{Float32}`, ...). They are part of the
 type so that generic code can allocate results with `similar` on the buffers it already
@@ -77,8 +78,13 @@ The structs are immutable, and the same struct is used inside kernels: `adapt` c
 each buffer, so a kernel that receives a `GPUSparseMatrixCSR` can read `A.rowPtr`,
 `A.colVal` and `A.nzVal` directly. Operations that change the structure of an existing
 array (`copyto!` between sparse arrays, for example) resize its buffers, which is only
-safe when no other object shares them; constructors, conversions and `copy` therefore
-always return arrays with their own storage.
+safe with exclusive structural access and storage supporting `GPUArrays.supports_resize`.
+Raw buffer constructors borrow their inputs. Allocating format constructors and `copy`
+return independent buffers; identity `convert` and `adapt` may share. Updating
+`nonzeros(A)` preserves the pattern. Structural updates invalidate retained structural
+views, device representations and prepared analyses. Known unsupported storage, shapes
+and representability errors are rejected before any destination write. Allocation
+failure does not promise transactional recovery.
 
 ### What a back-end provides
 
@@ -92,7 +98,7 @@ A back-end will usually add the following, all optional:
 1. **Aliases** for its storage, for naming and dispatch, with constructors on them:
 
    ```julia
-   const MtlSparseMatrixCSR{Tv,Ti} = GPUSparseMatrixCSR{Tv,Ti,<:MtlVector{Ti},<:MtlVector{Tv}}
+   const MtlSparseMatrixCSR{Tv,Ti} = GPUSparseMatrixCSR{Tv,Ti,<:MtlVector{<:Integer},<:MtlVector{Ti},<:MtlVector{Tv}}
    MtlSparseMatrixCSR(A::AbstractArray) = GPUSparseMatrixCSR(adapt(MtlArray, A))
    ```
 
@@ -105,36 +111,18 @@ A back-end will usually add the following, all optional:
 3. **A dense constructor** that densifies on the device, e.g.
    `MtlArray{T,2}(A::MtlSparseMatrixCSR) = copyto!(similar(nonzeros(A), T, size(A)), A)`.
    Otherwise the generic dense constructor copies through the host.
-4. **Vendor library overrides**, as methods of the public functions that are more specific
-   in storage, element and index type than the generic ones. When a vendor routine does
-   not apply, such a method can call the generic implementation, which never dispatches
-   back to the public function:
+4. **Vendor bindings and resource primitives** remain backend responsibilities.
+   GPUArrays extensions own public-operation validation and selection. They implement
+   `vendor_spmv`/`vendor_spmm` capability selection and the corresponding selected
+   executor, rather than overriding public `mul!` methods. `GPUArrays.spmv!` and
+   `GPUArrays.spmm!` accept `Automatic()`, `Portable()`, and `Vendor()` policies.
+   Forced portable execution includes subordinate sparse conversions. Forced vendor
+   execution rejects unsupported combinations before output writes; execution failures
+   propagate and never trigger a fallback retry.
 
-   | operation | public function | generic implementation |
-   |:--|:--|:--|
-   | sparse × dense vector | `mul!(y, tA, A, x, α, β)` | `GPUArrays.generic_spmv!` |
-   | sparse × dense, dense × sparse | `mul!(C, tA, tB, A, B, α, β)` | `GPUArrays.generic_spmm!` |
-   | sparse × sparse | `*`, `mul!(C, tA, tB, A, B, α, β)` with a sparse `C` | `GPUArrays.generic_spgemm`, `GPUArrays.generic_spgemm!` |
-   | CSR ↔ CSC | the target format's constructor | `GPUArrays.generic_regroup` |
-   | CSR ↔ COO | the target format's constructor | `GPUArrays.generic_expand`, `GPUArrays.generic_compress` |
-   | assembly from coordinates | `sparse(I, J, V, m, n, combine)`, `sparsevec` | `GPUArrays.generic_assemble` |
-
-   The product methods are LinearAlgebra's storage-level `mul!`, which it calls on Julia
-   1.13 and later with a character per operand ('N', 'T', 'C', or 'S'/'s'/'H'/'h' for the
-   upper or lower triangle of a Symmetric or Hermitian matrix); on older versions GPUArrays
-   forwards LinearAlgebra's internal `generic_matvecmul!` and `generic_matmatmul!` to
-   them. A vendor method looks like:
-
-   ```julia
-   function LinearAlgebra.mul!(y::CuVector{T}, tA::AbstractChar, A::CuSparseMatrixCSR{T},
-                               x::DenseCuVector{T}, α::Number, β::Number) where {T<:BlasFloat}
-       tA in ('N', 'T', 'C') || return GPUArrays.generic_spmv!(y, tA, A, x, α, β)
-       # call the vendor library
-   end
-   ```
-
-   The generic implementations make no promise of bitwise reproducibility across versions
-   or back-ends.
+   The callable `generic_spmv!`, `generic_spmm!`, `generic_regroup` and
+   `generic_assemble` implementations remain available. GPUArrays retains the
+   Julia <1.13 forwarding methods for LinearAlgebra internals.
 5. **Formats that GPUArrays does not implement** (block-sparse formats, batched matrices)
    as back-end structs subtyping `AbstractGPUSparseArray`, with constructors to and from
    the generic formats.
@@ -152,7 +140,16 @@ Generic code never names a back-end type; it allocates through the buffers it ha
 `similar` follows SparseArrays: `similar(A)`, `similar(A, Tv)` and `similar(A, Tv, Ti)`
 copy the structure and leave the values uninitialized, `similar(A, Tv, dims)` returns an
 array without stored entries (a matrix of the same format for two dimensions, a vector for
-one, a dense array for more), and `zero(A)` is an empty array of the same format.
+one, a dense array for more), and `zero(A)` is an empty array of the same format. Copying, value-only type changes
+and compressed-to-compressed conversion preserve both integer widths. Explicit
+`{Tv,Ti}` constructors and `similar(A,Tv,Ti)` request uniform `Ti`, with checked
+narrowing. Binary operations promote coordinate and pointer widths independently.
+Without a compressed-pointer prototype, new compressed pointers use
+`promote_type(Int,Ti)`. COO and vectors have no terminal-pointer count restriction.
+Adapting split-width CSC to host SparseArrays promotes both index buffers to a common
+type; adapting back cannot recover the original split. Storage aliases such as
+`CuSparseMatrixCSR{T,Ti}` are UnionAll types: downstream structs should parameterize
+on `typeof(A)` rather than assume that alias is concrete.
 
 Conversions:
 
@@ -173,6 +170,23 @@ Conversions:
 
 The generic types cannot be constructed from host arrays, because they do not determine
 where to store the result: use a back-end alias, `adapt`, or the back-end's adaptor.
+
+### Supported surface and limits
+
+The canonical formats support construction, transfer, conversions, products, reductions,
+range slicing, stored-value updates, value equality and sparse in-place broadcast.
+Stored zeros are permitted. Non-zero-preserving allocating broadcast and dimensional
+reductions may return dense device arrays. Dense/non-zero-preserving broadcast into a
+sparse destination and nonzero fill throw before mutation. Individual insertion,
+concatenation and blockdiag are not implemented; reshape and linearization copy.
+Arbitrary sparse views and complete SparseArrays compatibility are not promised.
+
+Assembly preserves duplicate operand order with unspecified parenthesization. Custom
+combiners must be associative; commutativity is not required. Floating-point rounding
+can vary across algorithms, backends and releases. Stable sorting uses checked packed
+keys with a lexicographic fallback. Generic ESC SpGEMM checks candidate counts and has
+a default 1 GiB temporary-memory estimate limit, overridable through
+`generic_spgemm(A,B; max_temp_bytes=...)`; its memory follows candidate products.
 
 ### Reference
 

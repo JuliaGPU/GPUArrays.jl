@@ -1,6 +1,6 @@
 # Productionize generic GPU sparse arrays for GPUArrays 13
 
-This is the implementation handoff for [GPUArrays #745](https://github.com/JuliaGPU/GPUArrays.jl/pull/745). Read [REPORT.sparse-v13.md](REPORT.sparse-v13.md) for the design assessment, confirmed failures, source references and measured limits. The investigation is complete; the steps below are **not implemented**.
+This is the implementation handoff for [GPUArrays #745](https://github.com/JuliaGPU/GPUArrays.jl/pull/745). Read [REPORT.sparse-v13.md](REPORT.sparse-v13.md) for the design assessment, confirmed failures, source references and measured limits. Implementation is underway on `tb/sparse-v13`; see [HANDOFF.sparse-v13.md](HANDOFF.sparse-v13.md) for exact commits, reviews, tests and remaining work. Representation, mutation preflight, arithmetic corrections and the initial selector are implemented. The selector is not frozen: vendor migrations and release gates remain open.
 
 The objective is one coordinated backend migration, followed by portable sparse development and algorithm selection maintained in GPUArrays and its AK/KA dependencies. Keep backend-specific runtime and vendor bindings where they belong. New bindings or new hardware capabilities may require backend work; adding ordinary sparse operations or changing the preferred existing algorithm must not.
 
@@ -8,7 +8,7 @@ The objective is one coordinated backend migration, followed by portable sparse 
 
 ### 1. Keep GPUArrays-owned immutable canonical containers
 
-Keep sparse vector, CSR, CSC and row-major COO, under `AbstractGPUSparseArray <: AbstractSparseArray`. Sorted, unique, one-based coordinates are invariants; stored zeros are valid. Raw constructors check metadata; `check_structure` validates contents explicitly. Do not launch a full structural validation on every operation.
+Keep sparse vector, CSR, CSC and row-major COO, under `AbstractGPUSparseArray <: AbstractSparseArray`. Sorted, unique, one-based coordinates are invariants; stored zeros are valid. Unassembled inputs and unfinished vendor outputs must remain private buffers/descriptors until canonicalization, including internal intermediates and results of qualified vendor APIs. This replaces CUDA's former noncanonical raw-storage contract; raw borrowing constructors must not silently sort caller buffers. Raw constructors check metadata; `check_structure` validates contents explicitly. Do not launch a full structural validation on every operation.
 
 CSR/CSC become:
 
