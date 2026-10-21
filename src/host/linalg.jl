@@ -1184,7 +1184,10 @@ end
 
 ## dot
 
-LinearAlgebra.dot(x::AbstractGPUArray, y::AbstractGPUArray) = mapreduce(dot, +, x, y)
+function LinearAlgebra.dot(x::AbstractGPUArray,y::AbstractGPUArray)
+    length(x)==length(y) || throw(DimensionMismatch("dot product arguments must have equal lengths"))
+    mapreduce(dot,+,x,y)
+end
 
 ## axp{b}y
 

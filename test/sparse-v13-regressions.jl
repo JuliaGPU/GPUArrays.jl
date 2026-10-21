@@ -12,10 +12,54 @@ GPUArrays.KernelAbstractions.get_backend(x::FixedSparseStorage) = GPUArrays.get_
 Base.resize!(::FixedSparseStorage, ::Integer) = throw(ArgumentError("fixed storage"))
 
 @testset "v13 sparse regressions" begin
+    @testset "generalized dot dimension preflight" begin
+        for S in (GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseMatrixCOO)
+            A=S(adapt(JLArray,sparse(Int32[1 0 2;3 4 0])))
+            x=JLArray(Int32[1,2]);y=JLArray(Int32[1,2,3])
+            @test dot(x,A,y)==Int32(29)
+            @test_throws DimensionMismatch dot(JLArray(Int32[1,2,3]),A,y)
+            @test_throws DimensionMismatch dot(JLArray(Int32[1]),A,y)
+            @test_throws DimensionMismatch dot(x,A,JLArray(Int32[1,2]))
+            @test_throws DimensionMismatch dot(x,A,JLArray(Int32[1,2,3,4]))
+            empty=S(adapt(JLArray,spzeros(Int32,0,0)))
+            @test_throws DimensionMismatch dot(JLArray(Int32[1]),empty,JLArray(Int32[]))
+            @test_throws DimensionMismatch dot(JLArray(Int32[]),empty,JLArray(Int32[1]))
+        end
+        @test_throws DimensionMismatch dot(JLArray(Int32[1,2]),JLArray(Int32[3]))
+    end
+    @testset "diagonal wrapper and offset compatibility" begin
+        host=sparse(ComplexF32[1 im 0;2 3 4])
+        for S in (GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseMatrixCOO)
+            A=S(adapt(JLArray,host))
+            for wrap in (identity,transpose,adjoint), k in (-20,-2,-1,0,1,3,20,typemin(Int),typemax(Int))
+                if k in (typemin(Int),typemax(Int))
+                    @test isempty(diag(wrap(A),k))
+                else
+                    @test Array(diag(wrap(A),k))==diag(Matrix(wrap(host)),k)
+                end
+            end
+            @test Array(diag(A,UInt(1)))==diag(Matrix(host),1)
+            @test Array(diag(transpose(A),Int8(-1)))==diag(Matrix(transpose(host)),-1)
+            @test_throws InexactError diag(A,typemax(UInt))
+        end
+    end
     @testset "preflight narrowing before compression" begin
         coo=GPUSparseMatrixCOO(JLArray(Int64[]),JLArray(Int64[]),JLArray(Float32[]),(2^32,1))
         @test_throws ArgumentError GPUSparseMatrixCSR{Float32,Int32}(coo)
         @test_throws ArgumentError GPUSparseMatrixCSC{Float32,Int32}(coo)
+        wide=GPUSparseMatrixCOO(JLArray(Int64[]),JLArray(Int64[]),JLArray(Float32[]),(1,2^32))
+        for S in (GPUSparseMatrixCSR,GPUSparseMatrixCSC), wrap in (transpose,adjoint)
+            @test_throws ArgumentError S{Float32,Int32}(wrap(wide))
+        end
+        bad=GPUSparseMatrixCOO(JLArray(Int64[1]),JLArray(Int64[1]),JLArray(ComplexF32[1+im]),(2^32,1))
+        @test_throws InexactError GPUSparseMatrixCSR{Float32}(bad)
+        @test_throws InexactError GPUSparseMatrixCSC{Float32}(transpose(bad))
+        for S in (GPUSparseMatrixCSR,GPUSparseMatrixCSC)
+            @test_throws ArgumentError S{Float32,Int8}(Diagonal(JLArray(ones(Float32,127))))
+            @test_throws ArgumentError S{Float32,Int8}(Diagonal(JLArray(zeros(Float32,127))))
+            D=S{Float32,Int8}(Diagonal(JLArray(zeros(Float32,126))))
+            @test nnz(D)==126 && size(D)==(126,126) && all(iszero,nonzeros(D))
+        end
         tiny=GPUSparseMatrixCOO(JLArray(Int8[1,1]),JLArray(Int8[1,2]),JLArray(Float32[1,2]),(1,2))
         @test_throws ArgumentError GPUSparseMatrixCSR{Float32,Bool}(tiny)
     end

@@ -177,4 +177,7 @@ function LinearAlgebra.dot(x::GPUSparseVector, y::AnyGPUVector)
     return mapreduce((a, b) -> dot(a, b), +, x.nzVal, y[x.nzInd])
 end
 LinearAlgebra.dot(y::AnyGPUVector, x::GPUSparseVector) = conj(dot(x, y))
-LinearAlgebra.dot(x::AnyGPUVector, A::GPUSparseMatrix, y::AnyGPUVector) = dot(x, A * y)
+function LinearAlgebra.dot(x::AnyGPUVector,A::GPUSparseMatrix,y::AnyGPUVector)
+    length(x)==size(A,1) && size(A,2)==length(y) || throw(DimensionMismatch("dimensions must match"))
+    dot(x,A*y)
+end

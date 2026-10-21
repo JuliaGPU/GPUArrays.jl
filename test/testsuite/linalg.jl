@@ -422,6 +422,8 @@
     @testset "dot" begin
         @testset "$T" for T in eltypes
             @test compare(dot, AT, rand(T,5), rand(T, 5))
+            @test_throws DimensionMismatch dot(AT(rand(T,5)),AT(rand(T,4)))
+            @test_throws DimensionMismatch dot(AT(rand(T,4)),AT(rand(T,5)))
         end
     end
 
