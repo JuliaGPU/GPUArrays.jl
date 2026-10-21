@@ -75,7 +75,7 @@ Dense pending-input-GC minimizer ga13-opencl-dense-gc.jl is running; baseline en
 ga13-opencl-baseline-env and clean main source opencl-v13-main-baseline are prepared.
 Do not attribute the failure to sparse code or treat PoCL CPU as GPU coverage.
 
-Validation driver validation/sparse-v13-backend.jl is currently untracked/uncommitted.
+Validation driver validation/sparse-v13-backend.jl is committed in5c477a3.
 It supports full automatic/portable shared runs and fixed contract fixtures, two public
 import scenarios (not impossible dependency-order reversals), extension assertions,
 source revision/dirty metadata, and ambiguity filtering including split extension files.
