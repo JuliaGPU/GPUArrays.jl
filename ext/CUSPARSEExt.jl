@@ -4,6 +4,9 @@ using GPUArrays, CUDACore, cuSPARSE, LinearAlgebra, SparseArrays
 using GPUArrays: UnsupportedSparseVendor
 using cuSPARSE: CuCanonicalMatrix, CuCanonicalSparse
 GPUArrays.product_buffers(A::cuSPARSE.CuSparseMatrixBSR) = (A.rowPtr,A.colVal,A.nzVal)
+GPUArrays.default_sparse_indtype(::CuMatrix) = Cint
+GPUArrays.sparse_format(fmt::Symbol,A::CuMatrix) = fmt===:bsr ? cuSPARSE.CuSparseMatrixBSR :
+    invoke(GPUArrays.sparse_format,Tuple{Symbol,GPUArrays.AbstractGPUMatrix},fmt,A)
 
 struct CuSparseSpMV end
 struct CuSparseSpMM end

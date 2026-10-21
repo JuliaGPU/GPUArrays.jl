@@ -388,14 +388,22 @@ sparse_format(fmt::Symbol) =
     fmt === :coo ? GPUSparseMatrixCOO :
     throw(ArgumentError("unknown sparse format :$fmt, expected :csc, :csr or :coo"))
 
+# Policy only for the dense `sparse(A)` convenience entrypoint. Explicit canonical
+# constructors and coordinate assembly retain their own documented index policies.
+default_sparse_indtype(A::AbstractGPUMatrix) = Int
+sparse_format(fmt::Symbol,A::AbstractGPUMatrix) =
+    sparse_format(fmt){eltype(A),default_sparse_indtype(A)}
+
 """
     sparse(A::AbstractGPUMatrix; fmt=:csc)
     sparse(x::AbstractGPUVector)
 
 The nonzero entries of a dense GPU array as a sparse array on the same device, in CSC
 format (like SparseArrays) or the format selected by `fmt` (`:csc`, `:csr` or `:coo`).
+The default index type is `Int`; GPUArrays' CUDA and AMDGPU integrations preserve
+their existing uniform `Int32` default and additionally accept `fmt=:bsr`.
 """
-SparseArrays.sparse(A::AbstractGPUMatrix; fmt::Symbol=:csc) = sparse_format(fmt)(A)
+SparseArrays.sparse(A::AbstractGPUMatrix; fmt::Symbol=:csc) = sparse_format(fmt,A)(A)
 SparseArrays.sparse(x::AbstractGPUVector) = GPUSparseVector(x)
 SparseArrays.sparsevec(x::AbstractGPUVector) = GPUSparseVector(x)
 for S in (:GPUSparseMatrixCSR,:GPUSparseMatrixCSC,:GPUSparseMatrixCOO)

@@ -94,6 +94,17 @@ A scoped operation-specific entry point can expose algorithm/workspace choices w
 
 Place high-level vendor integration in GPUArrays extensions. CUDA's extension should use cuSPARSE/CUDACore package boundaries; AMDGPU and oneAPI extensions can depend on their backend packages and invoke low-level vendor facilities. Remove or redirect old backend public methods that would bypass selection. Aliases and opinionated adaptors may remain backend conveniences, with their precision, format and index defaults preserved explicitly.
 
+For dense `sparse(A;fmt)` specifically, GPUArrays owns the entrypoint and two scoped
+policies: `default_sparse_indtype(A)` and `sparse_format(fmt,A)`. GPUArrays extensions
+preserve CUDA/AMD's uniform Int32 defaults and resolve BSR to the existing backend
+constructor (including its block-size default). Canonical constructors and coordinate
+assembly do not consult this policy. Astra turn14 and Sol turn24 approved this ownership
+correction after final shared tests exposed remaining backend public overrides. Keep
+the existing AbstractGPUMatrix domain; do not incidentally broaden wrapped-array support.
+Shared tests verify the declared policy, while backend tests pin its Int32 default and
+BSR functionality independently. Unknown-format rejection must not assume all backends
+reject a format they already support.
+
 Do not invent a universal capability registry or a universal public planning API. The minimum proof is one real migrated vendor executor, forced-portable tests on the same buffers, and adding/changing a generic algorithm without editing that backend.
 
 ### 4. Separate transient scratch from persistent analysis
