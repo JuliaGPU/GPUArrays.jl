@@ -243,6 +243,36 @@ end
             @test norm(adapt(JLArray, S)) ≈ norm(S)
         end
     end
+    @testset "logical negative-order norms" begin
+        for T in (Float32,ComplexF32)
+            fixtures=(sparsevec([1],T[2],2),sparsevec([1,2],T[2,3],2),
+                      sparsevec([1,2],T[0,3],2),sparsevec([1],T[NaN],2),
+                      sparsevec([1],T[Inf],2),spzeros(T,2),spzeros(T,0))
+            if T===ComplexF32
+                fixtures=(fixtures...,sparsevec([1],T[complex(Inf32,NaN32)],2))
+            end
+            for host in fixtures
+                matrix=SparseMatrixCSC(length(host),1,Int[1,nnz(host)+1],
+                                       copy(SparseArrays.nonzeroinds(host)),copy(nonzeros(host)))
+                arrays=(adapt(JLArray,host),
+                        (S(adapt(JLArray,matrix)) for S in
+                         (GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseMatrixCOO))...)
+                for A in arrays,p in (-Inf,-2,-1,-0.5,0,1,2,Inf)
+                    reference=norm(Array(host),p)
+                    actual=norm(A,p)
+                    @test typeof(actual)===typeof(reference)
+                    @test isnan(reference) ? isnan(actual) : actual ≈ reference
+                end
+                # Julia 1.13's CPU norm with p=NaN can throw from an undefined local.
+                # Preserve delegation for this unordered exponent without that reference.
+                for A in arrays
+                    @test isequal(norm(A,NaN),norm(nonzeros(A),NaN))
+                end
+            end
+        end
+        x=GPUSparseVector(JLArray(Int32[1]),JLArray(Int32[2]),2)
+        @test norm(x,-Inf)===0.0
+    end
     @testset "component aliasing" begin
         A = adapt(JLArray, sparse(Float32[1 0; 2 3]))
         B = GPUSparseMatrixCSC(A.colPtr, A.rowVal, copy(A.nzVal), size(A))

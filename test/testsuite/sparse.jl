@@ -842,8 +842,10 @@ function sparse_linalg(AT, eltypes)
             @test opnorm(A, Inf) ≈ opnorm(dA, Inf)
             @test opnorm(A, 1)   ≈ opnorm(dA, 1)
             @test_throws ArgumentError opnorm(dA, 2)
-            for p in (1, 2, 3, Inf, -Inf, 0)
-                @test norm(A, p) ≈ norm(dA, p)
+            for p in (1, 2, 3, Inf, -Inf, -2, -1, -0.5, 0)
+                # Older SparseArrays ignores implicit zeros for negative orders.
+                reference = p < 0 ? norm(Matrix(A), p) : norm(A, p)
+                @test reference ≈ norm(dA, p)
             end
             @test norm(gpu_sparse(AT, S, spzeros(ET, 3, 3)), Inf) == 0
         end
