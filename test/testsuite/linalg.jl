@@ -494,6 +494,13 @@ end
 end
 
 @testsuite "linalg/diagonal" (AT, eltypes) -> begin
+    @testset "explicit host transfer" begin
+        host=Diagonal(Float32[1,2,3])
+        D=Diagonal(AT(host.diag))
+        @test Array(D)==Matrix(host)
+        @test Array{Float64}(D)==Matrix{Float64}(host)
+        @test Matrix{Float64}(D)==Matrix{Float64}(host)
+    end
     @testset "Array + Diagonal" begin
         n = 128
         A = AT(rand(Float32, (n,n)))

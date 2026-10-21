@@ -325,6 +325,9 @@ end
 ## diagonal
 
 Base.copy(D::Diagonal{T, <:AbstractGPUArray{T, N}}) where {T, N} = Diagonal(copy(D.diag))
+Base.Array(D::Diagonal{<:Any,<:AnyGPUVector}) = Array(Diagonal(Array(D.diag)))
+Base.Array{T}(D::Diagonal{<:Any,<:AnyGPUVector}) where {T} = Array{T}(Diagonal(Array(D.diag)))
+Base.Array{T,2}(D::Diagonal{<:Any,<:AnyGPUVector}) where {T} = Matrix{T}(Diagonal(Array(D.diag)))
 
 _isrealandpositive(x) = isreal(x) && real(x) > 0
 
