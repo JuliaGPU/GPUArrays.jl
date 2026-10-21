@@ -480,3 +480,11 @@ function Base.append!(a::AbstractGPUVector, @nospecialize(items::Tuple))
     append!(a, collect(items))
     return a
 end
+
+# Exact numerical snapshots for retained vendor resources, including signed zero and
+# NaN payloads. This uses dense operations and does not require sparse backend hooks.
+function same_value_bits(A::AbstractVector{T},B::AbstractVector{T}) where {T}
+    length(A)==length(B) || return false
+    isbitstype(T) || throw(ArgumentError("bitwise comparison requires isbits values"))
+    mapreduce(==, &, reinterpret(UInt8,A), reinterpret(UInt8,B); init=true)
+end

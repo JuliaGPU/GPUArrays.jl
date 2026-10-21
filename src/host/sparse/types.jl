@@ -200,6 +200,16 @@ SparseArrays.rowvals(A::GPUSparseMatrixCSC) = A.rowVal
 SparseArrays.nzrange(A::GPUSparseMatrixCSC, col::Integer) =
     @inbounds A.colPtr[col]:(A.colPtr[col+1] - one(eltype(A.colPtr)))
 
+# A full-column view borrows the corresponding stored slice. These accessors also
+# work after adaptation to device storage, without a separate sparse device type.
+const GPUSparseColumnView = SubArray{<:Any,1,<:GPUSparseMatrixCSC,
+                                    <:Tuple{Base.Slice,Integer}}
+SparseArrays.nzrange(v::GPUSparseColumnView) = nzrange(parent(v),last(parentindices(v)))
+SparseArrays.nnz(v::GPUSparseColumnView) = length(nzrange(v))
+SparseArrays.nonzeros(v::GPUSparseColumnView) = view(nonzeros(parent(v)),nzrange(v))
+SparseArrays.rowvals(v::GPUSparseColumnView) = view(rowvals(parent(v)),nzrange(v))
+SparseArrays.nonzeroinds(v::GPUSparseColumnView) = rowvals(v)
+
 SparseArrays.nonzeroinds(x::GPUSparseVector) = x.nzInd
 SparseArrays.rowvals(x::GPUSparseVector) = x.nzInd
 
@@ -484,3 +494,7 @@ function check_structure(x::GPUSparseVector)
     all(valid) || throw(ArgumentError("invalid GPUSparseVector structure"))
     return x
 end
+
+# Retained analysis can borrow a fixed pattern while binding immutable numerical data.
+snapshot_sparse_values(A::GPUSparseMatrix) =
+    sparse_format_type(A)(Base.front(sparse_buffers(A))...,copy(nonzeros(A)),size(A))

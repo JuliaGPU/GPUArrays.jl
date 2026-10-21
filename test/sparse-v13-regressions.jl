@@ -12,6 +12,18 @@ GPUArrays.KernelAbstractions.get_backend(x::FixedSparseStorage) = GPUArrays.get_
 Base.resize!(::FixedSparseStorage, ::Integer) = throw(ArgumentError("fixed storage"))
 
 @testset "v13 sparse regressions" begin
+    @testset "borrowed CSC column accessors" begin
+        A=GPUSparseMatrixCSC(JLArray(Int64[1,3,3,4]),JLArray(Int32[1,3,2]),
+                             JLArray(Float32[2,4,6]),(3,3))
+        for j in 1:3
+            column=view(A,:,j)
+            GPUArrays.@allowscalar begin
+                @test nnz(column)==(j==1 ? 2 : j==2 ? 0 : 1)
+                @test Array(nonzeros(column))==Array(nonzeros(A))[nzrange(A,j)]
+                @test Array(rowvals(column))==Array(rowvals(A))[nzrange(A,j)]
+            end
+        end
+    end
     @testset "maximum coordinate" begin
         x = GPUSparseVector(JLArray(Int8[127]), JLArray(Float32[2]), 127)
         y = x .+ x
@@ -134,6 +146,23 @@ Base.resize!(::FixedSparseStorage, ::Integer) = throw(ArgumentError("fixed stora
                 @test !Base.mightalias(A,B)
             end
             @test_throws BoundsError A[JLArray(trues(2)),JLArray(trues(3))]
+        end
+    end
+    @testset "immutable numerical snapshots" begin
+        for values in (Float32[0],Float32[-0.0],reinterpret(Float32,UInt32[0x7fc00001]))
+            A=JLArray(values)
+            @test GPUArrays.same_value_bits(A,copy(A))
+        end
+        @test !GPUArrays.same_value_bits(JLArray(Float32[0]),JLArray(Float32[-0.0]))
+        a=JLArray(reinterpret(Float32,UInt32[0x7fc00001]))
+        b=JLArray(reinterpret(Float32,UInt32[0x7fc00002]))
+        @test !GPUArrays.same_value_bits(a,b)
+        for S in (GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseMatrixCOO)
+            A=S(adapt(JLArray,sparse(Float32[2 0;1 3])))
+            B=GPUArrays.snapshot_sparse_values(A)
+            @test Array(A)==Array(B)
+            @test !Base.mightalias(nonzeros(A),nonzeros(B))
+            @test all(pair -> pair[1] === pair[2],zip(Base.front(GPUArrays.sparse_buffers(A)),Base.front(GPUArrays.sparse_buffers(B))))
         end
     end
     @testset "concatenation rejects every operand position" begin
