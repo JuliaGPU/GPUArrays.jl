@@ -307,3 +307,70 @@ changes, push, then inspect real job logs and revisions. Full dense regressions,
 final extension/load-order checks, representative performance/memory measurements,
 OpenCL sequence minimization and hardware coverage remain incomplete. These are
 not release-ready results or completed backend migrations.
+
+## CI and parity checkpoint (Oct21, after first coordinated push)
+
+GPUArrays PR745 is now safely rewritten onto current main history: old tip2a50d28
+is preserved remotely as backup/sparse-v13-pr745-20261021. Both tb/sparse and
+tb/sparse-v13 include temporary exact-stack CI commit7d2123d. The PR itself still
+targets tb/permutedims-empty and is conflicted: `gh pr edit --base main` fails
+with "Cannot change the base branch because the pull request is part of a stack."
+An asynchronous question asks the user to detach it or retain stacking. Do not
+modify the old base branch. No PR description/comment was posted or edited.
+
+Direct workflow dispatch avoids the conflicted merge ref: GitHub run39597816964
+tests exact GPUArrays7d2123d. All17 jobs were queued at the last check. Buildkite
+2058 also tests7d2123d, with five backend steps scheduled (nine jobs including
+matrix expansion). Public build JSON statistics work, but its jobs/steps arrays
+are empty; retrieve actual job logs before accepting results. These are NOT
+passing CI results. Backend pins in .buildkite/sparse-v13-stack.toml are exact;
+follow-ups must update pins and verify tested revisions. The helper performs
+named Pkg.test from a separate environment, explicitly develops CUDA's complete
+split workspace (including test-only libraries), runs --all library tests and
+asserts runtime/vendor functionality. oneAPI builds support in an isolated module
+and task-owned scratch with cleaned ARGS, propagates the artifact preference and
+tests the native exception boundary only after verifying the expected library.
+
+Latest pushed production backend tips at this checkpoint: CUDAcdca56af1,
+AMDGPU08277ef7c, oneAPI01b71ad (Metal/OpenCL/AK/Atomix unchanged). AMD actual suite8
+and suite9 completed successfully, including43 preflight/empty checks,165 forced
+rectangular products, all native generic/solver groups, preconditioners24,
+triangular288, interfaces620, SparseArrays5, device15 and SparseMatricesCSR53.
+This is changing-worktree evidence, not final fresh-checkout commit validation.
+
+CUDA suites through conversions, broadcast, operations, reductions and linalg
+passed. interfaces/mul then found missing canonical +/- Symmetric/Hermitian
+materialization; centrally fixed, focused601 assertions + sparse ambiguity check
+pass. cuda-rest17.log is the current fresh physical rerun. Earlier tests also
+found missing generalized-dot dimensions (silently accepted trailing x entries),
+now fixed both in sparse dot(x,A,y) and generic dense dot. Typed conversion now
+checks requested widths/values before regrouping or wrapper materialization;
+the huge-COO narrowing regression previously attempted32GiB allocation.
+Diagonal extraction handles transposes, narrow offsets and extreme empty results;
+explicit host Array(Diagonal(GPUVector)) transfers only its diagonal first.
+495 focused + all JLArray linalg/diagonal groups passed that independent fix.
+
+Full JLArrays shared sparse default-type suite completed in
+ga13-parity-shared-final.log before the latest compatibility additions. Full
+Julia1.10 CPU+dense+sparse Pkg.test is currently running under ga13-ci-stack110b
+from the new explicit pinned setup; log /Users/tim/Julia/tmp/ga13-ci-stack110b.log.
+Its first run exposed a real Test import omission at the runner entrypoint,
+fixed separately in ebda95b. The initial setup experiment rewrote an ignored
+root manifest with Julia1.10 stdlibs; it was moved recoverably to
+/Users/tim/Julia/tmp/ga13-root-manifest-ci110.saved.toml and fresh1.13 strict
+precompilation passes. Production Project.toml was restored; the final helper no
+longer develops into it. Do not confuse dependency setup with completed tests.
+
+Sol review through turn20: dense diagonal transfer20 local checks pass; wrapper
+preflight, empty-BSR guards, CI functionality checks and build namespace fixes
+verified. Source claims about a missing AMD logical-dimension guard were checked
+and withdrawn: require_cint_storage already checks it. Astra turn12 approves the
+explicit scale-and-promote numerical policy with documented scope/limitations.
+
+Still required: finish CUDA interface/solver parity, final exact-revision hardware
+runs (including portable-only shared products), fresh Metal, OpenCL GPU sequence
+minimization and both-host coverage, load-order/ambiguities, performance/peak-temp
+benchmarks, actual CI logs, backend self-CI wiring/release coordination, and Metal
+PR982 update. Official oneAPI support artifact still lacks the C++ exception fix;
+new artifact release and normal registered dependency resolution are release gates.
+Local draft PR text: /Users/tim/Julia/tmp/sparse-v13-pr-description.md.
