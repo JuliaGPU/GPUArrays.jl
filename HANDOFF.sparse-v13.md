@@ -248,3 +248,62 @@ ga13-nvidia-min and ga13-nvidia-adapt in pegasus ga13-opencl-env. The earlier
 nonisolated run had CL_OUT_OF_HOST_MEMORY creating a context; explicitly creating
 a new NVIDIA context subsequently worked. Keep Intel ICD enumeration warnings
 separate from NVIDIA-only reproduction.
+
+## Current checkpoint (supersedes incomplete status above)
+
+LAN access works: Pegasus directly; Taurus with `ssh -J pegasus.maleadt.lan
+taurus.maleadt.lan`. Work remains under `~/Julia/tmp`, never remote pkg trees.
+
+GPUArrays HEAD is 7889d6c (pushed through f8e31c4); current uncommitted changes
+include ROCSPARSEExt, constructor/shape compatibility, diagonal arithmetic,
+trace overflow semantics and Kronecker test rounding. Fresh Julia 1.13.2 strict
+precompilation and focused JLArrays regressions pass 303/303; no sparse
+ambiguities. This does not establish a globally ambiguity-free package: eight
+unrelated dense ambiguities remain. Julia 1.10.12 full shared sparse tests passed
+Float32/ComplexF32/Int32/Float16 before the newest compatibility additions.
+
+CUDA RTX5080: qualified generic cuSPARSE suite, batched53, canonical device14,
+CSC column views3, ABI16, cancellation36, BSR alias6, cuSOLVER reorder12/numeric100
+and factorization36 pass. Remaining actual suite stops in conversion.jl on old
+constructor-identity expectations and missing typed BSR conversions. Array490,
+duplicate9, utility32, batch7, conversion52, half12, Bool29 passed in that run.
+The full shared suite exposed integer trace widening and exact complex Kronecker
+rounding expectations; fixes are local, full rerun pending. Large CUDA migration
+is uncommitted; pushed branch only contains earlier preparatory commits.
+
+oneAPI Arc A770: full actual oneMKL suite passes746 sparse assertions with24
+pre-existing broken CSC triangular cases; supported dense BLAS/LAPACK also pass.
+Full shared sparse suite passes Float32/ComplexF32/Int32/Float16. Resource and
+prepared-value-refresh tests pass119. Latest source HEAD1f0cb7c is not pushed
+(remote f93f70b). Optimized bindings use independent bit-exact value snapshots,
+re-preparing when source values change; PLAN records Astra's contract review.
+Transposed dense SpMM is rejected before writes and automatic selection uses
+portable execution. An unhandled native oneMKL exception previously aborted the
+process; C++ generator/epilogue/generated catches now contain all std::exception
+and unknown exceptions. A task-owned support build was actually loaded and
+native error containment passes2. Regenerated final C++ source still needs
+synchronizing locally/rebuilding/full resource rerun. Official support artifact
+does NOT contain this fix: coordinated artifact release remains mandatory.
+
+AMDGPU gfx1036: migration loads and strict-precompiles; shared contracts109,
+forced portable/vendor/solve43 pass. Existing generic/vendor solve groups,
+preconditioners24, triangular solves288 and conversion groups pass. Rectangular
+SpMM54 layouts across three policies passes165, ABI preflight9. COO transpose
+descriptor normalization fixes unsorted vendor interpretation and retains its
+central canonical temporary. Remaining interfaces suite failures concern BSR
+arithmetic normalization, rectangular UniformScaling, scalar wrapped arithmetic
+and scaled-product precision. Entire AMD migration remains uncommitted.
+
+Sol reviews through turn13 (`peer log sparse-v13-review`) verified descriptor,
+ABI, placement and geometry fixes. Latest remaining finding: qualified AMD
+gemm! must reject zero-based index before central delegation and mutation.
+Astra reviews through turn11 are in sparse-v13-architecture. No GitHub discussion
+was posted. Metal remains a763c7fb6, OpenCL9526a11, AKa915b41, Atomix1ffd4ae.
+
+No coordinated CI stack has run yet; neither existing PR branch has been
+rewritten. Need exact dependency pins (including Julia1.10 explicit develop and
+CUDA split workspace), remote-tip backups/concurrency checks, commit all logical
+changes, push, then inspect real job logs and revisions. Full dense regressions,
+final extension/load-order checks, representative performance/memory measurements,
+OpenCL sequence minimization and hardware coverage remain incomplete. These are
+not release-ready results or completed backend migrations.
