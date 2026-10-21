@@ -298,6 +298,9 @@ end
 iter_type(::Type{<:GPUSparseMatrixCSC}, ::Type{Ti}) where {Ti} = CSCIterator{Ti}
 iter_type(::Type{<:GPUSparseMatrixCSR}, ::Type{Ti}) where {Ti} = CSRIterator{Ti}
 
+sparse_iterator(::Val{:csr}, row, args...) = CSRIterator{Int}(row, args...)
+sparse_iterator(::Val{:csc}, col, args...) = CSCIterator{Int}(col, args...)
+
 _has_row(A, offsets, row, fpreszeros::Bool) = fpreszeros ? 0 : row
 _has_row(A::AbstractDeviceArray, offsets, row, ::Bool) = row
 # the position of `row` among the stored indices of a sparse vector, or 0 if it isn't stored
@@ -327,12 +330,12 @@ end
 end
 
 # kernel to count the number of non-zeros in a row, to determine the row offsets
-@kernel function compute_offsets_kernel(T::Type{<:Union{GPUSparseMatrixCSR, GPUSparseMatrixCSC}},
+@kernel function compute_offsets_kernel(layout::Val,
                                         offsets::AbstractVector{Ti}, args...) where Ti
     # every thread processes an entire row
     leading_dim = @index(Global, Linear)
     if leading_dim ≤ length(offsets)-1
-        iter = @inbounds iter_type(T, Int)(leading_dim, args...)
+        iter = @inbounds sparse_iterator(layout, leading_dim, args...)
 
         # count the nonzero leading_dims of all inputs
         accum = zero(Ti)
@@ -342,7 +345,9 @@ end
 
         # the counts are shifted by one (`offsets[1]` is set to 1 by the caller) so that
         # after accumulation they can be used as the rowPtr/colPtr array of a CSR/CSC matrix
-        @inbounds offsets[leading_dim+1] = accum
+        # Keep this store bounds checked: Metal miscompiles the count-only iterator
+        # loop with narrow input pointers and wide counts without this branch.
+        offsets[leading_dim+1] = accum
     end
 end
 
@@ -577,7 +582,7 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
             args = if sparse_typ <: GPUSparseVector
                 (sparse_typ, fpreszeros, offsets, bc.args...)
             else
-                (sparse_typ, offsets, bc.args...)
+                (sparse_typ <: GPUSparseMatrixCSR ? Val(:csr) : Val(:csc), offsets, bc.args...)
             end
             kernel = compute_offsets_kernel(get_backend(bc.args[first(sparse_args)]))
             # an empty launch fails on Metal (JuliaGPU/Metal.jl#980)

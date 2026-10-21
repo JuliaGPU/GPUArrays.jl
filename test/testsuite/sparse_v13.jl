@@ -27,6 +27,10 @@ function sparse_v13(AT, eltypes)
             @test Array(B) == 2 .* Array(host)
             B .= B .+ A
             @test Array(B) == 3 .* Array(host)
+            left = sparse(Float32[1 2 3; 0 0 0; 0 0 0])
+            right = sparse(Float32[0 0 0; 4 0 5; 0 6 0])
+            fused = 2f0 .* gpu_sparse(AT,S,left) .+ 3f0 .* gpu_sparse(AT,S,right)
+            @test Array(GPUArrays.check_structure(fused)) == 2f0 .* Array(left) .+ 3f0 .* Array(right)
             @test Array(A[:]) == vec(Array(host))
             @test nnz(transpose(A)) == nnz(A)
             @test sum(transpose(A)) == sum(host)
@@ -73,6 +77,14 @@ function sparse_v13(AT, eltypes)
                 before = map(Array, GPUArrays.sparse_buffers(bad))
                 @test_throws ArgumentError copyto!(bad, zero(A))
                 @test map(Array, GPUArrays.sparse_buffers(bad)) == before
+                for Tp in (Int32,Int64)
+                    shape = S === GPUSparseMatrixCSR ? (1,4) : (4,1)
+                    four = S(AT(Tp[1,5]),AT(Int32[1,2,3,4]),AT(Float32[1,2,3,4]),shape)
+                    empty = zero(four)
+                    merged = 2f0 .* four .+ 3f0 .* empty
+                    @test nnz(merged) == 4
+                    @test Array(GPUArrays.check_structure(merged)) == 2f0 .* Array(four)
+                end
             end
         end
         @testset "ordered duplicate assembly" begin
