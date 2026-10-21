@@ -33,8 +33,15 @@ backend in ("JLArrays","docs") && push!(specs,PackageSpec(path=joinpath(gpuarray
 package = if backend in ("JLArrays","docs")
     gpuarrays
 elseif haskey(ENV,"GPUARRAYS_V13_STACK_BACKEND")
-    path=realpath(ENV["GPUARRAYS_V13_STACK_BACKEND"])
-    TOML.parsefile(joinpath(path,"Project.toml"))["name"]==backend || error("wrong backend worktree")
+    source=realpath(ENV["GPUARRAYS_V13_STACK_BACKEND"])
+    TOML.parsefile(joinpath(source,"Project.toml"))["name"]==backend || error("wrong backend worktree")
+    isempty(readchomp(`git -C $source diff HEAD --`)) || error("commit backend changes before stack validation")
+    revision=readchomp(`git -C $source rev-parse HEAD`)
+    # Ignore stale workspace manifests and generated files in a reused CI checkout.
+    # Test the recorded commit, without modifying the supplied working tree.
+    path=joinpath(scratch,backend)
+    run(`git clone --quiet --shared --no-checkout $source $path`)
+    run(`git -C $path checkout --quiet --detach $revision`)
     println("STACK_REVISION $backend ",readchomp(`git -C $path rev-parse HEAD`))
     path
 else
@@ -65,6 +72,8 @@ end
 Pkg.status(; mode=Pkg.PKGMODE_MANIFEST)
 if haskey(ENV,"GPUARRAYS_V13_STACK_PREFERENCES")
     cp(ENV["GPUARRAYS_V13_STACK_PREFERENCES"],joinpath(active,"LocalPreferences.toml");force=true)
+    package==gpuarrays || cp(ENV["GPUARRAYS_V13_STACK_PREFERENCES"],
+                             joinpath(package,"LocalPreferences.toml");force=true)
 end
 
 if !setup_only && backend == "oneAPI"
@@ -82,7 +91,8 @@ if !setup_only && backend == "oneAPI"
         Scratch.with_scratch_directory(joinpath(scratch,"support-scratch")) do
             build_module=Module(gensym(:SparseV13SupportBuild))
             Core.eval(build_module,:(include(path)=Base.include($build_module,path)))
-            Base.include(build_module,joinpath(package,"deps","build_ci.jl"))
+            # This job requires the changed wrappers, regardless of JLL tag timestamps.
+            Base.include(build_module,joinpath(package,"deps","build_local.jl"))
         end
     finally
         empty!(ARGS)
@@ -97,6 +107,36 @@ if !setup_only && backend == "oneAPI"
     println("STACK_SUPPORT_LIBRARY ",support)
 end
 if !setup_only
+    # CUDA's runner switches into each library test project. Julia 1.10 ignores
+    # [sources] and workspaces, so developing the libraries in `active` alone does
+    # not resolve test-only imports such as SparseMatricesCSR. Resolve every actual
+    # test project using the same pins, including the backend's root test project.
+    test_projects=String[]
+    package==gpuarrays || push!(test_projects,joinpath(package,"test"))
+    if backend=="CUDA"
+        append!(test_projects,[joinpath(package,"lib",name,"test") for name in
+            ("cublas","cusparse","cusolver","cufft","curand","cudnn",
+             "cutensor","cutensornet","custatevec")])
+    end
+    for project in test_projects
+        isfile(joinpath(project,"Project.toml")) || continue
+        Pkg.activate(project)
+        withenv("JULIA_PKG_PRECOMPILE_AUTO"=>"0") do
+            Pkg.develop(specs)
+        end
+        preferences=joinpath(active,"LocalPreferences.toml")
+        isfile(preferences) && cp(preferences,joinpath(project,"LocalPreferences.toml");force=true)
+        println("STACK_TEST_PROJECT ",project)
+    end
+    Pkg.activate(active)
+    if VERSION<v"1.12" && package!=gpuarrays
+        # Older Pkg cannot merge a developed root-test manifest with the same
+        # developed packages already in the active manifest (even at identical
+        # paths). Keep it as evidence, and let Pkg.test construct its sandbox from
+        # `active`. Library test manifests remain in place for the runner switches.
+        manifest=joinpath(package,"test","Manifest.toml")
+        isfile(manifest) && mv(manifest,joinpath(scratch,"root-test-Manifest.toml"))
+    end
     # A backend runner may otherwise skip unavailable hardware/libraries and exit 0.
     if backend=="CUDA"
         @eval using CUDA,cuSPARSE,cuSOLVER
