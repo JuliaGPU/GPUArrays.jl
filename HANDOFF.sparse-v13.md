@@ -41,9 +41,12 @@ transfer counts, removal of the old dependency pin, and default-storage-aware te
 No vendor code is needed for Metal. Do not claim complete migration until the shared
 suite and load-order/ambiguity tests pass.
 
-CUDA, AMDGPU and oneAPI only have uncommitted dense resize-capability declarations.
-Their sparse containers, solves, factorizations, BSR/batched paths, vendor integration
-and lifetimes have NOT been migrated.
+CUDA has an uncommitted direct-alias migration in `/Users/tim/Julia/tmp/cuda-v13`,
+with matching GPUArrays `ext/CUSPARSEExt` selection/solves. Its split packages are
+provisionally v7.0.0. Syntax parsing passes, but package loading and hardware parity
+are still pending; do NOT call this a completed migration. AMDGPU and oneAPI still
+only have uncommitted dense resize-capability declarations. Their sparse migrations
+and oneAPI resource ownership remain unimplemented.
 
 ## Validation so far
 
@@ -64,7 +67,7 @@ not yet run. The exact binary is
 Metal M3 Pro / Julia 1.13.2 / KA 0.10.1 / AK 0.5.8:
 50/50 backend constructor/transfer/densification checks pass. The shared contract
 suite is being exercised with private storage. A constrained UnionAll array type
-has no constructor; use a callable `x -> MtlArray(x; storage=PrivateStorage)` for
+has no constructor; use a callable `x -> MtlArray{eltype(x),ndims(x),Metal.PrivateStorage}(x)` for
 the focused helper, or configure the ordinary MtlArray default for the whole suite.
 Main now defaults to SharedStorage; do not replay the old private-default assertion.
 
@@ -129,3 +132,40 @@ No existing remote ~/Julia/pkg working copy was modified. Both hosts are reachab
 
 The selector is provisional until real CUDA and oneAPI integrations validate it.
 Nothing here is a release-ready coordinated stack yet.
+
+## Latest checkpoint (supersedes earlier validation counts)
+
+GPUArrays pushed through `44b9e3b`; local central SpGEMM/open-format selection is
+`3b72005`. New fixes include `7bba4e2` (CI installation/nightly hard failures),
+`bcf3422` (wide equality and all-position concat guards), `7e23537` (checked values
+and single-column conversions), `c09c1af` (real/complex value preflight and storage
+placement), `1b6757e` (Metal count-loop workaround), `44b9e3b` (scalar policy tests).
+Focused JLArrays regressions pass 103/103 on Julia 1.13.2. Full shared sparse runs
+are ongoing against these changes; final exact-commit reruns remain required.
+
+Metal's full private-storage suite exposed a genuine count-kernel miscompilation:
+CSR/CSC with one slice [1,2,3,4] and an empty slice, Int32 pointers and Int64 counts,
+can count 1 instead of 4 with an unchecked final store. Sol independently reproduced
+it, including fixed-arity kernels. Removing that store's @inbounds restores the
+counts; optimized LLVM loop bodies are identical except SSA names. The failing
+stage beyond optimized LLVM is not established. Keep wide counts. The production
+workaround retains a bounds-checked store and explicit layout tag; shared tests
+cover both formats and Int32/Int64 pointers. The prior layout-tag-only snapshot
+passed 200 repeated product/update checks and 69 focused SpGEMM assertions. Current
+full private suite must pass before claiming this fixed across the stack.
+Scratch repros: `/Users/tim/Julia/tmp/ga13-metal-{copy,iterator}-repro.jl`.
+
+Pegasus fresh NVIDIA OpenCL context (RTX 5080, CUDA driver 13.4.96) passed the
+101 shared v13 contracts using GPUArrays `2c797a8`, OpenCL `9526a11`, AK `b13f97e`,
+Atomix `3486963`. The full suite stopped at scalar-rejection expectations because
+CLArray's SVM storage deliberately permits host scalar access. `44b9e3b` makes the
+check follow the component policy, not skip sparse results. Rerun full NVIDIA and
+separate PoCL CPU suites after synchronizing final revisions; neither is a full
+backend pass yet. No hardware equivalence is inferred from PoCL CPU.
+
+AK `a915b41` and Atomix `1ffd4ae` are pushed to their `tb/sparse-v13` branches:
+OpenCL 0.11 and provisional CUDA7/AMDGPU3/oneAPI3 compatibility. These are justified
+by actual package-resolution failures against the new OpenCL major/minor. A split
+CUDA scratch stack now resolves with explicit Pkg.develop paths in
+`pegasus:~/Julia/tmp/ga13-cuda-env`; installation is not migration validation.
+All remote work is in ~/Julia/tmp, with uniquely named, two-hour-idle jld daemons.
