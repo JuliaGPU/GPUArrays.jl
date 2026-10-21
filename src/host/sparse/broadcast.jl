@@ -21,6 +21,9 @@ GPUSparseMatStyle(::Val{N}) where N = Broadcast.DefaultArrayStyle{N}()
 
 Broadcast.BroadcastStyle(::GPUSparseVecStyle, ::AbstractGPUArrayStyle{1}) = GPUSparseVecStyle()
 Broadcast.BroadcastStyle(::GPUSparseVecStyle, ::AbstractGPUArrayStyle{2}) = GPUSparseMatStyle()
+Broadcast.BroadcastStyle(::GPUSparseVecStyle, ::GPUSparseMatStyle) = GPUSparseMatStyle()
+Broadcast.BroadcastStyle(::GPUSparseMatStyle, ::GPUSparseVecStyle) = GPUSparseMatStyle()
+Broadcast.BroadcastStyle(::GPUSparseMatStyle, ::AbstractGPUArrayStyle{1}) = GPUSparseMatStyle()
 Broadcast.BroadcastStyle(::GPUSparseMatStyle, ::AbstractGPUArrayStyle{2}) = GPUSparseMatStyle()
 
 # don't wrap sparse arrays with Extruded
@@ -290,7 +293,7 @@ function _getindex(arg::Union{GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseVec
     end
 end
 @inline function _getindex(arg::DenseArray{Tv}, I, ptr)::Tv where {Tv}
-    return @inbounds arg[I]::Tv
+    return @inbounds Broadcast._broadcast_getindex(arg, I)::Tv
 end
 @inline _getindex(arg, I, ptr) = Broadcast._broadcast_getindex(arg, I)
 
@@ -469,6 +472,8 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
     (all(arg -> arg isa GPUSparseVector, sparse_inputs) ||
      all(arg -> arg isa GPUSparseMatrix, sparse_inputs)) ||
         error("broadcast with both sparse vectors and sparse matrices is not supported")
+    all(arg -> axes(arg) == axes(bc), sparse_inputs) ||
+        throw(ArgumentError("broadcast expansion of sparse operands is not supported"))
 
     # The kernels iterate a single compressed format: that of the first sparse matrix, with
     # COO matrices read as CSR (which has the same order of entries). Other formats are

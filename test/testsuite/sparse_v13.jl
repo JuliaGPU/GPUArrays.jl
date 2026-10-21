@@ -18,6 +18,26 @@ function sparse_v13(AT, eltypes)
         @testset "$S" for S in sparse_matrix_formats
             host = sparse(Float32[1 0 0; 2 0 0; 0 0 3])
             A = gpu_sparse(AT, S, host)
+            v = gpu_sparse(AT, sparsevec([1,3],Float32[2,4],3))
+            dense_v = AT(Float32[2,3,4])
+            before = copy(A)
+            @test_throws ErrorException A .* v
+            @test_throws ErrorException v .* A
+            @test_throws ErrorException 2f0 .* A .+ v
+            @test_throws ErrorException A .* v .+ dense_v
+            @test_throws ErrorException dense_v .+ v .* A
+            @test_throws ErrorException (A .= A .* v)
+            @test A == before
+            @test Array(A .* dense_v) == Array(host) .* Float32[2,3,4]
+            @test Array(dense_v .+ A) == Float32[2,3,4] .+ Array(host)
+            @test Array(A .+ AT(Float32[2])) == Array(host) .+ 2f0
+            row = gpu_sparse(AT,S,sparse(reshape(Float32[1,0,2],1,3)))
+            @test_throws ArgumentError row .+ AT(Float32[2,3])
+            @test_throws ArgumentError AT(Float32[2,3]) .* row
+            column = gpu_sparse(AT,S,sparse(reshape(Float32[1,0,2],3,1)))
+            @test_throws ArgumentError column .+ AT(ones(Float32,3,2))
+            singleton = gpu_sparse(AT,sparsevec([1],Float32[2],1))
+            @test_throws ArgumentError singleton .+ v
             out = AT(zeros(Float32, 3))
             sparse_lookup_v13_kernel(get_backend(out))(out, A; ndrange=3)
             @test Array(out) == diag(host)

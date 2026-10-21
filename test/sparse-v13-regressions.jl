@@ -23,6 +23,19 @@ function downstream_cpu_transfer(::Type{T},x::Union{GPUSparseMatrixCSC,GPUSparse
 end
 
 @testset "v13 sparse regressions" begin
+    @testset "host-accessible mixed sparse broadcast rejects" begin
+        x=GPUSparseVector(Int32[1,2],Float32[3,4],2)
+        for S in (GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseMatrixCOO)
+            A=S===GPUSparseMatrixCOO ? S(Int32[1,2],Int32[1,2],Float32[1,2],(2,2)) :
+                                      S(Int32[1,2,3],Int32[1,2],Float32[1,2],(2,2))
+            before=Array(A)
+            @test_throws ErrorException A .* x
+            @test_throws ErrorException x .+ A
+            @test_throws ErrorException 2 .* A .+ x
+            @test_throws ErrorException (A .= A .* x)
+            @test Array(A)==before
+        end
+    end
     @testset "downstream dispatch and storage migration" begin
         for (name,S) in ((:AbstractGPUSparseMatrixCSR,GPUSparseMatrixCSR),
                          (:AbstractGPUSparseMatrixCSC,GPUSparseMatrixCSC),
