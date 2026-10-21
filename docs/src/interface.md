@@ -203,6 +203,36 @@ keys with a lexicographic fallback. Generic ESC SpGEMM checks candidate counts a
 a default 1 GiB temporary-memory estimate limit, overridable through
 `generic_spgemm(A,B; max_temp_bytes=...)`; its memory follows candidate products.
 
+### Migrating from backend-owned formats
+
+Backends now alias the canonical formats above. Compressed types gained a pointer-buffer
+parameter independent of coordinate storage; parameterize downstream fields by `typeof(A)`
+instead of assuming `CuSparseMatrixCSR{Tv,Ti}` is concrete. Use accessors such as `nnz(A)`
+and `nonzeros(A)`, not removed count fields. The vector index field is `nzInd`.
+
+`AbstractGPUSparseMatrixCSR`, `AbstractGPUSparseMatrixCSC` and
+`AbstractGPUSparseMatrixCOO` are deprecated names for the corresponding canonical
+containers. Ordinary dispatch, including `{Tv,Ti}`, continues to work, but these are no
+longer abstract extension points. They do not preserve subtyping, abstract-type introspection
+or coverage of independently implemented formats. Such formats should subtype the open
+dimensional `AbstractGPUSparseArray` root and implement their supported operations. There
+is no replacement alias for the removed BSR abstract or separate device sparse structs.
+Kernel signatures should use the canonical format with device-buffer parameters left free.
+
+The type-level `dense_array_type` protocol is removed. Allocate from an existing value
+buffer and populate the destination explicitly, preserving its device and storage policy:
+
+```julia
+dense = similar(nonzeros(A), T, size(A))
+copyto!(dense, A)
+```
+
+Allocation alone does not convert or initialize values. For a dense CPU result, use
+`Array(A)`; for a host sparse result, use `SparseMatrixCSC(A)` or `SparseVector(A)`.
+Type-only callers need a storage exemplar or an explicit destination type. A downstream
+compatibility release may still be required for removed helpers, fields and type layouts,
+even when its imports and dispatch work through the deprecated aliases.
+
 ### Reference
 
 ```@docs

@@ -11,7 +11,44 @@ Base.Array(x::FixedSparseStorage) = Array(x.data)
 GPUArrays.KernelAbstractions.get_backend(x::FixedSparseStorage) = GPUArrays.get_backend(x.data)
 Base.resize!(::FixedSparseStorage, ::Integer) = throw(ArgumentError("fixed storage"))
 
+# Same CPU-transfer policy as MLDataDevices' GPUArraysSparseArraysExt, without
+# resolving a downstream release whose compatibility does not yet include v13.
+function downstream_cpu_transfer(::Type{T},x::Union{GPUSparseMatrixCSC,GPUSparseVector}) where T
+    target=x isa GPUSparseMatrixCSC ? SparseMatrixCSC : SparseVector
+    if T <: AbstractFloat
+        eltype(x) <: Complex && return target{Complex{T}}(x)
+        return target{T}(x)
+    end
+    return target(x)
+end
+
 @testset "v13 sparse regressions" begin
+    @testset "downstream dispatch and storage migration" begin
+        for (name,S) in ((:AbstractGPUSparseMatrixCSR,GPUSparseMatrixCSR),
+                         (:AbstractGPUSparseMatrixCSC,GPUSparseMatrixCSC),
+                         (:AbstractGPUSparseMatrixCOO,GPUSparseMatrixCOO))
+            legacy=getfield(GPUArrays,name)
+            @test legacy===S
+            @test legacy{Float32,Int32}===S{Float32,Int32}
+            @test !isabstracttype(legacy)
+        end
+        for host in (sparse(Float32[1 0;0 2]),sparse(ComplexF32[1 im;0 2]),
+                     sparsevec([1,3],Float32[1,2],4),sparsevec([1,3],ComplexF32[1,im],4))
+            A=adapt(JLArray,host)
+            for T in (Float32,Float64,Nothing)
+                B=downstream_cpu_transfer(T,A)
+                expected=T <: AbstractFloat ? (eltype(host) <: Complex ? Complex{T} : T) : eltype(host)
+                @test B isa typeof(host).name.wrapper
+                @test eltype(B)===expected
+                @test B==host
+            end
+            dense=similar(nonzeros(A),eltype(A),size(A))
+            fill!(dense,convert(eltype(A),NaN))
+            copyto!(dense,A)
+            @test dense isa JLArray
+            @test Array(dense)==Array(host)
+        end
+    end
     @testset "generalized dot dimension preflight" begin
         for S in (GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseMatrixCOO)
             A=S(adapt(JLArray,sparse(Int32[1 0 2;3 4 0])))
