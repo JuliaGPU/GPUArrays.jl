@@ -143,6 +143,12 @@ Support common transpose/adjoint metadata, host conversion, reductions, broadcas
 
 Audit inherited paths including `hcat`, `vcat`, `blockdiag`, `UniformScaling`, `Diagonal`, views and mixed sparse/dense operations. Prefer straightforward central implementations where practical. Known unsupported paths must not silently download; give explicit errors and an accurately scoped operation table. Efficient sparse views, arbitrary index vectors, full concatenation and every structured wrapper need not all block v13.
 
+Retain existing GPU rectangular `A ± λI` / `λI ± A` diagonal behavior across Julia
+versions. Julia1.15 SparseArrays newly requires square inputs; this does not remove
+the GPU contract. Astra turn15 approved retaining and documenting this difference.
+Use an explicit rectangular diagonal reference (including tall, wide and empty cases,
+nonunit λ and reversed subtraction); keep square tests against SparseArrays directly.
+
 Keep these deliberate differences explicit: non-zero-preserving broadcast and dimensional reductions may return dense GPU arrays; stored zeros may be retained; individual sparse insertion is unsupported; reshape currently copies. Avoid a broader claim of complete SparseArrays compatibility.
 
 Implementation refinement (Astra architecture review, turn12; Sol review, turn16):
