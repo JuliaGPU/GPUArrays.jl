@@ -40,7 +40,10 @@ if backend=="OpenCL"
         load_package("pocl_jll")
     end
     OpenCL.cl.platform!(platform)
+    OpenCL.program_backend!(Symbol(get(ENV,"SPARSE_OPENCL_PROGRAM_BACKEND","auto")))
     println("OPENCL_DEVICE ",OpenCL.cl.device().name)
+    println("OPENCL_PROGRAM_BACKEND ",OpenCL.program_backend()," -> ",
+            OpenCL.resolve_program_backend(OpenCL.cl.device()))
 end
 GPUArrays.allowscalar(false)
 for mod in (GPUArrays,modules...)
@@ -67,8 +70,17 @@ if policy=="portable"
 end
 
 include(joinpath(pkgdir(GPUArrays),"test","testsuite.jl"))
+default_types="Float32,ComplexF32,Int32,Float16"
+if backend=="OpenCL" && !("cl_khr_fp16" in OpenCL.cl.device().extensions)
+    # Match the backend's device-capability contract, not a sparse-test exemption.
+    # Explicit caller-selected types remain unchanged and can deliberately test errors.
+    default_types="Float32,ComplexF32,Int32"
+    @testset "OpenCL unsupported Float16 rejects before allocation" begin
+        @test_throws ErrorException array_type{Float16}(undef,1)
+    end
+end
 types=[getfield(Base,Symbol(name)) for name in
-       split(get(ENV,"SPARSE_VALIDATION_TYPES","Float32,ComplexF32,Int32,Float16"),',')]
+       split(get(ENV,"SPARSE_VALIDATION_TYPES",default_types),',')]
 println("VALIDATION_FIXTURES ",suite=="full" ? string(types) :
         "fixed v13 fixtures: primarily Float32, with explicit integer/index edge cases")
 @testset "$backend $policy $suite" begin
