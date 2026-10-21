@@ -12,6 +12,13 @@ GPUArrays.KernelAbstractions.get_backend(x::FixedSparseStorage) = GPUArrays.get_
 Base.resize!(::FixedSparseStorage, ::Integer) = throw(ArgumentError("fixed storage"))
 
 @testset "v13 sparse regressions" begin
+    @testset "preflight narrowing before compression" begin
+        coo=GPUSparseMatrixCOO(JLArray(Int64[]),JLArray(Int64[]),JLArray(Float32[]),(2^32,1))
+        @test_throws ArgumentError GPUSparseMatrixCSR{Float32,Int32}(coo)
+        @test_throws ArgumentError GPUSparseMatrixCSC{Float32,Int32}(coo)
+        tiny=GPUSparseMatrixCOO(JLArray(Int8[1,1]),JLArray(Int8[1,2]),JLArray(Float32[1,2]),(1,2))
+        @test_throws ArgumentError GPUSparseMatrixCSR{Float32,Bool}(tiny)
+    end
     @testset "rectangular scaling and promoted wrapped products" begin
         for S in (GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseMatrixCOO)
             host_cancel=sparse(reshape(Float32[16777216,1,-16777216],1,3))

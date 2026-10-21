@@ -150,11 +150,16 @@ end
 GPUSparseMatrixCSR(x::GPUSparseVector) = generic_regroup(GPUSparseMatrixCSC(x))
 GPUSparseMatrixCOO(x::GPUSparseVector) = generic_expand(GPUSparseMatrixCSR(x))
 
-# typed forms: convert the format, then the element and index types
+# Typed forms preflight the requested widths before format conversion allocates.
 for S in (:GPUSparseMatrixCSR, :GPUSparseMatrixCSC, :GPUSparseMatrixCOO, :GPUSparseVector)
     @eval begin
         $S{Tv}(A::AbstractGPUSparseArray) where {Tv} = with_values($S(A), Tv)
-        $S{Tv,Ti}(A::AbstractGPUSparseArray) where {Tv,Ti} = with_eltypes($S(A), Tv, Ti)
+        function $S{Tv,Ti}(A::AbstractGPUSparseArray) where {Tv,Ti}
+            check_sparse_dims(Ti,size(A))
+            $S <: GPUSparseMatrixCompressed && check_sparse_nnz(Ti,nnz(A))
+            check_sparse_values(Tv,nonzeros(A))
+            with_eltypes($S(A),Tv,Ti)
+        end
         $S{Tv,Ti}(A::$S) where {Tv,Ti} = with_eltypes(A, Tv, Ti; copy=true)
     end
 end
