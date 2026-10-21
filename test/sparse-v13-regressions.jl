@@ -89,6 +89,10 @@ Base.resize!(::FixedSparseStorage, ::Integer) = throw(ArgumentError("fixed stora
                 @test sparse(wrap(A)) isa S
                 @test Array(sparse(wrap(A)))==Matrix(wrap(host))
                 @test SparseMatrixCSC(wrap(A))==sparse(wrap(host))
+                for op in (+,-), outer in (identity,transpose,adjoint)
+                    @test Array(op(outer(A),wrap(A)))≈Matrix(op(outer(host),wrap(host)))
+                    @test Array(op(wrap(A),outer(A)))≈Matrix(op(wrap(host),outer(host)))
+                end
             end
             for wrap in (transpose,adjoint)
                 @test Array(1.1*wrap(A)) ≈ Matrix(1.1*wrap(host))
