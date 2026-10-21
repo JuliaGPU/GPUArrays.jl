@@ -407,7 +407,7 @@ function materialize(H::Hermitian{<:Any,<:GPUSparseMatrix})
 end
 
 Base.:(*)(A::GPUSparseMatrixOperand, B::GPUSparseMatrixOperand) =
-    generic_spgemm(materialize(A), materialize(B))
+    spgemm(materialize(A), materialize(B))
 
 """
     GPUArrays.generic_spgemm!(C, tA, tB, A, B, α, β)
@@ -429,7 +429,7 @@ end
 
 LinearAlgebra.mul!(C::GPUSparseMatrix, tA::AbstractChar, tB::AbstractChar,
                    A::GPUSparseMatrix, B::GPUSparseMatrix, α::Number, β::Number) =
-    generic_spgemm!(C, tA, tB, A, B, α, β)
+    spgemm!(C, tA, tB, A, B, α, β)
 @static if VERSION < v"1.13.0-rc4"
     LinearAlgebra.generic_matmatmul!(C::GPUSparseMatrix, tA::AbstractChar, tB::AbstractChar,
                                      A::GPUSparseMatrix, B::GPUSparseMatrix, a::Number, b::Number) =
