@@ -4,6 +4,30 @@ This is the implementation handoff for [GPUArrays #745](https://github.com/Julia
 
 The objective is one coordinated backend migration, followed by portable sparse development and algorithm selection maintained in GPUArrays and its AK/KA dependencies. Keep backend-specific runtime and vendor bindings where they belong. New bindings or new hardware capabilities may require backend work; adding ordinary sparse operations or changing the preferred existing algorithm must not.
 
+Implementation evidence must distinguish independent runtime defects from redesign
+regressions. OpenCL9e55fc3 fixes publication of failed SVM allocations (CLPtr NULL
+was incorrectly compared with host C_NULL), using existing bounded reclamation and
+preserving the native context until success. Fifteen focused checks pass; broader
+NVIDIA allocation/transfer churn still fails on both baseline and v13. Astra20 and
+Sol43 reviewed the focused fix. Do not mask the unresolved failure with GC-off or
+blocking defaults. Actual root sparse/SVM tests now pass 11,759 checks on each of
+Pegasus and Taurus (GA64ea2d8/OpenCLe0a09f4); keep this scoped GPU evidence distinct
+from the unresolved dense-only churn reproducer and from whole-backend CI.
+
+Astra23/Sol65 corrected the stored-values norm assumption after actual Julia1.15
+CI: v13 norms cover logical entries on every Julia version. Negative orders include
+implicit zeros, preserving a NaN magnitude via postprocessing the dense stored-buffer
+norm. Use dense CPU references for this contract; older SparseArrays ignored those
+zeros. This is a semantic correction, not a version-dependent dispatch policy.
+
+Astra22/Sol61 require native sparse wrapper contract version2, probed from the same
+loaded handle as the entry points. Wide CSC symbols alone do not prove native
+exception containment: published oneAPI_Support0.11.0 has those symbols but lacks
+the catch boundary. Gate sparse wrappers without disabling dense oneAPI execution;
+publish the patched0.11.1 artifact and then raise the dependency minimum. The Yggdrasil
+recipe retains upstream source5093529 plus a focused native patch, not a topic-branch
+source. Metadata generation and source-file equivalence are not an artifact build.
+
 ## Decisions to implement
 
 ### 1. Keep GPUArrays-owned immutable canonical containers

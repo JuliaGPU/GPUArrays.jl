@@ -1,12 +1,132 @@
 # GPUArrays v13 implementation handoff
 
-## Latest checkpoint (Oct21, backend self-CI wiring)
+## Current state (Oct21, final source validation)
 
-This section supersedes the chronological checkpoints below. GPUArrays a6952ce pins
-CUDA42d9ec7ef, AMD47a61c2cf, oneAPI80a88b3, Metala9a75f81a and OpenCL88d88e8.
-All backend topic branches are pushed; Metal PR982 and GPUArrays PR745 branches are
-updated too. Backend bootstraps pin the reviewed GPUArrays helper ecbe5329. This is
-temporary coordinated-stack plumbing, not registered dependency resolution.
+This section supersedes every historical checkpoint below. GPUArrays local4083b78
+contains four reviewed fixes after pushed ef7659a: mixed sparse broadcast styles and
+preallocation rejection, logical negative-order norms, CPU-MIME-independent display
+tests, and scalar-magnitude nonfinite complex norm references. Runtime source at
+4083b78 equals frozen64ea2d8; only the final regression reference differs. Final
+central pins are CUDAa3e0c60, AMDf5b6976, oneAPId1cb45d, Metal1aaa653 and OpenCLe0a09f4,
+plus AKa915b41/Atomix1ffd4ae. Pin/helper/timeout changes will be folded into the single
+TEMP CI commit, not pushed as another series of debug commits. Preserve tested source
+SHAs and the old remote tip before that rewrite; do not relabel historical tests as
+literal tests of a new commit hash.
+
+Exact clean-source results:
+
+- GA64ea2d8/OpenCLe0a09f4: actual root Pkg.test sparse/SVM suites pass11,759 on
+  EACH host, Pegasus RTX5080 and Taurus RTX6000Ada. Shared sparse11,744 across all
+  ten supported types, SVM15, normal GC/synchronization, one worker. An empty
+  OCL_ICD_VENDORS directory plus native OCL_ICD_FILENAMES constrained enumeration
+  to NVIDIA only. Both logs: ga13-opencl-svm-env/actual-final-entry-full.log.
+  This is actual migrated GPU coverage, not PoCL evidence or a whole-backend pass.
+- GA64ea2d8/oneAPId1cb45d: actual checked Pkg.test, allow_reresolve=false, passes
+  13,138 plus24 pre-existing broken checks: sparse ABI96, shared11,641, native
+  oneMKL1279+24broken, resources122. Taurus ga13-oneapi-env/final-marked-stack.log.
+  The loaded rebuilt support SHA256 is
+  c19915c2965bc4f7153e4c16d240deb107ecfe0a902f07936445d5f9969932c9 at
+  ~/Julia/tmp/gpuarrays-v13-stack-lyFPFO/support-scratch/8f75cd03-7ff8-4ecb-9b8f-daf728133b1b/deps/lib/liboneapi_support.so.
+  This is a source-built stack, not the registered artifact. Actual published0.11.0
+  is rejected for its absent version marker; the new library reports2. Dense oneAPI
+  still executes with sparse eligibility disabled; real-artifact probes6/6 pass.
+- GA64ea2d8 full shared JL sparse on Julia1.15-DEV61 passes14,957; ambiguity1.
+  Expanded regressions initially1890pass/4fail exposed CPU BLAS versus scalar complex
+  Inf/NaN reference differences, not a runtime sparse failure. Corrected GA4083b78
+  actual nightly Pkg.test passes1894regressions+ambiguity1. Pegasus
+  ga13-nightly-final-env/{nightly-logical-final,nightly-norm-final-regressions}.log.
+- Local Julia1.13.2, runtime4083b78: regressions1894 and contracts154 pass;
+  focused display52, linalg195, mixed broadcast275, ambiguity1 pass. The broadcast
+  regression was independently red9/9 then green9/9. Negative orders now include
+  implicit zeros on every Julia version, preserving NaN magnitudes. Dense operands
+  may broadcast-expand; sparse expansion/mixed sparse ranks reject before allocation.
+- GA64ea2d8/AMDf5b6976: GPUArrays-first contracts151+ambiguity1 pass; earlier backend-
+  first ef7659a/f5b6976 contracts109+ambiguity1 pass. Pegasus
+  ga13-amdgpu-loadorder-final-env/core64-gpuarrays-first.log.
+- Metal1aaa653/GAef7659a: fresh actual Pkg.test spot53/53, --jobs=1 and explicit
+  --threads=1. Local ga13-metal-final-spot-prefix.log. No complete local Metal suite
+  and no physical Metal retest of the final central broadcast/norm changes claimed.
+  The user's limit remains single-threaded spot testing, not full local testing.
+- CUDAa3e0c60/GA64ea2d8 refreshed focused contracts/linalg/broadcast run is pending;
+  Pegasus ga13-cuda-env/final-core-focused.log. Retain older full automatic/portable
+  and native solver/factorization/BSR/batch evidence below at its exact revisions.
+
+The inherited NVIDIA dense-allocation churn remains independently reproducible on
+OpenCL main9c27048/registered GA12.1.1, including strict NVIDIA-only discovery. A
+native C shim observes NULL(size44,alignment4), alloc/fail/free=(15,1,3) at failure
+and(15,1,11) after unwind, after ten checks; baseline-strict-nvidia.log. The root
+sparse suites above do not reproduce it. Cause unresolved; neither a v13 regression
+nor a driver defect is established. The independent NULL guard and vendor-driver
+test initialization fix are production changes, not alleged causal fixes. See
+validation/REPORT.opencl-svm.md and its dense-only reproducer.
+
+Actual CI run39625043230 tested synthetic merge32c670f409c65fd095df6f0cdff9a541cc3ac788
+(main6fa6490 + ef7659a), NOT the local fixes above. Ubuntu/Windows1.10–1.13 and docs
+pass; Windows1.12 actual35,416 assertions. Both nightly jobs fail21 (18 implicit-zero
+norm assertions,3 CPU display-format references), now addressed by the frozen-source
+tests above but awaiting new CI. OpenCL hit its exact60-minute timeout while both
+IL/C sparse suites and dense jobs were still running; no completed aggregate pass.
+Logs were inspected. The final isolated CI layer gives this unshortened two-route
+suite180minutes, rather than skipping tests or allowing failure. macOS jobs remain
+queued/running. Buildkite2082 canceled and2083 all-broken are NOT backend validation.
+
+oneAPI's native artifact gate probes wrapper version2 plus wide CSC using one loaded
+handle. All87 raw sparse wrappers gate before argument conversion/native entry;
+96 ABI checks verify this behavior. Regeneration retains unrelated generated files.
+The official0.11.0+0 library lacks this marker despite exporting wide CSC, so must
+not be accepted as safe. Sparse support fails closed; dense behavior remains usable.
+Yggdrasil topic maleadt/Yggdrasil:tb/oneapi-sparse-v13-support is pushed at31c79455b,
+on latest master0defdb4d8. Separate e0dc775 fixes an existing extra-parenthesis parse
+error. Version0.11.1 retains upstream source5093529 and Intel2026.1, carrying only
+the focused native cpp/header patch; patched files cmp equal tested oneAPId1cb45d.
+Runtime dependency floors are the validated Loader1.32/OpenCL2024.10.24/Hwloc2.15,
+not claimed minimal ABI requirements. Julia1.13.2 root-project BinaryBuilder metadata
+generation passes for x86_64-linux-gnu-cxx11. Actual crossbuild/generated-JLL test is
+pending on Pegasus (ga13-ygg-build.log), with task-owned JULIA_PKG_DEVDIR. Metadata
+and the source-built Arc result are not a generated artifact validation.
+
+Release/maintainer checklist (temporary pins are not release-ready resolution):
+
+1. Finish refreshed exact-stack CI and inspect checkout + STACK_REVISION lines,
+   including CUDA's root/all13 split packages and their test environments. Use the
+   explicit develop/setup path on Julia1.10; [sources] alone is ineffective there.
+2. Build/test/publish and register oneAPI_Support0.11.1 with wrapper contract2;
+   test the generated artifact WITHOUT the source-build preference. Raise oneAPI's
+   support minimum to the actual registered version, retaining the runtime gate.
+3. Release compatibility-only AK0.5.9/Atomix1.6.1, GPUArrays13/JLArrays0.5 (Core stays
+   0.2.1), then coordinated CUDA7 (all14 packages), AMDGPU3, oneAPI3, OpenCL0.11,
+   Metal1.12 as their weak-dependency ordering permits. Verify every test project.
+4. Land downstream compatibility/API updates recorded in
+   validation/REPORT.sparse-v13-downstream.md; whole consumers were not tested.
+5. Remove the isolated TEMP CI/bootstrap pins when registered resolution works;
+   rerun normal Pkg.test/docs on Julia1.10 and supported modern/nightly versions.
+   Before then describe results as exact pinned-stack validation only.
+6. Keep the inherited OpenCL dense NULL reproducer open; old cuSPARSE algorithm
+   branch performance, additional GPU generations and full local Metal remain
+   untested. CUDA-only measured performance/memory is in perf/REPORT.sparse-v13.md.
+
+Astra architectural decisions through23 and Sol implementation review through76 are
+in peer conversations sparse-v13-architecture and sparse-v13-review. Findings were
+checked and fixes rerun. No GitHub discussions or PR descriptions changed yet. The
+user authorizes succinct existing PR745/Metal982 description updates once work is
+finished; new backend/dependency PR descriptions remain local drafts, not posted PRs.
+
+## Historical checkpoints
+
+## Latest checkpoint (Oct21, CI history cleanup and final native gates)
+
+This section supersedes the chronological checkpoints below. GPUArrays ef7659a pins
+CUDAa3e0c60ee, AMDf5b69764c, oneAPI4858db9, Metal89143a6ed and OpenCL0760462.
+All topic and existing PR branches are pushed. Per the user's concern,14 incremental
+TEMP CI commits were consolidated into ONE isolated CI commit. Production commits
+and contributor authorship remain; the full tree before repinning was byte-identical
+to fc9bda1. Old remote65ff6ec and full fc9bda1 are preserved in local/remote backup refs
+backup/sparse-v13-{ci-debug,before-ci-cleanup}-20261021. Backend bootstraps pin cleaned
+dd0ee48, retained under backup/sparse-v13-bootstrap-20261021; new central pins are the
+only tree difference from that cleanup. Backend previous tips have their own local/
+remote backup/sparse-v13-before-bootstrap-repin-20261021. All rewrites checked remote
+heads and used explicit leases/refspecs. This remains stack validation, not normal
+registered dependency resolution.
 
 Every backend's CI now explicitly resolves the pinned stack rather than letting an
 early test-plugin instantiate registered incompatible versions. Existing toolkit,
@@ -19,9 +139,18 @@ their selections through the checked runner. Preferences retain recursive __clea
 semantics and transitive UUID/name bindings via extras. Binding, actual Pkg.test
 sandbox propagation and preference-clearing probes pass on Julia1.10.12 and1.13.2.
 Sol turns28-30 reviewed these changes; two verified wiring issues were corrected.
-YAML parsing and diff checks pass. CUDA unified-memory, AMD native sparse/solver and
-oneAPI resource/native self-entrypoint runs are in progress; do not count setup as a
-test pass. No further full local Metal runs: single-worker/thread spot tests only.
+YAML parsing and diff checks pass. Actual checked Pkg.test runner ecbe532 with CUDA
+42d9ec7 passes228 in confirmed unified memory, allow_reresolve=false/check-bounds=yes;
+AMD47a61c2 passes3189 native sparse+dense solver; oneAPI80a88b3 passes1401 native/
+resource checks plus24 pre-existing broken CSC checks. Their runtime files are unchanged
+by the repin; do not label the new bootstrap SHAs hardware-tested yet. Logs Pegasus
+ga13-cuda-ci-entry/self-unified-final-green.log, ga13-amdgpu-env/self-final-green.log;
+Taurus ga13-oneapi-env/self-final-green.log. oneAPI rebuilt support SHA256
+6d0ee79ec8b9a91034b0442e8e9d7e54e493019aaf36db76376fa4241be13e55 at
+/tmp/gpuarrays-v13-stack-sttpHy/support-scratch/8f75cd03-7ff8-4ecb-9b8f-daf728133b1b/deps/lib/liboneapi_support.so.
+Initial invocations accidentally appended daemon startup ARGS; reruns cleared ARGS
+before the checked runner. That was a harness error, not a production CI failure.
+No further full local Metal runs: single-worker/thread spot tests only.
 
 Clean frozen GA0f2d80f / CUDAe37f85d19 full shared six-type suites now pass automatic
 7712 and forced-portable7713 (2004 portable selections), with an empty sparse ambiguity
@@ -32,28 +161,104 @@ oneAPI26fb776 forced-portable shared four-type run passes5517 (1560 selections),
 ambiguity1; Taurus ga13-oneapi-env/portable-final.log. These supplement the native
 backend suites and oneAPI12904+24 pre-existing broken checks recorded below.
 
-Julia1.15 newly rejects rectangular SparseMatrixCSC UniformScaling operations on CPU.
-e2e594d keeps the existing GPU rectangular behavior and tests against an explicit
-rectangular diagonal reference instead; square cases still use SparseArrays. Astra
-turn15 approved preserving this backend API. Reference regressions pass805 on both
-Julia1.13 and1.15; nightly ambiguity check passes separately. Logs local
-ga13-rect-reference-green.log and Pegasus ga13-cuda-ci-entry/nightly-sparse-green2.log.
+New deprecated CSR/CSC/COO dispatch names (Astra16/Sol31) alias canonical containers,
+not abstract extension points. BSR/device aliases and dense_array_type remain removed.
+CPU precision-policy and initialized dense-copy fixtures pass:858 on Julia1.10/1.13;
+clean frozen781a0b2 actual Julia1.15 Pkg.test passes859 including ambiguity. Log Pegasus
+ga13-nightly-final-env/nightly-final.log. History-cleaned equivalent is3ceeb6e.
+Julia1.10 docs makedocs also passes locally (ga13-docs-build-only110.log); merely
+including docs/make.jl in interactive jld does NOT call main. No deployment performed.
+See validation/REPORT.sparse-v13-downstream.md for exact consumer audit revisions;
+MLDataDevices, QuantumToolboxCore and SparseMatrixColorings still need coordinated
+compatibility/API releases. No whole downstream-package pass claimed.
 CUDAcb5389b13 / AMD8c0ff4687 remove four no-longer-included legacy integration files;
 their history remains recoverable and the active centralized methods are unchanged.
 
-NVIDIA OpenCL normal-GC repeat also fails first at clEnqueueSVMMemFill(-30), then the
-context is unusable. Dense-only pending-input, reduction+GC and40 distinct compile+GC
-probes against OpenCL main9c27048 pass; they have NOT reproduced the sparse-triggered
-failure or established its cause. Blocking synchronization / GC-disabled contracts
-remain diagnostics only. Do not silently enable those settings as a fix. A new hard
-NVIDIA OpenCL Buildkite job complements PoCL CPU IL/C testing on GitHub Actions.
+OpenCL Pegasus clean781a0b2/88d88e8: PoCL CPU forced-portable four-type full shared
+suite5544 passes (1554 selections), ambiguity1; forced OpenCL-C contracts112+ambiguity1
+pass. NVIDIA RTX5080 fresh contracts112+ambiguity1 pass, but broader sparse run fails
+first at native SVM upload(-30); separately the requested Float16 is unsupported there.
+The driver now records resolved IL/C route, capability-tests Float16 rejection when
+absent and omits it only from default types; explicit type selections remain honored.
+No complete NVIDIA sparse suite pass. Logs Pegasus ga13-opencl-final-env.
 
-Buildkite2075 tested GA746631d: uploader passed, all backend jobs scheduled. Latest
-GHA39617084725 at that SHA was pending. Subsequent pushes supersede those runs; inspect
-new jobs' actual revisions/logs before claiming CI coverage. Earlier Ubuntu1.13
-35017 assertion pass and Metal53 spot checks retain their recorded older revisions.
+Minimizer ga13-opencl-dense-triplet-churn.jl uses ONLY dense CLArray buffers and CPU
+SparseArrays reconstruction: current stack fails872 or4 checks in fresh contexts;
+matched minimal v13 environment also fails952. Same-host OpenCL main9c27048 with
+registered GA12.1.1 passes960 twice. Other simple dense/GC probes pass. This narrows
+the failing stack but does NOT establish GPUArrays or driver causality. GPUToolbox
+3.4.1 matches both Pegasus envs; AK/Atomix src/ext match their registered baseline
+trees exactly. Default preferences match. Guarded noinline uploader passes once;
+Native-blocking and ordinary-Ptr-return diagnostics also fail. Do not enable GC-off or
+blocking synchronization as a production fix without causal evidence.
+
+Subsequent controls supersede that baseline correlation: fresh same-host OpenCL
+main9c27048 / registered GA12.1.1 also fails10+1 on this minimizer, first native
+SVM memcpy CL_INVALID_VALUE(-30), log ga13-opencl-baseline-env/baseline-long.log.
+Classify the intermittent allocation/transfer failure as reproduced on baseline
+and v13, cause unresolved; this does not establish a driver or v13 regression.
+The ordinary-Ptr native-return diagnostic also fails824+1, so changing the custom
+CLPtr return type is not a sufficient fix. A same-call native C shim confirms actual
+NULL on the baseline, with the native out-parameter matching Julia's return. With
+OCL_ICD_FILENAMES=libnvidia-opencl.so.1,344 checks pass before size36/alignment4
+returns NULL: alloc/fail/free=(516,1,237) at failure and (516,1,514) after unwind.
+That environment variable adds ICDs, not exclusive discovery. The allocating task's
+finalizer-inhibition counter was0 on the default pool. No fixed resource cap is
+established. See validation/REPORT.opencl-svm.md and its dense-only reproducer.
+
+Independent OpenCL029274e is pushed: correctly detects CL_NULL (not cross-address-
+space C_NULL), retries through existing bounded reclamation, preserves the Context
+across GC and throws before retaining its native context or publishing storage.
+Mocked retry/error/argument checks and actual native context-reference checks pass15.
+The new error reports native NULL, not an unproven OOM cause. This does NOT fix the
+underlying intermittent native failure. Astra20/Sol43 reviewed the focused patch;
+post-initialization cleanup was deliberately not added because failed completion
+cannot justify freeing pending memory. Existing Intel initialization cleanup is a
+separate audit. Actual clean root Pkg.test with GAef7659a/OpenCL029274e crashed
+before tests in versioninfo, mixing JLL/system PoCL libraries: the runner imported
+pocl_jll even for --platform=cuda. Independent runner fix6ba2cf4 conditionally
+imports CPU drivers in all three runner contexts, leaving target/test selection
+unchanged. The matching GA setup fix remains uncommitted in the single CI layer.
+Actual root GAef7659a/OpenCL6ba2cf4 on both hosts now passes the15 SVM checks and is
+running the entire shared sparse group, one worker. Logs on both hosts:
+ga13-opencl-svm-env/actual-driver-entry-full.log. Complete result pending.
+
+Upstream Metal/OpenCL main advanced during validation. Rebased/pushed Metal
+1aaa6534c9770c28403a46d8c4006cfbaac5edb4 onto e0dd041 (cooperative execution test
+hardening) and OpenCL e0a09f4994faedfaa1606cb9e4f5ff4913e4da41 onto c0ee73d
+(versioninfo subgroup-ballot display). Metal's four CI iterations are consolidated
+into one isolated CI commit. Previous tips89143a6 and6ba2cf4 remain local/remote
+backup/sparse-v13-before-main-refresh-20261021; pushes used explicit leases/refspecs.
+Runtime sparse implementations are unchanged by these upstream deltas. The current
+root runs remain tied to frozen6ba2cf4, not the rebased OpenCL SHA. A fresh Metal
+53-check spot run is pending, --jobs=1 and explicit --threads=1; no full local suite.
+All other upstream main refs were rechecked and unchanged.
+
+Astra17/Sol33 independently confirmed an existing OpenCL callback lifetime defect:
+both Context constructors drop runtime Base.CFunction handles. Wrapper-only rooting
+would not cover native context lifetime, and foreign-thread callbacks need an audit.
+Keep this separate: not shown to cause the upload failure, not patched or posted.
+
+GitHub reports a PR/Actions/webhook delay incident starting14:52UTC Oct21; PR heads
+lagged verified git refs. GHA39625043230 documentation passes, actual checkout
+32c670f409c65fd095df6f0cdff9a541cc3ac788 (synthetic merge of main6fa6490 and
+topic ef7659a), not the topic SHA alone. Logs verify exact AK/Atomix pins, actual
+doctests and CheckDocument; preview deployment declined. Windows Julia1.12 also
+passes35416 actual assertions on that same merge checkout, with exact AK/Atomix
+pins verified in ga13-ci-windows112-ef7659a.log. Other jobs are queued or running,
+no whole-stack CI pass. Buildkite2082 on ef7659a was auto-canceled with
+build_skipping after delayed older webhooks;2083 on old781a0b2 says passed but ALL
+backend jobs are broken/never executed. This is NOT backend validation.
+Inspect exact head SHAs/logs after recovery; earlier Ubuntu1.13 35017 and Metal53 spot
+passes retain their recorded older revisions. Do not cancel unrelated busy GPU jobs.
 Official oneAPI support JLL still lacks the native exception-boundary change: a new
-artifact plus coordinated releases remain mandatory. No PR discussion text posted.
+artifact plus coordinated releases remain mandatory. User now authorizes updating
+existing PR descriptions ONCE EVERYTHING IS DONE, clearly and extremely succinctly;
+draft descriptions for new migration PRs too. Do not post premature completion claims.
+No PR descriptions/discussion text have been changed yet. Succinct drafts for GA,
+all five backends, AK and Atomix are /Users/tim/Julia/tmp/sparse-v13-*-description.md;
+Sol57 identified and corrected an overclaim about cuSPARSE direct publication:
+it avoids redundant canonical reassembly, not vendor candidate expansion.
 
 ## Latest checkpoint (Oct21, policy ownership and final-stack checks)
 
