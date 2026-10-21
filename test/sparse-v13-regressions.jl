@@ -34,7 +34,18 @@ end
             @test_throws ErrorException 2 .* A .+ x
             @test_throws ErrorException (A .= A .* x)
             @test Array(A)==before
+            scalar=JLArray(fill(0f0))
+            for make in ((A,x,z)->(A .* x) .+ z,
+                         (A,x,z)->z .+ (A .* x),
+                         (A,x,z)->A .* (z .+ x),
+                         (A,x,z)->(x .+ z) .* A)
+                @test_throws r"both sparse vectors and sparse matrices" make(A,x,scalar)
+            end
+            @test_throws r"zero-dimensional GPU arrays" A .+ scalar
+            @test_throws r"zero-dimensional GPU arrays" scalar .+ A
         end
+        @test_throws r"zero-dimensional GPU arrays" x .+ JLArray(fill(0f0))
+        @test_throws r"zero-dimensional GPU arrays" JLArray(fill(0f0)) .+ x
     end
     @testset "downstream dispatch and storage migration" begin
         for (name,S) in ((:AbstractGPUSparseMatrixCSR,GPUSparseMatrixCSR),

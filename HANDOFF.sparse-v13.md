@@ -2,6 +2,21 @@
 
 ## Current state (Oct21, final source validation)
 
+Final peer follow-up: zero-dimensional GPU fusion also needed sparse style joins.
+Twelve focused cases fail red with incidental scalar indexing, then pass the precise
+mixed-rank rejection after the fix. Positive GPU0 operands explicitly reject before
+host scalar capture; device-scalar broadcast is not implemented. The new runtime
+patch passes1914regressions,184contracts,display52,linalg195,mixedbroadcast275 and
+ambiguity1 locally on Julia1.13.2; Sol79 checked ordering and zero-dimensional views.
+GPUArrays64edd6d is pushed to both topic/PR refs with one TEMP CI commitca680c3;
+GHA39641730432 and Buildkite2085 target that exact head, but the GPU0 follow-up still
+needs pushing and its own final-head validation. Earlier exact GA64edd6d
+Julia1.10.12 focused run passes1894regressions,display52,linalg195,broadcast275 and
+ambiguity1. Actual final CI helper at GA64edd6d/OpenCLe0a passes seven native
+array/memory/context/queue/event/synchronization groups155 on Pegasus; log
+ga13-opencl-svm-env/final-native64.log, exact pins/clean source logged.
+CUDAa3/GA64ea focused run completed151contracts+195linalg+275broadcast+ambiguity1.
+
 This section supersedes every historical checkpoint below. GPUArrays local4083b78
 contains four reviewed fixes after pushed ef7659a: mixed sparse broadcast styles and
 preallocation rejection, logical negative-order norms, CPU-MIME-independent display
