@@ -361,10 +361,11 @@ function sparse_display(AT, eltypes)
             dA = gpu_sparse(AT, S, A)
             str = summary(dA)
             @test str == "6×7 $(nameof(S)){$ET, Int32} with $(nnz(A)) stored entries in $(nameof(AT))"
-            # the entries are rendered as for the host matrix
-            host_str = sprint(show, MIME"text/plain"(), A)
+            # GPUArrays delegates its entry grid to print_array, not SparseArrays'
+            # version-dependent MIME presentation (which can use braille patterns).
+            host_str = sprint(Base.print_array, A;context=(:compact=>true,:typeinfo=>ET))
             dev_str = sprint(show, MIME"text/plain"(), dA)
-            @test split(dev_str, '\n')[2:end] == split(host_str, '\n')[2:end]
+            @test split(dev_str, '\n';limit=2)[2] == host_str
             expected = S === GPUSparseMatrixCOO ? SparseMatrixCSC{ET,Int}(A) : A
             @test sprint(show, dA) == sprint(show, expected)
         end
