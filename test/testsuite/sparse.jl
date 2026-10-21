@@ -30,8 +30,10 @@ using GPUArrays: GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO, GPU
     sparse_linalg(AT, eltypes)
     iszero_sparse(AT, eltypes)
     sparse_bool(AT)
+    sparse_v13(AT, eltypes)
 end
 
+include("sparse_v13.jl")
 
 const sparse_matrix_formats = (GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO)
 
