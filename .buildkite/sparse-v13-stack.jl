@@ -2,6 +2,35 @@
 # Explicit path development is intentional: Julia 1.10 ignores [sources].
 using Pkg, TOML
 
+# Preferences are keyed by package name but Base needs a UUID/name binding in
+# each active project, including for transitive JLLs such as CUDA_Compiler_jll.
+# Extras provide that binding without changing the resolved dependency graph.
+function stack_bind_preferences()
+    project=Base.active_project()
+    preferences=joinpath(dirname(project),"LocalPreferences.toml")
+    isfile(preferences) || return
+    names=Dict(info.name=>string(uuid) for (uuid,info) in Pkg.dependencies())
+    data=TOML.parsefile(project)
+    changed=false
+    for name in keys(TOML.parsefile(preferences))
+        haskey(names,name) || continue
+        (get(data,"name",nothing)==name || haskey(get(data,"deps",Dict()),name)) && continue
+        extras=get!(data,"extras",Dict{String,Any}())
+        if !haskey(extras,name)
+            extras[name]=names[name]
+            changed=true
+            println("STACK_PREFERENCE_BINDING ",name,' ',names[name])
+        else
+            extras[name]==names[name] || error("conflicting preference UUID for $name")
+        end
+    end
+    if changed
+        open(project,"w") do io
+            TOML.print(io,data)
+        end
+    end
+end
+
 gpuarrays = normpath(joinpath(@__DIR__, ".."))
 pins = TOML.parsefile(joinpath(@__DIR__, "sparse-v13-stack.toml"))
 backend = isempty(ARGS) ? "JLArrays" : first(ARGS)
@@ -75,6 +104,9 @@ if haskey(ENV,"GPUARRAYS_V13_STACK_PREFERENCES")
     package==gpuarrays || cp(ENV["GPUARRAYS_V13_STACK_PREFERENCES"],
                              joinpath(package,"LocalPreferences.toml");force=true)
 end
+const stack_oneapi_debug=backend=="oneAPI" &&
+    get(ENV,"GPUARRAYS_V13_STACK_ONEAPI_DEBUG","false")=="true"
+stack_bind_preferences()
 
 if backend == "oneAPI" && (!setup_only || get(ENV,"GPUARRAYS_V13_STACK_BUILD_SUPPORT","false")=="true")
     # This branch changes the support C++ wrappers. Build them for stack validation;
@@ -126,6 +158,7 @@ function stack_prepare_tests()
         end
         preferences=joinpath(active,"LocalPreferences.toml")
         isfile(preferences) && cp(preferences,joinpath(project,"LocalPreferences.toml");force=true)
+        stack_bind_preferences()
         println("STACK_TEST_PROJECT ",project)
     end
     Pkg.activate(active)
@@ -134,6 +167,7 @@ end
 # Custom CI jobs (minimum dependencies, Enzyme) can prepare the pinned stack,
 # change dependencies in its disposable checkout, then run the same checked runner.
 function stack_load_backend(test_args)
+    stack_bind_preferences()
     if backend=="CUDA"
         @eval using CUDA,cuSPARSE,cuSOLVER
     elseif backend=="AMDGPU"
@@ -170,6 +204,13 @@ function stack_run_loaded_tests(test_args)
     elseif backend=="oneAPI"
         oneAPI.functional() || error("oneAPI must be functional for stack validation")
         oneAPI.Support._check_sparse_abi()
+        if stack_oneapi_debug
+            for library in (oneAPI.oneL0.NEO_jll,oneAPI.oneL0.NEO_jll.libigc_jll)
+                get(Base.get_preferences(Base.PkgId(library).uuid),"debug",nothing)=="true" ||
+                    error("oneAPI debug preference was not propagated for $(nameof(library))")
+                println("STACK_DEBUG_PREFERENCE ",nameof(library)," true")
+            end
+        end
     elseif backend=="OpenCL"
         requested=findfirst(arg->startswith(arg,"--platform="),test_args)
         request=requested===nothing ? "pocl" : split(test_args[requested],'=';limit=2)[2]
