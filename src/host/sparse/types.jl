@@ -185,6 +185,12 @@ const GPUSparseMatrixCompressed = Union{GPUSparseMatrixCSR,GPUSparseMatrixCSC}
 const GPUSparseMatrix = Union{GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseMatrixCOO}
 const GPUSparseArray = Union{GPUSparseVector,GPUSparseMatrix}
 
+# Dispatch compatibility only: these are canonical containers, not abstract extension
+# points. Independent formats must subtype the dimensional AbstractGPUSparseArray root.
+Base.@deprecate_binding AbstractGPUSparseMatrixCSR GPUSparseMatrixCSR false
+Base.@deprecate_binding AbstractGPUSparseMatrixCSC GPUSparseMatrixCSC false
+Base.@deprecate_binding AbstractGPUSparseMatrixCOO GPUSparseMatrixCOO false
+
 
 ## accessors
 

@@ -205,6 +205,14 @@ No vendor sparse layer is required. Test the generic implementation with current
 
 **Downstream users**
 
+Implementation audit (Astra turn16): retain deprecated CSR/CSC/COO abstract names as
+aliases of the corresponding canonical containers, preserving ordinary dispatch but not
+subtyping, introspection or independent-format coverage. Do not fake BSR or device-type
+aliases. Keep the removed dense_array_type protocol removed: migrate value-based callers
+to allocation from nonzeros(A) followed by explicit copyto!, and require an exemplar or
+explicit destination for type-only callers. Document these limits and test the retained
+MLDataDevices-style CPU-transfer method body, not merely its import.
+
 Audit users that subtype removed abstract types versus users that only dispatch on them. Deprecated abstract aliases preserve some dispatch but cannot preserve subtyping. Device-type aliases also have changed type parameters and storage predicates; do not add misleading host/device aliases simply to make imports succeed. Document the new kernel signatures and test representative consumers such as MLDataDevices, BSR/batched users and packages defining their own sparse formats. Version bumps for backend packages should reflect their public compatibility changes, not just GPUArrays' version number.
 
 ## AK and KA roadmap
