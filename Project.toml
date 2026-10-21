@@ -21,17 +21,20 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [weakdeps]
+AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
 oneAPI = "8f75cd03-7ff8-4ecb-9b8f-daf728133b1b"
 CUDACore = "bd0ed864-bdfe-4181-a5ed-ce625a5fdea2"
 cuSPARSE = "b26da814-b3bc-49ef-b0ee-c816305aa060"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 
 [extensions]
+ROCSPARSEExt = "AMDGPU"
 ONEMKLExt = "oneAPI"
 CUSPARSEExt = ["CUDACore", "cuSPARSE"]
 JLD2Ext = "JLD2"
 
 [compat]
+AMDGPU = "3"
 oneAPI = "3"
 AcceleratedKernels = "0.5"
 Adapt = "4.7.3"
