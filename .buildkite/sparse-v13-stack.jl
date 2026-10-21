@@ -54,7 +54,8 @@ elseif backend == "OpenCL"
     push!(specs,PackageSpec(path=joinpath(package,"lib","intrinsics")))
 end
 
-active = backend == "docs" ? joinpath(gpuarrays,"docs") : joinpath(scratch,"env")
+active = get(ENV,"GPUARRAYS_V13_STACK_SETUP_PROJECT",
+             backend == "docs" ? joinpath(gpuarrays,"docs") : joinpath(scratch,"env"))
 filter!(spec -> normpath(spec.path) != active,specs)
 Pkg.activate(active)
 withenv("JULIA_PKG_PRECOMPILE_AUTO"=>"0") do
