@@ -7,16 +7,16 @@ url = "https://github.com/JuliaConcurrent/Atomix.jl"
 rev = "1ffd4ae4746fbc9463882c68563c6bdb81e0d9c0"
 [CUDA]
 url = "https://github.com/JuliaGPU/CUDA.jl"
-rev = "8a9379519f03586ca41d1a472d0ddf63eb9ba7be"
+rev = "e37f85d19233c54f7bd7db1dab67aacc6fdb5a22"
 [AMDGPU]
 url = "https://github.com/JuliaGPU/AMDGPU.jl"
-rev = "08277ef7c2e81c6af3d3e13a068be18e5ceac798"
+rev = "e3a3a604c874da3bb4924c9fa539e74561f39e20"
 [oneAPI]
 url = "https://github.com/JuliaGPU/oneAPI.jl"
 rev = "26fb7762ad1429c151f69f0c519facf36bd5213f"
 [Metal]
 url = "https://github.com/JuliaGPU/Metal.jl"
-rev = "f8b91252b0d0ed67b22080bef50cf3e579146c2f"
+rev = "b8dc6bf1fa97d816064ae5404cc81b1a07605ea8"
 [OpenCL]
 url = "https://github.com/JuliaGPU/OpenCL.jl"
 rev = "9526a1137a76385c9220150b5fb2bbb73dddc653"
