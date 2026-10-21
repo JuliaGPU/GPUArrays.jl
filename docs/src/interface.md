@@ -159,7 +159,9 @@ Conversions:
   `convert(GPUSparseMatrixCSC, A)` returns `A` itself if it already has that format;
 - to the host, with `SparseMatrixCSC(A)`, `SparseVector(x)` or `Array(A)`;
 - from a dense GPU array, dropping its zeros, with `sparse(A; fmt=:csc)` or the format's
-  constructor (`GPUSparseMatrixCSR(A)`); the index type defaults to `Int`;
+  constructor (`GPUSparseMatrixCSR(A)`); canonical constructors default to `Int`.
+  Dense `sparse(A)` preserves CUDA/AMD's existing uniform `Int32` default and BSR option;
+  this convenience policy is maintained by GPUArrays' extensions, not backend overrides;
 - to a dense array on the device, with `copyto!(similar(nonzeros(A), T, size(A)), A)`;
 - transposes: `transpose(A)` and `adjoint(A)` stay lazy, `copy(transpose(A))` and
   `permutedims(A)` materialize them in the same format, and a format constructor

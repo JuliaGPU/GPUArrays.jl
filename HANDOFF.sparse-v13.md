@@ -1,5 +1,89 @@
 # GPUArrays v13 implementation handoff
 
+## Latest checkpoint (Oct21, policy ownership and final-stack checks)
+
+This section supersedes older chronological checkpoints below. Latest pushed GPUArrays
+is1234787 on both topic/PR branches; production0f23249 is committed locally and awaits the
+coordinated dependency-pin push. CUDAe37f85d19 and AMDe3a3a604c are pushed to tb/sparse-v13;
+Metalb8dc6bf1f is pushed to both branches and bootstraps GA1234787. oneAPI26fb776,
+OpenCL9526a11, AKa915b41 and Atomix1ffd4ae unchanged. PR745 targets main and is detached
+from its old stack; the other three PRs' bases and heads were verified unchanged.
+
+Production0f23249 moves dense sparse(A) policy fully into GPUArrays. Two scoped helpers
+preserve CUDA/AMD uniform Cint defaults and existing BSR constructor/block-size behavior;
+explicit canonical constructors and coordinate assembly retain their width rules. Removed
+backend public overrides in CUDAbcf4a222a/AMDc5ae5ef37. Astra turn14/Sol turn24 approve.
+Shared tests now check the declared default including pointer width; independent backend
+tests require Cint and BSR parity, invalid-format tests use unknown_format. No tests skipped.
+Candidate physical conversions pass600 shared+8 findnz each on CUDA/AMD, plus each native
+conversion suite and12 dedicated policy checks. JL reference208 checks pass. These are
+candidate-worktree results, not yet clean final-commit full shared runs.
+
+Independent explicit SparseMatricesCSR upload fix in CUDAe37f85d19/AMDe3a3a604c:
+typed CSC/COO now construct the requested uniform-width CSR directly instead of first
+narrowing through the backend's default Cint adaptor. Old CUDA8a9379519 red repro rejects
+explicit Int64 COO with dimensions(1,2147483648) despite one stored entry. New physical
+12 regressions each pass, plus CUDA48/AMD53 existing extension checks. No giant allocation.
+
+Clean frozen GA c8dd580 / oneAPI26fb776 Pkg.test on Taurus ArcA770 passes12904,
+with24 pre-existing broken CSC triangular checks: shared sparse11503, resources122,
+oneMKL1279. Custom support path verified and native exception containment included.
+AKa915b41 and Atomix1ffd4ae source trees verified clean. Official support artifact still
+lacks the C++ catch fix, so this remains stack validation, not normal release resolution.
+Log Taurus: ga13-oneapi-env/frozen-root.log.
+
+Clean frozen GA c8dd580 / AMD08277ef7c actual Pkg.test on Pegasus passes all selected
+native sparse and dense solver groups: sparse_v13 208, solver1089, interfaces625,
+generic596, preconditioners312, broadcast65, linalg168, SparseMatricesCSR53,
+conversions34, device15. Log ga13-amdgpu-env/frozen-native.log. This precedes the latest
+policy/upload commits; final rerun remains required. CUDA clean c8dd580/8a9379519 shared
+six-type runs expose ONLY24 dense policy expectation failures: automatic7652 passing,
+forced-portable7653 passing. The policy correction above addresses those exact failures;
+do not call those whole runs passing.
+
+TEMP CI1234787 (reviewed by Sol turn23) resolves each actual CUDA library test project
+with the same pins; Julia<1.12's generated root-test Manifest is moved into scratch before
+Pkg.test because old Pkg unconditionally rejects duplicate developed UUIDs even at the
+same path. Library manifests stay for runner project switches. Actual Julia1.10.12 CUDA
+entrypoint SparseMatricesCSR test passes48, log ga13-cuda-ci-entry/entry110-libs2.log.
+Self-backend checkouts are cloned clean into disposable scratch (no stale manifests or
+source worktree mutations). oneAPI source build is unconditional build_local, with supplied
+preferences retained through the build and propagated to tests. Metal own spot tests53
+pass one-worker, log /Users/tim/Julia/tmp/ga13-metal-spot-clean.log; daemon stopped.
+Local Metal testing must remain focused and single-worker per user's request.
+
+GHA39608465677 / Buildkite2067 test exact GA1234787, not local0f23249. At last check all17
+GHA jobs queued; Buildkite uploader passed, backend jobs scheduled. Earlier GHA7d2123d
+Ubuntu1.13 passed35017. New pins/commits will need revision verification and real logs.
+GPU agents are online but occupied; do not cancel unrelated jobs. Other backend self-CI
+still needs coordinated bootstrap wiring; Metal is wired. No CI stack pass claimed.
+
+Performance checkpoint0cc9461 commits the harness,115 native-case comparisons, raw data,
+and observed Nsight device memory. Exact GA c8dd580 / CUDA8a9379519 native SpGEMM is
+within1% of old CUDA44ac4ebb3, same203605548-byte incremental peak. See perf/REPORT.sparse-v13.md.
+
+Fresh NVIDIA OpenCL Taurus reproduction: frozen GA c8dd580/OpenCL9526a11, RTX6000Ada,
+GPUToolbox3.4.2. Normal GC/cooperative synchronization gives82 passing/3 errors; first
+-9999 occurs after tiny fused CSR broadcast, then context is poisoned. Same full contracts
+with GC disabled pass112 + ambiguity1; blocking preference (normal GC) also passes112+1.
+Isolated tiny broadcast with explicit synchronization+GC passes3 repetitions. These variants
+are diagnostics, not acceptable test skips/fixes. Sol turn25 found no confirmed missing
+kernel root; cooperative finalizer marker path and timing need dense-only minimization
+against OpenCL main9c27048. Taurus logs ga13-opencl-frozen-env/{contracts-nvidia4.log,
+contracts-nvidia-nogc.log,min-csr32.log}; blocking variant ga13-opencl-blocking-env.
+Dense pending-input-GC minimizer ga13-opencl-dense-gc.jl is running; baseline environment
+ga13-opencl-baseline-env and clean main source opencl-v13-main-baseline are prepared.
+Do not attribute the failure to sparse code or treat PoCL CPU as GPU coverage.
+
+Validation driver validation/sparse-v13-backend.jl is currently untracked/uncommitted.
+It supports full automatic/portable shared runs and fixed contract fixtures, two public
+import scenarios (not impossible dependency-order reversals), extension assertions,
+source revision/dirty metadata, and ambiguity filtering including split extension files.
+No permanent global algorithm switch; portable instrumentation is process-local only.
+Finish clean exact-revision suites, OpenCL minimization/both-host coverage, oneAPI prepared
+resource tests with forced-portable shared products, backend self-CI wiring and CI logs.
+Keep the release/artifact checklist precise. No PR discussion text has been posted.
+
 ## Current checkpoint (Oct21, after PR retarget)
 
 The sections below are chronological checkpoints; this section supersedes stale state
