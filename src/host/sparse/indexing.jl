@@ -133,6 +133,30 @@ Base.getindex(A::GPUSparseMatrix, I::SparseRangeIndex, J::SparseRangeIndex) =
 Base.getindex(A::GPUSparseMatrix, i::Integer, J::SparseRangeIndex) = sparse_getindex(A, i, J)
 Base.getindex(A::GPUSparseMatrix, I::SparseRangeIndex, j::Integer) = sparse_getindex(A, I, j)
 
+# Masks preserve coordinate order, so neither assembly nor sorting is needed.
+function Base.getindex(A::GPUSparseMatrix,I::AbstractVector{Bool},J::AbstractVector{Bool})
+    length(I)==size(A,1) && length(J)==size(A,2) || throw(BoundsError(A,(I,J)))
+    mask(X) = X isa AnyGPUVector ? X : copyto!(sparse_similar(A.nzVal,Bool,length(X)),Vector{Bool}(X))
+    I,J = mask(I),mask(J)
+    check_sparse_storage(sparse_buffers(A)...,I,J)
+    rowrank = accumulate(+,Int.(I))
+    colrank = accumulate(+,Int.(J))
+    dims = (count(I),count(J))
+    rows,cols = entry_coordinates(A)
+    kept = findall(I[rows] .& J[cols])
+    Ti = indtype(A)
+    newrows = convert_index_buffer(Ti,rowrank[rows[kept]])
+    newcols = convert_index_buffer(Ti,colrank[cols[kept]])
+    values = A.nzVal[kept]
+    if A isa GPUSparseMatrixCSR
+        GPUSparseMatrixCSR(compress(newrows,dims[1],eltype(A.rowPtr)),newcols,values,dims)
+    elseif A isa GPUSparseMatrixCSC
+        GPUSparseMatrixCSC(compress(newcols,dims[2],eltype(A.colPtr)),newrows,values,dims)
+    else
+        GPUSparseMatrixCOO(newrows,newcols,values,dims)
+    end
+end
+
 function sparse_getindex(x::GPUSparseVector, I::AbstractRange{<:Integer})
     @boundscheck checkbounds(x, I)
     I = range_index(I, length(x))

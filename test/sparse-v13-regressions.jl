@@ -122,6 +122,20 @@ Base.resize!(::FixedSparseStorage, ::Integer) = throw(ArgumentError("fixed stora
         @test_throws InexactError copyto!(real_dest, complex_src)
         @test (Array(real_dest.nzInd), Array(real_dest.nzVal)) == (Int32[1], Float32[4])
     end
+    @testset "ordered boolean mask slices" begin
+        host = sparse(Float32[1 2 0; 3 0 4; 5 6 7])
+        for S in (GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseMatrixCOO)
+            A = S(adapt(JLArray,host))
+            for mask in (Bool[true,false,true],falses(3)), device in (false,true)
+                I = device ? JLArray(mask) : mask
+                B = A[I,I]
+                @test Array(B) == Matrix(host[mask,mask])
+                @test GPUArrays.check_structure(B) === B
+                @test !Base.mightalias(A,B)
+            end
+            @test_throws BoundsError A[JLArray(trues(2)),JLArray(trues(3))]
+        end
+    end
     @testset "concatenation rejects every operand position" begin
         A = adapt(JLArray, sparse(Float32[1 0; 0 1]))
         D = JLArray(ones(Float32, 2, 2))
