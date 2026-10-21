@@ -29,7 +29,16 @@ specs = PackageSpec[
     PackageSpec(path=checkout("AcceleratedKernels")),
     PackageSpec(path=checkout("Atomix")),
 ]
-package = backend in ("JLArrays","docs") ? gpuarrays : checkout(backend)
+package = if backend in ("JLArrays","docs")
+    gpuarrays
+elseif haskey(ENV,"GPUARRAYS_V13_STACK_BACKEND")
+    path=realpath(ENV["GPUARRAYS_V13_STACK_BACKEND"])
+    TOML.parsefile(joinpath(path,"Project.toml"))["name"]==backend || error("wrong backend worktree")
+    println("STACK_REVISION $backend ",readchomp(`git -C $path rev-parse HEAD`))
+    path
+else
+    checkout(backend)
+end
 if package != gpuarrays
     push!(specs,PackageSpec(path=package))
 end
@@ -52,6 +61,9 @@ withenv("JULIA_PKG_PRECOMPILE_AUTO"=>"0") do
     Pkg.develop(specs)
 end
 Pkg.status(; mode=Pkg.PKGMODE_MANIFEST)
+if haskey(ENV,"GPUARRAYS_V13_STACK_PREFERENCES")
+    cp(ENV["GPUARRAYS_V13_STACK_PREFERENCES"],joinpath(active,"LocalPreferences.toml");force=true)
+end
 
 if !setup_only && backend == "oneAPI"
     # This branch changes the support C++ wrappers. Build them for stack validation;
@@ -109,5 +121,6 @@ if !setup_only
     # CUDA defaults omit library suites; Metal defaults omit GPUArrays' suite.
     test_args = backend in ("CUDA","Metal") ? ["--all","--verbose"] :
                 backend == "OpenCL" ? ["pocl/"] : ["--verbose"]
+    length(ARGS)>1 && (test_args=ARGS[2:end])
     Pkg.test([backend == "JLArrays" ? "GPUArrays" : backend]; coverage="@" * gpuarrays, test_args)
 end
