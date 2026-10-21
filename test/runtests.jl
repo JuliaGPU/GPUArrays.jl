@@ -1,5 +1,6 @@
 using ParallelTestRunner: runtests, parse_args
 import GPUArrays
+import Test
 
 include("testsuite.jl")
 
