@@ -182,7 +182,11 @@ Stored zeros are permitted. Non-zero-preserving allocating broadcast and dimensi
 reductions may return dense device arrays. Dense/non-zero-preserving broadcast into a
 sparse destination and nonzero fill throw before mutation. Individual insertion,
 concatenation and blockdiag are not implemented; reshape and linearization copy.
+Broadcasting may expand dense operands, but expansion of sparse operands and mixing
+sparse vectors with sparse matrices are explicitly rejected.
 Arbitrary sparse views and complete SparseArrays compatibility are not promised.
+Norms cover logical entries: negative orders include implicit zeros while preserving
+NaN magnitudes, independently of the installed SparseArrays version.
 Diagonal extraction follows the dense-array convention of returning an empty device
 vector for offsets outside the matrix, including extreme signed offsets.
 `A ± λI` and `λI ± A` remain supported for rectangular GPU sparse matrices: the
