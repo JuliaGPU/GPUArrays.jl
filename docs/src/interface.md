@@ -182,8 +182,9 @@ Stored zeros are permitted. Non-zero-preserving allocating broadcast and dimensi
 reductions may return dense device arrays. Dense/non-zero-preserving broadcast into a
 sparse destination and nonzero fill throw before mutation. Individual insertion,
 concatenation and blockdiag are not implemented; reshape and linearization copy.
-Broadcasting may expand dense operands, but expansion of sparse operands and mixing
-sparse vectors with sparse matrices are explicitly rejected.
+Broadcasting may expand dense vectors/matrices, but expansion of sparse operands,
+mixing sparse vectors with sparse matrices, and zero-dimensional GPU operands are
+explicitly rejected before scalar evaluation or mutation.
 Arbitrary sparse views and complete SparseArrays compatibility are not promised.
 Norms cover logical entries: negative orders include implicit zeros while preserving
 NaN magnitudes, independently of the installed SparseArrays version.

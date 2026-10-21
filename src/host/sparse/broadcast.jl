@@ -19,10 +19,12 @@ GPUSparseMatStyle(::Val{1}) = GPUSparseMatStyle()
 GPUSparseMatStyle(::Val{2}) = GPUSparseMatStyle()
 GPUSparseMatStyle(::Val{N}) where N = Broadcast.DefaultArrayStyle{N}()
 
+Broadcast.BroadcastStyle(::GPUSparseVecStyle, ::AbstractGPUArrayStyle{0}) = GPUSparseVecStyle()
 Broadcast.BroadcastStyle(::GPUSparseVecStyle, ::AbstractGPUArrayStyle{1}) = GPUSparseVecStyle()
 Broadcast.BroadcastStyle(::GPUSparseVecStyle, ::AbstractGPUArrayStyle{2}) = GPUSparseMatStyle()
 Broadcast.BroadcastStyle(::GPUSparseVecStyle, ::GPUSparseMatStyle) = GPUSparseMatStyle()
 Broadcast.BroadcastStyle(::GPUSparseMatStyle, ::GPUSparseVecStyle) = GPUSparseMatStyle()
+Broadcast.BroadcastStyle(::GPUSparseMatStyle, ::AbstractGPUArrayStyle{0}) = GPUSparseMatStyle()
 Broadcast.BroadcastStyle(::GPUSparseMatStyle, ::AbstractGPUArrayStyle{1}) = GPUSparseMatStyle()
 Broadcast.BroadcastStyle(::GPUSparseMatStyle, ::AbstractGPUArrayStyle{2}) = GPUSparseMatStyle()
 
@@ -474,6 +476,10 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
         error("broadcast with both sparse vectors and sparse matrices is not supported")
     all(arg -> axes(arg) == axes(bc), sparse_inputs) ||
         throw(ArgumentError("broadcast expansion of sparse operands is not supported"))
+    # capturescalars evaluates wrapped scalars on the host to test zero preservation.
+    # GPU scalar arrays need device-side evaluation, which is not implemented here.
+    any(arg -> arg isa AnyGPUArray{<:Any,0}, bc.args) &&
+        throw(ArgumentError("sparse broadcast with zero-dimensional GPU arrays is not supported"))
 
     # The kernels iterate a single compressed format: that of the first sparse matrix, with
     # COO matrices read as CSR (which has the same order of entries). Other formats are
