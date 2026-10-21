@@ -1,5 +1,52 @@
 # GPUArrays v13 implementation handoff
 
+## Current checkpoint (Oct21, after PR retarget)
+
+The sections below are chronological checkpoints; this section supersedes stale state
+claims in them. PR745 now targets main and is no longer stacked, with the user's explicit
+approval. GitHub only supports unstacking the whole stack: saved stack797 to
+`/Users/tim/Julia/tmp/ga13-stack797-before.json`, dissolved it, recreated unchanged
+PRs795/796/798 as stack832, and retargeted745. Verified their base relationships and
+head SHAs unchanged. No other branches, PR descriptions or discussion comments changed.
+PR745 is mergeable. Its previous tip and Metal982's previous tip are preserved in both
+local and remote backup refs documented below. Both PR branches have been safely rewritten.
+
+Latest pushed GPUArrays31bd874 is on tb/sparse-v13 and PR branch tb/sparse. Metal f8b9125
+is on both corresponding branches. CUDA8a9379519 adds direct publication of completed
+canonical SpGEMM output; 168 physical RTX5080 assertions pass across CSR/CSC and
+default/ALG1/ALG2/ALG3, including empty products, cancellation, retained-storage GC and
+check_structure. Older cuSPARSE library versions retain assembly (not hardware-tested).
+CUDA213e11fff and oneAPI26fb776 also remove obsolete TestSuite.sparse_types registration
+hooks that prevented the actual root runners from starting. The real focused CUDA Pkg.test
+entrypoint passes221 at CUDA213e11fff / GPUArrays31bd874, clean detached checkouts.
+Other pushed tips: AMD08277ef7c, OpenCL9526a11, AKa915b41, Atomix1ffd4ae.
+
+GitHub Actions39597816964 tests exact GPUArrays7d2123d, not the newest tips. Ubuntu1.13
+passed35017 assertions including dense and sparse. Documentation failed because setup-only
+mktempdir dependencies vanished at process exit;31bd874 fixes retention but needs a new
+run. Other jobs were running/queued at the last check. Buildkite2065 at31bd874 had only
+the uploader passed; all8 backend jobs scheduled. Authenticated `bk api` / `bk build view`
+works with pipeline julialang/gpuarrays-dot-jl; public web JSON omits jobs. Obsolete builds
+2060..2064 and2058 were automatically canceled. Do not report scheduled jobs as coverage.
+
+Local full Metal Pkg.test (--all,96 groups,5 workers) was interrupted at the user's request
+to reduce local load. Source stack: GA c0c2482 / Metal a763c7fb6 / KA0.10.1. Many dense,
+native and own sparse tests passed, kernelabstractions failed (details not emitted before
+interruption), and the shared sparse group had not finished. Log:
+`/Users/tim/Julia/tmp/ga13-metal-stack-full.log`. This is NOT a passing full suite.
+Use only focused spot tests locally, one worker (--jobs=1, Julia threads1); leave full
+Metal suites in CI. The full daemon and workers are stopped. Prior focused Metal results
+remain valid only for their recorded revisions.
+
+Performance harness is currently untracked at perf/sparse-v13-cuda.jl; old/new warm timings
+and Nsight peak-memory traces exist in Pegasus ga13-cuda-{baseline,benchmark}-env.
+Pre-optimization heavy SpGEMM: old vendor0.589ms, migrated vendor0.853ms, portable7.391ms;
+incremental peak device allocation203605548 bytes for both native paths,553648304 portable.
+These are exploratory changing-stack results, not the final report. Rebenchmark8a9379519
+serially against frozen baseline before recording conclusions. Record cumulative GPU
+allocation separately from observed live peak. New dependency pins must be pushed and
+their exact tested revisions verified. Official oneAPI support still needs a new artifact.
+
 ## Worktrees and branches
 
 All implementation uses fresh isolated worktrees under `/Users/tim/Julia/tmp`:
