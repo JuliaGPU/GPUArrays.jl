@@ -109,7 +109,7 @@ keep those changes out of production commits. Manifest files remain local.
 
 Pegasus scratch checkout `~/Julia/tmp/gpuarrays-v13` is at pushed `2c797a8`.
 Its origin is GitHub (a --shared clone initially pointed at the local source).
-No existing remote ~/Julia/pkg working copy was modified. Both hosts are reachable.
+No existing remote ~/Julia/pkg working copy was modified. Both hosts became unreachable during implementation; see the latest checkpoint below.
 
 ## Next work and release gates
 
@@ -169,3 +169,82 @@ by actual package-resolution failures against the new OpenCL major/minor. A spli
 CUDA scratch stack now resolves with explicit Pkg.develop paths in
 `pegasus:~/Julia/tmp/ga13-cuda-env`; installation is not migration validation.
 All remote work is in ~/Julia/tmp, with uniquely named, two-hour-idle jld daemons.
+
+## Checkpoint after physical CUDA and refreshed Metal runs
+
+GPUArrays latest committed extension/selection snapshot is `22df6fb`; central mask
+slicing is `70fdfca`, triangular-wrapper preservation/component alias preflight is
+`2f996a1`. JLArrays focused regressions now pass **142/142**, sparse ambiguities
+empty on Julia 1.13.2. The entire shared sparse suite passed all default JLArray
+value types before the mask/triangular additions. Julia **1.10.12** explicit
+Pkg.develop resolution and strict precompilation pass (AK0.5.8, KA0.9.45,
+Atomix1.6.0). Focused regressions142 pass there; full suite initially stopped because
+the scratch harness lacked a direct KA dependency, being corrected.
+
+Metal migration `a763c7fb6` is pushed to `tb/sparse-v13`. Full shared sparse tests
+pass Float32/ComplexF32/Int32/Float16 against GPUArrays `3b72005` plus the extension
+worktree snapshot (including checked count-store). Dense broadcast specialization
+previously covered arbitrary AbstractArray destinations, creating a sparse copyto!
+ambiguity; narrowing it to AnyGPUArray resolves this and preserves sparse errors.
+Fresh current Metal tests: backend53 assertions, shared112 contracts, supported
+dense broadcast groups, and sparse ambiguity check all pass. The ignored test
+LocalPreferences.toml still selects private storage.
+
+Pegasus CUDA stack (Julia1.13.2, runtime13.4, cuSPARSE12.8.6, RTX5080) physically
+passed:
+- Shared v13 contracts109 and forced portable/vendor product comparison60.
+- Migrated cuSPARSE construction217 plus Float16 construction4.
+- Existing BSR solve groups80 + 80 + 432; IC/ILU preconditioners20 + 20 + 16 + 24.
+- Qualified SpMV/SpMM, dense conversions and ordinary triangular vendor groups
+  passed in the generic suite. SpGEMM updates passed after replacing an obsolete
+  different-pattern error expectation with the now-supported numerical result.
+  The suite then exposed sparse-vector -> compressed default pointer widening in
+  qualified gemv; fixed locally with explicit uniform output construction, not yet
+  rerun. Batched/device suites have NOT run because generic.jl stopped first.
+These used changing uncommitted CUDA/extension snapshots, not final commit hashes.
+
+CUDA local history includes resizing `6b15bb1cf`, family-v7 declaration
+`e530fab77`, descriptor storage retention `7435b2a08`, legacy both-width guards
+`dcb0568af`. The large alias/output-builder migration remains uncommitted, as do
+the latest physical-test follow-ups. Sol source review found and prompted fixes:
+legacy Cint IC/ILU/coloring guards; descriptor-owned operand lifetimes; accumulator
+precision eligibility; BSR component alias checks; shared Boolean masks; missing
+SpMM version guards; destination-format conversion in qualified gemm!. New CUDA
+sparse_v13.jl rejection/cancellation/alias regressions are not hardware validated.
+The latest BSR metadata/copy preflight and scalar indexing corrections are also
+not rerun. Do not describe all CUDA functionality as migrated.
+
+oneAPI now has an uncommitted direct-alias/resource/qualified-operation rewrite,
+plus GPUArrays ONEMKLExt (`22df6fb`). sparse_resources.jl owns captured actual SYCL
+queue, stream/context/device/task and buffers; prepared objects borrow fixed
+storage and constrain optimized-operation parameters. Scoped calls close
+deterministically. All support statuses are checked. Complex CSC uses scratch;
+effective RHS widths are used. Astra source-reviewed and required removal of the
+blocking reclaim callback (could invert allocation locks), preservation of handles
+on pre-release failure, full-resource quarantine after uncertain native release,
+skipping already-closed finalizers, foreign-task drain without mkl_dirty changes,
+and solve/scalar preflight. Those fixes are local. Exact RHS/output alias support
+still needs vendor confirmation; stage transposed in-place TRSM until proven.
+No oneAPI code has loaded or executed on hardware yet; installed ABI unverified.
+AMDGPU migration is still unimplemented beyond resizing capability.
+
+At approximately 12:25 local time, **both pegasus and taurus began returning
+"No route to host" on SSH**, reproducible across several attempts. Taurus setup
+disconnected during Pkg.resolve after jld bootstrap. Its new scratch trees:
+~/Julia/tmp/{oneapi-v13,gpuarrays-v13,ak-v13,atomix-v13,ga13-oneapi-env}.
+jld was absent there; installed JuliaDaemon from its actual app-manifest repository
+https://github.com/KristofferC/JuliaDaemon.jl (master), then used unique two-hour
+daemons. No ~/Julia/pkg edits. Ask user about LAN/VPN restoration; continue local
+work. Pegasus latest source sync predates the descriptor-retention/ABI/precision/
+mask follow-ups. Explicitly resynchronize and rerun after access returns.
+
+Fresh NVIDIA-only ICD run reproduced full-suite failure: construction144 and
+allocation97 pass, transfer16 then packed-key kernel compilation fails, followed
+by CL_UNKNOWN_ERROR_CODE/finalizer errors. Fresh isolated packed_keys on three
+entries passes; a separate fresh isolated sparse_transfer run passes20/20.
+Therefore the failure is sequence/context dependent, not yet a proven bad
+packed-key kernel. Full logs are in jld transcripts of ga13-nvidia-isolated,
+ga13-nvidia-min and ga13-nvidia-adapt in pegasus ga13-opencl-env. The earlier
+nonisolated run had CL_OUT_OF_HOST_MEMORY creating a context; explicitly creating
+a new NVIDIA context subsequently worked. Keep Intel ICD enumeration warnings
+separate from NVIDIA-only reproduction.

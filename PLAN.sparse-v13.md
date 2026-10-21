@@ -89,7 +89,7 @@ Do not invent a universal capability registry or a universal public planning API
 
 Reuse AK workspace facilities for temporary storage when their contracts fit. An AK workspace does not validate sparse pattern reuse.
 
-Ordinary oneAPI operations need a concrete handle owner during migration, including originating context/queue, retained arrays, exception cleanup and deferred destruction. Existing optimized repeated operations need an explicit prepared object, not a fresh handle on every invocation that silently discards optimization. Document the transition from `sparse_optimize_*` entry points.
+Ordinary oneAPI operations need a concrete handle owner during migration, including originating context/queue, retained arrays, exception cleanup and deferred destruction. Disposal must not block under allocator reclaim locks. Pre-release failures retain an open owner; uncertain native-release outcomes quarantine the full resource record without retry. A failed close does not lift borrowed-buffer restrictions. Existing optimized repeated operations need an explicit prepared object, not a fresh handle on every invocation that silently discards optimization. Document the transition from `sparse_optimize_*` entry points.
 
 For prepared operations, choose and document a pattern lifetime: copy/snapshot the pattern, or borrow it while forbidding structural edits and resize. Holding an array reference does not pin its allocation. Buffer identity, pointer and length checks are useful diagnostics but cannot detect in-place index writes. Specify whether values can be updated in place or rebound. Bind independent concurrent executions to independent workspaces/descriptors unless the vendor explicitly supports sharing.
 
