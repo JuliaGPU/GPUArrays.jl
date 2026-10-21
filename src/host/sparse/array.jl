@@ -3,7 +3,16 @@
 function Base.:(==)(A::GPUSparseArray, B::GPUSparseArray)
     size(A) == size(B) || return false
     # Stored zeros need not have identical patterns.
-    return !any(A .!= B)
+    return !any(comparison_operand(A) .!= comparison_operand(B))
+end
+
+comparison_operand(A::Union{GPUSparseVector,GPUSparseMatrixCOO}) = A
+function comparison_operand(A::GPUSparseMatrixCompressed)
+    # A scalar comparison does not create a public sparse output. Its structural union
+    # can exceed either input's pointer width, including when both store only zeros.
+    ptr = compressed_ptr(A)
+    eltype(ptr) === Int && return A
+    sparse_format_type(A)(convert_index_buffer(Int, ptr), compressed_ind(A), A.nzVal, size(A))
 end
 
 function sparse_broadcast!(dest::GPUSparseArray, bc::Broadcasted)
@@ -56,6 +65,13 @@ Base.getindex(A::GPUSparseTransposed, I::SparseRangeIndex, J::SparseRangeIndex) 
 # SparseMatrixCSC. These operations can be implemented centrally without backend changes.
 const GPUSparseConcatOperand = Union{GPUSparseArray,GPUSparseTransposed}
 const GPUSparseConcatInput = Union{GPUSparseConcatOperand,AnyGPUArray}
+# SparseArrays uses this helper for every position in hcat/vcat/cat/block syntax.
+# Reject before its conversion of the first GPU operand can download any buffers.
+SparseArrays._makesparse(::GPUSparseVector) = throw(ArgumentError("GPU sparse concatenation is not implemented"))
+SparseArrays._makesparse(::Union{GPUSparseMatrix,GPUSparseTransposed}) =
+    throw(ArgumentError("GPU sparse concatenation is not implemented"))
+SparseArrays._makesparse(::Union{AnyGPUVector,AnyGPUMatrix}) =
+    throw(ArgumentError("concatenation involving GPU arrays and sparse operands is not implemented"))
 for f in (:hcat, :vcat)
     @eval begin
         Base.$f(A::GPUSparseConcatOperand, Bs::GPUSparseConcatInput...) =
