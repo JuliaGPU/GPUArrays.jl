@@ -196,6 +196,10 @@ function stack_run_loaded_tests(test_args)
     if backend=="CUDA"
         CUDA.functional() && cuSPARSE.functional() && cuSOLVER.functional() ||
             error("CUDA/cuSPARSE/cuSOLVER must be functional for stack validation")
+        memory=get(Base.get_preferences(Base.PkgId(CUDA.CUDACore).uuid),"default_memory","device")
+        expected=Dict("device"=>CUDA.DeviceMemory,"unified"=>CUDA.UnifiedMemory,"host"=>CUDA.HostMemory)[memory]
+        CUDA.CUDACore.default_memory===expected || error("CUDA default memory preference was not propagated")
+        println("STACK_CUDA_MEMORY ",memory,' ',expected)
     elseif backend=="AMDGPU"
         all(AMDGPU.functional,(:hip,:rocsparse,:rocblas,:rocsolver)) ||
             error("HIP/rocSPARSE/rocBLAS/rocSOLVER must be functional for stack validation")
