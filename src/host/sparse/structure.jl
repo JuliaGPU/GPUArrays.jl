@@ -149,11 +149,11 @@ LinearAlgebra.istriu(L::GPUSparseLowerOrUnitLowerTriangular) =
 # the union of both structures also checks for stored zeros on one side only
 function LinearAlgebra.issymmetric(A::GPUSparseMatrix)
     size(A, 1) == size(A, 2) || return false
-    return !any(A .!= copy(transpose(A)))
+    return A == copy(transpose(A))
 end
 function LinearAlgebra.ishermitian(A::GPUSparseMatrix)
     size(A, 1) == size(A, 2) || return false
-    return !any(A .!= copy(adjoint(A)))
+    return A == copy(adjoint(A))
 end
 
 

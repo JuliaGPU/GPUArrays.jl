@@ -47,9 +47,7 @@ function check_sparse_storage(buffers...)
     if any(b -> b isa AnyGPUArray, buffers)
         all(b -> b isa AnyGPUArray, buffers) ||
             throw(ArgumentError("sparse component buffers must use compatible storage"))
-        backend = get_backend(first(buffers))
-        all(b -> get_backend(b) == backend, buffers) ||
-            throw(ArgumentError("sparse component buffers must use the same backend"))
+        check_storage_compatibility(map(storage_parent, buffers)...)
     end
     return nothing
 end
@@ -263,13 +261,24 @@ function convert_index_buffer(::Type{T}, src::AbstractVector) where {T<:Integer}
     return dst
 end
 
-function check_sparse_values(::Type{T}, values::AbstractVector{S}) where {T<:Integer,S<:Integer}
-    if !all(v -> typemin(T) <= v <= typemax(T), values)
-        throw(InexactError(:convert, T, "stored values outside the destination integer range"))
+value_representable(::Type{T}, value::Real) where {T<:Integer} =
+    isfinite(value) && isinteger(value) && typemin(T) <= value <= typemax(T)
+value_representable(::Type{T}, value::Integer) where {T<:Integer} =
+    typemin(T) <= value <= typemax(T)
+value_representable(::Type{T}, value::Complex) where {T<:Real} =
+    iszero(imag(value)) && value_representable(T, real(value))
+value_representable(::Type{Complex{T}}, value::Complex) where {T} =
+    value_representable(T, real(value)) && value_representable(T, imag(value))
+value_representable(::Type{Complex{T}}, value::Real) where {T} = value_representable(T, value)
+value_representable(::Type, value) = true
+
+function check_sparse_values(::Type{T}, values::AbstractVector) where {T}
+    T === eltype(values) && return nothing
+    if !all(v -> value_representable(T, v), values)
+        throw(InexactError(:convert, T, "stored values cannot be represented by the destination type"))
     end
     return nothing
 end
-check_sparse_values(::Type, ::AbstractVector) = nothing
 
 # an empty compressed pointer buffer for `n` slices
 empty_ptr(proto::AbstractVector, ::Type{Ti}, n::Integer) where {Ti} =

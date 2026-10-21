@@ -111,6 +111,16 @@ Base.resize!(::FixedSparseStorage, ::Integer) = throw(ArgumentError("fixed stora
         @test Array(dest) == Int8[1, 0]
         @test_throws InexactError (dest .= 300 .* dest)
         @test Array(dest) == Int8[1, 0]
+        for vals in (Float32[1.5], Float32[Inf], ComplexF32[1+im])
+            src = GPUSparseVector(JLArray(Int32[2]), JLArray(vals), 2)
+            before = (Array(dest.nzInd), Array(dest.nzVal))
+            @test_throws InexactError copyto!(dest, src)
+            @test (Array(dest.nzInd), Array(dest.nzVal)) == before
+        end
+        real_dest = GPUSparseVector(JLArray(Int32[1]), JLArray(Float32[4]), 2)
+        complex_src = GPUSparseVector(JLArray(Int32[2]), JLArray(ComplexF32[1+im]), 2)
+        @test_throws InexactError copyto!(real_dest, complex_src)
+        @test (Array(real_dest.nzInd), Array(real_dest.nzVal)) == (Int32[1], Float32[4])
     end
     @testset "concatenation rejects every operand position" begin
         A = adapt(JLArray, sparse(Float32[1 0; 0 1]))

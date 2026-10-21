@@ -153,6 +153,17 @@ structural access, and allocation failure need not leave a collection unchanged.
 supports_resize(::AbstractVector) = false
 supports_resize(::Vector) = true
 
+# Host wrappers may report physical placement in backend extensions. Device structs
+# must never invoke this host boundary. Unwrap only known host GPU wrappers.
+storage_parent(A::AbstractArray) = A
+storage_parent(A::WrappedGPUArray) = storage_parent(parent(A))
+function check_storage_compatibility(arrays::AbstractArray...)
+    backend = get_backend(first(arrays))
+    all(A -> get_backend(A) == backend, arrays) ||
+        throw(ArgumentError("array buffers must use compatible backends"))
+    return nothing
+end
+
 # `copy(::DataRef)` shares `rc`. Views and reshapes are built that way, so
 # alias detection has to key off the shared record rather than the wrapper.
 Base.dataids(ref::DataRef) = (objectid(ref.rc),)
