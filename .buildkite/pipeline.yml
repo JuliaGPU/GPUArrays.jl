@@ -87,6 +87,23 @@ steps:
           - "1.10"
           - "1.13"
 
+  - label: "OpenCL.jl -- NVIDIA GPU"
+    plugins:
+      - JuliaCI/julia#v1:
+          version: "1.13"
+      - JuliaCI/julia-coverage#v1:
+          codecov: true
+    command: julia .buildkite/sparse-v13-stack.jl OpenCL --platform=cuda --verbose
+    agents:
+      queue: "cuda"
+    env:
+      OCL_ICD_FILENAMES: "libnvidia-opencl.so.1"
+    if: |
+      build.message !~ /\[skip [^\]]*(tests|opencl)/ &&
+      (build.message =~ /\[only [^\]]*(tests|opencl)/ ||
+       build.message !~ /\[only / && !build.pull_request.draft)
+    timeout_in_minutes: 120
+
   - label: "Metal.jl -- Julia {{matrix.julia}}"
     plugins:
       - JuliaCI/julia#v1:
