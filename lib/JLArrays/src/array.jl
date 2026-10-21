@@ -231,6 +231,8 @@ end
 Base.copyto!(dest::DenseJLArray{T}, source::DenseJLArray{T}) where {T} =
     copyto!(dest, 1, source, 1, length(source))
 
+GPUArrays.supports_resize(::JLVector) = true
+
 function Base.resize!(a::DenseJLVector{T}, nl::Integer) where {T}
     # JLArrays aren't performance critical, so simply allocate a new one
     # instead of duplicating the underlying data allocation from the ctor.

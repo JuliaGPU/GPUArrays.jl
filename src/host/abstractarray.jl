@@ -139,6 +139,20 @@ when they share the `DataRef` returned by `GPUArrays.storage`.
 """
 memory_location(::AbstractGPUArray) = nothing
 
+"""
+    GPUArrays.supports_resize(A::AbstractVector)
+
+Whether this storage instance supports structural resizing. The default is false;
+ordinary host vectors return true. Dense backends that implement `resize!` should
+specialize this predicate, including any memory-mode or instance restrictions. Views
+and device-side representations are not resizable structural storage.
+
+This capability does not establish ownership: callers must guarantee exclusive
+structural access, and allocation failure need not leave a collection unchanged.
+"""
+supports_resize(::AbstractVector) = false
+supports_resize(::Vector) = true
+
 # `copy(::DataRef)` shares `rc`. Views and reshapes are built that way, so
 # alias detection has to key off the shared record rather than the wrapper.
 Base.dataids(ref::DataRef) = (objectid(ref.rc),)
