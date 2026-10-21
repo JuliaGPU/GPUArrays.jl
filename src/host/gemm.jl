@@ -45,9 +45,11 @@ function coalesced_matmul_kernel!(
     gi = (grow - 1) * TILE + li
     gj = (gcol - 1) * TILE + lj
 
-    # padded by one row to avoid bank conflicts on shared memory
-    tile1 = KI.localmemory(TAT, (TILE + 1, TILE))
-    tile2 = KI.localmemory(TBT, (TILE + 1, TILE))
+    # no padding: consecutive work-items (`li`) access consecutive elements of a column, or
+    # all the same element of `tile2`, so there are no bank conflicts to avoid. unpadded
+    # columns stay aligned, which lets each work-item read `tile2[:, lj]` with vector loads.
+    tile1 = KI.localmemory(TAT, (TILE, TILE))
+    tile2 = KI.localmemory(TBT, (TILE, TILE))
 
     # private variable for tile C
     Tacc = promote_type(R, typeof(zero(TAT) * zero(TBT) + zero(TAT) * zero(TBT)))
