@@ -258,7 +258,9 @@ end
                         (S(adapt(JLArray,matrix)) for S in
                          (GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseMatrixCOO))...)
                 for A in arrays,p in (-Inf,-2,-1,-0.5,0,1,2,Inf)
-                    reference=norm(Array(host),p)
+                    # A complex BLAS nrm2 can report NaN for Inf+NaN*im even though
+                    # its scalar magnitude is Inf. Test the scalar-magnitude contract.
+                    reference=norm(norm.(Array(host)),p)
                     actual=norm(A,p)
                     @test typeof(actual)===typeof(reference)
                     @test isnan(reference) ? isnan(actual) : actual ≈ reference
