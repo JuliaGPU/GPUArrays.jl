@@ -46,6 +46,7 @@ function GPUArrays.vendor_spmm(C::oneMatrix,trans,transB,A::oneAbstractSparseMat
     A isa MKL.oneSparseMatrixCOO && return UnsupportedSparseVendor("oneMKL SpMM requires CSR or CSC")
     trans in ('N','T','C') && transB in ('N','T','C') ||
         return UnsupportedSparseVendor("oneMKL executor requires ordinary operand characters")
+    transB=='N' || return UnsupportedSparseVendor("oneMKL SpMM requires a nontransposed dense operand")
     OneSparseSpMM()
 end
 GPUArrays.execute_spmm!(::OneSparseSpMM,C,trans,transB,A,B,alpha,beta) =

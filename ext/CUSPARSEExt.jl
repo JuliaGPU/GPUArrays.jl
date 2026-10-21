@@ -87,6 +87,17 @@ function spmm_capability(C,tA,tB,A,B)
     D = A isa CuCanonicalMatrix ? B : A
     sparse_trans = A isa CuCanonicalMatrix ? tA : tB
     dense_trans = A isa CuCanonicalMatrix ? tB : tA
+    if eltype(C)<:Union{Float16,ComplexF16}
+        # Dense-times-sparse is executed as a transposed sparse-times-dense product.
+        # Half storage uses a wider accumulator with stricter vendor layout support.
+        supported = A isa CuCanonicalMatrix ?
+            !(S isa cuSPARSE.CuSparseMatrixCSC) && sparse_trans=='N' :
+            S isa cuSPARSE.CuSparseMatrixCSC ? sparse_trans=='N' :
+            S isa cuSPARSE.CuSparseMatrixCOO && sparse_trans!='N'
+        supported || return UnsupportedSparseVendor("cuSPARSE half-precision SpMM does not support this sparse layout or operation")
+        eltype(C)<:Complex && dense_trans=='C' &&
+            return UnsupportedSparseVendor("cuSPARSE half-precision SpMM does not support dense conjugate transpose")
+    end
     S isa cuSPARSE.CuSparseMatrixCSC && sparse_trans=='C' && eltype(S)<:Complex && cuSPARSE.version()<v"12" &&
         return UnsupportedSparseVendor("complex CSC adjoint requires cuSPARSE 12")
     B isa cuSPARSE.CuSparseMatrixCSR && tB=='C' && eltype(B)<:Complex && cuSPARSE.version()<v"12" &&
