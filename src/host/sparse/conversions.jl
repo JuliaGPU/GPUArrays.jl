@@ -131,6 +131,18 @@ GPUSparseMatrixCSC(A::GPUSparseMatrixCSC) = copy(A)
 GPUSparseMatrixCOO(A::GPUSparseMatrixCOO) = copy(A)
 GPUSparseVector(x::GPUSparseVector) = copy(x)
 
+function GPUSparseVector(A::GPUSparseMatrix)
+    size(A, 2) == 1 || throw(ArgumentError("sparse vector construction requires a single-column matrix"))
+    return vec(A)
+end
+function GPUSparseMatrixCSC(x::GPUSparseVector)
+    Tp = promote_type(Int, indtype(x))
+    ptr = copyto!(sparse_similar(x.nzInd, Tp, 2), Tp[1, Base.checked_add(nnz(x), 1)])
+    GPUSparseMatrixCSC(ptr, copy(x.nzInd), copy(x.nzVal), (length(x), 1))
+end
+GPUSparseMatrixCSR(x::GPUSparseVector) = generic_regroup(GPUSparseMatrixCSC(x))
+GPUSparseMatrixCOO(x::GPUSparseVector) = generic_expand(GPUSparseMatrixCSR(x))
+
 # typed forms: convert the format, then the element and index types
 for S in (:GPUSparseMatrixCSR, :GPUSparseMatrixCSC, :GPUSparseMatrixCOO, :GPUSparseVector)
     @eval begin
@@ -143,6 +155,7 @@ end
 # `A` with the given element and index types, reusing its buffers where they already match
 # unless `copy` is set
 function with_eltypes(A::GPUSparseArray, ::Type{Tv}, ::Type{Ti}; copy::Bool=false) where {Tv,Ti}
+    check_sparse_values(Tv, nonzeros(A))
     Tv == eltype(A) && Ti == indtype(A) &&
         (!(A isa GPUSparseMatrixCompressed) || Ti == eltype(compressed_ptr(A))) &&
         return copy ? Base.copy(A) : A
@@ -153,7 +166,7 @@ function with_eltypes(A::GPUSparseArray, ::Type{Tv}, ::Type{Ti}; copy::Bool=fals
         if field === :nzVal
             convert_buffer(Tv, buf)
         elseif buf isa AbstractVector
-            convert_buffer(Ti, buf)
+            convert_index_buffer(Ti, buf)
         else
             buf
         end
@@ -161,6 +174,7 @@ function with_eltypes(A::GPUSparseArray, ::Type{Tv}, ::Type{Ti}; copy::Bool=fals
     return sparse_format_type(A)(buffers...)
 end
 function with_values(A::GPUSparseArray, ::Type{Tv}) where {Tv}
+    check_sparse_values(Tv, nonzeros(A))
     B = similar(A, Tv)
     copyto!(nonzeros(B), nonzeros(A))
     return B

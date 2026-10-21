@@ -95,4 +95,31 @@ Base.resize!(::FixedSparseStorage, ::Integer) = throw(ArgumentError("fixed stora
         @test SparseArrays.indtype(C) == Int16
         @test Array(C)[end] == 6
     end
+    @testset "scalar equality can exceed input pointer widths" begin
+        a = sparse(ones(Int8, 72), Int8.(1:72), zeros(Float32, 72), 2, 72)
+        b = sparse(fill(Int8(2), 72), Int8.(1:72), zeros(Float32, 72), 2, 72)
+        A = GPUSparseMatrixCSR{Float32,Int8}(adapt(JLArray, a))
+        B = GPUSparseMatrixCSR{Float32,Int8}(adapt(JLArray, b))
+        @test A == B
+        @test_throws ArgumentError A .+ B
+    end
+    @testset "integer value conversion is checked" begin
+        x = GPUSparseVector(JLArray(Int32[1]), JLArray(Int64[300]), 2)
+        @test_throws InexactError GPUSparseVector{Int8,Int32}(x)
+        dest = GPUSparseVector(JLArray(Int32[1]), JLArray(Int8[1]), 2)
+        @test_throws InexactError copyto!(dest, x)
+        @test Array(dest) == Int8[1, 0]
+        @test_throws InexactError (dest .= 300 .* dest)
+        @test Array(dest) == Int8[1, 0]
+    end
+    @testset "concatenation rejects every operand position" begin
+        A = adapt(JLArray, sparse(Float32[1 0; 0 1]))
+        D = JLArray(ones(Float32, 2, 2))
+        for f in (hcat, vcat), pos in 1:4
+            args = ntuple(i -> i == pos ? transpose(A) : D, 4)
+            @test_throws ArgumentError f(args...)
+            mixed = ntuple(i -> i == pos ? A : ones(Float32, 2, 2), 4)
+            @test_throws ArgumentError f(mixed...)
+        end
+    end
 end

@@ -67,12 +67,12 @@ function sparse_v13(AT, eltypes)
                 @test SparseArrays.indtype(B) == Int32
                 @test Array(B) == 2 .* Array(A)
                 @test Array(GPUArrays.check_structure(B)) == Array(B)
-                old = copy(A)
                 backing = AT(Float32[1, 9, 2, 9, 3, 9])
                 bad = S(copy(GPUArrays.compressed_ptr(A)), copy(GPUArrays.compressed_ind(A)),
                         view(backing, 1:2:6), size(A))
+                before = map(Array, GPUArrays.sparse_buffers(bad))
                 @test_throws ArgumentError copyto!(bad, zero(A))
-                @test Array(A) == Array(old)
+                @test map(Array, GPUArrays.sparse_buffers(bad)) == before
             end
         end
         @testset "ordered duplicate assembly" begin

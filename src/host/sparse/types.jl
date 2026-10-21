@@ -251,13 +251,25 @@ sparse_similar(proto) = sparse_similar(proto, eltype(proto), size(proto))
 # callers have verified that the dimensions and number of entries fit.
 function convert_buffer(::Type{T}, src::AbstractVector) where {T}
     dst = similar(src, T)
-    if T <: Integer && eltype(src) <: Integer
-        dst .= src .% T
-    else
-        dst .= src
-    end
+    dst .= src
     return dst
 end
+
+# Canonical dimensions/counts prove index representability before this conversion.
+# Values use ordinary conversion semantics and must never take this unchecked path.
+function convert_index_buffer(::Type{T}, src::AbstractVector) where {T<:Integer}
+    dst = sparse_similar(src, T)
+    dst .= src .% T
+    return dst
+end
+
+function check_sparse_values(::Type{T}, values::AbstractVector{S}) where {T<:Integer,S<:Integer}
+    if !all(v -> typemin(T) <= v <= typemax(T), values)
+        throw(InexactError(:convert, T, "stored values outside the destination integer range"))
+    end
+    return nothing
+end
+check_sparse_values(::Type, ::AbstractVector) = nothing
 
 # an empty compressed pointer buffer for `n` slices
 empty_ptr(proto::AbstractVector, ::Type{Ti}, n::Integer) where {Ti} =
@@ -276,23 +288,23 @@ Base.similar(A::GPUSparseMatrixCSC, ::Type{Tv}) where {Tv} =
 function Base.similar(A::GPUSparseMatrixCSR, ::Type{Tv}, ::Type{Ti}) where {Tv,Ti}
     check_sparse_dims(Ti, size(A))
     check_sparse_nnz(Ti, nnz(A))
-    GPUSparseMatrixCSR(convert_buffer(Ti, A.rowPtr), convert_buffer(Ti, A.colVal),
+    GPUSparseMatrixCSR(convert_index_buffer(Ti, A.rowPtr), convert_index_buffer(Ti, A.colVal),
                        similar(A.nzVal, Tv), size(A))
 end
 function Base.similar(A::GPUSparseMatrixCSC, ::Type{Tv}, ::Type{Ti}) where {Tv,Ti}
     check_sparse_dims(Ti, size(A))
     check_sparse_nnz(Ti, nnz(A))
-    GPUSparseMatrixCSC(convert_buffer(Ti, A.colPtr), convert_buffer(Ti, A.rowVal),
+    GPUSparseMatrixCSC(convert_index_buffer(Ti, A.colPtr), convert_index_buffer(Ti, A.rowVal),
                        similar(A.nzVal, Tv), size(A))
 end
 function Base.similar(A::GPUSparseMatrixCOO, ::Type{Tv}, ::Type{Ti}) where {Tv,Ti}
     check_sparse_dims(Ti, size(A))
-    GPUSparseMatrixCOO(convert_buffer(Ti, A.rowInd), convert_buffer(Ti, A.colInd),
+    GPUSparseMatrixCOO(convert_index_buffer(Ti, A.rowInd), convert_index_buffer(Ti, A.colInd),
                        similar(A.nzVal, Tv), size(A))
 end
 function Base.similar(x::GPUSparseVector, ::Type{Tv}, ::Type{Ti}) where {Tv,Ti}
     check_sparse_dims(Ti, size(x))
-    GPUSparseVector(convert_buffer(Ti, x.nzInd), similar(x.nzVal, Tv), length(x))
+    GPUSparseVector(convert_index_buffer(Ti, x.nzInd), similar(x.nzVal, Tv), length(x))
 end
 
 Base.similar(A::GPUSparseArray, dims::Dims) = similar(A, eltype(A), dims)
@@ -365,11 +377,7 @@ end
 
 function copy_buffer!(dst::AbstractVector, src::AbstractVector)
     length(dst) == length(src) || resize!(dst, length(src))
-    if eltype(dst) <: Integer && eltype(src) <: Integer
-        dst .= src .% eltype(dst)
-    else
-        dst .= src
-    end
+    dst .= src
     return dst
 end
 
@@ -379,6 +387,7 @@ function copy_sparse!(dst, src)
     check_sparse_dims(indtype(dst), size(src))
     dst isa GPUSparseMatrixCompressed && check_sparse_nnz(eltype(compressed_ptr(dst)), nnz(src))
     check_sparse_mutation(dst)
+    check_sparse_values(eltype(dst), nonzeros(src))
     dst === src && return dst
     # Copy before resizing/writing any component, including overlapping component views.
     src = Base.mightalias(dst, src) ? copy(src) : src
