@@ -43,6 +43,17 @@ end
             end
             @test_throws r"zero-dimensional GPU arrays" A .+ scalar
             @test_throws r"zero-dimensional GPU arrays" scalar .+ A
+            for shape in ((2,2,1),(2,2,2),(2,2,1,1)), AT in (Array,JLArray)
+                dense=AT(zeros(Float32,shape))
+                @test_throws r"both sparse vectors and sparse matrices" (A .* x) .+ dense
+                @test_throws r"both sparse vectors and sparse matrices" dense .+ (x .* A)
+                @test_throws r"both sparse vectors and sparse matrices" A .* (x .+ dense)
+                @test_throws r"both sparse vectors and sparse matrices" (dense .+ x) .* A
+                @test_throws r"expansion of sparse operands" A .+ dense
+                @test_throws r"expansion of sparse operands" dense .+ A
+                @test_throws DimensionMismatch (A .= A .+ dense)
+                @test Array(A)==before
+            end
         end
         @test_throws r"zero-dimensional GPU arrays" x .+ JLArray(fill(0f0))
         @test_throws r"zero-dimensional GPU arrays" JLArray(fill(0f0)) .+ x

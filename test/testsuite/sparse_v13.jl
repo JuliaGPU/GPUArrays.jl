@@ -37,6 +37,16 @@ function sparse_v13(AT, eltypes)
             @test_throws r"zero-dimensional GPU arrays" (A .= A .+ scalar)
             @test_throws r"zero-dimensional GPU arrays" v .+ scalar
             @test_throws r"zero-dimensional GPU arrays" scalar .+ v
+            for shape in ((3,3,1),(3,3,2),(3,3,1,1))
+                dense = AT(zeros(Float32,shape))
+                @test_throws r"both sparse vectors and sparse matrices" (A .* v) .+ dense
+                @test_throws r"both sparse vectors and sparse matrices" dense .+ (v .* A)
+                @test_throws r"both sparse vectors and sparse matrices" A .* (v .+ dense)
+                @test_throws r"both sparse vectors and sparse matrices" (dense .+ v) .* A
+                @test_throws r"expansion of sparse operands" A .+ dense
+                @test_throws r"expansion of sparse operands" dense .+ A
+                @test_throws DimensionMismatch (A .= A .+ dense)
+            end
             @test_throws ErrorException (A .= A .* v)
             @test A == before
             @test Array(A .* dense_v) == Array(host) .* Float32[2,3,4]
