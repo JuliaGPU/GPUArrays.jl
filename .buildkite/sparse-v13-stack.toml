@@ -1,0 +1,22 @@
+# TEMPORARY coordinated-v13 stack validation. Remove after registered resolution works.
+[AcceleratedKernels]
+url = "https://github.com/JuliaGPU/AcceleratedKernels.jl"
+rev = "a915b419728e3abd258bce78ea3d1d3255b88ed7"
+[Atomix]
+url = "https://github.com/JuliaConcurrent/Atomix.jl"
+rev = "1ffd4ae4746fbc9463882c68563c6bdb81e0d9c0"
+[CUDA]
+url = "https://github.com/JuliaGPU/CUDA.jl"
+rev = "4ddeb0a45cecba28f3272ee2eafcff443e689374"
+[AMDGPU]
+url = "https://github.com/JuliaGPU/AMDGPU.jl"
+rev = "0bf3ee38f7038932b33f71e41748c35dccb993fe"
+[oneAPI]
+url = "https://github.com/JuliaGPU/oneAPI.jl"
+rev = "c7e27cb8d102da956240fe953584bab448ed7ae8"
+[Metal]
+url = "https://github.com/JuliaGPU/Metal.jl"
+rev = "c15be393b1ad166a5ff7fd60170014ffc07938cd"
+[OpenCL]
+url = "https://github.com/JuliaGPU/OpenCL.jl"
+rev = "167b5af8ace3e150f711611d27fccaa0e57ac8e0"
