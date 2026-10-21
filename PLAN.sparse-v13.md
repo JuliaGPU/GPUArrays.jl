@@ -10,6 +10,17 @@ The objective is one coordinated backend migration, followed by portable sparse 
 
 Keep sparse vector, CSR, CSC and row-major COO, under `AbstractGPUSparseArray <: AbstractSparseArray`. Sorted, unique, one-based coordinates are invariants; stored zeros are valid. Unassembled inputs and unfinished vendor outputs must remain private buffers/descriptors until canonicalization, including internal intermediates and results of qualified vendor APIs. This replaces CUDA's former noncanonical raw-storage contract; raw borrowing constructors must not silently sort caller buffers. Raw constructors check metadata; `check_structure` validates contents explicitly. Do not launch a full structural validation on every operation.
 
+Canonicalization is a postcondition, not a requirement to run assembly after every vendor
+operation. Astra turn13 and Sol turn21 (`sparse-v13-architecture`, `sparse-v13-review`)
+agreed to publish completed cuSPARSE SpGEMM output directly: canonical one-based Int32
+inputs, independently allocated output buffers, contribution accumulation, and documented
+sorted output establish the invariant. The fast path conservatively requires cuSPARSE
+library version >=12.6; this is not a claim about when its guarantee first appeared.
+Older versions retain assembly. Check the output count before allocation and initialize
+empty output pointers explicitly. Test all available algorithms with repeated contributions,
+cancellation, empty products, empty rows, structural validation, aliasing and GC. Do not
+extend this argument to other vendor producers without verifying their guarantees.
+
 CSR/CSC become:
 
 ```julia
