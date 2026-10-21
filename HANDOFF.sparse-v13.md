@@ -1,5 +1,60 @@
 # GPUArrays v13 implementation handoff
 
+## Latest checkpoint (Oct21, backend self-CI wiring)
+
+This section supersedes the chronological checkpoints below. GPUArrays a6952ce pins
+CUDA42d9ec7ef, AMD47a61c2cf, oneAPI80a88b3, Metala9a75f81a and OpenCL88d88e8.
+All backend topic branches are pushed; Metal PR982 and GPUArrays PR745 branches are
+updated too. Backend bootstraps pin the reviewed GPUArrays helper ecbe5329. This is
+temporary coordinated-stack plumbing, not registered dependency resolution.
+
+Every backend's CI now explicitly resolves the pinned stack rather than letting an
+early test-plugin instantiate registered incompatible versions. Existing toolkit,
+allocator/memory, sanitizer, multi-GPU, minimum-dependency, Enzyme, debug/validation,
+OpenCL driver/memory/translation and docs/performance variants are retained. Nightly
+and dependency installation failures are hard failures. CUDA's memory matrix now
+writes CUDACore's preference (not obsolete CUDA's), and the helper asserts the loaded
+memory mode. Custom dependency jobs change the disposable root environment and keep
+their selections through the checked runner. Preferences retain recursive __clear__
+semantics and transitive UUID/name bindings via extras. Binding, actual Pkg.test
+sandbox propagation and preference-clearing probes pass on Julia1.10.12 and1.13.2.
+Sol turns28-30 reviewed these changes; two verified wiring issues were corrected.
+YAML parsing and diff checks pass. CUDA unified-memory, AMD native sparse/solver and
+oneAPI resource/native self-entrypoint runs are in progress; do not count setup as a
+test pass. No further full local Metal runs: single-worker/thread spot tests only.
+
+Clean frozen GA0f2d80f / CUDAe37f85d19 full shared six-type suites now pass automatic
+7712 and forced-portable7713 (2004 portable selections), with an empty sparse ambiguity
+check each. Clean GA0f2d80f / AMDe3a3a604c shared four-type suites pass automatic5540
+and forced-portable5541 (1557 selections), ambiguity1 each. Pegasus logs:
+ga13-{cuda,amdgpu}-env/shared-0f2-{auto,portable}.log. Clean GA c8dd580 /
+oneAPI26fb776 forced-portable shared four-type run passes5517 (1560 selections),
+ambiguity1; Taurus ga13-oneapi-env/portable-final.log. These supplement the native
+backend suites and oneAPI12904+24 pre-existing broken checks recorded below.
+
+Julia1.15 newly rejects rectangular SparseMatrixCSC UniformScaling operations on CPU.
+e2e594d keeps the existing GPU rectangular behavior and tests against an explicit
+rectangular diagonal reference instead; square cases still use SparseArrays. Astra
+turn15 approved preserving this backend API. Reference regressions pass805 on both
+Julia1.13 and1.15; nightly ambiguity check passes separately. Logs local
+ga13-rect-reference-green.log and Pegasus ga13-cuda-ci-entry/nightly-sparse-green2.log.
+CUDAcb5389b13 / AMD8c0ff4687 remove four no-longer-included legacy integration files;
+their history remains recoverable and the active centralized methods are unchanged.
+
+NVIDIA OpenCL normal-GC repeat also fails first at clEnqueueSVMMemFill(-30), then the
+context is unusable. Dense-only pending-input, reduction+GC and40 distinct compile+GC
+probes against OpenCL main9c27048 pass; they have NOT reproduced the sparse-triggered
+failure or established its cause. Blocking synchronization / GC-disabled contracts
+remain diagnostics only. Do not silently enable those settings as a fix. A new hard
+NVIDIA OpenCL Buildkite job complements PoCL CPU IL/C testing on GitHub Actions.
+
+Buildkite2075 tested GA746631d: uploader passed, all backend jobs scheduled. Latest
+GHA39617084725 at that SHA was pending. Subsequent pushes supersede those runs; inspect
+new jobs' actual revisions/logs before claiming CI coverage. Earlier Ubuntu1.13
+35017 assertion pass and Metal53 spot checks retain their recorded older revisions.
+Official oneAPI support JLL still lacks the native exception-boundary change: a new
+artifact plus coordinated releases remain mandatory. No PR discussion text posted.
+
 ## Latest checkpoint (Oct21, policy ownership and final-stack checks)
 
 This section supersedes older chronological checkpoints below. Latest pushed GPUArrays
