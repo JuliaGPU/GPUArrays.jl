@@ -7,26 +7,18 @@ Broadcast.BroadcastStyle(::Type{<:GPUSparseVector}) = GPUSparseVecStyle()
 Broadcast.BroadcastStyle(::Type{<:GPUSparseMatrix}) = GPUSparseMatStyle()
 const SPVM = Union{GPUSparseVecStyle,GPUSparseMatStyle}
 
-# GPUSparseVecStyle handles 0-1 dimensions, GPUSparseMatStyle 0-2 dimensions.
-# GPUSparseVecStyle promotes to GPUSparseMatStyle for 2 dimensions.
-# Fall back to DefaultArrayStyle for higher dimensionality.
+# Keep sparse validation in control even for unsupported output dimensions.
+# Falling back to DefaultArrayStyle would permit CPU execution on borrowed host buffers.
 GPUSparseVecStyle(::Val{0}) = GPUSparseVecStyle()
 GPUSparseVecStyle(::Val{1}) = GPUSparseVecStyle()
-GPUSparseVecStyle(::Val{2}) = GPUSparseMatStyle()
-GPUSparseVecStyle(::Val{N}) where N = Broadcast.DefaultArrayStyle{N}()
-GPUSparseMatStyle(::Val{0}) = GPUSparseMatStyle()
-GPUSparseMatStyle(::Val{1}) = GPUSparseMatStyle()
-GPUSparseMatStyle(::Val{2}) = GPUSparseMatStyle()
-GPUSparseMatStyle(::Val{N}) where N = Broadcast.DefaultArrayStyle{N}()
+GPUSparseVecStyle(::Val) = GPUSparseMatStyle()
+GPUSparseMatStyle(::Val) = GPUSparseMatStyle()
 
-Broadcast.BroadcastStyle(::GPUSparseVecStyle, ::AbstractGPUArrayStyle{0}) = GPUSparseVecStyle()
-Broadcast.BroadcastStyle(::GPUSparseVecStyle, ::AbstractGPUArrayStyle{1}) = GPUSparseVecStyle()
-Broadcast.BroadcastStyle(::GPUSparseVecStyle, ::AbstractGPUArrayStyle{2}) = GPUSparseMatStyle()
+Broadcast.BroadcastStyle(::GPUSparseVecStyle, ::AbstractGPUArrayStyle{N}) where N =
+    GPUSparseVecStyle(Val(N))
 Broadcast.BroadcastStyle(::GPUSparseVecStyle, ::GPUSparseMatStyle) = GPUSparseMatStyle()
 Broadcast.BroadcastStyle(::GPUSparseMatStyle, ::GPUSparseVecStyle) = GPUSparseMatStyle()
-Broadcast.BroadcastStyle(::GPUSparseMatStyle, ::AbstractGPUArrayStyle{0}) = GPUSparseMatStyle()
-Broadcast.BroadcastStyle(::GPUSparseMatStyle, ::AbstractGPUArrayStyle{1}) = GPUSparseMatStyle()
-Broadcast.BroadcastStyle(::GPUSparseMatStyle, ::AbstractGPUArrayStyle{2}) = GPUSparseMatStyle()
+Broadcast.BroadcastStyle(::GPUSparseMatStyle, ::AbstractGPUArrayStyle) = GPUSparseMatStyle()
 
 # don't wrap sparse arrays with Extruded
 Broadcast.extrude(x::GPUSparseArray) = x

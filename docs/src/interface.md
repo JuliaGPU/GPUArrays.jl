@@ -184,7 +184,8 @@ sparse destination and nonzero fill throw before mutation. Individual insertion,
 concatenation and blockdiag are not implemented; reshape and linearization copy.
 Broadcasting may expand dense vectors/matrices, but expansion of sparse operands,
 mixing sparse vectors with sparse matrices, and zero-dimensional GPU operands are
-explicitly rejected before scalar evaluation or mutation.
+explicitly rejected before scalar evaluation or mutation. Higher-dimensional
+broadcast results also reject instead of falling back to CPU execution.
 Arbitrary sparse views and complete SparseArrays compatibility are not promised.
 Norms cover logical entries: negative orders include implicit zeros while preserving
 NaN magnitudes, independently of the installed SparseArrays version.
