@@ -34,7 +34,6 @@ include("device/array.jl")
 
 # array implementation
 include("array.jl")
-include("algorithms.jl")
 include("sparse.jl")
 include("broadcast.jl")
 include("mapreduce.jl")
