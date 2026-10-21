@@ -12,6 +12,25 @@ GPUArrays.KernelAbstractions.get_backend(x::FixedSparseStorage) = GPUArrays.get_
 Base.resize!(::FixedSparseStorage, ::Integer) = throw(ArgumentError("fixed storage"))
 
 @testset "v13 sparse regressions" begin
+    @testset "backend arithmetic parity" begin
+        host=sparse(ComplexF32[2 0;1+im 3])
+        for S in (GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseMatrixCOO)
+            A=S(adapt(JLArray,host))
+            for B in (A,transpose(A),adjoint(A)), op in (+,-)
+                reference=B === A ? host : B isa Transpose ? transpose(host) : adjoint(host)
+                @test Array(op(A,B)) ≈ Array(op(host,reference))
+                @test Array(op(B,A)) ≈ Array(op(reference,host))
+                @test Array(op(B,2I)) ≈ Array(op(reference,2I))
+                @test Array(op(2I,B)) ≈ Array(op(2I,reference))
+                D=Diagonal(ComplexF32[2,4])
+                @test Array(op(B,D)) ≈ Array(op(reference,D))
+                @test Array(op(D,B)) ≈ Array(op(D,reference))
+            end
+            @test Array(one(A))==Matrix{ComplexF32}(I,2,2)
+            @test iszero(zero(A))
+        end
+        @test SparseMatrixCSC(JLArray(Matrix(host)))==host
+    end
     @testset "borrowed CSC column accessors" begin
         A=GPUSparseMatrixCSC(JLArray(Int64[1,3,3,4]),JLArray(Int32[1,3,2]),
                              JLArray(Float32[2,4,6]),(3,3))

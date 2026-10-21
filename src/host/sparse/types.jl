@@ -191,6 +191,8 @@ const GPUSparseArray = Union{GPUSparseVector,GPUSparseMatrix}
 Base.size(A::GPUSparseMatrix) = A.dims
 Base.length(A::GPUSparseMatrix) = Base.checked_mul(size(A, 1), size(A, 2))
 Base.size(x::GPUSparseVector) = (x.len,)
+Base.size(A::GPUSparseArray,d::Integer) = d<1 ?
+    throw(ArgumentError("dimension must be positive, got $d")) : d<=ndims(A) ? size(A)[d] : 1
 
 SparseArrays.nnz(A::GPUSparseArray) = length(A.nzVal)
 SparseArrays.nonzeros(A::GPUSparseArray) = A.nzVal

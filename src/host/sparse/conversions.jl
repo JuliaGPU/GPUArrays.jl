@@ -386,6 +386,13 @@ SparseArrays.sparse(A::AbstractGPUMatrix; fmt::Symbol=:csc) = sparse_format(fmt)
 SparseArrays.sparse(x::AbstractGPUVector) = GPUSparseVector(x)
 SparseArrays.sparsevec(x::AbstractGPUVector) = GPUSparseVector(x)
 
+# Construct the sparse representation on-device before transferring its buffers.
+SparseArrays.SparseMatrixCSC(A::AbstractGPUMatrix) = SparseMatrixCSC(sparse(A))
+SparseArrays.SparseMatrixCSC{T}(A::AbstractGPUMatrix) where {T} =
+    SparseMatrixCSC(GPUSparseMatrixCSC{T}(A))
+SparseArrays.SparseMatrixCSC{T,Ti}(A::AbstractGPUMatrix) where {T,Ti} =
+    SparseMatrixCSC(GPUSparseMatrixCSC{T,Ti}(A))
+
 
 ## transposes
 
@@ -405,8 +412,14 @@ end
 
 # into any format; the cheap cases (CSR ↔ CSC) are defined above
 for S in (:GPUSparseMatrixCSR, :GPUSparseMatrixCSC, :GPUSparseMatrixCOO)
-    @eval $S(A::Union{Transpose{<:Any,<:GPUSparseMatrix},Adjoint{<:Any,<:GPUSparseMatrix}}) =
-        convert($S, copy(A))
+    @eval begin
+        $S(A::Union{Transpose{<:Any,<:GPUSparseMatrix},Adjoint{<:Any,<:GPUSparseMatrix}}) =
+            convert($S, copy(A))
+        $S{T}(A::Union{Transpose{<:Any,<:GPUSparseMatrix},Adjoint{<:Any,<:GPUSparseMatrix}}) where {T} =
+            with_values($S(A),T)
+        $S{T,Ti}(A::Union{Transpose{<:Any,<:GPUSparseMatrix},Adjoint{<:Any,<:GPUSparseMatrix}}) where {T,Ti} =
+            with_eltypes($S(A),T,Ti)
+    end
 end
 
 Base.permutedims(A::GPUSparseMatrix) = copy(transpose(A))

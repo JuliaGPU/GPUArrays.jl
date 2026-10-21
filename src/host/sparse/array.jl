@@ -50,8 +50,20 @@ function Base.fill!(A::GPUSparseArray, value)
 end
 
 Base.getindex(A::GPUSparseMatrix, ::Colon) = vec(A)
+Base.getindex(A::GPUSparseMatrix,I::AbstractRange{<:Integer}) = vec(A)[I]
 
 const GPUSparseTransposed = Union{Transpose{<:Any,<:GPUSparseMatrix},Adjoint{<:Any,<:GPUSparseMatrix}}
+LinearAlgebra.Hermitian{T}(A::GPUSparseMatrix,uplo::Symbol=:U) where {T} =
+    Hermitian(with_values(A,T),uplo)
+LinearAlgebra.Symmetric{T}(A::GPUSparseMatrix,uplo::Symbol=:U) where {T} =
+    Symmetric(with_values(A,T),uplo)
+for op in (:+,:-)
+    @eval begin
+        Base.$op(A::GPUSparseMatrix,B::GPUSparseTransposed) = sparse_map($op,A,copy(B))
+        Base.$op(A::GPUSparseTransposed,B::GPUSparseMatrix) = sparse_map($op,copy(A),B)
+        Base.$op(A::GPUSparseTransposed,B::GPUSparseTransposed) = sparse_map($op,copy(A),copy(B))
+    end
+end
 SparseArrays.nnz(A::GPUSparseTransposed) = nnz(parent(A))
 SparseArrays.nonzeros(A::Transpose{<:Any,<:GPUSparseMatrix}) = nonzeros(parent(A))
 SparseArrays.nonzeros(A::Adjoint{<:Any,<:GPUSparseMatrix}) = conj.(nonzeros(parent(A)))
@@ -60,6 +72,47 @@ Base.Array(A::GPUSparseTransposed) = Array(copy(A))
 Base.collect(A::GPUSparseTransposed) = Array(A)
 Base.mapreduce(f, op, A::GPUSparseTransposed; kwargs...) = mapreduce(f, op, copy(A); kwargs...)
 Base.getindex(A::GPUSparseTransposed, I::SparseRangeIndex, J::SparseRangeIndex) = copy(A)[I, J]
+
+function sparse_diagonal_like(A::GPUSparseMatrix,values::AbstractVector,dims::Dims{2}=size(A))
+    n=min(dims...)
+    length(values)==n || throw(DimensionMismatch("diagonal length must match matrix dimensions"))
+    check_sparse_dims(indtype(A),dims)
+    inds=sparse_similar(nonzeros(A),indtype(A),n)
+    inds .= 1:n
+    Tp=A isa GPUSparseMatrixCompressed ? eltype(compressed_ptr(A)) : promote_type(Int,indtype(A))
+    assemble_matrix(inds,copy(inds),move_buffer(nonzeros(A),values),dims...,
+                    default_combine(eltype(values)),matrix_format_symbol(A);pointer_type=Tp)
+end
+matrix_format_symbol(::GPUSparseMatrixCSR)=:csr
+matrix_format_symbol(::GPUSparseMatrixCSC)=:csc
+matrix_format_symbol(::GPUSparseMatrixCOO)=:coo
+function sparse_identity_like(A::GPUSparseMatrix,value)
+    n=LinearAlgebra.checksquare(A)
+    sparse_diagonal_like(A,fill!(sparse_similar(nonzeros(A),typeof(value),n),value))
+end
+Base.one(A::GPUSparseMatrix)=sparse_identity_like(A,one(eltype(A)))
+for op in (:+,:-)
+    @eval begin
+        function Base.$op(A::Union{GPUSparseMatrix,GPUSparseTransposed},J::UniformScaling)
+            B=materialize(A)
+            sparse_map($op,B,sparse_identity_like(B,J.λ))
+        end
+        function Base.$op(J::UniformScaling,A::Union{GPUSparseMatrix,GPUSparseTransposed})
+            B=materialize(A)
+            sparse_map($op,sparse_identity_like(B,J.λ),B)
+        end
+        function Base.$op(A::Union{GPUSparseMatrix,GPUSparseTransposed},D::Diagonal)
+            B=materialize(A)
+            size(B)==size(D) || throw(DimensionMismatch("matrix dimensions must match"))
+            sparse_map($op,B,sparse_diagonal_like(B,D.diag))
+        end
+        function Base.$op(D::Diagonal,A::Union{GPUSparseMatrix,GPUSparseTransposed})
+            B=materialize(A)
+            size(B)==size(D) || throw(DimensionMismatch("matrix dimensions must match"))
+            sparse_map($op,sparse_diagonal_like(B,D.diag),B)
+        end
+    end
+end
 
 # Explicit errors prevent SparseArrays' concatenation fallbacks from downloading through
 # SparseMatrixCSC. These operations can be implemented centrally without backend changes.
