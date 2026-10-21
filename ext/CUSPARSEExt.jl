@@ -9,6 +9,16 @@ struct CuSparseSpMV end
 struct CuSparseSpMM end
 struct CuSparseSpGEMM end
 
+function GPUArrays.normalize_sparse_product_operand(A::cuSPARSE.CuSparseMatrixBSR,t,algorithm)
+    t in ('S','s','H','h') || return A,t
+    algorithm isa GPUArrays.Portable &&
+        throw(ArgumentError("portable conversion of BSR storage is not implemented"))
+    # Vendor-only BSR conversion establishes canonical storage before GPUArrays
+    # materializes the wrapper and selects the numerical product algorithm.
+    canonical=cuSPARSE.CuSparseMatrixCSR(A)
+    return GPUArrays.materialize(LinearAlgebra.wrap(canonical,t)),'N'
+end
+
 function GPUArrays.check_storage_compatibility(arrays::CuArray...)
     ctx = CUDACore.context(first(arrays))
     all(A -> CUDACore.context(A) == ctx, arrays) ||
@@ -35,6 +45,10 @@ function product_capability(C,A,B)
         return UnsupportedSparseVendor("cuSPARSE does not convert complex operands to real output")
     GPUArrays.product_accumulator(eltype(A),eltype(B)) === GPUArrays.product_accumulator(T,T) ||
         return UnsupportedSparseVendor("normalizing to this output type would change sparse accumulation precision")
+    if T in (Float16,ComplexF16)
+        all(S -> S===T || S===Bool || (T===ComplexF16 && S===Float16),(eltype(A),eltype(B))) ||
+            return UnsupportedSparseVendor("normalizing operands to half precision would lose input values")
+    end
     cuSPARSE.functional() || return UnsupportedSparseVendor("cuSPARSE is unavailable")
     T === Float16 && cuSPARSE.version() < v"11.4" &&
         return UnsupportedSparseVendor("Float16 products require cuSPARSE 11.4")
@@ -53,8 +67,6 @@ function GPUArrays.vendor_spmv(y::CuVector,tA,A::CuCanonicalMatrix,x::CuVector,Î
         return UnsupportedSparseVendor("complex CSC adjoint requires cuSPARSE 12")
     # Floating mixed precision is not universally supported by cuSPARSE SpMV. Integer
     # and Bool operands retain upstream's explicit normalization to the output type.
-    (eltype(A) === eltype(y) || eltype(A) <: Integer) ||
-        return UnsupportedSparseVendor("this cuSPARSE SpMV combination needs portable mixed-precision accumulation")
     return CuSparseSpMV()
 end
 
@@ -77,6 +89,8 @@ function spmm_capability(C,tA,tB,A,B)
     dense_trans = A isa CuCanonicalMatrix ? tB : tA
     S isa cuSPARSE.CuSparseMatrixCSC && sparse_trans=='C' && eltype(S)<:Complex && cuSPARSE.version()<v"12" &&
         return UnsupportedSparseVendor("complex CSC adjoint requires cuSPARSE 12")
+    B isa cuSPARSE.CuSparseMatrixCSR && tB=='C' && eltype(B)<:Complex && cuSPARSE.version()<v"12" &&
+        return UnsupportedSparseVendor("transformed dense-times-CSR complex adjoint requires cuSPARSE 12")
     cuSPARSE.version()<v"11" && (B isa CuCanonicalMatrix || (dense_trans!='N' && !(S isa cuSPARSE.CuSparseMatrixCOO))) &&
         return UnsupportedSparseVendor("these dense SpMM layouts require cuSPARSE 11")
     stride(D,1) == stride(C,1) == 1 && stride(D,2) >= max(1,size(D,1)) &&

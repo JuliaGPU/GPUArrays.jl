@@ -37,6 +37,7 @@ end
 product_buffers(A::GPUSparseArray) = sparse_buffers(A)
 product_buffers(A::AbstractGPUSparseArray) = (nonzeros(A),)
 product_buffers(A::AbstractArray) = (A,)
+normalize_sparse_product_operand(A,t,algorithm) = (A,t)
 
 const GPUSparseRootOperand = Union{AbstractGPUSparseMatrix,
     Transpose{<:Any,<:AbstractGPUSparseMatrix},Adjoint{<:Any,<:AbstractGPUSparseMatrix}}
@@ -56,6 +57,7 @@ it never triggers a retry against a potentially modified output.
 function spmv!(y, tA::AbstractChar, A::AbstractGPUSparseMatrix, x, α::Number, β::Number;
                algorithm=Automatic())
     check_sparse_product(y, tA, 'N', A, x)
+    A,tA = normalize_sparse_product_operand(A,tA,algorithm)
     executor = algorithm isa Portable ? Portable() :
                select_sparse(algorithm, vendor_spmv(y, tA, A, x, α, β))
     return execute_spmv!(executor, y, tA, A, x, α, β)
@@ -71,6 +73,8 @@ reenter selection for the same operation or a subordinate sparse conversion.
 function spmm!(C, tA::AbstractChar, tB::AbstractChar, A, B, α::Number, β::Number;
                algorithm=Automatic())
     check_sparse_product(C, tA, tB, A, B)
+    A,tA = normalize_sparse_product_operand(A,tA,algorithm)
+    B,tB = normalize_sparse_product_operand(B,tB,algorithm)
     executor = algorithm isa Portable ? Portable() :
                select_sparse(algorithm, vendor_spmm(C, tA, tB, A, B, α, β))
     return execute_spmm!(executor, C, tA, tB, A, B, α, β)
