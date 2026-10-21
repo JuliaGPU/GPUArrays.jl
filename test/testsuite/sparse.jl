@@ -379,9 +379,21 @@ function sparse_indexing(AT, eltypes)
     @testset "indexing" begin
         ET = first(eltypes)
         A = sprand_awkward(ET, 6, 7)
+        probe = AT(ET[1])
+        dense_scalar_rejected = try
+            probe[1]
+            false
+        catch err
+            err isa ErrorException || rethrow()
+            true
+        end
         @testset "$S" for S in sparse_matrix_formats
             dA = gpu_sparse(AT, S, A)
-            @test_throws ErrorException dA[1, 1]
+            if dense_scalar_rejected
+                @test_throws ErrorException dA[1, 1]
+            else
+                @test dA[1, 1] == A[1, 1]
+            end
             @allowscalar begin
                 @test all(dA[i, j] == A[i, j] for i in 1:6, j in 1:7)
                 @test dA[(2, 3)] == A[2, 3]
