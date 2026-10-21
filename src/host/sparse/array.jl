@@ -53,6 +53,35 @@ Base.getindex(A::GPUSparseMatrix, ::Colon) = vec(A)
 Base.getindex(A::GPUSparseMatrix,I::AbstractRange{<:Integer}) = vec(A)[I]
 
 const GPUSparseTransposed = Union{Transpose{<:Any,<:GPUSparseMatrix},Adjoint{<:Any,<:GPUSparseMatrix}}
+Base.:(*)(a::Number,A::GPUSparseTransposed)=a.*copy(A)
+Base.:(*)(A::GPUSparseTransposed,a::Number)=copy(A).*a
+Base.:(^)(A::GPUSparseTransposed,p::Integer)=copy(A)^p
+# Base's fused three-argument product otherwise scales after accumulating in the
+# unscaled element type. Match left association, including scalar promotion.
+Base.:(*)(a::Number,A::Union{GPUSparseMatrix,GPUSparseTransposed},
+          B::Union{GPUSparseMatrix,GPUSparseTransposed})=(a*materialize(A))*B
+const GPUSparseRealComplexMatrix = Union{GPUSparseMatrixCSR{<:Union{Real,Complex}},
+    GPUSparseMatrixCSC{<:Union{Real,Complex}},GPUSparseMatrixCOO{<:Union{Real,Complex}},
+    Transpose{<:Union{Real,Complex},<:GPUSparseMatrix},Adjoint{<:Union{Real,Complex},<:GPUSparseMatrix}}
+Base.:(*)(a::Union{Real,Complex},A::GPUSparseRealComplexMatrix,
+          B::GPUSparseRealComplexMatrix)=(a*materialize(A))*B
+Base.:(*)(a::Number,A::Union{GPUSparseMatrix,GPUSparseTransposed},
+          B::AnyGPUMatrix)=(a*materialize(A))*B
+Base.:(*)(a::Union{Real,Complex},A::GPUSparseRealComplexMatrix,
+          B::AnyGPUMatrix{<:Union{Real,Complex}})=(a*materialize(A))*B
+const GPUSparseStructured = Union{Symmetric{<:Any,<:GPUSparseMatrix},Hermitian{<:Any,<:GPUSparseMatrix}}
+Base.:(*)(a::Number,A::GPUSparseStructured)=a.*materialize(A)
+Base.:(*)(A::GPUSparseStructured,a::Number)=materialize(A).*a
+Base.:(*)(a::Real,A::Hermitian{<:Any,<:GPUSparseMatrix})=a.*materialize(A)
+Base.:(*)(A::Hermitian{<:Any,<:GPUSparseMatrix},a::Real)=materialize(A).*a
+SparseArrays.sparse(A::GPUSparseStructured)=materialize(A)
+SparseArrays.SparseMatrixCSC(A::GPUSparseStructured)=SparseMatrixCSC(materialize(A))
+SparseArrays.SparseMatrixCSC{T}(A::Union{GPUSparseStructured,GPUSparseTransposed}) where {T} =
+    SparseMatrixCSC{T}(SparseMatrixCSC(A))
+SparseArrays.SparseMatrixCSC{T,Ti}(A::Union{GPUSparseStructured,GPUSparseTransposed}) where {T,Ti} =
+    SparseMatrixCSC{T,Ti}(SparseMatrixCSC(A))
+Base.Array(A::GPUSparseStructured)=Array(materialize(A))
+Base.collect(A::GPUSparseStructured)=Array(A)
 LinearAlgebra.Hermitian{T}(A::GPUSparseMatrix,uplo::Symbol=:U) where {T} =
     Hermitian(with_values(A,T),uplo)
 LinearAlgebra.Symmetric{T}(A::GPUSparseMatrix,uplo::Symbol=:U) where {T} =
@@ -87,10 +116,24 @@ matrix_format_symbol(::GPUSparseMatrixCSR)=:csr
 matrix_format_symbol(::GPUSparseMatrixCSC)=:csc
 matrix_format_symbol(::GPUSparseMatrixCOO)=:coo
 function sparse_identity_like(A::GPUSparseMatrix,value)
-    n=LinearAlgebra.checksquare(A)
+    n=min(size(A)...)
     sparse_diagonal_like(A,fill!(sparse_similar(nonzeros(A),typeof(value),n),value))
 end
-Base.one(A::GPUSparseMatrix)=sparse_identity_like(A,one(eltype(A)))
+Base.one(A::GPUSparseMatrix)=(LinearAlgebra.checksquare(A);sparse_identity_like(A,one(eltype(A))))
+Base.oneunit(A::GPUSparseMatrix)=(LinearAlgebra.checksquare(A);sparse_identity_like(A,oneunit(eltype(A))))
+Base.:(*)(A::Union{GPUSparseMatrix,GPUSparseTransposed},J::UniformScaling)=materialize(A).*J.λ
+Base.:(*)(J::UniformScaling,A::Union{GPUSparseMatrix,GPUSparseTransposed})=J.λ.*materialize(A)
+function scale_sparse_diagonal(A,D,side)
+    B=materialize(A)
+    side===:right ? size(B,2)==size(D,1) || throw(DimensionMismatch("diagonal dimensions differ")) :
+                   size(D,2)==size(B,1) || throw(DimensionMismatch("diagonal dimensions differ"))
+    d=move_buffer(nonzeros(B),D.diag)
+    rows,cols=entry_coordinates(B)
+    values=side===:right ? nonzeros(B).*d[cols] : d[rows].*nonzeros(B)
+    sparse_format_type(B)(map(copy,Base.front(sparse_buffers(B)))...,values,size(B))
+end
+Base.:(*)(A::Union{GPUSparseMatrix,GPUSparseTransposed},D::Diagonal)=scale_sparse_diagonal(A,D,:right)
+Base.:(*)(D::Diagonal,A::Union{GPUSparseMatrix,GPUSparseTransposed})=scale_sparse_diagonal(A,D,:left)
 for op in (:+,:-)
     @eval begin
         function Base.$op(A::Union{GPUSparseMatrix,GPUSparseTransposed},J::UniformScaling)

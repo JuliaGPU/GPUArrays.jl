@@ -71,25 +71,25 @@ sparse_vector(nzInd, nzVal, len) = GPUSparseVector(nzInd, nzVal, len)
 move_buffer(proto::AbstractVector, src::AbstractVector) =
     copyto!(sparse_similar(proto, eltype(src), length(src)), src)
 
-function Adapt.adapt_structure(to::Type{<:DenseArray}, A::GPUSparseMatrixCSR)
+function adapt_sparse_storage(to, A::GPUSparseMatrixCSR)
     nzVal = adapt(to, A.nzVal)
     nzVal === A.nzVal && return A
     GPUSparseMatrixCSR(move_buffer(nzVal, A.rowPtr), move_buffer(nzVal, A.colVal), nzVal,
                        size(A))
 end
-function Adapt.adapt_structure(to::Type{<:DenseArray}, A::GPUSparseMatrixCSC)
+function adapt_sparse_storage(to, A::GPUSparseMatrixCSC)
     nzVal = adapt(to, A.nzVal)
     colPtr, rowVal = nzVal === A.nzVal ? (A.colPtr, A.rowVal) :
                      (move_buffer(nzVal, A.colPtr), move_buffer(nzVal, A.rowVal))
     sparse_csc(colPtr, rowVal, nzVal, size(A))
 end
-function Adapt.adapt_structure(to::Type{<:DenseArray}, A::GPUSparseMatrixCOO)
+function adapt_sparse_storage(to, A::GPUSparseMatrixCOO)
     nzVal = adapt(to, A.nzVal)
     nzVal === A.nzVal && return A
     GPUSparseMatrixCOO(move_buffer(nzVal, A.rowInd), move_buffer(nzVal, A.colInd), nzVal,
                        size(A))
 end
-function Adapt.adapt_structure(to::Type{<:DenseArray}, x::GPUSparseVector)
+function adapt_sparse_storage(to, x::GPUSparseVector)
     nzVal = adapt(to, x.nzVal)
     nzInd = nzVal === x.nzVal ? x.nzInd : move_buffer(nzVal, x.nzInd)
     sparse_vector(nzInd, nzVal, length(x))
@@ -97,14 +97,21 @@ end
 
 # host sparse arrays to GPU storage, likewise keeping format and types: a CSC matrix stays
 # CSC. Adapting never densifies.
-function Adapt.adapt_structure(to::Type{<:AbstractGPUArray}, S::SparseMatrixCSC)
+function adapt_sparse_storage(to, S::SparseMatrixCSC)
     nzVal = adapt(to, nonzeros(S))
     GPUSparseMatrixCSC(move_buffer(nzVal, getcolptr(S)), move_buffer(nzVal, rowvals(S)),
                        nzVal, size(S))
 end
-function Adapt.adapt_structure(to::Type{<:AbstractGPUArray}, x::SparseVector)
+function adapt_sparse_storage(to, x::SparseVector)
     nzVal = adapt(to, nonzeros(x))
     GPUSparseVector(move_buffer(nzVal, SparseArrays.nonzeroinds(x)), nzVal, length(x))
+end
+
+for S in (:GPUSparseMatrixCSR,:GPUSparseMatrixCSC,:GPUSparseMatrixCOO,:GPUSparseVector)
+    @eval Adapt.adapt_structure(to::Type{<:DenseArray},A::$S)=adapt_sparse_storage(to,A)
+end
+for S in (:SparseMatrixCSC,:SparseVector)
+    @eval Adapt.adapt_structure(to::Type{<:AbstractGPUArray},A::$S)=adapt_sparse_storage(to,A)
 end
 
 # explicit sparse types (`adapt(MtlSparseMatrixCSR{Float32,Int32}, S)`) are constructors
@@ -385,6 +392,13 @@ format (like SparseArrays) or the format selected by `fmt` (`:csc`, `:csr` or `:
 SparseArrays.sparse(A::AbstractGPUMatrix; fmt::Symbol=:csc) = sparse_format(fmt)(A)
 SparseArrays.sparse(x::AbstractGPUVector) = GPUSparseVector(x)
 SparseArrays.sparsevec(x::AbstractGPUVector) = GPUSparseVector(x)
+for S in (:GPUSparseMatrixCSR,:GPUSparseMatrixCSC,:GPUSparseMatrixCOO)
+    @eval begin
+        $S(D::Diagonal{<:Any,<:AnyGPUVector})=convert($S,spdiagm(D.diag))
+        $S{T}(D::Diagonal{<:Any,<:AnyGPUVector}) where {T}=with_values($S(D),T)
+        $S{T,Ti}(D::Diagonal{<:Any,<:AnyGPUVector}) where {T,Ti}=with_eltypes($S(D),T,Ti)
+    end
+end
 
 # Construct the sparse representation on-device before transferring its buffers.
 SparseArrays.SparseMatrixCSC(A::AbstractGPUMatrix) = SparseMatrixCSC(sparse(A))

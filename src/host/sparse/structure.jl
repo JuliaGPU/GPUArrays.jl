@@ -189,7 +189,8 @@ end
 
 function LinearAlgebra.tr(A::GPUSparseMatrix)
     LinearAlgebra.checksquare(A)
-    return sum(diag(A))
+    # `tr` folds with +, unlike sum's widening add_sum for narrow integers.
+    return mapreduce(identity,+,diag(A);init=zero(eltype(A)))
 end
 
 
@@ -316,6 +317,10 @@ LinearAlgebra.kron(A::GPUSparseMatrixOrTransposed, D::Diagonal{<:Any,<:AnyGPUVec
     kron(A, spdiagm(D.diag))
 LinearAlgebra.kron(D::Diagonal{<:Any,<:AnyGPUVector}, B::GPUSparseMatrixOrTransposed) =
     convert(matrix_format(materialize_format(B)), kron(spdiagm(D.diag), B))
+LinearAlgebra.kron(A::GPUSparseMatrixOrTransposed,D::Diagonal) =
+    kron(A,Diagonal(move_buffer(nonzeros(materialize_format(A)),D.diag)))
+LinearAlgebra.kron(D::Diagonal,B::GPUSparseMatrixOrTransposed) =
+    kron(Diagonal(move_buffer(nonzeros(materialize_format(B)),D.diag)),B)
 
 # a sparse matrix without a lazy wrapper, and the format that has
 materialize(A::GPUSparseMatrix) = A

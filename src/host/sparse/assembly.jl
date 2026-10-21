@@ -38,6 +38,7 @@ keys. A single stable permutation sort preserves duplicate order.
 """
 function generic_assemble(I::AbstractVector, J::AbstractVector, V::AbstractVector,
                           m::Integer, n::Integer, combine; major::Symbol=:col)
+    m,n=Int(m),Int(n)
     length(I) == length(J) == length(V) ||
         throw(ArgumentError("the coordinate and value vectors must have the same length"))
     check_coordinates(I, m, "row")

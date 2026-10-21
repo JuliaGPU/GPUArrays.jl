@@ -12,6 +12,40 @@ GPUArrays.KernelAbstractions.get_backend(x::FixedSparseStorage) = GPUArrays.get_
 Base.resize!(::FixedSparseStorage, ::Integer) = throw(ArgumentError("fixed storage"))
 
 @testset "v13 sparse regressions" begin
+    @testset "rectangular scaling and promoted wrapped products" begin
+        for S in (GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseMatrixCOO)
+            host_cancel=sparse(reshape(Float32[16777216,1,-16777216],1,3))
+            cancel=S(adapt(JLArray,host_cancel))
+            rhs=JLArray(ones(Float32,3,1))
+            @test Array(1.0*cancel*rhs)==ones(1,1)
+            @test Array(1.0*transpose(copy(transpose(cancel)))*rhs)==ones(1,1)
+            for dims in ((2,3),(3,2))
+                host=sparse(reshape(Float32.(1:prod(dims)),dims))
+                A=S(adapt(JLArray,host))
+                for op in (+,-)
+                    @test Array(op(A,I)) == Matrix(op(host,I))
+                    @test Array(op(I,A)) == Matrix(op(I,host))
+                end
+                @test_throws DimensionMismatch one(A)
+                @test_throws DimensionMismatch oneunit(A)
+            end
+            host=sparse(Float32[1.1 2.3;0 3.7])
+            A=S(adapt(JLArray,host))
+            for wrap in (Symmetric,Hermitian)
+                @test Array(2*wrap(A))==Matrix(2*wrap(host))
+                @test Array(wrap(A)*2)==Matrix(wrap(host)*2)
+                @test sparse(wrap(A)) isa S
+                @test Array(sparse(wrap(A)))==Matrix(wrap(host))
+                @test SparseMatrixCSC(wrap(A))==sparse(wrap(host))
+            end
+            for wrap in (transpose,adjoint)
+                @test Array(1.1*wrap(A)) ≈ Matrix(1.1*wrap(host))
+                @test Array(wrap(A)*1.1) ≈ Matrix(wrap(host)*1.1)
+                @test Array(1.1*wrap(A)*A) ≈ Matrix((1.1*wrap(host))*host)
+                @test Array(wrap(A)^2) ≈ Matrix(wrap(host)^2)
+            end
+        end
+    end
     @testset "backend arithmetic parity" begin
         host=sparse(ComplexF32[2 0;1+im 3])
         for S in (GPUSparseMatrixCSR,GPUSparseMatrixCSC,GPUSparseMatrixCOO)
@@ -27,9 +61,20 @@ Base.resize!(::FixedSparseStorage, ::Integer) = throw(ArgumentError("fixed stora
                 @test Array(op(D,B)) ≈ Array(op(D,reference))
             end
             @test Array(one(A))==Matrix{ComplexF32}(I,2,2)
+            @test Array(oneunit(A))==Matrix{ComplexF32}(I,2,2)
+            @test Array(A*2I)==Matrix(host)*2I
+            @test Array(2I*A)==2I*Matrix(host)
+            D=Diagonal(ComplexF32[2,4])
+            @test Array(A*D)==Matrix(host*D)
+            @test Array(D*A)==Matrix(D*host)
+            @test Array(kron(A,D))≈Matrix(kron(host,D))
+            @test Array(kron(D,A))≈Matrix(kron(D,host))
             @test iszero(zero(A))
         end
         @test SparseMatrixCSC(JLArray(Matrix(host)))==host
+        host32=sparse(Int32[typemax(Int32) 0;0 typemax(Int32)])
+        @test tr(adapt(JLArray,host32))===tr(host32)
+        @test Array(sparse(JLArray(Int32[1]),JLArray(Int32[1]),JLArray(Float32[2]),Int32(1),Int32(1)))==reshape(Float32[2],1,1)
     end
     @testset "borrowed CSC column accessors" begin
         A=GPUSparseMatrixCSC(JLArray(Int64[1,3,3,4]),JLArray(Int32[1,3,2]),

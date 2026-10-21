@@ -330,13 +330,17 @@ end
 
 Base.similar(A::GPUSparseArray, dims::Dims) = similar(A, eltype(A), dims)
 Base.similar(A::GPUSparseArray, ::Type{Tv}, dims::Dims) where {Tv} =
-    similar(A, Tv, indtype(A), dims)
+    length(dims)>2 ? similar(A.nzVal,Tv,dims) : similar(A, Tv, indtype(A), dims)
 Base.similar(A::Union{GPUSparseVector,GPUSparseMatrixCOO}, ::Type{Tv}, dims::Dims{2}) where {Tv} =
     empty_sparse(matrix_format(A), A.nzVal, Tv, indtype(A), dims, promote_type(Int, indtype(A)))
 Base.similar(A::GPUSparseMatrixCompressed, ::Type{Tv}, dims::Dims{2}) where {Tv} =
     empty_sparse(matrix_format(A), A.nzVal, Tv, indtype(A), dims, eltype(compressed_ptr(A)))
 Base.similar(A::GPUSparseArray, ::Type{Tv}, ::Type{Ti}, dims::Dims) where {Tv,Ti} =
-    similar(A.nzVal, Tv, dims)
+    throw(MethodError(similar,(A,Tv,Ti,dims)))
+Base.similar(A::GPUSparseArray,::Type{Tv},::Type{Ti},m::Integer) where {Tv,Ti} =
+    similar(A,Tv,Ti,(Int(m),))
+Base.similar(A::GPUSparseArray,::Type{Tv},::Type{Ti},m::Integer,n::Integer) where {Tv,Ti} =
+    similar(A,Tv,Ti,(Int(m),Int(n)))
 function Base.similar(A::GPUSparseArray, ::Type{Tv}, ::Type{Ti}, dims::Dims{1}) where {Tv,Ti}
     GPUSparseVector(similar(A.nzVal, Ti, 0), similar(A.nzVal, Tv, 0), dims[1])
 end
