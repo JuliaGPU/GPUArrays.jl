@@ -67,8 +67,9 @@ buffers, with the dimensions last:
 A = GPUSparseMatrixCSR(rowPtr, colVal, nzVal, (m, n))
 ```
 
-The constructors only check what is known on the host (buffer lengths, and whether the
-dimensions and number of stored entries fit the index type). Like SparseArrays, the
+The constructors only check host metadata: buffer lengths, dimensions fitting the
+coordinate type, and compressed `nnz+1` fitting the pointer type. COO/vector entry
+counts are not limited by their coordinate type. Like SparseArrays, the
 formats are *canonical*: the indices within a row (CSR), column (CSC) or vector are sorted
 and unique, and COO entries are sorted by row and then column without duplicates.
 Explicitly stored zeros are allowed. Every operation relies on these invariants and
@@ -180,6 +181,8 @@ reductions may return dense device arrays. Dense/non-zero-preserving broadcast i
 sparse destination and nonzero fill throw before mutation. Individual insertion,
 concatenation and blockdiag are not implemented; reshape and linearization copy.
 Arbitrary sparse views and complete SparseArrays compatibility are not promised.
+Diagonal extraction follows the dense-array convention of returning an empty device
+vector for offsets outside the matrix, including extreme signed offsets.
 
 For `*(α, A, B)` with a canonical sparse matrix (or its transpose/adjoint) on
 the left, GPUArrays scales `A` with normal element-type promotion before the
