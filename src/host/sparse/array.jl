@@ -70,6 +70,14 @@ Base.:(*)(a::Number,A::Union{GPUSparseMatrix,GPUSparseTransposed},
 Base.:(*)(a::Union{Real,Complex},A::GPUSparseRealComplexMatrix,
           B::AnyGPUMatrix{<:Union{Real,Complex}})=(a*materialize(A))*B
 const GPUSparseStructured = Union{Symmetric{<:Any,<:GPUSparseMatrix},Hermitian{<:Any,<:GPUSparseMatrix}}
+for op in (:+,:-)
+    @eval begin
+        Base.$op(A::Union{GPUSparseMatrix,GPUSparseTransposed},B::GPUSparseStructured)=
+            sparse_map($op,materialize(A),materialize(B))
+        Base.$op(A::GPUSparseStructured,B::Union{GPUSparseMatrix,GPUSparseTransposed})=
+            sparse_map($op,materialize(A),materialize(B))
+    end
+end
 Base.:(*)(a::Number,A::GPUSparseStructured)=a.*materialize(A)
 Base.:(*)(A::GPUSparseStructured,a::Number)=materialize(A).*a
 Base.:(*)(a::Real,A::Hermitian{<:Any,<:GPUSparseMatrix})=a.*materialize(A)
