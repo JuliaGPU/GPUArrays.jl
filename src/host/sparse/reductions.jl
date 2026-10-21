@@ -129,7 +129,7 @@ function LinearAlgebra.norm(A::GPUSparseArray, p::Real=2)
     elseif p == 0
         return float(real(eltype(A)))(count(!iszero, nonzeros(A)))
     else
-        return sum(x -> abs(x)^p, nonzeros(A); init=zero(real(eltype(A))))^(1/p)
+        return norm(nonzeros(A), p)
     end
 end
 
