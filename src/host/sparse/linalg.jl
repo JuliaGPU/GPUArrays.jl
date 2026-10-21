@@ -245,13 +245,13 @@ end
 
 LinearAlgebra.mul!(C::AnyGPUVector, tA::AbstractChar, A::GPUSparseMatrix, B::AnyGPUVector,
                    α::Number, β::Number) =
-    generic_spmv!(C, tA, A, B, α, β)
+    spmv!(C, tA, A, B, α, β)
 LinearAlgebra.mul!(C::AnyGPUMatrix, tA::AbstractChar, tB::AbstractChar, A::GPUSparseMatrix,
                    B::AnyGPUMatrix, α::Number, β::Number) =
-    generic_spmm!(C, tA, tB, A, B, α, β)
+    spmm!(C, tA, tB, A, B, α, β)
 LinearAlgebra.mul!(C::AnyGPUMatrix, tA::AbstractChar, tB::AbstractChar, A::AnyGPUMatrix,
                    B::GPUSparseMatrix, α::Number, β::Number) =
-    generic_spmm!(C, tA, tB, A, B, α, β)
+    spmm!(C, tA, tB, A, B, α, β)
 
 # Julia < 1.13 dispatches on the non-public `generic_matvecmul!` and `generic_matmatmul!`
 # instead, as for dense arrays (see `linalg.jl`)
