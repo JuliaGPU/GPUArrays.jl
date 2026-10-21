@@ -177,7 +177,8 @@ end
 
 function LinearAlgebra.diag(A::GPUSparseMatrix, k::Integer=0)
     m, n = size(A)
-    -m <= k <= n || throw(ArgumentError("requested diagonal, $k, must be at least $(-m) and at most $n for a $m×$n matrix"))
+    k=Int(k)
+    (k<=-m || k>=n) && return sparse_similar(A.nzVal,0)
     len = k >= 0 ? min(m, n - k) : min(m + k, n)
     d = sparse_similar(A.nzVal, len)
     len == 0 && return d
@@ -185,6 +186,15 @@ function LinearAlgebra.diag(A::GPUSparseMatrix, k::Integer=0)
     diagonal_kernel(get_backend(B))(d, compressed_ptr(B), compressed_ind(B), B.nzVal, k,
                                     B isa GPUSparseMatrixCSR; ndrange=len)
     return d
+end
+
+function LinearAlgebra.diag(A::Transpose{<:Any,<:GPUSparseMatrix},k::Integer=0)
+    k=Int(k)
+    k==typemin(Int) ? sparse_similar(nonzeros(parent(A)),0) : diag(parent(A),-k)
+end
+function LinearAlgebra.diag(A::Adjoint{<:Any,<:GPUSparseMatrix},k::Integer=0)
+    k=Int(k)
+    k==typemin(Int) ? sparse_similar(nonzeros(parent(A)),0) : conj.(diag(parent(A),-k))
 end
 
 function LinearAlgebra.tr(A::GPUSparseMatrix)

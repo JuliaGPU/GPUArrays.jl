@@ -1253,7 +1253,7 @@ function sparse_structure(AT, eltypes)
                 @test d isa AT{ET}
                 @test Array(d) == diag(A, k)
             end
-            @test_throws ArgumentError diag(dA, 7)
+            @test isempty(diag(dA, 7))
             @test tr(gpu_sparse(AT, S, A[1:6, 1:6])) ≈ tr(A[1:6, 1:6])
 
             # reshaping (SparseArrays gives a lazy wrapper), keeping the stored zero
