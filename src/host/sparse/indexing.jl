@@ -13,19 +13,16 @@ end
 
 function Base.getindex(A::GPUSparseMatrixCSR, i::Integer, j::Integer)
     @boundscheck checkbounds(A, i, j)
-    assertscalar("getindex")
     stored_value(A, A.colVal, Int(A.rowPtr[i]), Int(A.rowPtr[i+1]) - 1, j)
 end
 
 function Base.getindex(A::GPUSparseMatrixCSC, i::Integer, j::Integer)
     @boundscheck checkbounds(A, i, j)
-    assertscalar("getindex")
     stored_value(A, A.rowVal, Int(A.colPtr[j]), Int(A.colPtr[j+1]) - 1, i)
 end
 
 function Base.getindex(A::GPUSparseMatrixCOO, i::Integer, j::Integer)
     @boundscheck checkbounds(A, i, j)
-    assertscalar("getindex")
     # the entries of row `i` are contiguous, and sorted by column
     lo = searchsortedfirst(A.rowInd, i)
     hi = searchsortedlast(A.rowInd, i)
@@ -34,7 +31,6 @@ end
 
 function Base.getindex(x::GPUSparseVector, i::Integer)
     @boundscheck checkbounds(x, i)
-    assertscalar("getindex")
     stored_value(x, x.nzInd, 1, nnz(x), i)
 end
 
@@ -124,9 +120,9 @@ function sparse_getindex(A::GPUSparseMatrix, I, J)
     end
     dims = (length(range_index(I, m)), length(range_index(J, n)))
     if A isa GPUSparseMatrixCSR
-        GPUSparseMatrixCSR(compress(rows, dims[1]), cols, vals, dims)
+        GPUSparseMatrixCSR(compress(rows, dims[1], eltype(A.rowPtr)), cols, vals, dims)
     elseif A isa GPUSparseMatrixCSC
-        GPUSparseMatrixCSC(compress(cols, dims[2]), rows, vals, dims)
+        GPUSparseMatrixCSC(compress(cols, dims[2], eltype(A.colPtr)), rows, vals, dims)
     else
         GPUSparseMatrixCOO(rows, cols, vals, dims)
     end

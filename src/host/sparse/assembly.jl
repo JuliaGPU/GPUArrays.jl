@@ -1,53 +1,21 @@
 # assembly of sparse arrays from coordinates
 
 ## COV_EXCL_START
-# a sort key that is unique per input entry, ordering the runs of equal coordinates and,
-# within each run, the entries by their position in the input
-@kernel function positional_key_kernel(keys, runs, perm, n)
-    k = @index(Global, Linear)
-    if k <= length(keys)
-        @inbounds keys[k] = (Int64(runs[k]) - 1) * n + (Int64(perm[k]) - 1)
-    end
-end
+unpack_sparse_key(key::Integer, nminor) = ((key - 1) ÷ nminor + 1, (key - 1) % nminor + 1)
+unpack_sparse_key(key::Tuple{Integer,Integer}, nminor) = key
 
 @kernel function unpack_key_kernel(major, minor, keys, nminor)
     k = @index(Global, Linear)
     if k <= length(keys)
-        key = @inbounds keys[k] - 1
-        @inbounds major[k] = (key ÷ nminor + 1) % eltype(major)
-        @inbounds minor[k] = (key % nminor + 1) % eltype(minor)
+        i, j = unpack_sparse_key(@inbounds(keys[k]), nminor)
+        @inbounds major[k] = i % eltype(major)
+        @inbounds minor[k] = j % eltype(minor)
     end
 end
 ## COV_EXCL_STOP
 
-# whether the order in which `combine` folds repeated entries of type `T` cannot change
-# the result, so that the assembly does not need to restore the input order after an
-# unstable sort. Floating-point `+` and `*` are commutative but not associative.
-order_independent(combine, ::Type) = false
-order_independent(::Union{typeof(max), typeof(min), typeof(|), typeof(&)}, ::Type) = true
-order_independent(::Union{typeof(+), typeof(*)}, ::Type{<:Union{Integer,Complex{<:Integer}}}) = true
-
-# the order in which to visit the entries so that equal keys are contiguous and appear in
-# their input order. `sortperm` need not be stable (Metal's is not), so the input order is
-# restored with a second sort on keys that are unique per entry.
-function stable_sortperm(keys::AbstractVector{Int64}; stable::Bool)
-    perm = sortperm(keys)
-    stable || return perm
-    n = length(keys)
-    widemul(n, n) < typemax(Int64) ||
-        throw(ArgumentError("cannot assemble $n entries in input order"))
-    sorted = keys[perm]
-    runs = accumulate(Base.add_sum, run_heads(sorted))
-    free_buffer!(sorted)
-    unique_keys = similar(keys)
-    if !isempty(keys)
-        positional_key_kernel(get_backend(keys))(unique_keys, runs, perm, n; ndrange=n)
-    end
-    free_buffer!(runs)
-    perm2 = sortperm(unique_keys)
-    free_buffer!(unique_keys)
-    return perm[perm2]
-end
+# AK's stable permutation sort preserves relative operand order within each run.
+stable_sortperm(keys::AbstractVector) = sortperm(keys; alg=Base.Sort.MergeSort)
 
 function check_coordinates(I::AbstractVector, m::Integer, name)
     isempty(I) || all(i -> 1 <= i <= m, I) ||
@@ -59,14 +27,14 @@ end
     GPUArrays.generic_assemble(I, J, V, m, n, combine; major=:col)
 
 Assemble the entries `V[k]` at coordinates `(I[k], J[k])` of an `m`×`n` sparse matrix on
-the device, combining the values of repeated coordinates with `combine`, from left to
-right in input order (as `sparse(I, J, V, m, n, combine)` does). Returns the sorted, unique
+the device, combining duplicate values with `combine` while preserving their relative input
+order. Parenthesization is unspecified: custom combiners must be associative,
+although commutativity is not required. Floating-point rounding may vary. Returns the sorted, unique
 major and minor indices of the entries (rows and columns for `major=:row`, columns and
 rows for `major=:col`) and their values, from which any format can be built.
 
-The coordinates are sorted on packed `Int64` keys; a second sort restores the input order
-of repeated coordinates, unless the order cannot change the result (e.g. `+` on integers,
-or `max`). `combine` must be associative.
+Coordinates use packed Int64 keys where representable, otherwise lexicographic tuple
+keys. A single stable permutation sort preserves duplicate order.
 """
 function generic_assemble(I::AbstractVector, J::AbstractVector, V::AbstractVector,
                           m::Integer, n::Integer, combine; major::Symbol=:col)
@@ -81,7 +49,7 @@ function generic_assemble(I::AbstractVector, J::AbstractVector, V::AbstractVecto
                            throw(ArgumentError("major must be :row or :col"))
 
     keys = packed_keys(majors, minors, dims)
-    perm = stable_sortperm(keys; stable=!order_independent(combine, eltype(V)))
+    perm = stable_sortperm(keys)
     sorted_keys = keys[perm]
     sorted_vals = V[perm]
     free_buffer!(keys)
@@ -90,8 +58,8 @@ function generic_assemble(I::AbstractVector, J::AbstractVector, V::AbstractVecto
     free_buffer!(sorted_keys)
     free_buffer!(sorted_vals)
 
-    out_major = similar(I, Ti, length(unique_keys))
-    out_minor = similar(I, Ti, length(unique_keys))
+    out_major = sparse_similar(I, Ti, length(unique_keys))
+    out_minor = sparse_similar(I, Ti, length(unique_keys))
     if !isempty(unique_keys)
         unpack_key_kernel(get_backend(unique_keys))(out_major, out_minor, unique_keys,
                                                     Int64(dims[2]); ndrange=length(unique_keys))
@@ -107,14 +75,15 @@ const AnyGPUIndices = AnyGPUVector{<:Integer}
 
 # `combine` can be any callable, with separate methods for functions to be more specific
 # than SparseArrays' own
-function assemble_matrix(I, J, V, m, n, combine, fmt::Symbol)
+function assemble_matrix(I, J, V, m, n, combine, fmt::Symbol;
+                         pointer_type::Type=promote_type(Int, eltype(I), eltype(J)))
     S = sparse_format(fmt)
     major, minor, vals = generic_assemble(I, J, V, m, n, combine;
                                           major=S <: GPUSparseMatrixCSC ? :col : :row)
     if S <: GPUSparseMatrixCSC
-        GPUSparseMatrixCSC(compress(major, n), minor, vals, (m, n))
+        GPUSparseMatrixCSC(compress(major, n, pointer_type), minor, vals, (m, n))
     elseif S <: GPUSparseMatrixCSR
-        GPUSparseMatrixCSR(compress(major, m), minor, vals, (m, n))
+        GPUSparseMatrixCSR(compress(major, m, pointer_type), minor, vals, (m, n))
     else
         GPUSparseMatrixCOO(major, minor, vals, (m, n))
     end
@@ -126,7 +95,7 @@ for C in (:Function, :Any)
             assemble_matrix(I, J, V, m, n, combine, fmt)
         SparseArrays.sparse(I::AnyGPUIndices, J::AnyGPUIndices, v::Number, m::Integer,
                             n::Integer, combine::$C; fmt::Symbol=:csc) =
-            assemble_matrix(I, J, fill!(similar(I, typeof(v)), v), m, n, combine, fmt)
+            assemble_matrix(I, J, fill!(sparse_similar(I, typeof(v)), v), m, n, combine, fmt)
     end
 end
 
@@ -156,7 +125,7 @@ end
 sparse_extent(I::AbstractVector) = isempty(I) ? 0 : Int(maximum(I))
 
 function assemble_vector(I, V, n, combine)
-    J = fill!(similar(I), one(eltype(I)))
+    J = fill!(sparse_similar(I), one(eltype(I)))
     nzInd, _, vals = generic_assemble(I, J, V, n, 1, combine; major=:row)
     GPUSparseVector(nzInd, vals, n)
 end
@@ -165,7 +134,7 @@ for C in (:Function, :Any)
         SparseArrays.sparsevec(I::AnyGPUIndices, V::AnyGPUVector, n::Integer, combine::$C) =
             assemble_vector(I, V, n, combine)
         SparseArrays.sparsevec(I::AnyGPUIndices, v::Number, n::Integer, combine::$C) =
-            assemble_vector(I, fill!(similar(I, typeof(v)), v), n, combine)
+            assemble_vector(I, fill!(sparse_similar(I, typeof(v)), v), n, combine)
         SparseArrays.sparsevec(I::AnyGPUIndices, V::Union{AnyGPUVector,Number}, combine::$C) =
             sparsevec(I, V, sparse_extent(I), combine)
     end
@@ -213,17 +182,17 @@ end
 function spdiagm_gpu(dims, kv::Pair{<:Integer,<:AnyGPUVector}...)
     # the extent that holds every diagonal, as in SparseArrays
     m, n = if dims === nothing
-        extent = maximum(((k, v),) -> length(v) + abs(k), kv)
+        extent = maximum(((k, v),) -> Base.checked_add(length(v), Base.Checked.checked_abs(k)), kv)
         (extent, extent)
     else
         dims
     end
     Tv = mapreduce(((_, v),) -> eltype(v), promote_type, kv)
     proto = last(first(kv))
-    total = sum(((_, v),) -> length(v), kv)
-    I = similar(proto, Int, total)
-    J = similar(proto, Int, total)
-    V = similar(proto, Tv, total)
+    total = foldl((n, pair) -> Base.checked_add(n, length(last(pair))), kv; init=0)
+    I = sparse_similar(proto, Int, total)
+    J = sparse_similar(proto, Int, total)
+    V = sparse_similar(proto, Tv, total)
     offset = 0
     for (k, v) in kv
         len = length(v)

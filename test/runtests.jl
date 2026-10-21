@@ -23,6 +23,7 @@ for AT in (:JLArray, :Array), name in keys(TestSuite.tests)
 end
 
 # the sparse implementation should not add method ambiguities (the dense code has a few)
+testsuite["sparse/v13-regressions"] = :(include("sparse-v13-regressions.jl"))
 testsuite["sparse/ambiguities"] = quote
     import GPUArrays
     sparse_sources = (joinpath("src", "host", "sparse"), joinpath("JLArrays", "src", "sparse.jl"),

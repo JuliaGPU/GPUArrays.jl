@@ -26,15 +26,15 @@ end
 # the conjugation of 'C' left to the kernel. Buffers of `A` itself are borrowed, others are
 # temporary.
 function csr_operand(A::GPUSparseMatrixCSR, t::AbstractChar)
-    B = t == 'N' ? A : transpose_view(GPUSparseMatrixCSC(A))
+    B = t == 'N' ? A : transpose_view(generic_regroup(A))
     return B.rowPtr, B.colVal, B.nzVal
 end
 function csr_operand(A::GPUSparseMatrixCSC, t::AbstractChar)
-    B = t == 'N' ? GPUSparseMatrixCSR(A) : transpose_view(A)
+    B = t == 'N' ? generic_regroup(A) : transpose_view(A)
     return B.rowPtr, B.colVal, B.nzVal
 end
 function csr_operand(A::GPUSparseMatrixCOO, t::AbstractChar)
-    t == 'N' || return csr_operand(GPUSparseMatrixCSC(A), t)
+    t == 'N' || return csr_operand(generic_regroup(generic_compress(A)), t)
     # a COO matrix is a CSR matrix with explicit row indices
     return compress(A.rowInd, size(A, 1)), A.colInd, A.nzVal
 end
@@ -66,6 +66,12 @@ strict_lower_entries(i, j, v) = j < i ? v : zero(v)
 upper_hermitian_entries(i, j, v) = j > i ? v : j == i ? oftype(v, real(v)) : zero(v)
 lower_hermitian_entries(i, j, v) = j < i ? v : j == i ? oftype(v, real(v)) : zero(v)
 
+entry_selected(::typeof(all_entries), i, j) = true
+entry_selected(::Union{typeof(upper_entries),typeof(upper_hermitian_entries)}, i, j) = j >= i
+entry_selected(::Union{typeof(lower_entries),typeof(lower_hermitian_entries)}, i, j) = j <= i
+entry_selected(::typeof(strict_upper_entries), i, j) = j > i
+entry_selected(::typeof(strict_lower_entries), i, j) = j < i
+
 value_op(t::AbstractChar) = t == 'C' ? conj : identity
 
 
@@ -79,6 +85,7 @@ value_op(t::AbstractChar) = t == 'C' ? conj : identity
         acc = zero(T)
         for k in @inbounds(ptr[i]):@inbounds(ptr[i+1] - one(eltype(ptr)))
             j = @inbounds ind[k]
+            entry_selected(entry, i, j) || continue
             v = entry(i, j, valop(@inbounds val[k]))
             acc += T(v) * T(@inbounds x[j])
         end
@@ -95,6 +102,7 @@ end
         acc = zero(T)
         for k in @inbounds(ptr[i]):@inbounds(ptr[i+1] - one(eltype(ptr)))
             l = @inbounds ind[k]
+            entry_selected(entry, i, l) || continue
             v = entry(i, l, valop(@inbounds val[k]))
             b = tB == 'N' ? @inbounds(B[l, j]) :
                 tB == 'T' ? @inbounds(B[j, l]) : conj(@inbounds(B[j, l]))
@@ -114,6 +122,7 @@ end
         acc = zero(T)
         for k in @inbounds(ptr[j]):@inbounds(ptr[j+1] - one(eltype(ptr)))
             l = @inbounds ind[k]
+            entry_selected(entry, l, j) || continue
             v = entry(l, j, valop(@inbounds val[k]))
             a = tA == 'N' ? @inbounds(A[i, l]) :
                 tA == 'T' ? @inbounds(A[l, i]) : conj(@inbounds(A[l, i]))
@@ -161,7 +170,7 @@ end
 function dense_operand(B, t::AbstractChar)
     t in ('N', 'T', 'C') && return B, t
     LinearAlgebra.checksquare(B)
-    out = similar(B, eltype(B), size(B))
+    out = sparse_similar(B, eltype(B), size(B))
     isempty(out) ||
         materialize_symmetric_kernel(get_backend(out))(out, B, t in ('S', 'H'), t in ('H', 'h');
                                                        ndrange=size(out))
@@ -273,12 +282,12 @@ const GPUSparseMatrixOperand = Union{GPUSparseMatrix, Transpose{<:Any,<:GPUSpars
                                      Hermitian{<:Any,<:GPUSparseMatrix}}
 function Base.:(*)(A::AnyGPUMatrix, B::GPUSparseMatrixOperand)
     T = Base.promote_op(LinearAlgebra.matprod, eltype(A), eltype(B))
-    return mul!(similar(A, T, (size(A, 1), size(B, 2))), A, B)
+    return mul!(sparse_similar(A, T, (size(A, 1), size(B, 2))), A, B)
 end
 
 # A sparse vector operand is densified, as CUDA.jl does. (A product with a sparse vector
 # could skip its implicit zeros, but that only pays for very sparse vectors.)
-densify(x::GPUSparseVector) = copyto!(similar(x.nzVal, eltype(x), length(x)), x)
+densify(x::GPUSparseVector) = copyto!(sparse_similar(x.nzVal, eltype(x), length(x)), x)
 
 const GPUMatrixOperand = Union{GPUSparseMatrix, AnyGPUMatrix}
 LinearAlgebra.mul!(C::AnyGPUVector, tA::AbstractChar, A::GPUMatrixOperand, B::GPUSparseVector,
@@ -296,11 +305,15 @@ end
 # like dense × sparse, LinearAlgebra would allocate a sparse destination
 function Base.:(*)(A::Union{AnyGPUMatrix,GPUSparseMatrixOperand}, x::GPUSparseVector)
     T = Base.promote_op(LinearAlgebra.matprod, eltype(A), eltype(x))
-    return mul!(similar(x.nzVal, T, size(A, 1)), A, x)
+    return mul!(sparse_similar(x.nzVal, T, size(A, 1)), A, x)
 end
 
 
 ## sparse × sparse
+
+# Nonnegative counts form an associative saturating monoid. Saturation is rejected
+# before candidate allocation; neither a device scan nor its final count may wrap.
+saturating_count_add(a, b) = b > typemax(Int64) - a ? typemax(Int64) : a + b
 
 ## COV_EXCL_START
 # the number of products every stored entry `A[i, l]` contributes: the length of row `l`
@@ -339,7 +352,7 @@ of `B` is materialized, then the products are summed per coordinate as in
 generic implementation behind `A * B`; hash-based accumulation with atomic insertion would
 avoid materializing all products.
 """
-function generic_spgemm(A::GPUSparseMatrix, B::GPUSparseMatrix)
+function generic_spgemm(A::GPUSparseMatrix, B::GPUSparseMatrix; max_temp_bytes::Integer=1 << 30)
     size(A, 2) == size(B, 1) ||
         throw(DimensionMismatch("A has dimensions $(size(A)), B has dimensions $(size(B))"))
     m, n = size(A, 1), size(B, 2)
@@ -347,19 +360,28 @@ function generic_spgemm(A::GPUSparseMatrix, B::GPUSparseMatrix)
     Ti = promote_type(indtype(A), indtype(B))
     Aptr, Aind, Aval = csr_operand(A, 'N')
     Bptr, Bind, Bval = csr_operand(B, 'N')
-    Arow = expand_ptr(Aptr, length(Aval))
+    Tp = promote_pointer_type(A, B)
+    Arow = expand_ptr(Aptr, length(Aval), indtype(A))
 
-    counts = similar(Aval, Int64, length(Aval))
+    counts = sparse_similar(Aval, Int64, length(Aval))
     if !isempty(counts)
         spgemm_counts_kernel(get_backend(counts))(counts, Aind, Bptr; ndrange=length(counts))
     end
-    offsets = accumulate(+, counts)
+    offsets = accumulate(saturating_count_add, counts)
     free_buffer!(counts)
     total = isempty(offsets) ? 0 : Int(@allowscalar offsets[end])
+    total < typemax(Int) || throw(ArgumentError("SpGEMM candidate count exceeds host indexing capacity"))
+    # Conservative bound for candidate coordinates/values, sort permutations and keys,
+    # assembly gathers, and offsets. Exact peak use depends on the sorting workspace.
+    bytes_per_candidate = Base.checked_add(8 * sizeof(Int),
+        Base.checked_add(4 * sizeof(Ti), 4 * sizeof(product_accumulator(eltype(A), eltype(B)))))
+    estimated = Base.checked_add(Base.checked_mul(total, bytes_per_candidate),
+                                 Base.checked_mul(length(Aval), 3 * sizeof(Int)))
+    estimated <= max_temp_bytes || throw(ArgumentError("portable SpGEMM temporary-memory estimate $estimated bytes exceeds max_temp_bytes=$max_temp_bytes; explicitly raise the limit or select a vendor implementation"))
 
-    I = similar(Aind, Ti, total)
-    J = similar(Aind, Ti, total)
-    V = similar(Aval, product_accumulator(eltype(A), eltype(B)), total)
+    I = sparse_similar(Aind, Ti, total)
+    J = sparse_similar(Aind, Ti, total)
+    V = sparse_similar(Aval, product_accumulator(eltype(A), eltype(B)), total)
     if total > 0
         spgemm_expand_kernel(get_backend(V))(I, J, V, offsets, Arow, Aind, Aval, Bptr, Bind,
                                              Bval; ndrange=total)
@@ -367,8 +389,8 @@ function generic_spgemm(A::GPUSparseMatrix, B::GPUSparseMatrix)
     free_buffer!(offsets)
     free_buffer!(Arow)
     fmt = A isa GPUSparseMatrixCSC ? :csc : A isa GPUSparseMatrixCSR ? :csr : :coo
-    C = assemble_matrix(I, J, V, m, n, +, fmt)
-    return eltype(C) == T ? C : with_eltypes(C, T, Ti)
+    C = assemble_matrix(I, J, V, m, n, +, fmt; pointer_type=Tp)
+    return eltype(C) == T ? C : with_values(C, T)
 end
 
 # a sparse operand without a lazy wrapper
@@ -435,7 +457,7 @@ function LinearAlgebra.exp(A::GPUSparseMatrix; threshold=1e-7, nonzero_tol=1e-14
     # scale A to norm at most 1 by a power of two
     scaling = max(one(real(T)), nextpow(2, max(norm(A, Inf), floatmin(real(T)))))
     A = A ./ T(scaling)
-    Id = spdiagm(0 => fill!(similar(nonzeros(A), n), one(T)))
+    Id = spdiagm(0 => fill!(sparse_similar(nonzeros(A), n), one(T)))
     P = convert(matrix_format(A), Id)
     term = P
     k = 1

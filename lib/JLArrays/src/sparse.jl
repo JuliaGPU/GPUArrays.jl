@@ -2,8 +2,8 @@
 # them and adds constructors
 
 const JLSparseVector{Tv,Ti} = GPUSparseVector{Tv,Ti,<:JLVector{Ti},<:JLVector{Tv}}
-const JLSparseMatrixCSR{Tv,Ti} = GPUSparseMatrixCSR{Tv,Ti,<:JLVector{Ti},<:JLVector{Tv}}
-const JLSparseMatrixCSC{Tv,Ti} = GPUSparseMatrixCSC{Tv,Ti,<:JLVector{Ti},<:JLVector{Tv}}
+const JLSparseMatrixCSR{Tv,Ti} = GPUSparseMatrixCSR{Tv,Ti,<:JLVector{<:Integer},<:JLVector{Ti},<:JLVector{Tv}}
+const JLSparseMatrixCSC{Tv,Ti} = GPUSparseMatrixCSC{Tv,Ti,<:JLVector{<:Integer},<:JLVector{Ti},<:JLVector{Tv}}
 const JLSparseMatrixCOO{Tv,Ti} = GPUSparseMatrixCOO{Tv,Ti,<:JLVector{Ti},<:JLVector{Tv}}
 const JLSparseMatrix = Union{JLSparseMatrixCSR,JLSparseMatrixCSC,JLSparseMatrixCOO}
 

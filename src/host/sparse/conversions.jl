@@ -3,20 +3,19 @@
 ## to the host
 
 SparseArrays.SparseMatrixCSC(A::GPUSparseMatrixCSC) =
-    SparseMatrixCSC(size(A)..., Array(A.colPtr), Array(A.rowVal), Array(A.nzVal))
+    sparse_csc(Array(A.colPtr), Array(A.rowVal), Array(A.nzVal), size(A))
 # the CSR buffers are those of the transpose in CSC
 SparseArrays.SparseMatrixCSC(A::GPUSparseMatrixCSR) =
-    copy(transpose(SparseMatrixCSC(reverse(size(A))..., Array(A.rowPtr), Array(A.colVal),
-                                   Array(A.nzVal))))
+    copy(transpose(sparse_csc(Array(A.rowPtr), Array(A.colVal), Array(A.nzVal), reverse(size(A)))))
 function SparseArrays.SparseMatrixCSC(A::GPUSparseMatrixCOO)
     rowInd = Array(A.rowInd)
-    rowPtr = zeros(eltype(rowInd), size(A, 1) + 1)
+    rowPtr = zeros(promote_type(Int, eltype(rowInd)), Base.checked_add(size(A, 1), 1))
     rowPtr[1] = 1
     for i in rowInd
         rowPtr[i + 1] += one(eltype(rowPtr))
     end
     cumsum!(rowPtr, rowPtr)
-    copy(transpose(SparseMatrixCSC(reverse(size(A))..., rowPtr, Array(A.colInd),
+    copy(transpose(SparseMatrixCSC(reverse(size(A))..., rowPtr, Vector{eltype(rowPtr)}(Array(A.colInd)),
                                    Array(A.nzVal))))
 end
 SparseArrays.SparseMatrixCSC(x::GPUSparseVector) = SparseMatrixCSC(SparseVector(x))
@@ -57,8 +56,10 @@ Adapt.adapt_structure(to, A::GPUSparseMatrixCOO) =
 Adapt.adapt_structure(to, x::GPUSparseVector) =
     sparse_vector(adapt(to, x.nzInd), adapt(to, x.nzVal), length(x))
 
-sparse_csc(colPtr::Vector, rowVal::Vector, nzVal::Vector, dims) =
-    SparseMatrixCSC(dims..., colPtr, rowVal, nzVal)
+function sparse_csc(colPtr::Vector{Tp}, rowVal::Vector{Ti}, nzVal::Vector, dims) where {Tp,Ti}
+    T = promote_type(Tp, Ti)
+    SparseMatrixCSC(dims..., convert(Vector{T}, colPtr), convert(Vector{T}, rowVal), nzVal)
+end
 sparse_csc(colPtr, rowVal, nzVal, dims) = GPUSparseMatrixCSC(colPtr, rowVal, nzVal, dims)
 sparse_vector(nzInd::Vector, nzVal::Vector, len) = SparseVector(len, nzInd, nzVal)
 sparse_vector(nzInd, nzVal, len) = GPUSparseVector(nzInd, nzVal, len)
@@ -68,7 +69,7 @@ sparse_vector(nzInd, nzVal, len) = GPUSparseVector(nzInd, nzVal, len)
 # values, so that a target with an element type (`Array{Float32}`, or the
 # `CuArray{Float32,1,M}` that `cu` adapts to) only converts the values.
 move_buffer(proto::AbstractVector, src::AbstractVector) =
-    copyto!(similar(proto, eltype(src), length(src)), src)
+    copyto!(sparse_similar(proto, eltype(src), length(src)), src)
 
 function Adapt.adapt_structure(to::Type{<:DenseArray}, A::GPUSparseMatrixCSR)
     nzVal = adapt(to, A.nzVal)
@@ -133,7 +134,7 @@ GPUSparseVector(x::GPUSparseVector) = copy(x)
 # typed forms: convert the format, then the element and index types
 for S in (:GPUSparseMatrixCSR, :GPUSparseMatrixCSC, :GPUSparseMatrixCOO, :GPUSparseVector)
     @eval begin
-        $S{Tv}(A::AbstractGPUSparseArray) where {Tv} = $S{Tv,indtype(A)}(A)
+        $S{Tv}(A::AbstractGPUSparseArray) where {Tv} = with_values($S(A), Tv)
         $S{Tv,Ti}(A::AbstractGPUSparseArray) where {Tv,Ti} = with_eltypes($S(A), Tv, Ti)
         $S{Tv,Ti}(A::$S) where {Tv,Ti} = with_eltypes(A, Tv, Ti; copy=true)
     end
@@ -142,9 +143,11 @@ end
 # `A` with the given element and index types, reusing its buffers where they already match
 # unless `copy` is set
 function with_eltypes(A::GPUSparseArray, ::Type{Tv}, ::Type{Ti}; copy::Bool=false) where {Tv,Ti}
-    Tv == eltype(A) && Ti == indtype(A) && return copy ? Base.copy(A) : A
+    Tv == eltype(A) && Ti == indtype(A) &&
+        (!(A isa GPUSparseMatrixCompressed) || Ti == eltype(compressed_ptr(A))) &&
+        return copy ? Base.copy(A) : A
     check_sparse_dims(Ti, size(A))
-    check_sparse_nnz(Ti, nnz(A))
+    A isa GPUSparseMatrixCompressed && check_sparse_nnz(Ti, nnz(A))
     buffers = map(fieldnames(typeof(A))) do field
         buf = getfield(A, field)
         if field === :nzVal
@@ -156,6 +159,11 @@ function with_eltypes(A::GPUSparseArray, ::Type{Tv}, ::Type{Ti}; copy::Bool=fals
         end
     end
     return sparse_format_type(A)(buffers...)
+end
+function with_values(A::GPUSparseArray, ::Type{Tv}) where {Tv}
+    B = similar(A, Tv)
+    copyto!(nonzeros(B), nonzeros(A))
+    return B
 end
 sparse_format_type(::GPUSparseMatrixCSR) = GPUSparseMatrixCSR
 sparse_format_type(::GPUSparseMatrixCSC) = GPUSparseMatrixCSC
@@ -189,7 +197,7 @@ Convert between CSR and COO on the device, which have the same order of stored e
 expand the row pointers into a row index per entry, or compress them back.
 """
 generic_expand(A::GPUSparseMatrixCSR) =
-    GPUSparseMatrixCOO(expand_ptr(A.rowPtr, nnz(A)), copy(A.colVal), copy(A.nzVal), size(A))
+    GPUSparseMatrixCOO(expand_ptr(A.rowPtr, nnz(A), indtype(A)), copy(A.colVal), copy(A.nzVal), size(A))
 generic_compress(A::GPUSparseMatrixCOO) =
     GPUSparseMatrixCSR(compress(A.rowInd, size(A, 1)), copy(A.colInd), copy(A.nzVal), size(A))
 GPUSparseMatrixCOO(A::GPUSparseMatrixCSR) = generic_expand(A)
@@ -198,7 +206,7 @@ GPUSparseMatrixCSR(A::GPUSparseMatrixCOO) = generic_compress(A)
 # CSC ↔ COO through CSR, borrowing the buffers of the intermediate
 function GPUSparseMatrixCOO(A::GPUSparseMatrixCSC)
     B = GPUSparseMatrixCSR(A)
-    GPUSparseMatrixCOO(expand_ptr(B.rowPtr, nnz(B)), B.colVal, B.nzVal, size(A))
+    GPUSparseMatrixCOO(expand_ptr(B.rowPtr, nnz(B), indtype(B)), B.colVal, B.nzVal, size(A))
 end
 function GPUSparseMatrixCSC(A::GPUSparseMatrixCOO)
     B = GPUSparseMatrixCSR(compress(A.rowInd, size(A, 1)), A.colInd, A.nzVal, size(A))
@@ -282,6 +290,7 @@ function Base.copyto!(dst::AbstractGPUArray, src::GPUSparseArray)
 end
 
 Base.copyto!(dst::Array, src::GPUSparseArray) = copyto!(dst, Array(src))
+Base.copyto!(dst::Vector, src::GPUSparseVector) = copyto!(dst, Array(src))
 
 
 ## from dense arrays
@@ -305,9 +314,8 @@ function dense_entries(A::AbstractGPUMatrix, ::Type{Tv}, ::Type{Ti}, major::Symb
     B = major === :col ? A : permutedims(A)
     lin = findall(!iszero, vec(B))
     n = length(lin)
-    check_sparse_nnz(Ti, n)
-    minor_ind = similar(lin, Ti, n)
-    major_ind = similar(lin, Ti, n)
+    minor_ind = sparse_similar(lin, Ti, n)
+    major_ind = sparse_similar(lin, Ti, n)
     if n > 0
         split_linear_kernel(get_backend(lin))(minor_ind, major_ind, lin, size(B, 1); ndrange=n)
     end
@@ -319,11 +327,11 @@ end
 
 function GPUSparseMatrixCSC{Tv,Ti}(A::AbstractGPUMatrix) where {Tv,Ti}
     cols, rows, vals = dense_entries(A, Tv, Ti, :col)
-    GPUSparseMatrixCSC(compress(cols, size(A, 2)), rows, vals, size(A))
+    GPUSparseMatrixCSC(compress(cols, size(A, 2), Ti), rows, vals, size(A))
 end
 function GPUSparseMatrixCSR{Tv,Ti}(A::AbstractGPUMatrix) where {Tv,Ti}
     rows, cols, vals = dense_entries(A, Tv, Ti, :row)
-    GPUSparseMatrixCSR(compress(rows, size(A, 1)), cols, vals, size(A))
+    GPUSparseMatrixCSR(compress(rows, size(A, 1), Ti), cols, vals, size(A))
 end
 function GPUSparseMatrixCOO{Tv,Ti}(A::AbstractGPUMatrix) where {Tv,Ti}
     rows, cols, vals = dense_entries(A, Tv, Ti, :row)
@@ -332,7 +340,6 @@ end
 function GPUSparseVector{Tv,Ti}(x::AbstractGPUVector) where {Tv,Ti}
     check_sparse_dims(Ti, size(x))
     lin = findall(!iszero, x)
-    check_sparse_nnz(Ti, length(lin))
     vals = x[lin]
     GPUSparseVector(convert_buffer(Ti, lin), eltype(vals) == Tv ? vals : convert_buffer(Tv, vals),
                     length(x))
@@ -401,7 +408,7 @@ end
 # the coordinates and values of the stored entries, in column-major order like SparseArrays
 function SparseArrays.findnz(A::GPUSparseMatrix)
     C = A isa GPUSparseMatrixCSC ? copy(A) : GPUSparseMatrixCSC(A)
-    return C.rowVal, expand_ptr(C.colPtr, nnz(C)), C.nzVal
+    return C.rowVal, expand_ptr(C.colPtr, nnz(C), indtype(C)), C.nzVal
 end
 SparseArrays.findnz(x::GPUSparseVector) = (copy(x.nzInd), copy(x.nzVal))
 
@@ -409,9 +416,9 @@ SparseArrays.findnz(x::GPUSparseVector) = (copy(x.nzInd), copy(x.nzVal))
 ## element types
 
 Base.float(A::GPUSparseArray) =
-    eltype(A) <: AbstractFloat ? A : with_eltypes(A, float(eltype(A)), indtype(A))
+    eltype(A) <: AbstractFloat ? A : with_values(A, float(eltype(A)))
 Base.complex(A::GPUSparseArray) =
-    eltype(A) <: Complex ? A : with_eltypes(A, complex(eltype(A)), indtype(A))
+    eltype(A) <: Complex ? A : with_values(A, complex(eltype(A)))
 Base.real(A::GPUSparseArray) = eltype(A) <: Real ? A : real.(A)
 Base.imag(A::GPUSparseArray) = eltype(A) <: Real ? zero(A) : imag.(A)
 

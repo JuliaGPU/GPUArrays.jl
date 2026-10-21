@@ -32,6 +32,7 @@ using GPUArrays: GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO, GPU
     sparse_bool(AT)
 end
 
+
 const sparse_matrix_formats = (GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO)
 
 # A GPU sparse matrix of format `S` with the entries of `A`, built directly from buffers
@@ -104,7 +105,8 @@ function sparse_construction(AT, eltypes)
             @test nonzeros(dA) isa AT{ET}
             check_structure(dA)
             @test same_sparse(SparseMatrixCSC(dA), A)
-            @test SparseMatrixCSC(dA) isa SparseMatrixCSC{ET,Ti}
+                Thost = S === GPUSparseMatrixCOO ? promote_type(Int, Ti) : Ti
+                @test SparseMatrixCSC(dA) isa SparseMatrixCSC{ET,Thost}
             @test Array(dA) == Array(A)
             @test collect(dA) == Array(A)
             @test get_backend(dA) == get_backend(AT(ET[]))
@@ -285,7 +287,11 @@ function sparse_transfer(AT, eltypes)
         @test adapt(Array, dx) isa SparseVector{ET,Int32}
         for S in (GPUSparseMatrixCSR, GPUSparseMatrixCOO)
             B = adapt(Array, gpu_sparse(AT, S, A))
-            @test B isa S{ET,Int32,Vector{Int32},Vector{ET}}
+            if S === GPUSparseMatrixCSR
+                @test B isa S{ET,Int32,Vector{Int32},Vector{Int32},Vector{ET}}
+            else
+                @test B isa S{ET,Int32,Vector{Int32},Vector{ET}}
+            end
             @test same_sparse(SparseMatrixCSC(B), A)
         end
 
@@ -352,7 +358,8 @@ function sparse_display(AT, eltypes)
             host_str = sprint(show, MIME"text/plain"(), A)
             dev_str = sprint(show, MIME"text/plain"(), dA)
             @test split(dev_str, '\n')[2:end] == split(host_str, '\n')[2:end]
-            @test sprint(show, dA) == sprint(show, A)
+            expected = S === GPUSparseMatrixCOO ? SparseMatrixCSC{ET,Int}(A) : A
+            @test sprint(show, dA) == sprint(show, expected)
         end
         x = SparseVector{ET,Int32}(sprand_nozeros(ET, 20, 0.3))
         dx = gpu_sparse(AT, x)

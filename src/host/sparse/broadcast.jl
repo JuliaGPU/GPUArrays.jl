@@ -147,7 +147,7 @@ end
                 return @inbounds arg.colVal[ptr] % Ti
             end
         end
-        typemax(Ti)
+        zero(Ti)
     end
 
     # initialize the state
@@ -160,8 +160,8 @@ end
                 ptr = @inbounds iter.args[i].rowPtr[iter.row] % Ti
                 col = @inbounds get_col(i, ptr)
             else
-                ptr = typemax(Ti)
-                col = typemax(Ti)
+                ptr = zero(Ti)
+                col = zero(Ti)
             end
             (; ptr, col)
         end
@@ -169,8 +169,8 @@ end
 
     # determine the column we're currently processing
     cols = ntuple(i -> @inbounds(state[i].col), Val(N))
-    cur_col = min(cols...)
-    cur_col == typemax(Ti) && return
+    cur_col = reduce((a, b) -> iszero(a) ? b : iszero(b) ? a : min(a, b), cols)
+    iszero(cur_col) && return
 
     # fetch the pointers (we don't look up the values, as the caller might want to index
     # the sparse array directly, e.g., to mutate it). we don't return `ptrs` from the state
@@ -233,7 +233,7 @@ end
                 return @inbounds arg.rowVal[ptr] % Ti
             end
         end
-        typemax(Ti)
+        zero(Ti)
     end
 
     # initialize the state
@@ -246,8 +246,8 @@ end
                 ptr = @inbounds iter.args[i].colPtr[iter.col] % Ti
                 row = @inbounds get_col(i, ptr)
             else
-                ptr = typemax(Ti)
-                row = typemax(Ti)
+                ptr = zero(Ti)
+                row = zero(Ti)
             end
             (; ptr, row)
         end
@@ -255,8 +255,8 @@ end
 
     # determine the row we're currently processing
     rows = ntuple(i -> @inbounds(state[i].row), Val(N))
-    cur_row = min(rows...)
-    cur_row == typemax(Ti) && return
+    cur_row = reduce((a, b) -> iszero(a) ? b : iszero(b) ? a : min(a, b), rows)
+    iszero(cur_row) && return
 
     # fetch the pointers (we don't look up the values, as the caller might want to index
     # the sparse array directly, e.g., to mutate it). we don't return `ptrs` from the state
@@ -321,7 +321,7 @@ end
         for i in 1:N
             row_is_nnz |= @inbounds(arg_row_is_nnz[i]) != 0
         end
-        key = row_is_nnz ? row % Ti : typemax(Ti)
+        key = row_is_nnz ? row % Ti : zero(Ti)
         @inbounds offsets[row] = key => arg_row_is_nnz
     end
 end
@@ -332,7 +332,7 @@ end
     # every thread processes an entire row
     leading_dim = @index(Global, Linear)
     if leading_dim ≤ length(offsets)-1
-        iter = @inbounds iter_type(T, Ti)(leading_dim, args...)
+        iter = @inbounds iter_type(T, Int)(leading_dim, args...)
 
         # count the nonzero leading_dims of all inputs
         accum = zero(Ti)
@@ -349,13 +349,13 @@ end
 # `positions` is the inclusive prefix count of output entries, so an output entry for `row`
 # goes to `positions[row]`.
 @kernel function sparse_to_sparse_broadcast_kernel(f::F, output::GPUSparseVector{Tv,Ti},
-                                                   offsets::AbstractVector{Pair{Ti, NTuple{N, Ti}}},
-                                                   positions::AbstractVector{Ti},
-                                                   args...) where {Tv, Ti, N, F}
+                                                   offsets::AbstractVector{Pair{Tp, NTuple{N, Tp}}},
+                                                   positions::AbstractVector{Int},
+                                                   args...) where {Tv, Ti, Tp, N, F}
     row = @index(Global, Linear)
     if row ≤ length(offsets)
         key, arg_ptrs = @inbounds offsets[row]
-        if key != typemax(Ti)
+        if key != 0
             vals = ntuple(Val(N)) do i
                 @inline
                 arg = @inbounds args[i]
@@ -378,7 +378,7 @@ end
     leading_dim = @index(Global, Linear)
     leading_dim_size = output isa GPUSparseMatrixCSR ? size(output, 1) : size(output, 2)
     if leading_dim ≤ leading_dim_size
-        iter = @inbounds iter_type(T, Ti)(leading_dim, args...)
+        iter = @inbounds iter_type(T, Int)(leading_dim, args...)
 
         output_ptrs  = output isa GPUSparseMatrixCSR ? output.rowPtr : output.colPtr
         output_ivals = output isa GPUSparseMatrixCSR ? output.colVal : output.rowVal
@@ -413,7 +413,7 @@ end
     leading_dim = @index(Global, Linear)
     leading_dim_size = T <: GPUSparseMatrixCSR ? size(output, 1) : size(output, 2)
     if leading_dim ≤ leading_dim_size
-        iter = @inbounds iter_type(T, Ti)(leading_dim, args...)
+        iter = @inbounds iter_type(T, Int)(leading_dim, args...)
 
         # set the values for this row
         for (sub_leading_dim, ptrs) in iter
@@ -478,8 +478,16 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
         end
         out = copy(Broadcasted(bc.f, args, bc.axes))
         if lead isa GPUSparseMatrixCOO && out isa GPUSparseMatrixCSR
-            out = GPUSparseMatrixCOO(expand_ptr(out.rowPtr, nnz(out)), out.colVal, out.nzVal,
+            out = GPUSparseMatrixCOO(expand_ptr(out.rowPtr, nnz(out), indtype(out)), out.colVal, out.nzVal,
                                      size(out))
+        end
+        if out isa GPUSparseMatrixCompressed
+            prototypes = filter(A -> A isa GPUSparseMatrixCompressed, sparse_inputs)
+            Tp = isempty(prototypes) ? promote_type(Int, indtype(out)) :
+                 mapreduce(A -> eltype(compressed_ptr(A)), promote_type, prototypes)
+            check_sparse_nnz(Tp, nnz(out))
+            out = sparse_format_type(out)(convert_buffer(Tp, compressed_ptr(out)),
+                                           compressed_ind(out), out.nzVal, size(out))
         end
         return out
     end
@@ -488,13 +496,12 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
         arg isa GPUSparseArray
     end
     sparse_typ = typeof(bc.args[first(sparse_args)])
-    Ti = if sparse_typ <: GPUSparseMatrixCSR
-        reduce(promote_type, map(i->eltype(bc.args[i].rowPtr), sparse_args))
-    elseif sparse_typ <: GPUSparseMatrixCSC
-        reduce(promote_type, map(i->eltype(bc.args[i].colPtr), sparse_args))
-    elseif sparse_typ <: GPUSparseVector
-        reduce(promote_type, map(i->eltype(bc.args[i].nzInd), sparse_args))
-    end
+    Ti = reduce(promote_type, map(i -> indtype(bc.args[i]), sparse_args))
+    Tp = sparse_typ <: GPUSparseVector ? Int :
+         reduce(promote_type, map(i -> eltype(compressed_ptr(bc.args[i])), sparse_args))
+    # A union cannot contain more entries than its inputs. Check the host-count bound
+    # before computing Int prefix sums; narrow the actual count only after the scan.
+    foldl(Base.checked_add, map(i -> nnz(bc.args[i]), sparse_args); init=1)
 
     # determine the output type
     Tv = Broadcast.combine_eltypes(bc.f, eltype.(bc.args))
@@ -526,7 +533,7 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
         # either we have dense inputs, or the function isn't preserving zeros,
         # so use a dense output to broadcast into.
         val_array = nonzeros(sparse_arg)
-        output    = similar(val_array, Tv, size(bc))
+        output    = sparse_similar(val_array, Tv, size(bc))
         # since we'll be iterating the sparse inputs, we need to pre-fill the dense output
         # with appropriate values (while setting the sparse inputs to zero). we do this by
         # re-using the dense broadcast implementation.
@@ -544,13 +551,13 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
         # this avoids a kernel launch and costly synchronization.
         if sparse_typ <: GPUSparseMatrixCSR
             offsets = rowPtr = copy(sparse_arg.rowPtr)
-            colVal  = similar(sparse_arg.colVal)
-            nzVal   = similar(sparse_arg.nzVal, Tv)
+            colVal  = sparse_similar(sparse_arg.colVal)
+            nzVal   = sparse_similar(sparse_arg.nzVal, Tv)
             output  = GPUSparseMatrixCSR(rowPtr, colVal, nzVal, size(bc))
         elseif sparse_typ <: GPUSparseMatrixCSC
             offsets = colPtr = copy(sparse_arg.colPtr)
-            rowVal  = similar(sparse_arg.rowVal)
-            nzVal   = similar(sparse_arg.nzVal, Tv)
+            rowVal  = sparse_similar(sparse_arg.rowVal)
+            nzVal   = sparse_similar(sparse_arg.nzVal, Tv)
             output  = GPUSparseMatrixCSC(colPtr, rowVal, nzVal, size(bc))
         end
     else
@@ -558,13 +565,13 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
         # appropriately-structured output container
         offsets = if sparse_typ <: GPUSparseMatrixCSR
             ptr_array = sparse_arg.rowPtr
-            fill!(similar(ptr_array, Ti, rows+1), one(Ti))
+            fill!(sparse_similar(ptr_array, Int, Base.checked_add(rows, 1)), 1)
         elseif sparse_typ <: GPUSparseMatrixCSC
             ptr_array = sparse_arg.colPtr
-            fill!(similar(ptr_array, Ti, cols+1), one(Ti))
+            fill!(sparse_similar(ptr_array, Int, Base.checked_add(cols, 1)), 1)
         elseif sparse_typ <: GPUSparseVector
             ptr_array = sparse_arg.nzInd
-            similar(ptr_array, Pair{Ti, NTuple{length(bc.args), Ti}}, rows)
+            sparse_similar(ptr_array, Pair{Int, NTuple{length(bc.args), Int}}, rows)
         end
         let
             args = if sparse_typ <: GPUSparseVector
@@ -584,21 +591,23 @@ function Broadcast.copy(bc::Broadcasted{<:Union{GPUSparseVecStyle,GPUSparseMatSt
             total_nnz = @allowscalar offsets[end] - 1
         elseif fpreszeros
             # number the rows that have an output entry, which gives each its output position
-            positions = similar(offsets, Ti)
-            positions .= first.(offsets) .!= typemax(Ti)
+            positions = sparse_similar(offsets, Int)
+            positions .= first.(offsets) .!= 0
             rows == 0 || accumulate!(Base.add_sum, positions, positions)
             total_nnz = rows == 0 ? 0 : Int(@allowscalar positions[end])
         end
         output = if sparse_typ <: Union{GPUSparseMatrixCSR,GPUSparseMatrixCSC}
-            ixVal = similar(offsets, Ti, total_nnz)
-            nzVal = similar(offsets, Tv, total_nnz)
+            check_sparse_nnz(Tp, total_nnz)
+            offsets = convert_buffer(Tp, offsets)
+            ixVal = sparse_similar(offsets, Ti, total_nnz)
+            nzVal = sparse_similar(offsets, Tv, total_nnz)
             sparse_format_type(sparse_arg)(offsets, ixVal, nzVal, size(bc))
         elseif sparse_typ <: GPUSparseVector && !fpreszeros
             val_array = bc.args[first(sparse_args)].nzVal
-            similar(val_array, Tv, size(bc))
+            sparse_similar(val_array, Tv, size(bc))
         elseif sparse_typ <: GPUSparseVector && fpreszeros
-            nzInd  = similar(offsets, Ti, total_nnz)
-            nzVal  = similar(offsets, Tv, total_nnz)
+            nzInd  = sparse_similar(offsets, Ti, total_nnz)
+            nzVal  = sparse_similar(offsets, Tv, total_nnz)
             GPUSparseVector(nzInd, nzVal, rows)
         end
         if sparse_typ <: GPUSparseVector && !fpreszeros

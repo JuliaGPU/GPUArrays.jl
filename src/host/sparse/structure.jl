@@ -1,8 +1,8 @@
 # structural operations
 
 # the row and column of every stored entry, borrowing the index buffers of `A`
-entry_coordinates(A::GPUSparseMatrixCSR) = expand_ptr(A.rowPtr, nnz(A)), A.colVal
-entry_coordinates(A::GPUSparseMatrixCSC) = A.rowVal, expand_ptr(A.colPtr, nnz(A))
+entry_coordinates(A::GPUSparseMatrixCSR) = expand_ptr(A.rowPtr, nnz(A), indtype(A)), A.colVal
+entry_coordinates(A::GPUSparseMatrixCSC) = A.rowVal, expand_ptr(A.colPtr, nnz(A), indtype(A))
 entry_coordinates(A::GPUSparseMatrixCOO) = A.rowInd, A.colInd
 
 ## COV_EXCL_START
@@ -23,7 +23,8 @@ end
 
 # replace the contents of `dst` by `src`, which may have a different length
 function replace_buffer!(dst::AbstractVector, src::AbstractVector)
-    copyto!(resize!(dst, length(src)), src)
+    length(dst) == length(src) || resize!(dst, length(src))
+    copyto!(dst, src)
     return dst
 end
 
@@ -36,19 +37,20 @@ on the device, as in SparseArrays. `f` runs in a kernel. The buffers of `A` are 
 `A` must not share them with another array.
 """
 function SparseArrays.fkeep!(f::F, A::GPUSparseMatrix) where {F}
+    check_sparse_mutation(A)
     nnz(A) == 0 && return A
     rows, cols = entry_coordinates(A)
-    keep = similar(A.nzVal, Bool)
+    keep = sparse_similar(A.nzVal, Bool)
     keep_matrix_entries_kernel(get_backend(A))(keep, f, rows, cols, A.nzVal; ndrange=nnz(A))
     kept = findall(keep)
     free_buffer!(keep)
     new_rows, new_cols, new_vals = rows[kept], cols[kept], A.nzVal[kept]
     free_buffer!(kept)
     if A isa GPUSparseMatrixCSR
-        replace_buffer!(A.rowPtr, compress(new_rows, size(A, 1)))
+        replace_buffer!(A.rowPtr, compress(new_rows, size(A, 1), eltype(A.rowPtr)))
         replace_buffer!(A.colVal, new_cols)
     elseif A isa GPUSparseMatrixCSC
-        replace_buffer!(A.colPtr, compress(new_cols, size(A, 2)))
+        replace_buffer!(A.colPtr, compress(new_cols, size(A, 2), eltype(A.colPtr)))
         replace_buffer!(A.rowVal, new_rows)
     else
         replace_buffer!(A.rowInd, new_rows)
@@ -58,8 +60,9 @@ function SparseArrays.fkeep!(f::F, A::GPUSparseMatrix) where {F}
     return A
 end
 function SparseArrays.fkeep!(f::F, x::GPUSparseVector) where {F}
+    check_sparse_mutation(x)
     nnz(x) == 0 && return x
-    keep = similar(x.nzVal, Bool)
+    keep = sparse_similar(x.nzVal, Bool)
     keep_vector_entries_kernel(get_backend(x))(keep, f, x.nzInd, x.nzVal; ndrange=nnz(x))
     kept = findall(keep)
     free_buffer!(keep)
@@ -121,7 +124,7 @@ end
 function within_band(A::GPUSparseMatrix, lo, hi)
     nnz(A) == 0 && return true
     rows, cols = entry_coordinates(A)
-    outside = similar(A.nzVal, Bool)
+    outside = sparse_similar(A.nzVal, Bool)
     outside_band_kernel(get_backend(A))(outside, rows, cols, A.nzVal, lo, hi; ndrange=nnz(A))
     return !any(outside)
 end
@@ -176,7 +179,7 @@ function LinearAlgebra.diag(A::GPUSparseMatrix, k::Integer=0)
     m, n = size(A)
     -m <= k <= n || throw(ArgumentError("requested diagonal, $k, must be at least $(-m) and at most $n for a $m×$n matrix"))
     len = k >= 0 ? min(m, n - k) : min(m + k, n)
-    d = similar(A.nzVal, len)
+    d = sparse_similar(A.nzVal, len)
     len == 0 && return d
     B = A isa GPUSparseMatrixCOO ? csr_view(A) : A
     diagonal_kernel(get_backend(B))(d, compressed_ptr(B), compressed_ind(B), B.nzVal, k,
@@ -214,17 +217,17 @@ end
 # it is preserved by any reshape: new coordinates, in the same order, form the CSC buffers
 # of the result.
 function Base.reshape(A::GPUSparseMatrix, dims::Dims{2})
-    prod(dims) == length(A) ||
+    foldl(Base.checked_mul, dims; init=1) == length(A) ||
         throw(DimensionMismatch("new dimensions $dims must be consistent with array size $(length(A))"))
     dims == size(A) && return copy(A)
     C = A isa GPUSparseMatrixCSC ? copy(A) : GPUSparseMatrixCSC(A)
     rows = C.rowVal
-    cols = expand_ptr(C.colPtr, nnz(C))
+    cols = expand_ptr(C.colPtr, nnz(C), indtype(C))
     check_sparse_dims(indtype(A), dims)
     if nnz(C) > 0
         reshape_kernel(get_backend(C))(rows, cols, size(A, 1), dims[1]; ndrange=nnz(C))
     end
-    B = GPUSparseMatrixCSC(compress(cols, dims[2]), rows, C.nzVal, dims)
+    B = GPUSparseMatrixCSC(compress(cols, dims[2], eltype(C.colPtr)), rows, C.nzVal, dims)
     free_buffer!(cols)
     return convert(matrix_format(A), B)
 end
@@ -234,9 +237,9 @@ Base.reshape(A::GPUSparseMatrix, dims::Tuple{Union{Int,Colon},Union{Int,Colon}})
 function Base.vec(A::GPUSparseMatrix)
     C = A isa GPUSparseMatrixCSC ? A : GPUSparseMatrixCSC(A)
     check_sparse_dims(indtype(A), (length(A),))
-    inds = similar(C.rowVal, nnz(C))
+    inds = sparse_similar(C.rowVal, nnz(C))
     if nnz(C) > 0
-        cols = expand_ptr(C.colPtr, nnz(C))
+        cols = expand_ptr(C.colPtr, nnz(C), indtype(C))
         linear_index_kernel(get_backend(C))(inds, C.rowVal, cols, size(C, 1); ndrange=nnz(C))
         free_buffer!(cols)
     end
@@ -284,12 +287,13 @@ function generic_kron(A::GPUSparseMatrixCSC, B::GPUSparseMatrixCSC)
         throw(ArgumentError("the Kronecker product of $(size(A)) and $(size(B)) matrices is too large"))
     dims = (m1 * m2, n1 * n2)
     check_sparse_dims(Ti, dims)
-    check_sparse_nnz(Ti, widemul(nnz(A), nnz(B)))
+    Tp = promote_type(eltype(A.colPtr), eltype(B.colPtr))
+    check_sparse_nnz(Tp, widemul(nnz(A), nnz(B)))
     n = nnz(A) * nnz(B)
-    colPtr = similar(A.colPtr, Ti, dims[2] + 1)
-    rowVal = similar(A.rowVal, Ti, n)
-    nzVal = similar(A.nzVal, Tv, n)
-    fill!(view(colPtr, 1:1), one(Ti))
+    colPtr = sparse_similar(A.colPtr, Tp, Base.checked_add(dims[2], 1))
+    rowVal = sparse_similar(A.rowVal, Ti, n)
+    nzVal = sparse_similar(A.nzVal, Tv, n)
+    fill!(view(colPtr, 1:1), one(Tp))
     if dims[2] > 0
         kron_counts_kernel(get_backend(A))(view(colPtr, 2:dims[2]+1), A.colPtr, B.colPtr, n2;
                                            ndrange=dims[2])

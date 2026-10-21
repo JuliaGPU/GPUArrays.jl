@@ -22,7 +22,7 @@ end
 @kernel function compress_kernel(ptr, major)
     j = @index(Global, Linear)
     if j <= length(ptr)
-        @inbounds ptr[j] = searchsortedfirst(major, j % eltype(major)) % eltype(ptr)
+        @inbounds ptr[j] = searchsortedfirst(major, j) % eltype(ptr)
     end
 end
 
@@ -42,8 +42,9 @@ The slice index of each of the `nnz` stored entries of a compressed pointer buff
 Every stored entry is handled by its own thread, which finds its slice by binary search,
 so that long slices do not serialize.
 """
-function expand_ptr(ptr::AbstractVector{Ti}, nnz::Integer) where {Ti}
-    major = similar(ptr, Ti, nnz)
+function expand_ptr(ptr::AbstractVector, nnz::Integer, ::Type{Ti}=eltype(ptr)) where {Ti}
+    check_sparse_dims(Ti, (length(ptr) - 1,))
+    major = sparse_similar(ptr, Ti, nnz)
     if nnz > 0
         expand_ptr_kernel(get_backend(ptr))(major, ptr; ndrange=nnz)
     end
@@ -57,9 +58,10 @@ The compressed pointer buffer, of length `n+1`, for stored entries whose sorted 
 indices are `major`: the inverse of [`expand_ptr`](@ref). Every pointer is found by binary
 search; an atomic histogram followed by a scan would avoid the searches.
 """
-function compress(major::AbstractVector{Ti}, n::Integer) where {Ti}
-    ptr = similar(major, Ti, n + 1)
-    compress_kernel(get_backend(ptr))(ptr, major; ndrange=n + 1)
+function compress(major::AbstractVector, n::Integer, ::Type{Tp}=promote_type(Int, eltype(major))) where {Tp}
+    check_sparse_nnz(Tp, length(major))
+    ptr = sparse_similar(major, Tp, Base.checked_add(n, 1))
+    compress_kernel(get_backend(ptr))(ptr, major; ndrange=length(ptr))
     return ptr
 end
 
@@ -68,9 +70,13 @@ end
 # device (Metal's `sortperm` does not support unsigned integers).
 function packed_keys(major::AbstractVector, minor::AbstractVector, dims::Dims{2})
     nmajor, nminor = dims
-    widemul(nmajor, nminor) < typemax(Int64) ||
-        throw(ArgumentError("sparse matrices with $nmajor × $nminor entries are too large to sort"))
-    keys = similar(major, Int64, length(major))
+    if widemul(nmajor, nminor) > typemax(Int64)
+        # Tuple comparison is lexicographic and avoids multiplying the dimensions.
+        keys = sparse_similar(major, Tuple{eltype(major),eltype(minor)}, length(major))
+        keys .= tuple.(major, minor)
+        return keys
+    end
+    keys = sparse_similar(major, Int64, length(major))
     if !isempty(keys)
         packed_key_kernel(get_backend(keys))(keys, major, minor, Int64(nminor);
                                              ndrange=length(keys))
@@ -83,13 +89,13 @@ end
 #
 # The entries are sorted by (minor, major) and gathered. An atomic counting sort over the
 # minor indices (histogram, scan, scatter) would be much faster than the general sort.
-function regroup(ptr::AbstractVector{Ti}, ind::AbstractVector{Ti}, val::AbstractVector,
-                 dims::Dims{2}) where {Ti}
+function regroup(ptr::AbstractVector{Tp}, ind::AbstractVector{Ti}, val::AbstractVector,
+                 dims::Dims{2}) where {Tp,Ti}
     nmajor, nminor = dims
     n = length(val)
-    n == 0 && return empty_ptr(ptr, Ti, nminor), similar(ind, 0), similar(val, 0)
+    n == 0 && return empty_ptr(ptr, Tp, nminor), sparse_similar(ind, 0), sparse_similar(val, 0)
 
-    major = expand_ptr(ptr, n)
+    major = expand_ptr(ptr, n, Ti)
     keys = packed_keys(ind, major, (nminor, nmajor))
     perm = sortperm(keys)
     free_buffer!(keys)
@@ -98,7 +104,7 @@ function regroup(ptr::AbstractVector{Ti}, ind::AbstractVector{Ti}, val::Abstract
     new_val = val[perm]
     free_buffer!(major)
     free_buffer!(perm)
-    new_ptr = compress(new_major, nminor)
+    new_ptr = compress(new_major, nminor, Tp)
     free_buffer!(new_major)
     return new_ptr, new_ind, new_val
 end
@@ -129,7 +135,7 @@ end
 
 # whether each of the sorted `keys` starts a run of equal keys
 function run_heads(keys::AbstractVector)
-    heads = similar(keys, Bool)
+    heads = sparse_similar(keys, Bool)
     isempty(keys) || run_heads_kernel(get_backend(keys))(heads, keys; ndrange=length(keys))
     return heads
 end
@@ -144,8 +150,8 @@ one thread, so many repetitions of a key serialize; a tiled segmented scan would
 function reduce_by_key(op, keys::AbstractVector, vals::AbstractVector)
     starts = findall(run_heads(keys))
     n = length(starts)
-    out_keys = similar(keys, n)
-    out_vals = similar(vals, n)
+    out_keys = sparse_similar(keys, n)
+    out_vals = sparse_similar(vals, n)
     if n > 0
         reduce_runs_kernel(get_backend(vals))(out_keys, out_vals, op, starts, keys, vals;
                                               ndrange=n)

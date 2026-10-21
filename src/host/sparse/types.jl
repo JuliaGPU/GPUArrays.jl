@@ -27,19 +27,31 @@ function check_sparse_dims(::Type{Ti}, dims::Dims) where {Ti}
 end
 function check_sparse_nnz(::Type{Ti}, nnz::Integer) where {Ti}
     # pointers go up to nnz+1
-    nnz < typemax(Ti) ||
+    0 <= nnz < typemax(Ti) && nnz < typemax(Int) ||
         throw(ArgumentError("$nnz stored entries do not fit index type $Ti"))
     return
 end
 function check_sparse_entries(::Type{Ti}, inds::AbstractVector, nzVal::AbstractVector) where {Ti}
     length(inds) == length(nzVal) ||
         throw(ArgumentError("index and value buffers must have the same length, got $(length(inds)) and $(length(nzVal))"))
-    check_sparse_nnz(Ti, length(nzVal))
 end
 function check_sparse_ptr(ptr::AbstractVector, n::Integer)
-    length(ptr) == n + 1 ||
+    length(ptr) == Base.checked_add(n, 1) ||
         throw(ArgumentError("the pointer buffer must have length $(n + 1), got $(length(ptr))"))
     return
+end
+
+# Query only host GPU wrappers. Device representations are plain DenseArrays in modern
+# backends and must be reconstructible without invoking host runtime APIs.
+function check_sparse_storage(buffers...)
+    if any(b -> b isa AnyGPUArray, buffers)
+        all(b -> b isa AnyGPUArray, buffers) ||
+            throw(ArgumentError("sparse component buffers must use compatible storage"))
+        backend = get_backend(first(buffers))
+        all(b -> get_backend(b) == backend, buffers) ||
+            throw(ArgumentError("sparse component buffers must use the same backend"))
+    end
+    return nothing
 end
 
 """
@@ -49,30 +61,35 @@ A sparse matrix in compressed sparse row format, stored in the dense vectors `ro
 (length `m+1`), `colVal` and `nzVal` (length `nnz`). The stored entries of row `i` are at
 positions `rowPtr[i]:rowPtr[i+1]-1`, with their columns in `colVal` and their values in
 `nzVal`. The columns in a row must be sorted and unique; explicitly stored zeros are
-allowed.
+allowed. Raw constructors borrow the supplied buffers, which must have compatible
+storage and device placement. Coordinate storage `Vi` and compressed-pointer storage
+`Vp` may use different integer types and wrappers. The stored count plus one must fit
+the pointer type; both dimensions must fit the coordinate type.
 
 The index and value buffers are typically GPU vectors, whose type is part of the matrix
-type (`GPUSparseMatrixCSR{Tv,Ti,Vi,Vv}`), so that generic code allocates new buffers with
+type (`GPUSparseMatrixCSR{Tv,Ti,Vp,Vi,Vv}`), so that generic code allocates new buffers with
 `similar` on the existing ones. Back-ends provide aliases for their storage, e.g.
-`const MtlSparseMatrixCSR{Tv,Ti} = GPUSparseMatrixCSR{Tv,Ti,<:MtlVector{Ti},<:MtlVector{Tv}}`.
+`const MtlSparseMatrixCSR{Tv,Ti} = GPUSparseMatrixCSR{Tv,Ti,<:MtlVector{<:Integer},<:MtlVector{Ti},<:MtlVector{Tv}}`.
 
 The same struct is used on the device: `adapt` converts the buffers, so kernels can read
 the fields of a sparse matrix passed as an argument.
 """
-struct GPUSparseMatrixCSR{Tv,Ti<:Integer,Vi<:AbstractVector{Ti},Vv<:AbstractVector{Tv}} <:
+struct GPUSparseMatrixCSR{Tv,Ti<:Integer,Vp<:AbstractVector{<:Integer},Vi<:AbstractVector{Ti},Vv<:AbstractVector{Tv}} <:
        AbstractGPUSparseMatrix{Tv,Ti}
-    rowPtr::Vi
+    rowPtr::Vp
     colVal::Vi
     nzVal::Vv
     dims::Dims{2}
 
-    function GPUSparseMatrixCSR{Tv,Ti,Vi,Vv}(rowPtr::Vi, colVal::Vi, nzVal::Vv,
-                                            dims::NTuple{2,Integer}) where {Tv,Ti,Vi,Vv}
+    function GPUSparseMatrixCSR{Tv,Ti,Vp,Vi,Vv}(rowPtr::Vp, colVal::Vi, nzVal::Vv,
+                                            dims::NTuple{2,Integer}) where {Tv,Ti,Vp,Vi,Vv}
         dims = Dims{2}(dims)
         check_sparse_dims(Ti, dims)
         check_sparse_ptr(rowPtr, dims[1])
         check_sparse_entries(Ti, colVal, nzVal)
-        new{Tv,Ti,Vi,Vv}(rowPtr, colVal, nzVal, dims)
+        check_sparse_nnz(eltype(rowPtr), length(nzVal))
+        check_sparse_storage(rowPtr, colVal, nzVal)
+        new{Tv,Ti,Vp,Vi,Vv}(rowPtr, colVal, nzVal, dims)
     end
 end
 
@@ -84,20 +101,22 @@ stored entries of column `j` are at positions `colPtr[j]:colPtr[j+1]-1`, with th
 (sorted and unique) in `rowVal` and their values in `nzVal`. See
 [`GPUSparseMatrixCSR`](@ref) for the storage type parameters.
 """
-struct GPUSparseMatrixCSC{Tv,Ti<:Integer,Vi<:AbstractVector{Ti},Vv<:AbstractVector{Tv}} <:
+struct GPUSparseMatrixCSC{Tv,Ti<:Integer,Vp<:AbstractVector{<:Integer},Vi<:AbstractVector{Ti},Vv<:AbstractVector{Tv}} <:
        AbstractGPUSparseMatrix{Tv,Ti}
-    colPtr::Vi
+    colPtr::Vp
     rowVal::Vi
     nzVal::Vv
     dims::Dims{2}
 
-    function GPUSparseMatrixCSC{Tv,Ti,Vi,Vv}(colPtr::Vi, rowVal::Vi, nzVal::Vv,
-                                            dims::NTuple{2,Integer}) where {Tv,Ti,Vi,Vv}
+    function GPUSparseMatrixCSC{Tv,Ti,Vp,Vi,Vv}(colPtr::Vp, rowVal::Vi, nzVal::Vv,
+                                            dims::NTuple{2,Integer}) where {Tv,Ti,Vp,Vi,Vv}
         dims = Dims{2}(dims)
         check_sparse_dims(Ti, dims)
         check_sparse_ptr(colPtr, dims[2])
         check_sparse_entries(Ti, rowVal, nzVal)
-        new{Tv,Ti,Vi,Vv}(colPtr, rowVal, nzVal, dims)
+        check_sparse_nnz(eltype(colPtr), length(nzVal))
+        check_sparse_storage(colPtr, rowVal, nzVal)
+        new{Tv,Ti,Vp,Vi,Vv}(colPtr, rowVal, nzVal, dims)
     end
 end
 
@@ -123,6 +142,7 @@ struct GPUSparseMatrixCOO{Tv,Ti<:Integer,Vi<:AbstractVector{Ti},Vv<:AbstractVect
         check_sparse_dims(Ti, dims)
         check_sparse_entries(Ti, rowInd, nzVal)
         check_sparse_entries(Ti, colInd, nzVal)
+        check_sparse_storage(rowInd, colInd, nzVal)
         new{Tv,Ti,Vi,Vv}(rowInd, colInd, nzVal, dims)
     end
 end
@@ -143,13 +163,18 @@ struct GPUSparseVector{Tv,Ti<:Integer,Vi<:AbstractVector{Ti},Vv<:AbstractVector{
     function GPUSparseVector{Tv,Ti,Vi,Vv}(nzInd::Vi, nzVal::Vv, len::Integer) where {Tv,Ti,Vi,Vv}
         check_sparse_dims(Ti, (Int(len),))
         check_sparse_entries(Ti, nzInd, nzVal)
+        check_sparse_storage(nzInd, nzVal)
         new{Tv,Ti,Vi,Vv}(nzInd, nzVal, len)
     end
 end
 
 for (S, args) in ((:GPUSparseMatrixCSR, (:rowPtr, :colVal)),
-                  (:GPUSparseMatrixCSC, (:colPtr, :rowVal)),
-                  (:GPUSparseMatrixCOO, (:rowInd, :colInd)))
+                  (:GPUSparseMatrixCSC, (:colPtr, :rowVal)))
+    @eval $S($(args[1])::Vp, $(args[2])::Vi, nzVal::Vv, dims::NTuple{2,Integer}) where
+            {Vp<:AbstractVector{<:Integer},Ti<:Integer,Vi<:AbstractVector{Ti},Tv,Vv<:AbstractVector{Tv}} =
+        $S{Tv,Ti,Vp,Vi,Vv}($(args[1]), $(args[2]), nzVal, dims)
+end
+for (S, args) in ((:GPUSparseMatrixCOO, (:rowInd, :colInd)),)
     @eval $S($(args[1])::Vi, $(args[2])::Vi, nzVal::Vv, dims::NTuple{2,Integer}) where
             {Ti<:Integer,Vi<:AbstractVector{Ti},Tv,Vv<:AbstractVector{Tv}} =
         $S{Tv,Ti,Vi,Vv}($(args[1]), $(args[2]), nzVal, dims)
@@ -166,6 +191,7 @@ const GPUSparseArray = Union{GPUSparseVector,GPUSparseMatrix}
 ## accessors
 
 Base.size(A::GPUSparseMatrix) = A.dims
+Base.length(A::GPUSparseMatrix) = Base.checked_mul(size(A, 1), size(A, 2))
 Base.size(x::GPUSparseVector) = (x.len,)
 
 SparseArrays.nnz(A::GPUSparseArray) = length(A.nzVal)
@@ -187,6 +213,17 @@ compressed_ptr(A::GPUSparseMatrixCSC) = A.colPtr
 compressed_ind(A::GPUSparseMatrixCSR) = A.colVal
 compressed_ind(A::GPUSparseMatrixCSC) = A.rowVal
 
+function promote_pointer_type(A, B)
+    if A isa GPUSparseMatrixCompressed
+        return B isa GPUSparseMatrixCompressed ?
+            promote_type(eltype(compressed_ptr(A)), eltype(compressed_ptr(B))) :
+            eltype(compressed_ptr(A))
+    elseif B isa GPUSparseMatrixCompressed
+        return eltype(compressed_ptr(B))
+    end
+    return promote_type(Int, indtype(A), indtype(B))
+end
+
 # the size of the dimension the pointers compress, and of the other one
 major_dim(A::GPUSparseMatrixCSR) = size(A, 1)
 major_dim(A::GPUSparseMatrixCSC) = size(A, 2)
@@ -195,6 +232,20 @@ minor_dim(A::GPUSparseMatrixCSC) = size(A, 1)
 
 
 ## allocation
+
+# Counts and byte sizes are host dimensions. Check arithmetic before asking a backend
+# allocator, including allocations whose integer element type is narrower than Int.
+function sparse_similar(proto, ::Type{T}, dims::Dims) where {T}
+    count = foldl(Base.checked_mul, dims; init=1)
+    count >= 0 || throw(ArgumentError("negative sparse allocation dimensions $dims"))
+    Base.checked_mul(count, sizeof(T))
+    return similar(proto, T, dims)
+end
+sparse_similar(proto, ::Type{T}, n::Integer) where {T} = sparse_similar(proto, T, (Int(n),))
+sparse_similar(proto, ::Type{T}) where {T} = sparse_similar(proto, T, size(proto))
+sparse_similar(proto, dims::Dims) = sparse_similar(proto, eltype(proto), dims)
+sparse_similar(proto, n::Integer) = sparse_similar(proto, eltype(proto), (Int(n),))
+sparse_similar(proto) = sparse_similar(proto, eltype(proto), size(proto))
 
 # a copy of `src` converted to eltype `T`. Indices are converted without checks, as the
 # callers have verified that the dimensions and number of entries fit.
@@ -210,7 +261,7 @@ end
 
 # an empty compressed pointer buffer for `n` slices
 empty_ptr(proto::AbstractVector, ::Type{Ti}, n::Integer) where {Ti} =
-    fill!(similar(proto, Ti, n + 1), one(Ti))
+    fill!(sparse_similar(proto, Ti, Base.checked_add(n, 1)), one(Ti))
 
 # SparseArrays semantics: `similar(A[, Tv[, Ti]])` copies the structure and leaves the
 # values uninitialized, while `similar(A, Tv, dims)` returns an array without stored
@@ -218,6 +269,10 @@ empty_ptr(proto::AbstractVector, ::Type{Ti}, n::Integer) where {Ti} =
 # dimensions, a sparse vector for one, and a dense array for more.
 Base.similar(A::GPUSparseArray) = similar(A, eltype(A))
 Base.similar(A::GPUSparseArray, ::Type{Tv}) where {Tv} = similar(A, Tv, indtype(A))
+Base.similar(A::GPUSparseMatrixCSR, ::Type{Tv}) where {Tv} =
+    GPUSparseMatrixCSR(copy(A.rowPtr), copy(A.colVal), similar(A.nzVal, Tv), size(A))
+Base.similar(A::GPUSparseMatrixCSC, ::Type{Tv}) where {Tv} =
+    GPUSparseMatrixCSC(copy(A.colPtr), copy(A.rowVal), similar(A.nzVal, Tv), size(A))
 function Base.similar(A::GPUSparseMatrixCSR, ::Type{Tv}, ::Type{Ti}) where {Tv,Ti}
     check_sparse_dims(Ti, size(A))
     check_sparse_nnz(Ti, nnz(A))
@@ -232,19 +287,21 @@ function Base.similar(A::GPUSparseMatrixCSC, ::Type{Tv}, ::Type{Ti}) where {Tv,T
 end
 function Base.similar(A::GPUSparseMatrixCOO, ::Type{Tv}, ::Type{Ti}) where {Tv,Ti}
     check_sparse_dims(Ti, size(A))
-    check_sparse_nnz(Ti, nnz(A))
     GPUSparseMatrixCOO(convert_buffer(Ti, A.rowInd), convert_buffer(Ti, A.colInd),
                        similar(A.nzVal, Tv), size(A))
 end
 function Base.similar(x::GPUSparseVector, ::Type{Tv}, ::Type{Ti}) where {Tv,Ti}
     check_sparse_dims(Ti, size(x))
-    check_sparse_nnz(Ti, nnz(x))
     GPUSparseVector(convert_buffer(Ti, x.nzInd), similar(x.nzVal, Tv), length(x))
 end
 
 Base.similar(A::GPUSparseArray, dims::Dims) = similar(A, eltype(A), dims)
 Base.similar(A::GPUSparseArray, ::Type{Tv}, dims::Dims) where {Tv} =
     similar(A, Tv, indtype(A), dims)
+Base.similar(A::Union{GPUSparseVector,GPUSparseMatrixCOO}, ::Type{Tv}, dims::Dims{2}) where {Tv} =
+    empty_sparse(matrix_format(A), A.nzVal, Tv, indtype(A), dims, promote_type(Int, indtype(A)))
+Base.similar(A::GPUSparseMatrixCompressed, ::Type{Tv}, dims::Dims{2}) where {Tv} =
+    empty_sparse(matrix_format(A), A.nzVal, Tv, indtype(A), dims, eltype(compressed_ptr(A)))
 Base.similar(A::GPUSparseArray, ::Type{Tv}, ::Type{Ti}, dims::Dims) where {Tv,Ti} =
     similar(A.nzVal, Tv, dims)
 function Base.similar(A::GPUSparseArray, ::Type{Tv}, ::Type{Ti}, dims::Dims{1}) where {Tv,Ti}
@@ -263,24 +320,25 @@ matrix_format(::GPUSparseVector) = GPUSparseMatrixCSC
 
 # a matrix without stored entries, in format `S` and with the storage of `proto`
 function empty_sparse(::Type{GPUSparseMatrixCSR}, proto, ::Type{Tv}, ::Type{Ti},
-                      dims::Dims{2}) where {Tv,Ti}
-    GPUSparseMatrixCSR(empty_ptr(proto, Ti, dims[1]), similar(proto, Ti, 0),
+                      dims::Dims{2}, ::Type{Tp}=Ti) where {Tv,Ti,Tp}
+    GPUSparseMatrixCSR(empty_ptr(proto, Tp, dims[1]), similar(proto, Ti, 0),
                        similar(proto, Tv, 0), dims)
 end
 function empty_sparse(::Type{GPUSparseMatrixCSC}, proto, ::Type{Tv}, ::Type{Ti},
-                      dims::Dims{2}) where {Tv,Ti}
-    GPUSparseMatrixCSC(empty_ptr(proto, Ti, dims[2]), similar(proto, Ti, 0),
+                      dims::Dims{2}, ::Type{Tp}=Ti) where {Tv,Ti,Tp}
+    GPUSparseMatrixCSC(empty_ptr(proto, Tp, dims[2]), similar(proto, Ti, 0),
                        similar(proto, Tv, 0), dims)
 end
 function empty_sparse(::Type{GPUSparseMatrixCOO}, proto, ::Type{Tv}, ::Type{Ti},
-                      dims::Dims{2}) where {Tv,Ti}
+                      dims::Dims{2}, ::Type{Tp}=Ti) where {Tv,Ti,Tp}
     GPUSparseMatrixCOO(similar(proto, Ti, 0), similar(proto, Ti, 0),
                        similar(proto, Tv, 0), dims)
 end
 
 Base.zero(A::GPUSparseArray) = similar(A, eltype(A), size(A))
 
-# constructors and `copy` always return independent storage
+# Allocating format constructors and `copy` return independent storage. Raw buffer
+# constructors borrow their arguments; identity `convert` and `adapt` may share.
 Base.copy(A::GPUSparseMatrixCSR) =
     GPUSparseMatrixCSR(copy(A.rowPtr), copy(A.colVal), copy(A.nzVal), size(A))
 Base.copy(A::GPUSparseMatrixCSC) =
@@ -290,10 +348,23 @@ Base.copy(A::GPUSparseMatrixCOO) =
 Base.copy(x::GPUSparseVector) =
     GPUSparseVector(copy(x.nzInd), copy(x.nzVal), length(x))
 
-# `copyto!` between sparse arrays of the same format replaces the structure of `dst` by
-# that of `src`, resizing its buffers, so `dst` must not share them with another array
+# Structural mutation requires resizable dense storage and exclusive access. Views are
+# supported for reads and value updates, but cannot serve as structural destinations.
+sparse_buffers(A::GPUSparseMatrixCSR) = (A.rowPtr, A.colVal, A.nzVal)
+sparse_buffers(A::GPUSparseMatrixCSC) = (A.colPtr, A.rowVal, A.nzVal)
+sparse_buffers(A::GPUSparseMatrixCOO) = (A.rowInd, A.colInd, A.nzVal)
+sparse_buffers(A::GPUSparseVector) = (A.nzInd, A.nzVal)
+Base.dataids(A::GPUSparseArray) = mapreduce(Base.dataids, (a, b) -> (a..., b...), sparse_buffers(A))
+Base.unaliascopy(A::GPUSparseArray) = copy(A)
+
+function check_sparse_mutation(A::GPUSparseArray)
+    all(supports_resize, sparse_buffers(A)) ||
+        throw(ArgumentError("structural mutation requires resizable dense buffers; raw views support reads and values-only updates"))
+    return A
+end
+
 function copy_buffer!(dst::AbstractVector, src::AbstractVector)
-    resize!(dst, length(src))
+    length(dst) == length(src) || resize!(dst, length(src))
     if eltype(dst) <: Integer && eltype(src) <: Integer
         dst .= src .% eltype(dst)
     else
@@ -301,36 +372,21 @@ function copy_buffer!(dst::AbstractVector, src::AbstractVector)
     end
     return dst
 end
-function Base.copyto!(dst::GPUSparseMatrixCSR, src::GPUSparseMatrixCSR)
-    size(dst) == size(src) || throw(DimensionMismatch("destination has size $(size(dst)), source has size $(size(src))"))
-    check_sparse_nnz(indtype(dst), nnz(src))
-    copy_buffer!(dst.rowPtr, src.rowPtr)
-    copy_buffer!(dst.colVal, src.colVal)
-    copy_buffer!(dst.nzVal, src.nzVal)
+
+function copy_sparse!(dst, src)
+    size(dst) == size(src) ||
+        throw(DimensionMismatch("destination has size $(size(dst)), source has size $(size(src))"))
+    check_sparse_dims(indtype(dst), size(src))
+    dst isa GPUSparseMatrixCompressed && check_sparse_nnz(eltype(compressed_ptr(dst)), nnz(src))
+    check_sparse_mutation(dst)
+    dst === src && return dst
+    # Copy before resizing/writing any component, including overlapping component views.
+    src = Base.mightalias(dst, src) ? copy(src) : src
+    foreach(copy_buffer!, sparse_buffers(dst), sparse_buffers(src))
     return dst
 end
-function Base.copyto!(dst::GPUSparseMatrixCSC, src::GPUSparseMatrixCSC)
-    size(dst) == size(src) || throw(DimensionMismatch("destination has size $(size(dst)), source has size $(size(src))"))
-    check_sparse_nnz(indtype(dst), nnz(src))
-    copy_buffer!(dst.colPtr, src.colPtr)
-    copy_buffer!(dst.rowVal, src.rowVal)
-    copy_buffer!(dst.nzVal, src.nzVal)
-    return dst
-end
-function Base.copyto!(dst::GPUSparseMatrixCOO, src::GPUSparseMatrixCOO)
-    size(dst) == size(src) || throw(DimensionMismatch("destination has size $(size(dst)), source has size $(size(src))"))
-    check_sparse_nnz(indtype(dst), nnz(src))
-    copy_buffer!(dst.rowInd, src.rowInd)
-    copy_buffer!(dst.colInd, src.colInd)
-    copy_buffer!(dst.nzVal, src.nzVal)
-    return dst
-end
-function Base.copyto!(dst::GPUSparseVector, src::GPUSparseVector)
-    length(dst) == length(src) || throw(DimensionMismatch("destination has length $(length(dst)), source has length $(length(src))"))
-    check_sparse_nnz(indtype(dst), nnz(src))
-    copy_buffer!(dst.nzInd, src.nzInd)
-    copy_buffer!(dst.nzVal, src.nzVal)
-    return dst
+for S in (:GPUSparseMatrixCSR, :GPUSparseMatrixCSC, :GPUSparseMatrixCOO, :GPUSparseVector)
+    @eval Base.copyto!(dst::$S, src::$S) = copy_sparse!(dst, src)
 end
 
 
@@ -405,7 +461,7 @@ function check_structure(A::GPUSparseMatrixCOO)
 end
 function check_structure(x::GPUSparseVector)
     valid = similar(x.nzVal, Bool, 1)
-    ptr = copyto!(similar(x.nzInd, 2), indtype(x)[1, nnz(x) + 1])
+    ptr = copyto!(similar(x.nzInd, Int, 2), Int[1, Base.checked_add(nnz(x), 1)])
     check_compressed_kernel(get_backend(x))(valid, ptr, x.nzInd, length(x); ndrange=1)
     all(valid) || throw(ArgumentError("invalid GPUSparseVector structure"))
     return x
