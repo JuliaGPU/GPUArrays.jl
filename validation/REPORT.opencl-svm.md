@@ -70,6 +70,12 @@ program route. Strict ICD discovery enumerates only NVIDIA. Both logs are
 GPU sparse/SVM results, not PoCL CPU or whole-backend CI results. They do not resolve
 or conceal the independently reproduced baseline dense-allocation failure above.
 
+The final exact pinned helper at GPUArrays9a9126f/OpenCL94fae12 also passes11,852
+on Pegasus: shared11,837 plus15 SVM, including the final all-dimensional broadcast
+guards. Clean sources and exact pins are logged in
+~/Julia/tmp/ga13-opencl-svm-env/final9a-root.log. This is actual checked Pkg.test
+stack validation on a test host, not a hosted-CI or normal registered-resolution pass.
+
 Existing Context callback-handle lifetime and Intel SVM initialization-failure
 cleanup need separate audits. Neither has been shown to cause this failure, and
 neither was silently changed as part of the NULL guard.
