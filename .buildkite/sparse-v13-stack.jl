@@ -25,10 +25,10 @@ println("STACK_JULIA ", VERSION)
 specs = PackageSpec[
     PackageSpec(path=gpuarrays),
     PackageSpec(path=joinpath(gpuarrays,"lib","GPUArraysCore")),
-    PackageSpec(path=joinpath(gpuarrays,"lib","JLArrays")),
     PackageSpec(path=checkout("AcceleratedKernels")),
     PackageSpec(path=checkout("Atomix")),
 ]
+backend in ("JLArrays","docs") && push!(specs,PackageSpec(path=joinpath(gpuarrays,"lib","JLArrays")))
 package = if backend in ("JLArrays","docs")
     gpuarrays
 elseif haskey(ENV,"GPUARRAYS_V13_STACK_BACKEND")
