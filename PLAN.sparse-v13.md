@@ -93,6 +93,20 @@ Ordinary oneAPI operations need a concrete handle owner during migration, includ
 
 For prepared operations, choose and document a pattern lifetime: copy/snapshot the pattern, or borrow it while forbidding structural edits and resize. Holding an array reference does not pin its allocation. Buffer identity, pointer and length checks are useful diagnostics but cannot detect in-place index writes. Specify whether values can be updated in place or rebound. Bind independent concurrent executions to independent workspaces/descriptors unless the vendor explicitly supports sharing.
 
+The oneAPI implementation borrows a fixed pattern and permits in-place source-value
+updates between completed executions, but binds an independent numerical snapshot.
+Intel's matrix-handle contract prohibits modification of bound data; hardware also
+confirmed stale optimized CSC results after direct value edits. Before execution,
+compare source and snapshot bitwise (including signed zero and NaN payloads).
+Unchanged values reuse native analysis; changed values create and optimize a new
+snapshot before disposing the old owner and installing the replacement. This costs
+O(nnz) comparison work, a host-visible decision and snapshot storage; replacement
+briefly retains two snapshots/analyses. Pattern sharing is read-only and serialized.
+Preparation failure propagates without executing stale data; disposal failure
+invalidates the prepared operation and preserves/quarantines complete resources.
+This refinement was agreed with Astra in `sparse-v13-architecture` turns 8–10.
+See Intel's [matrix-handle contract](https://www.intel.com/content/www/us/en/docs/onemkl/developer-reference-dpcpp/2026-0/sparse-blas-matrix-handle-contract-between-user.html).
+
 A future portable prepared conversion can retain an index permutation and gather **current** values. A future SpGEMM plan can retain symbolic structure. These can be added without changing sparse array fields. Do not require public APIs for every future plan before v13.
 
 ### 5. Define the supported Julia surface
