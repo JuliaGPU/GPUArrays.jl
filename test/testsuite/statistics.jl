@@ -30,9 +30,11 @@ using Statistics
             @test compare(mean, AT, rand(range, 2, 2))
             @test compare(A -> mean(A; dims = 2), AT, rand(range, 2, 2))
             @test compare(A -> mean(A; dims = [1, 3]), AT, rand(range, 2, 2, 2))
-            @test compare(A -> mean(sin, A), AT, rand(range, 2, 2))
-            @test compare(A -> mean(sin, A; dims = 2), AT, rand(range, 2, 2))
-            @test compare(A -> mean(sin, A; dims = [1, 3]), AT, rand(range, 2, 2, 2))
+            # sin of `range` can cancel to near zero, where the summation order decides the
+            # result; values in [0, 1) keep every term positive
+            @test compare(A -> mean(sin, A), AT, rand(ET, 2, 2))
+            @test compare(A -> mean(sin, A; dims = 2), AT, rand(ET, 2, 2))
+            @test compare(A -> mean(sin, A; dims = [1, 3]), AT, rand(ET, 2, 2, 2))
         end
     end
 
