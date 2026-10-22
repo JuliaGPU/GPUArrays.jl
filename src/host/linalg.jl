@@ -624,7 +624,13 @@ end
 function LinearAlgebra.mul!(C::AnyStridedGPUVector, tA::AbstractChar, A::AnyStridedGPUMatrix, B::AnyStridedGPUVector, a::Number, b::Number)
     Cm = reshape(C, length(C), 1)
     Bm = reshape(B, length(B), 1)
-    LinearAlgebra.mul!(Cm, tA, 'N', A, Bm, a, b)
+    # reshaping a non-contiguous view yields a `ReshapedArray`, which the storage-level
+    # methods don't accept, so multiply those vectors with the generic kernel directly
+    if Cm isa AnyStridedGPUMatrix && Bm isa AnyStridedGPUMatrix
+        LinearAlgebra.mul!(Cm, tA, 'N', A, Bm, a, b)
+    else
+        generic_matmatmul!(C, tA, 'N', A, B, MulAddMul(a, b))
+    end
     return C
 end
 
