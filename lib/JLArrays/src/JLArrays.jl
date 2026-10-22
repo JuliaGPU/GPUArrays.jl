@@ -6,7 +6,8 @@
 
 module JLArrays
 
-export JLArray, JLVector, JLMatrix, jl, JLBackend, JLSparseVector, JLSparseMatrixCSC, JLSparseMatrixCSR
+export JLArray, JLVector, JLMatrix, jl, JLBackend, JLSparseVector, JLSparseMatrixCSC, JLSparseMatrixCSR,
+       JLSparseMatrixCOO
 
 using GPUArrays
 
@@ -14,7 +15,7 @@ using Adapt
 using SparseArrays, LinearAlgebra
 using Random
 
-import GPUArrays: dense_array_type
+using GPUArrays: GPUSparseVector, GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO
 
 import KernelAbstractions
 

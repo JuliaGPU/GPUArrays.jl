@@ -139,6 +139,31 @@ when they share the `DataRef` returned by `GPUArrays.storage`.
 """
 memory_location(::AbstractGPUArray) = nothing
 
+"""
+    GPUArrays.supports_resize(A::AbstractVector)
+
+Whether this storage instance supports structural resizing. The default is false;
+ordinary host vectors return true. Dense backends that implement `resize!` should
+specialize this predicate, including any memory-mode or instance restrictions. Views
+and device-side representations are not resizable structural storage.
+
+This capability does not establish ownership: callers must guarantee exclusive
+structural access, and allocation failure need not leave a collection unchanged.
+"""
+supports_resize(::AbstractVector) = false
+supports_resize(::Vector) = true
+
+# Host wrappers may report physical placement in backend extensions. Device structs
+# must never invoke this host boundary. Unwrap only known host GPU wrappers.
+storage_parent(A::AbstractArray) = A
+storage_parent(A::WrappedGPUArray) = storage_parent(parent(A))
+function check_storage_compatibility(arrays::AbstractArray...)
+    backend = get_backend(first(arrays))
+    all(A -> get_backend(A) == backend, arrays) ||
+        throw(ArgumentError("array buffers must use compatible backends"))
+    return nothing
+end
+
 # `copy(::DataRef)` shares `rc`. Views and reshapes are built that way, so
 # alias detection has to key off the shared record rather than the wrapper.
 Base.dataids(ref::DataRef) = (objectid(ref.rc),)
@@ -454,4 +479,12 @@ end
 function Base.append!(a::AbstractGPUVector, @nospecialize(items::Tuple))
     append!(a, collect(items))
     return a
+end
+
+# Exact numerical snapshots for retained vendor resources, including signed zero and
+# NaN payloads. This uses dense operations and does not require sparse backend hooks.
+function same_value_bits(A::AbstractVector{T},B::AbstractVector{T}) where {T}
+    length(A)==length(B) || return false
+    isbitstype(T) || throw(ArgumentError("bitwise comparison requires isbits values"))
+    mapreduce(==, &, reinterpret(UInt8,A), reinterpret(UInt8,B); init=true)
 end

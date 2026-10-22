@@ -44,13 +44,7 @@ mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
 end
 
 GPUArrays.storage(a::JLArray) = a.data
-
 GPUArrays.memory_location(a::JLArray) = (UInt(pointer(a.data[])), a.offset)
-
-GPUArrays.dense_array_type(a::JLArray{T, N}) where {T, N} = JLArray{T, N}
-GPUArrays.dense_array_type(::Type{JLArray{T, N}}) where {T, N} = JLArray{T, N}
-GPUArrays.dense_vector_type(a::JLArray{T, N}) where {T, N} = JLArray{T, 1}
-GPUArrays.dense_vector_type(::Type{JLArray{T, N}}) where {T, N} = JLArray{T, 1}
 
 # conversion of untyped data to a typed Array
 function typed_data(x::JLArray{T}) where {T}
@@ -236,6 +230,8 @@ end
 
 Base.copyto!(dest::DenseJLArray{T}, source::DenseJLArray{T}) where {T} =
     copyto!(dest, 1, source, 1, length(source))
+
+GPUArrays.supports_resize(::JLVector) = true
 
 function Base.resize!(a::DenseJLVector{T}, nl::Integer) where {T}
     # JLArrays aren't performance critical, so simply allocate a new one

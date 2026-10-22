@@ -32,23 +32,8 @@ jobs:
           show-versioninfo: true
       - uses: julia-actions/cache@v3
         timeout-minutes: 5
-      - name: Develop subpackages
-        timeout-minutes: 5
-        run: |
-          julia --project -e "
-            using Pkg
-            Pkg.develop([PackageSpec(; name=basename(path), path) for path in ARGS])
-          " lib/GPUArraysCore lib/JLArrays
-      - name: "Set test arguments"
-        shell: bash
-        run: |
-          # Run tests in verbose mode
-          TEST_ARGS=(--verbose)
-          echo "runtest_test_args=${TEST_ARGS[@]}" >> "${GITHUB_ENV}"
-      - uses: julia-actions/julia-runtest@v1
-        continue-on-error: ${{ matrix.version == 'nightly' }}
-        with:
-          test_args: ${{ env.runtest_test_args }}
+      - name: Test coordinated v13 stack
+        run: julia .buildkite/sparse-v13-stack.jl JLArrays
       - uses: julia-actions/julia-processcoverage@v1
         with:
           directories: src,lib
@@ -60,7 +45,8 @@ jobs:
   opencl:
     name: OpenCL.jl
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Both IL and OpenCL-C suites compile many kernels on PoCL CPU runners.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v6
       - uses: julia-actions/setup-julia@v3
@@ -70,42 +56,7 @@ jobs:
       - uses: julia-actions/cache@v3
       - name: Run tests
         run: |
-          julia -e 'using Pkg
-
-                    gpuarrays = pwd()
-                    gpuarrayscore = joinpath(gpuarrays, "lib", "GPUArraysCore")
-                    devdir = mktempdir()
-                    package = joinpath(devdir, "OpenCL")
-
-                    println("--- :julia: Installing TestEnv")
-                    Pkg.activate(; temp=true)
-                    Pkg.add("TestEnv")
-                    using TestEnv
-
-                    println("--- :julia: Installing OpenCL.jl")
-                    withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0,
-                            "JULIA_PKG_DEVDIR" => devdir) do
-                      try
-                        Pkg.develop("OpenCL")
-                        Pkg.activate(package)
-                        Pkg.develop([PackageSpec(path=gpuarrays), PackageSpec(path=gpuarrayscore)])
-                        TestEnv.activate()
-                      catch err
-                        # OpenCL.jl may not support this GPUArrays version yet (e.g. after a
-                        # breaking release): skip, like Buildkite soft-fails, but annotate
-                        # the run so the skip is visible
-                        @error "Could not install OpenCL.jl" exception=(err,catch_backtrace())
-                        println("::warning title=OpenCL.jl not tested::Could not install OpenCL.jl with this version of GPUArrays")
-                        exit(0)
-                      finally
-                        Pkg.activate(package)
-                      end
-                    end
-
-                    println("+++ :julia: Running tests")
-                    # `poclc/` repeats every test through the OpenCL C back-end, which exercises
-                    # the compiler of OpenCL.jl rather than GPUArrays
-                    Pkg.test(; coverage="@" * gpuarrays, test_args=`pocl/`)'
+          julia .buildkite/sparse-v13-stack.jl OpenCL
       - uses: julia-actions/julia-processcoverage@v1
         with:
           directories: src,lib
@@ -125,10 +76,7 @@ jobs:
           version: '1.10'
       - name: Develop packages
         run: |
-          julia -e "
-            using Pkg
-            Pkg.develop([PackageSpec(; name=basename(splitext(path)[1]), path) for path in ARGS])
-          " ../GPUArrays.jl lib/GPUArraysCore
+          julia .buildkite/sparse-v13-stack.jl docs --setup-only
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; Pkg.instantiate()'
       - name: Build and deploy
