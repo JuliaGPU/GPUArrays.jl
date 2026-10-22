@@ -43,8 +43,9 @@ using Statistics
         if !(ET in [Float32, Float64, Float16, ComplexF64])
             continue
         end
-        # Larger range for Float16 to avoid numerical instability
-        range = ET == Float16 ? (ET(1):ET(100)) : ET
+        # Integers for Float16, so that `cor` of two-element rows have no subnormal variances,
+        # but small ones, so that `cov` of 100 samples does not overflow
+        range = ET == Float16 ? (ET(1):ET(10)) : ET
 
         @testset "cov" begin
             s = 100
