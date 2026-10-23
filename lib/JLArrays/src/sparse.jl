@@ -153,6 +153,11 @@ function JLSparseMatrixCSC(xs::SparseMatrixCSC{Tv, Ti}) where {Ti, Tv}
     return JLSparseMatrixCSC{Tv, Ti}(colPtr, rowVal, nzVal, (xs.m, xs.n))
 end
 JLSparseMatrixCSC(xs::SparseVector) = JLSparseMatrixCSC(SparseMatrixCSC(xs))
+
+# dense to sparse, on the host
+SparseArrays.sparse(x::JLVector) = JLSparseVector(sparse(Array(x)))
+SparseArrays.sparse(x::JLMatrix) = JLSparseMatrixCSC(sparse(Array(x)))
+
 Base.length(x::JLSparseMatrixCSC) = prod(x.dims)
 Base.size(x::JLSparseMatrixCSC) = x.dims
 
@@ -209,9 +214,15 @@ end
 
 ## adapt for the device
 
-Adapt.adapt_structure(to::Adaptor, x::JLSparseMatrixCSC{Tv,Ti}) where {Tv,Ti} =
-GPUSparseDeviceMatrixCSC{Tv,Ti,JLDeviceArray{Ti, 1}, JLDeviceArray{Tv, 1}, AS.Generic}(adapt(to, x.colPtr), adapt(to, x.rowVal), adapt(to, x.nzVal), x.dims, x.nnz)
-Adapt.adapt_structure(to::Adaptor, x::JLSparseMatrixCSR{Tv,Ti}) where {Tv,Ti} =
-GPUSparseDeviceMatrixCSR{Tv,Ti,JLDeviceArray{Ti, 1}, JLDeviceArray{Tv, 1}, AS.Generic}(adapt(to, x.rowPtr), adapt(to, x.colVal), adapt(to, x.nzVal), x.dims, x.nnz)
-Adapt.adapt_structure(to::Adaptor, x::JLSparseVector{Tv,Ti}) where {Tv,Ti} =
-GPUSparseDeviceVector{Tv,Ti,JLDeviceArray{Ti, 1}, JLDeviceArray{Tv, 1}, AS.Generic}(adapt(to, x.iPtr), adapt(to, x.nzVal), x.len, x.nnz)
+function Adapt.adapt_structure(to::Adaptor, x::JLSparseMatrixCSC{Tv,Ti}) where {Tv,Ti}
+    colPtr, rowVal, nzVal = adapt(to, x.colPtr), adapt(to, x.rowVal), adapt(to, x.nzVal)
+    GPUSparseDeviceMatrixCSC{Tv,Ti,typeof(colPtr),typeof(nzVal),AS.Generic}(colPtr, rowVal, nzVal, x.dims, x.nnz)
+end
+function Adapt.adapt_structure(to::Adaptor, x::JLSparseMatrixCSR{Tv,Ti}) where {Tv,Ti}
+    rowPtr, colVal, nzVal = adapt(to, x.rowPtr), adapt(to, x.colVal), adapt(to, x.nzVal)
+    GPUSparseDeviceMatrixCSR{Tv,Ti,typeof(rowPtr),typeof(nzVal),AS.Generic}(rowPtr, colVal, nzVal, x.dims, x.nnz)
+end
+function Adapt.adapt_structure(to::Adaptor, x::JLSparseVector{Tv,Ti}) where {Tv,Ti}
+    iPtr, nzVal = adapt(to, x.iPtr), adapt(to, x.nzVal)
+    GPUSparseDeviceVector{Tv,Ti,typeof(iPtr),typeof(nzVal),AS.Generic}(iPtr, nzVal, x.len, x.nnz)
+end
