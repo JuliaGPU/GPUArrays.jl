@@ -140,6 +140,7 @@ include("testsuite/statistics.jl")
 include("testsuite/sparse.jl")
 include("testsuite/alloc_cache.jl")
 include("testsuite/jld2ext.jl")
+include("testsuite/unions.jl")
 
 """
 Runs the entire GPUArrays test suite on array type `AT`
