@@ -18,13 +18,16 @@ Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 ScopedValues = "7e506255-f358-4e82-b7e4-beb19740aa63"
 Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+Static = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [weakdeps]
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+StaticArrayInterface = "0d7ed370-da01-4f52-bd93-41d350b8b718"
 
 [extensions]
 JLD2Ext = "JLD2"
+StaticArrayInterfaceExt = "StaticArrayInterface"
 
 [compat]
 AcceleratedKernels = "0.5"
@@ -40,5 +43,7 @@ Reexport = "1"
 ScopedValues = "1"
 Serialization = "1"
 SparseArrays = "1"
+Static = "1"
+StaticArrayInterface = "1.5"
 Statistics = "1"
 julia = "1.10"
