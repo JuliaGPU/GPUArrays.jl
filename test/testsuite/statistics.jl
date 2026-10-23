@@ -30,9 +30,11 @@ using Statistics
             @test compare(mean, AT, rand(range, 2, 2))
             @test compare(A -> mean(A; dims = 2), AT, rand(range, 2, 2))
             @test compare(A -> mean(A; dims = [1, 3]), AT, rand(range, 2, 2, 2))
-            @test compare(A -> mean(sin, A), AT, rand(range, 2, 2))
-            @test compare(A -> mean(sin, A; dims = 2), AT, rand(range, 2, 2))
-            @test compare(A -> mean(sin, A; dims = [1, 3]), AT, rand(range, 2, 2, 2))
+            # sin of `range` can cancel to near zero, where the summation order decides the
+            # result; values in [0, 1) keep every term positive
+            @test compare(A -> mean(sin, A), AT, rand(ET, 2, 2))
+            @test compare(A -> mean(sin, A; dims = 2), AT, rand(ET, 2, 2))
+            @test compare(A -> mean(sin, A; dims = [1, 3]), AT, rand(ET, 2, 2, 2))
         end
     end
 
@@ -41,8 +43,9 @@ using Statistics
         if !(ET in [Float32, Float64, Float16, ComplexF64])
             continue
         end
-        # Larger range for Float16 to avoid numerical instability
-        range = ET == Float16 ? (ET(1):ET(100)) : ET
+        # Integers for Float16, so that `cor` of two-element rows have no subnormal variances,
+        # but small ones, so that `cov` of 100 samples does not overflow
+        range = ET == Float16 ? (ET(1):ET(10)) : ET
 
         @testset "cov" begin
             s = 100

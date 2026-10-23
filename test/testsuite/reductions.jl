@@ -25,18 +25,21 @@ test_shapes(ET, all, few) = ET in (Float32, ComplexF32) ? all : few
 @testsuite "reductions/mapreducedim!" (AT, eltypes)->begin
     @testset "$ET" for ET in eltypes
         range = ET <: Real ? (ET(1):ET(10)) : ET
+        # ten ComplexF16 values from [0, 1) multiply to a magnitude `norm` cannot resolve in
+        # Float16, so the array comparison tolerates no error; unit values keep it near one
+        prod_data(sz) = ET == ComplexF16 ? ET.(cis.(2π .* rand(sz...))) : rand(range, sz)
         for (sz,red) in test_shapes(ET, [(10,)=>(1,), (10,10)=>(1,1), (10,10,10)=>(1,1,1), (10,10,10)=>(10,10,10),
                                          (10,10,10)=>(1,10,10), (10,10,10)=>(10,1,10), (10,10,10)=>(10,10,1),
                                          (0,)=>(1,)],
                                     [(10,)=>(1,), (10,10,10)=>(10,1,10), (0,)=>(1,)])
             # mapreducedim!
             @test compare((A,R)->Base.mapreducedim!(identity, +, R, A), AT, rand(range, sz), zeros(ET, red))
-            @test compare((A,R)->Base.mapreducedim!(identity, *, R, A), AT, rand(range, sz), ones(ET, red))
+            @test compare((A,R)->Base.mapreducedim!(identity, *, R, A), AT, prod_data(sz), ones(ET, red))
             @test compare((A,R)->Base.mapreducedim!(x->x+x, +, R, A), AT, rand(range, sz), zeros(ET, red))
 
             # reducedim!
             @test compare((A,R)->Base.reducedim!(+, R, A), AT, rand(range, sz), zeros(ET, red))
-            @test compare((A,R)->Base.reducedim!(*, R, A), AT, rand(range, sz), ones(ET, red))
+            @test compare((A,R)->Base.reducedim!(*, R, A), AT, prod_data(sz), ones(ET, red))
         end
 
         # implicit singleton dimensions
