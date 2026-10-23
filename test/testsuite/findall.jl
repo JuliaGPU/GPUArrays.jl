@@ -110,17 +110,9 @@ end
         @test isequal(any(f, AT(xs)), any(f, xs))
         @test isequal(all(f, AT(xs)), all(f, xs))
     end
-    # ... also stored in the array, where the back-end supports isbits unions
-    supports_unions = try
-        Array(AT(Union{Missing,Bool}[missing, true]) .| false)
-        true
-    catch
-        false
-    end
-    if supports_unions
-        for (a, b) in ((missing, true), (missing, false), (true, true))
-            @test isequal(any(AT(Union{Missing,Bool}[a, b])), any([a, b]))
-            @test isequal(all(AT(Union{Missing,Bool}[a, b])), all([a, b]))
-        end
+    # ... also stored in the array
+    for (a, b) in ((missing, true), (missing, false), (true, true))
+        @test isequal(any(AT(Union{Missing,Bool}[a, b])), any([a, b]))
+        @test isequal(all(AT(Union{Missing,Bool}[a, b])), all([a, b]))
     end
 end

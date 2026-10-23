@@ -14,30 +14,35 @@ mutable struct JLArray{T, N} <: AbstractGPUArray{T, N}
 
     offset::Int        # offset of the data in the buffer, in bytes
 
+    # arrays of isbits unions keep one selector byte per element past the data, like
+    # `Array` does: this is the offset of the array's first selector byte in the buffer
+    tagoffset::Int
+
     dims::Dims{N}
 
     # allocating constructor
     function JLArray{T,N}(::UndefInitializer, dims::Dims{N}) where {T,N}
         check_eltype(T)
-        maxsize = prod(dims) * sizeof(T)
+        datasize = prod(dims) * aligned_sizeof(T)
+        bufsize = Base.isbitsunion(T) ? datasize + prod(dims) : datasize
 
-        ref = GPUArrays.cached_alloc((JLArray, maxsize)) do
-            data = Vector{UInt8}(undef, maxsize)
+        ref = GPUArrays.cached_alloc((JLArray, bufsize)) do
+            data = Vector{UInt8}(undef, bufsize)
             DataRef(data) do data
                 resize!(data, 0)
             end
         end
 
-        obj = new{T, N}(ref, 0, dims)
+        obj = new{T, N}(ref, 0, datasize, dims)
         finalizer(unsafe_free!, obj)
         return obj
     end
 
     # low-level constructor for wrapping existing data
-    function JLArray{T,N}(ref::DataRef{Vector{UInt8}}, dims::Dims{N};
-                          offset::Int=0) where {T,N}
+    function JLArray{T,N}(ref::DataRef{Vector{UInt8}}, dims::Dims{N}; offset::Int=0,
+                          tagoffset::Int=offset + prod(dims) * aligned_sizeof(T)) where {T,N}
         check_eltype(T)
-        obj = new{T,N}(ref, offset, dims)
+        obj = new{T,N}(ref, offset, tagoffset, dims)
         finalizer(unsafe_free!, obj)
         return obj
     end
@@ -57,10 +62,25 @@ function typed_data(x::JLArray{T}) where {T}
     unsafe_wrap(Array, pointer(x), x.dims)
 end
 
+# the selector byte of element `i` of an array of isbits unions
+typetagdata(a::JLArray, i=1) = pointer(a.data[]) + a.tagoffset + i - 1
+@static if VERSION >= v"1.11.0-DEV.753"
+    function typetagdata(a::Array, i=1)
+        # for memory of isbits unions, the reference holds the offset of the data in elements
+        ptr_or_offset = Int(a.ref.ptr_or_offset)
+        @ccall(jl_genericmemory_typetagdata(a.ref.mem::Any)::Ptr{UInt8}) + ptr_or_offset + i - 1
+    end
+else
+    typetagdata(a::Array, i=1) = ccall(:jl_array_typetagdata, Ptr{UInt8}, (Any,), a) + i - 1
+end
+
 function GPUArrays.derive(::Type{T}, a::JLArray, dims::Dims{N}, offset::Int) where {T,N}
     ref = copy(a.data)
-    offset = a.offset + offset * sizeof(T)
-    JLArray{T,N}(ref, dims; offset)
+    # arrays of isbits unions are only derived as arrays of the same union
+    # (`reinterpret` rejects them), so their selector bytes advance by element
+    tagoffset = a.tagoffset + offset
+    offset = a.offset + offset * aligned_sizeof(T)
+    JLArray{T,N}(ref, dims; offset, tagoffset)
 end
 
 
@@ -120,7 +140,7 @@ StridedJLVecOrMat{T} = Union{StridedJLVector{T}, StridedJLMatrix{T}}
 Base.pointer(x::JLArray{T}) where {T} =
     convert(Ptr{T}, pointer(x.data[])) + x.offset
 @inline function Base.pointer(x::JLArray{T}, i::Integer) where T
-    pointer(x) + (i - 1) * sizeof(T)
+    pointer(x) + (i - 1) * aligned_sizeof(T)
 end
 
 # anything that's (secretly) backed by a JLArray
@@ -132,7 +152,7 @@ AnyJLVecOrMat{T} = Union{AnyJLVector{T}, AnyJLMatrix{T}}
 
 ## array interface
 
-Base.elsize(::Type{<:JLArray{T}}) where {T} = sizeof(T)
+Base.elsize(::Type{<:JLArray{T}}) where {T} = aligned_sizeof(T)
 
 Base.size(x::JLArray) = x.dims
 Base.sizeof(x::JLArray) = Base.elsize(x) * length(x)
@@ -174,7 +194,7 @@ Adapt.adapt_storage(::Type{Array}, xs::JLArray) = convert(Array, xs)
 # adapt for the device
 @static if !isdefined(JLArrays.KernelAbstractions, :POCL) # KA v0.9
     Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N} =
-      JLDeviceArray{T,N}(x.data[], x.offset, x.dims)
+      JLDeviceArray{T,N}(x.data[], x.offset, x.tagoffset, x.dims)
 else
     function Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N}
         arr = typed_data(x)
@@ -189,53 +209,38 @@ Base.convert(::Type{T}, x::T) where T <: JLArray = x
 
 ## memory operations
 
-function Base.copyto!(dest::Array{T}, d_offset::Integer,
-                      source::DenseJLArray{T}, s_offset::Integer,
-                      amount::Integer) where T
-    amount==0 && return dest
-    @boundscheck checkbounds(dest, d_offset)
-    @boundscheck checkbounds(dest, d_offset+amount-1)
-    @boundscheck checkbounds(source, s_offset)
-    @boundscheck checkbounds(source, s_offset+amount-1)
-    GC.@preserve dest source Base.unsafe_copyto!(pointer(dest, d_offset),
-                                                 pointer(source, s_offset), amount)
+# copy the elements, and the selector bytes of isbits unions
+function unsafe_copy_elements!(dest, d_offset, source, s_offset, amount)
+    T = eltype(dest)
+    GC.@preserve dest source begin
+        Base.unsafe_copyto!(convert(Ptr{UInt8}, pointer(dest, d_offset)),
+                            convert(Ptr{UInt8}, pointer(source, s_offset)),
+                            amount * aligned_sizeof(T))
+        if Base.isbitsunion(T)
+            Base.unsafe_copyto!(typetagdata(dest, d_offset), typetagdata(source, s_offset),
+                                amount)
+        end
+    end
     return dest
 end
 
-Base.copyto!(dest::Array{T}, source::DenseJLArray{T}) where {T} =
-    copyto!(dest, 1, source, 1, length(source))
+for (D, S) in ((:Array, :DenseJLArray), (:DenseJLArray, :Array), (:DenseJLArray, :DenseJLArray))
+    @eval begin
+        function Base.copyto!(dest::$D{T}, d_offset::Integer,
+                              source::$S{T}, s_offset::Integer,
+                              amount::Integer) where T
+            amount==0 && return dest
+            @boundscheck checkbounds(dest, d_offset)
+            @boundscheck checkbounds(dest, d_offset+amount-1)
+            @boundscheck checkbounds(source, s_offset)
+            @boundscheck checkbounds(source, s_offset+amount-1)
+            unsafe_copy_elements!(dest, d_offset, source, s_offset, amount)
+        end
 
-function Base.copyto!(dest::DenseJLArray{T}, d_offset::Integer,
-                      source::Array{T}, s_offset::Integer,
-                      amount::Integer) where T
-    amount==0 && return dest
-    @boundscheck checkbounds(dest, d_offset)
-    @boundscheck checkbounds(dest, d_offset+amount-1)
-    @boundscheck checkbounds(source, s_offset)
-    @boundscheck checkbounds(source, s_offset+amount-1)
-    GC.@preserve dest source Base.unsafe_copyto!(pointer(dest, d_offset),
-                                                 pointer(source, s_offset), amount)
-    return dest
+        Base.copyto!(dest::$D{T}, source::$S{T}) where {T} =
+            copyto!(dest, 1, source, 1, length(source))
+    end
 end
-
-Base.copyto!(dest::DenseJLArray{T}, source::Array{T}) where {T} =
-    copyto!(dest, 1, source, 1, length(source))
-
-function Base.copyto!(dest::DenseJLArray{T}, d_offset::Integer,
-                      source::DenseJLArray{T}, s_offset::Integer,
-                      amount::Integer) where T
-    amount==0 && return dest
-    @boundscheck checkbounds(dest, d_offset)
-    @boundscheck checkbounds(dest, d_offset+amount-1)
-    @boundscheck checkbounds(source, s_offset)
-    @boundscheck checkbounds(source, s_offset+amount-1)
-    GC.@preserve dest source Base.unsafe_copyto!(pointer(dest, d_offset),
-                                                 pointer(source, s_offset), amount)
-    return dest
-end
-
-Base.copyto!(dest::DenseJLArray{T}, source::DenseJLArray{T}) where {T} =
-    copyto!(dest, 1, source, 1, length(source))
 
 function Base.resize!(a::DenseJLVector{T}, nl::Integer) where {T}
     # JLArrays aren't performance critical, so simply allocate a new one
@@ -249,6 +254,7 @@ function Base.resize!(a::DenseJLVector{T}, nl::Integer) where {T}
     a.data = copy(b.data)
 
     a.offset = b.offset
+    a.tagoffset = b.tagoffset
     a.dims = b.dims
     return a
 end

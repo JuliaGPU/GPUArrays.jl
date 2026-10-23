@@ -1,7 +1,13 @@
 # reductions
 
 struct ArrayNoCopy end
-Adapt.adapt_storage(::ArrayNoCopy, x::JLArray) = typed_data(x)
+# (an `Array` can't wrap the storage of isbits unions, whose selector bytes are elsewhere)
+Adapt.adapt_storage(::ArrayNoCopy, x::JLArray{T}) where {T} =
+    Base.isbitsunion(T) ? jlconvert(x) : typed_data(x)
+@static if !isdefined(KernelAbstractions, :POCL) # KA v0.9
+    # (AcceleratedKernels picks its host algorithms by the back-end)
+    KernelAbstractions.get_backend(::JLDeviceArray) = KernelAbstractions.CPU()
+end
 
 # GPUArrays reduces with AcceleratedKernels, whose kernels do not run on JLArrays' back-end. The
 # reference implementation runs AcceleratedKernels' host algorithms on the arrays' storage

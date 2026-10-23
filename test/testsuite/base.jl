@@ -607,17 +607,7 @@ end
       end
 
       if AT <: AbstractGPUArray
-        # XXX: use a predicate function?
-        supports_bitsunion = try
-          AT([1,nothing])
-          true
-        catch
-          false
-        end
-
-        if supports_bitsunion
-          @test_throws "cannot reinterpret an `Union{Nothing, Int64}` array to `Float64`, because not all types are bitstypes" reinterpret(Float64, AT([1,nothing]))
-        end
+        @test_throws "cannot reinterpret an `Union{Nothing, Int64}` array to `Float64`, because not all types are bitstypes" reinterpret(Float64, AT([1,nothing]))
 
         @test_throws "cannot reinterpret a zero-dimensional `Float32` array to `Int128` which is of a different size" reinterpret(Int128, AT(fill(1f0)))
 
