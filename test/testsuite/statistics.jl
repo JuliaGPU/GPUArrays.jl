@@ -38,6 +38,29 @@ using Statistics
         end
     end
 
+    @testset "mean accumulation" begin
+        # integers are summed in floating point, so they don't overflow
+        if Int64 in eltypes && Float64 in eltypes
+            x = fill(typemax(Int64) ÷ 2, 4, 2)
+            @test compare(mean, AT, x)
+            @test compare(A -> mean(A; dims = 1), AT, x)
+            @test compare(A -> mean(identity, A), AT, x)
+            @test compare(A -> mean(identity, A; dims = 2), AT, x)
+            @test compare(mean, AT, zeros(Int64, 0, 2)) nans = true
+            @test compare(A -> mean(A; dims = 1), AT, zeros(Int64, 0, 2)) nans = true
+        end
+        if Int32 in eltypes && Float32 in eltypes
+            x = rand(Int32, 10, 3)
+            @test compare(A -> mean(Float32, A), AT, x)
+            @test compare(A -> mean(Float32, A; dims = 1), AT, x)
+        end
+
+        # dividing after summing is exact here, scaling every term first is not
+        if Float32 in eltypes
+            @test all(isone, Array(mean(AT(ones(Float32, 640, 64)); dims = 1)))
+        end
+    end
+
     for ET in eltypes
         # Doesn't work with ComplexF32 in oneAPI for some reason.
         if !(ET in [Float32, Float64, Float16, ComplexF64])
