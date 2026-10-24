@@ -285,6 +285,11 @@ end
         @test compare((a, b)-> map(+, a, b),    AT, rand(Float32, 10), rand(Float32, 10))
         @test compare((a, b)-> map!(-, a, b),   AT, rand(Float32, 10), rand(Float32, 10))
         @test compare((a, b, c, d)-> map!(*, a, b, c, d), AT, rand(Float32, 10), rand(Float32, 10), rand(Float32, 10), rand(Float32, 10))
+        if VERSION >= v"1.12"
+            @test compare(a-> map!(sqrt, a), AT, rand(Float32, 10))
+        else
+            @test_throws ArgumentError map!(sqrt, AT(rand(Float32, 10)))
+        end
     end
 
     @testset "repeat" begin
