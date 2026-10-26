@@ -72,7 +72,8 @@ end
     Is = map(adapt(ToGPU(dest)), Is)
     @boundscheck checkbounds(src, Is...)
 
-    getindex_kernel(get_backend(dest))(dest, src, idims, Is...; ndrange=size(dest))
+    # the kernel only uses the linear index, so don't pay for a multidimensional ndrange
+    getindex_kernel(get_backend(dest))(dest, src, idims, Is...; ndrange=length(dest))
     return dest
 end
 
@@ -86,7 +87,10 @@ end
     i = @index(Global, Linear)
     getindex_generated(dest, src, idims, i, Is...)
 end
-@generated function getindex_generated(dest, src, idims, i, Is::Vararg{Any,N}) where {N}
+# these must be inlined into their kernel, or every work item passes the index tuples
+# through local memory, which is several times slower
+@inline @generated function getindex_generated(dest, src, idims, i,
+                                               Is::Vararg{Any,N}) where {N}
     quote
         is = @inbounds CartesianIndices(idims)[i]
         @nexprs $N i -> I_i = @inbounds(Is[i][is[i]])
@@ -123,7 +127,8 @@ end
     i = @index(Global, Linear)
     setindex_generated(dest, src, idims, len, i, Is...)
 end
-@generated function setindex_generated(dest, src, idims, len, i, Is::Vararg{Any,N}) where {N}
+@inline @generated function setindex_generated(dest, src, idims, len, i,
+                                               Is::Vararg{Any,N}) where {N}
     quote
         i > len && return
         is = @inbounds CartesianIndices(idims)[i]
