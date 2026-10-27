@@ -114,7 +114,7 @@ function Base.map!(f, dest::AnyGPUArray, xs::AbstractArray...)
     # (avoids the reshape + view that our mapreduce impl has to do)
     indices = LinearIndices.((dest, xs...))
     common_length = minimum(length.(indices))
-    common_length==0 && return
+    common_length==0 && return dest
 
     bc = Broadcast.instantiate(Broadcast.broadcasted(f, xs...))
     if bc isa Broadcast.Broadcasted
