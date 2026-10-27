@@ -76,6 +76,10 @@ end
 KI.supports_shuffle(::JLBackend, ::Type{T}) where {T} = KI.supports_shuffle(POCLBackend(), T)
 KI.versioninfo(io::IO, ::JLBackend) = KI.versioninfo(io, POCLBackend())
 
+# KernelAbstractions computes indices in `Int32` unless the back-end is POCL, where narrowing
+# them keeps LLVM from vectorizing the loops over work-items. JLArray kernels run on POCL too.
+KernelAbstractions.narrow_index_type(::JLBackend) = Int
+
 Adapt.adapt_storage(::JLBackend, a::Array) = Adapt.adapt(JLArray, a)
 Adapt.adapt_storage(::JLBackend, a::JLArray) = a
 
