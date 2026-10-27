@@ -26,16 +26,20 @@ _init_type(kwargs) = haskey(kwargs, :init) ? typeof(kwargs[:init]) : Union{}
 _mapped_eltype(f, A) = Base.promote_op(f, _source_eltype(A))
 
 # Whether `op` commutes on values of the types `Ts` (`Union{}` stands for no value): Base's
-# arithmetic and bitwise operators on Base's number types, and this package's own commutative
+# arithmetic and bitwise operators on Base's number types (including the `@fastmath` versions,
+# which may ignore NaNs and the sign of zero anyway), and this package's own commutative
 # operators. Other types can define these operators without commuting (`*` of matrices), so
 # anything else is reduced in order.
 const _CommutativeReal = Union{Bool, Base.BitInteger, Base.IEEEFloat}
 const _CommutativeNumber = Union{_CommutativeReal, Complex{<:_CommutativeReal}}
 _commutes_on(::Type{S}, Ts) where {S} = all(T -> T <: S, Ts)
 _commutative(op, Ts::Type...) = false
-_commutative(::Union{typeof(+), typeof(*), typeof(Base.add_sum), typeof(Base.mul_prod)},
+_commutative(::Union{typeof(+), typeof(*), typeof(Base.add_sum), typeof(Base.mul_prod),
+                     typeof(Base.FastMath.add_fast), typeof(Base.FastMath.mul_fast)},
              Ts::Type...) = _commutes_on(_CommutativeNumber, Ts)
-_commutative(::Union{typeof(max), typeof(min)}, Ts::Type...) = _commutes_on(_CommutativeReal, Ts)
+_commutative(::Union{typeof(max), typeof(min),
+                     typeof(Base.FastMath.max_fast), typeof(Base.FastMath.min_fast)},
+             Ts::Type...) = _commutes_on(_CommutativeReal, Ts)
 _commutative(::Union{typeof(&), typeof(|), typeof(xor)}, Ts::Type...) =
     _commutes_on(Union{Bool, Base.BitInteger}, Ts)
 _commutative(::typeof(Base._extrema_rf), Ts::Type...) =
