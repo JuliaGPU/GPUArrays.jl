@@ -94,7 +94,8 @@ end
     quote
         is = @inbounds CartesianIndices(idims)[i]
         @nexprs $N i -> I_i = @inbounds(Is[i][is[i]])
-        val = @ncall $N getindex src i -> I_i
+        # the host already checked the indices against `src`
+        val = @inbounds @ncall $N getindex src i -> I_i
         @inbounds dest[i] = val
     end
 end
@@ -133,7 +134,9 @@ end
         i > len && return
         is = @inbounds CartesianIndices(idims)[i]
         @nexprs $N i -> I_i = @inbounds(Is[i][is[i]])
-        @ncall $N setindex! dest src[i] i -> I_i
+        # the host already checked the indices against `dest`, and that `src` has `len`
+        # elements; offset by `firstindex` as a vector source can have other indices
+        @inbounds @ncall $N setindex! dest src[firstindex(src) + i - 1] i -> I_i
         return
     end
 end

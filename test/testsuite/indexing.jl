@@ -103,6 +103,13 @@ end
         end
     end
 
+    @testset "sliced setindex!, offset source" begin
+        @testset "$T" for T in eltypes
+            src = Base.IdentityUnitRange(5:6)   # indices 5:6, not 1:2
+            @test compare(x -> (x[2:3, 1] = src; x), AT, zeros(T, 4, 2))
+        end
+    end
+
     @allowscalar @testset "empty array" begin
         @testset "1D" begin
             Ac = zeros(Float32, 10)
