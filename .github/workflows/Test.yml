@@ -21,7 +21,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ['1.10', '1.11', '1.12', '1.13', 'nightly']
+        # pull requests only test the oldest and newest supported release
+        version: ${{ fromJSON(github.event_name == 'pull_request' && '["1.10", "1.13"]' ||
+                              '["1.10", "1.11", "1.12", "1.13", "nightly"]') }}
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6

@@ -1,8 +1,8 @@
 # Tests of the GPU back-ends against this version of GPUArrays. The JLArray tests on GitHub
-# Actions cover every supported Julia version, so the back-ends are only tested on the oldest
-# and newest release. Draft pull requests skip them, unless selected by name in the last commit
-# message: `[only cuda]`, `[only metal, oneapi]` or `[only tests]` for all of them. `[skip amdgpu]`
-# or `[skip tests]` does the opposite.
+# Actions cover the Julia releases in between (on pushes to main), so the back-ends are only
+# tested on the oldest and newest release. Draft pull requests skip them, unless selected by
+# name in the last commit message: `[only cuda]`, `[only metal, oneapi]` or `[only tests]` for
+# all of them. `[skip amdgpu]` or `[skip tests]` does the opposite.
 steps:
   # Julia 1.10 doesn't support [sources] in Project.toml,
   # so we need to manually dev CUDA.jl's workspace packages.
