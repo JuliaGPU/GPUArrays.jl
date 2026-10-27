@@ -41,8 +41,8 @@
     @test compare(A -> accumulate(something_add, A; init=nothing), AT, rand(1:10, 100))
 
     # Base's rules, which AcceleratedKernels leaves to GPUArrays: element types (which differ
-    # between Julia versions), a `dims` beyond the array's (which copies, ignoring `init`), and
-    # the running type Base's front-end chooses through the destination
+    # between Julia versions), a `dims` beyond the array's (where JuliaLang/julia#64233 started
+    # applying `init`), and the running type Base's front-end chooses through the destination
     for (f, x) in ((A -> accumulate(+, A), Int8[1, 2, 100]), (A -> accumulate(+, A; init=0), Int8[1, 2, 100]),
                    (cumsum, Int8[1, 2, 100]), (cumsum, Bool[1, 1, 0]), (cumprod, Int8[2, 3]),
                    (A -> accumulate(*, A), UInt8[16, 16, 16]),
@@ -57,6 +57,7 @@
                         zeros(Int32, 1, 3), Float32[0.5 1.0 2.0])
     @test compare_exact((B, A) -> accumulate!(+, B, A; dims=3, init=10), AT, zeros(Int, 3, 4),
                         rand(1:10, 3, 4))
+    @test compare_exact(A -> accumulate(+, A; dims=3, init=10), AT, zeros(Int, 0, 4))
 
     # Associative operators need not be commutative
     @test compare(A -> accumulate((a, b) -> a, A), AT, rand(1:10, 1000))
@@ -71,4 +72,5 @@
     end
     @test compare(A -> accumulate(compose, A; dims=2, init=(1, 0)), AT, affine(7, 10_000))
     @test compare(A -> accumulate(compose, A; dims=1), AT, affine(10_000, 7))
+    @test compare(A -> accumulate(compose, A; dims=3, init=(2, 1)), AT, affine(7, 10))
 end

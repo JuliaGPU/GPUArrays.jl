@@ -3,9 +3,12 @@
 # Base's `accumulate!` and `accumulate` reach these four methods, split as Base's are. `init` is
 # passed on only when given (`Some(x)`), so that an explicit `init=nothing` stays an initial
 # value. Base's rules are kept here: without `dims`, only vectors are scanned, and a `dims` beyond
-# the array's copies it, ignoring `init` (AcceleratedKernels would apply `init` to every element).
-# `B`'s element type, which Base's front-end chose, sets the running values' type in
-# AcceleratedKernels.
+# the array's is a trailing singleton dimension, so every element starts a scan of its own: it is
+# combined with `init`, or passed through `reduce_first` (Julia versions without
+# JuliaLang/julia#64233 copy the array instead, ignoring `init`). `B`'s element type, which Base's
+# front-end chose, sets the running values' type in AcceleratedKernels.
+
+const ACCUMULATE_BEYOND_NDIMS_USES_INIT = accumulate(+, [0]; dims=2, init=1) == [1]
 
 Base._accumulate!(op, B::AnyGPUArray, A::AnyGPUVector, dims::Nothing, init::Nothing) =
     AK.accumulate!(op, B, A)
@@ -14,13 +17,20 @@ Base._accumulate!(op, B::AnyGPUArray, A::AnyGPUVector, dims::Nothing, init::Some
 function Base._accumulate!(op, B::AnyGPUArray, A::AnyGPUArray, dims::Integer, init::Nothing)
     dims > 0 || throw(ArgumentError("dims must be a positive integer"))
     axes(B) == axes(A) || throw(DimensionMismatch("shape of B must match A"))
-    dims > ndims(A) && return copyto!(B, A)
+    if dims > ndims(A)
+        ACCUMULATE_BEYOND_NDIMS_USES_INIT || return copyto!(B, A)
+        return map!(x -> Base.reduce_first(op, x), B, A)
+    end
     AK.accumulate!(op, B, A; dims)
 end
 function Base._accumulate!(op, B::AnyGPUArray, A::AnyGPUArray, dims::Integer, init::Some)
     dims > 0 || throw(ArgumentError("dims must be a positive integer"))
     axes(B) == axes(A) || throw(DimensionMismatch("shape of B must match A"))
-    dims > ndims(A) && return copyto!(B, A)
+    if dims > ndims(A)
+        ACCUMULATE_BEYOND_NDIMS_USES_INIT || return copyto!(B, A)
+        v = something(init)
+        return map!(x -> op(v, x), B, A)
+    end
     AK.accumulate!(op, B, A; dims, init=something(init))
 end
 
