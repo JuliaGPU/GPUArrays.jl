@@ -1,8 +1,12 @@
 using Documenter, GPUArrays
+using DocumenterCodeBlocks: CodeBlocks
 
 function main()
     makedocs(
         modules = [GPUArrays],
+        plugins = [
+            CodeBlocks(; line_counter = :named),
+        ],
         format = Documenter.HTML(
             # Use clean URLs on CI
             prettyurls = get(ENV, "CI", nothing) == "true",
