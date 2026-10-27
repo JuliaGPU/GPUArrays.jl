@@ -191,10 +191,17 @@ Adapt.adapt_storage(::Type{<:JLArray{T}}, xs::AbstractArray) where {T} =
 # adapt back to the CPU
 Adapt.adapt_storage(::Type{Array}, xs::JLArray) = convert(Array, xs)
 
-# adapt for the device
+# adapt for the device, where JLArrays are POCL arrays (constructed directly, rather than
+# by adapting a wrapping `Array`, to avoid allocating on every launch)
 function Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N}
-    arr = typed_data(x)
-    Adapt.adapt_storage(POCL.KernelAdaptor([pointer(arr)]), arr)
+    AS = POCL.AS.CrossWorkgroup
+    ptr = reinterpret(Core.LLVMPtr{T,AS}, pointer(x))
+    if Base.isbitsunion(T)
+        # POCL arrays of isbits unions find their selector bytes `maxsize` bytes past the data
+        POCL.CLDeviceArray{T,N,AS}(x.dims, ptr, x.tagoffset - x.offset)
+    else
+        POCL.CLDeviceArray{T,N,AS}(x.dims, ptr)
+    end
 end
 
 ## conversions
