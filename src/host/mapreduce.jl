@@ -11,8 +11,35 @@ const AbstractArrayOrBroadcasted = Union{AbstractArray,Broadcast.Broadcasted}
 # AcceleratedKernels' primitives, on the backend `backend` (a `Broadcasted` source may hold arrays
 # without one, such as `EachIndex`). The reference back-end (JLArrays) runs them on its storage
 # instead; these are internal, not an extension point for back-ends.
-_ak_mapreduce(f, op, A; kwargs...) = AK.mapreduce(f, op, A; kwargs...)
-_ak_mapreducedim!(f, op, R, A; kwargs...) = AK.mapreducedim!(f, op, R, A; kwargs...)
+#
+# Base's reductions combine the elements in their order, so `op` need not be commutative, while
+# AcceleratedKernels' faster kernels combine them in any order: they are only used for operators
+# known to commute on the types involved (see `_commutative`).
+_ak_mapreduce(f, op, A; kwargs...) =
+    AK.mapreduce(f, op, A; commutative=_commutative(op, _mapped_eltype(f, A), _init_type(kwargs)),
+                 kwargs...)
+_ak_mapreducedim!(f, op, R, A; kwargs...) =
+    AK.mapreducedim!(f, op, R, A; commutative=_commutative(op, _mapped_eltype(f, A), eltype(R),
+                                                           _init_type(kwargs)),
+                     kwargs...)
+_init_type(kwargs) = haskey(kwargs, :init) ? typeof(kwargs[:init]) : Union{}
+_mapped_eltype(f, A) = Base.promote_op(f, _source_eltype(A))
+
+# Whether `op` commutes on values of the types `Ts` (`Union{}` stands for no value): Base's
+# arithmetic and bitwise operators on Base's number types, and this package's own commutative
+# operators. Other types can define these operators without commuting (`*` of matrices), so
+# anything else is reduced in order.
+const _CommutativeReal = Union{Bool, Base.BitInteger, Base.IEEEFloat}
+const _CommutativeNumber = Union{_CommutativeReal, Complex{<:_CommutativeReal}}
+_commutes_on(::Type{S}, Ts) where {S} = all(T -> T <: S, Ts)
+_commutative(op, Ts::Type...) = false
+_commutative(::Union{typeof(+), typeof(*), typeof(Base.add_sum), typeof(Base.mul_prod)},
+             Ts::Type...) = _commutes_on(_CommutativeNumber, Ts)
+_commutative(::Union{typeof(max), typeof(min)}, Ts::Type...) = _commutes_on(_CommutativeReal, Ts)
+_commutative(::Union{typeof(&), typeof(|), typeof(xor)}, Ts::Type...) =
+    _commutes_on(Union{Bool, Base.BitInteger}, Ts)
+_commutative(::typeof(Base._extrema_rf), Ts::Type...) =
+    _commutes_on(Tuple{_CommutativeReal, _CommutativeReal}, Ts)
 
 # `Base.mapreducedim!` folds into `R`'s values
 Base.mapreducedim!(f, op, R::AnyGPUArray, A::AbstractArray) =
@@ -259,13 +286,15 @@ function Base.:(==)(A::AnyGPUArray, B::AnyGPUArray)
             (; is_missing=false, is_equal=eq)
         end
     end
-    function reducer(a, b)
-        if a.is_missing || b.is_missing
-            (; is_missing=true, is_equal=#=don't care=#false)
-        else
-            (; is_missing=false, is_equal=a.is_equal & b.is_equal)
-        end
-    end
-    res = mapreduce(mapper, reducer, A, B; init=(; is_missing=false, is_equal=true))
+    res = mapreduce(mapper, _equal_reducer, A, B; init=(; is_missing=false, is_equal=true))
     res.is_missing ? missing : res.is_equal
 end
+function _equal_reducer(a, b)
+    if a.is_missing || b.is_missing
+        (; is_missing=true, is_equal=#=don't care=#false)
+    else
+        (; is_missing=false, is_equal=a.is_equal & b.is_equal)
+    end
+end
+_commutative(::typeof(_equal_reducer), Ts::Type...) =
+    _commutes_on(@NamedTuple{is_missing::Bool, is_equal::Bool}, Ts)
