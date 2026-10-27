@@ -512,6 +512,18 @@ end
         @test collect(D) == collect(C)
     end
 
+    @testset "copyto! diagonal" begin
+        D = Diagonal(AT(rand(Float32, 10)))
+        C = Diagonal(AT(zeros(Float32, 10)))
+        @test copyto!(C, D) === C
+        @test C.diag isa AT
+        @test collect(C) == collect(D)
+
+        D = Diagonal(AT(Int32.(1:10)))
+        copyto!(C, D)
+        @test collect(C) == Diagonal(Float32.(1:10))
+    end
+
     @testset "cholesky + Diagonal" begin
         n = 128
         # Add one in order prevent failures due to random numbers being zero
