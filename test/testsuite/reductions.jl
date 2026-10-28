@@ -311,6 +311,9 @@ end
     @test GPUArrays._commutative(+, Float32, Union{})
     @test GPUArrays._commutative(Base.add_sum, Int8, Int)
     @test GPUArrays._commutative(max, Float64, Float64)
+    @test GPUArrays._commutative(Base.FastMath.add_fast, Float32, Float32)
+    @test GPUArrays._commutative(Base.FastMath.max_fast, Float16, Union{})
+    @test !GPUArrays._commutative(Base.FastMath.mul_fast, NTuple{4, UInt32}, Union{})
     @test !GPUArrays._commutative(*, NTuple{4, UInt32}, Union{})
     @test !GPUArrays._commutative(+, Float32, Any)
     @test !GPUArrays._commutative((a, b) -> a + b, Float32, Float32)
@@ -512,9 +515,23 @@ end
     @test GPUArrays.neutral_element(max, Float64) === -Inf
     @test GPUArrays.neutral_element(&, UInt8) === 0xff
     @test GPUArrays.neutral_element(Base._extrema_rf, NTuple{2,Int8}) === (typemax(Int8), typemin(Int8))
+    # ... including the operators that `@fastmath` substitutes
+    @test GPUArrays.neutral_element(Base.FastMath.add_fast, Float32) === 0.0f0
+    @test GPUArrays.neutral_element(Base.FastMath.mul_fast, Int32) === Int32(1)
+    @test GPUArrays.neutral_element(Base.FastMath.min_fast, Int16) === typemax(Int16)
+    @test GPUArrays.neutral_element(Base.FastMath.max_fast, Float64) === -Inf
     @test_throws ErrorException GPUArrays.neutral_element((x, y) -> x, Int)
     if isdefined(Base, :and_all)    # Julia 1.13
         @test GPUArrays.neutral_element(Base.and_all, Bool) === true
         @test GPUArrays.neutral_element(Base.or_any, Bool) === false
+    end
+
+    @testset "@fastmath $ET" for ET in eltypes
+        ET <: Real || continue
+        x = rand(ET(1):ET(2), 10, 10)
+        @test compare(A->@fastmath(reduce(max, A; dims=1, init=typemin(ET))), AT, x)
+        @test compare(A->@fastmath(reduce(min, A; init=typemax(ET))), AT, x)
+        @test compare(A->@fastmath(reduce(+, A; dims=2, init=zero(ET))), AT, x)
+        @test compare(A->@fastmath(reduce(*, A; dims=1, init=one(ET))), AT, x)
     end
 end
