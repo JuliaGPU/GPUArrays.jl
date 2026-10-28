@@ -22,6 +22,13 @@ import KernelAbstractions
     import KernelAbstractions: POCL
 end
 
+# the size of an element in an array, including padding up to the element's alignment
+@static if VERSION < v"1.11"
+    @generated aligned_sizeof(::Type{T}) where {T} = :($(Base.aligned_sizeof(T)))
+else
+    import Base: aligned_sizeof
+end
+
 module AS
 
 const Generic  = 0
