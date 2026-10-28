@@ -87,6 +87,29 @@ end
         end
     end
 
+    @testset "sliced getindex and setindex! with ranges" begin
+        # odd sizes (so the last workgroup is only partially used), ranges in inner and outer
+        # dimensions, strided and reversed ranges, and integer indices that drop dimensions
+        # (the destination then has fewer dimensions than there are indices)
+        @testset "$T" for T in eltypes
+            x = rand(T, 7, 5, 13, 3)
+            @testset "$(join(Is, ", "))" for Is in ((:, :, 4:9, :), (2:6, 1:2:5, :, 2),
+                                                    (:, 3, 12:-3:3, 1:2), (4, :, :, 3))
+                @test compare(x -> x[Is...], AT, x)
+                @test compare(x -> copy(view(x, Is...)), AT, x)
+                y = rand(T, size(x[Is...]))
+                @test compare((x, y) -> (x[Is...] = y; x), AT, x, y)
+            end
+        end
+    end
+
+    @testset "sliced setindex!, offset source" begin
+        @testset "$T" for T in eltypes
+            src = Base.IdentityUnitRange(5:6)   # indices 5:6, not 1:2
+            @test compare(x -> (x[2:3, 1] = src; x), AT, zeros(T, 4, 2))
+        end
+    end
+
     @allowscalar @testset "empty array" begin
         @testset "1D" begin
             Ac = zeros(Float32, 10)

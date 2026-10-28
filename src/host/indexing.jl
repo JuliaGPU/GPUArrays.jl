@@ -72,7 +72,8 @@ end
     Is = map(adapt(ToGPU(dest)), Is)
     @boundscheck checkbounds(src, Is...)
 
-    getindex_kernel(get_backend(dest))(dest, src, idims, Is...; ndrange=size(dest))
+    # the kernel only uses the linear index, so don't pay for a multidimensional ndrange
+    getindex_kernel(get_backend(dest))(dest, src, idims, Is...; ndrange=length(dest))
     return dest
 end
 
@@ -86,11 +87,15 @@ end
     i = @index(Global, Linear)
     getindex_generated(dest, src, idims, i, Is...)
 end
-@generated function getindex_generated(dest, src, idims, i, Is::Vararg{Any,N}) where {N}
+# these must be inlined into their kernel, or every work item passes the index tuples
+# through local memory, which is several times slower
+@inline @generated function getindex_generated(dest, src, idims, i,
+                                               Is::Vararg{Any,N}) where {N}
     quote
         is = @inbounds CartesianIndices(idims)[i]
         @nexprs $N i -> I_i = @inbounds(Is[i][is[i]])
-        val = @ncall $N getindex src i -> I_i
+        # the host already checked the indices against `src`
+        val = @inbounds @ncall $N getindex src i -> I_i
         @inbounds dest[i] = val
     end
 end
@@ -123,12 +128,15 @@ end
     i = @index(Global, Linear)
     setindex_generated(dest, src, idims, len, i, Is...)
 end
-@generated function setindex_generated(dest, src, idims, len, i, Is::Vararg{Any,N}) where {N}
+@inline @generated function setindex_generated(dest, src, idims, len, i,
+                                               Is::Vararg{Any,N}) where {N}
     quote
         i > len && return
         is = @inbounds CartesianIndices(idims)[i]
         @nexprs $N i -> I_i = @inbounds(Is[i][is[i]])
-        @ncall $N setindex! dest src[i] i -> I_i
+        # the host already checked the indices against `dest`, and that `src` has `len`
+        # elements; offset by `firstindex` as a vector source can have other indices
+        @inbounds @ncall $N setindex! dest src[firstindex(src) + i - 1] i -> I_i
         return
     end
 end
