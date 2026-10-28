@@ -320,6 +320,14 @@ end
 
 Base.copy(D::Diagonal{T, <:AbstractGPUArray{T, N}}) where {T, N} = Diagonal(copy(D.diag))
 
+# copy only the diagonal; the generic `AnyGPUArray` method would launch a kernel over all
+# n^2 entries, calling `setindex!(::Diagonal, ...)` whose error path isn't GPU-compatible
+function Base.copyto!(D1::Diagonal{T, <:AbstractGPUArray{T, N}},
+                      D2::Diagonal{S, <:AbstractGPUArray{S, M}}) where {T, N, S, M}
+    copyto!(D1.diag, D2.diag)
+    return D1
+end
+
 _isrealandpositive(x) = isreal(x) && real(x) > 0
 
 function LinearAlgebra.cholesky!(D::Diagonal{<:Any, <:AbstractGPUArray},
