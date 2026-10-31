@@ -16,11 +16,7 @@ using Random
 
 import GPUArrays: dense_array_type
 
-import KernelAbstractions
-
-@static if isdefined(JLArrays.KernelAbstractions, :POCL) # KA v0.10
-    import KernelAbstractions: POCL
-end
+import KernelAbstractions: KernelAbstractions, POCL
 
 # the size of an element in an array, including padding up to the element's alignment
 @static if VERSION < v"1.11"
@@ -50,5 +46,8 @@ include("findall.jl")
 # KernelAbstractions
 include("JLKernels.jl")
 import .JLKernels: JLBackend
+
+# code reflection: JLArray kernels are compiled by POCL, for the device-side argument types
+import .POCL: code_typed, code_warntype, code_llvm, code_native
 
 end

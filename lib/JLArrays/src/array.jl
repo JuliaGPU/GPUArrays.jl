@@ -192,14 +192,9 @@ Adapt.adapt_storage(::Type{<:JLArray{T}}, xs::AbstractArray) where {T} =
 Adapt.adapt_storage(::Type{Array}, xs::JLArray) = convert(Array, xs)
 
 # adapt for the device
-@static if !isdefined(JLArrays.KernelAbstractions, :POCL) # KA v0.9
-    Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N} =
-      JLDeviceArray{T,N}(x.data[], x.offset, x.tagoffset, x.dims)
-else
-    function Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N}
-        arr = typed_data(x)
-        Adapt.adapt_storage(POCL.KernelAdaptor([pointer(arr)]), arr)
-    end
+function Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N}
+    arr = typed_data(x)
+    Adapt.adapt_storage(POCL.KernelAdaptor([pointer(arr)]), arr)
 end
 
 ## conversions

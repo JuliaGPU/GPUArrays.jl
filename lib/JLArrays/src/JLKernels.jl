@@ -3,8 +3,8 @@ module JLKernels
 using ..JLArrays
 using ..JLArrays: jlconvert
 
-import KernelAbstractions
-import KernelAbstractions: Kernel, StaticSize, DynamicSize, partition, launch_config
+import KernelAbstractions: KernelAbstractions, POCLBackend
+import KernelInterface as KI
 
 import Adapt
 
@@ -13,73 +13,65 @@ import Adapt
 
 export JLBackend
 
-const MAXTHREADS = 256
+struct JLBackend <: KI.Backend end
 
-struct JLBackend <: KernelAbstractions.GPU
-    static::Bool
-    JLBackend(;static::Bool=false) = new(static)
+KI.get_backend(a::JLA) where JLA <: JLArray = JLBackend()
+KI.get_backend(a::JLA) where JLA <: Union{JLSparseMatrixCSC, JLSparseMatrixCSR, JLSparseVector} = JLBackend()
+
+KI.allocate(::JLBackend, ::Type{T}, dims::Tuple) where T = JLArray{T}(undef, dims)
+
+## KernelInterface
+
+# JLArrays are executed by POCL: convert arguments to their POCL-compatible (CPU)
+# counterparts, and forward compilation and launches to the POCL backend. KernelAbstractions
+# kernels are launched through these methods too.
+
+KI.functional(::JLBackend) = true
+
+# POCL launches synchronously, and JLArrays live in host memory
+KI.synchronize(::JLBackend) = nothing
+
+function KI.copyto!(::JLBackend, A, B)
+    length(A) == length(B) ||
+        throw(ArgumentError("Arrays must match in length, got $(length(A)) and $(length(B))"))
+    Base.copyto!(A, B)
+    return A
 end
 
-KernelAbstractions.get_backend(a::JLA) where JLA <: JLArray = JLBackend()
-KernelAbstractions.get_backend(a::JLA) where JLA <: Union{JLSparseMatrixCSC, JLSparseMatrixCSR, JLSparseVector} = JLBackend()
+KI.argconvert(::JLBackend, arg) = KI.argconvert(POCLBackend(), jlconvert(arg))
 
-function KernelAbstractions.mkcontext(kernel::Kernel{JLBackend}, I, _ndrange, iterspace, ::Dynamic) where Dynamic
-    return KernelAbstractions.CompilerMetadata{KernelAbstractions.ndrange(kernel), Dynamic}(I, _ndrange, iterspace)
+# the POCL kernel, and the callable it was compiled from, which has to be kept alive since
+# its converted form only holds pointers to the arrays it captures
+struct JLKernel{K, F}
+    kernel::K
+    f::F
 end
 
-KernelAbstractions.allocate(::JLBackend, ::Type{T}, dims::Tuple) where T = JLArray{T}(undef, dims)
-
-@inline function launch_config(kernel::Kernel{JLBackend}, ndrange, workgroupsize)
-    if ndrange isa Integer
-        ndrange = (ndrange,)
-    end
-    if workgroupsize isa Integer
-        workgroupsize = (workgroupsize, )
-    end
-
-    if KernelAbstractions.workgroupsize(kernel) <: DynamicSize && workgroupsize === nothing
-        workgroupsize = (MAXTHREADS,) # Vectorization, 4x unrolling, minimal grain size
-    end
-    iterspace, dynamic = partition(kernel, ndrange, workgroupsize)
-    # partition checked that the ndrange's agreed
-    if KernelAbstractions.ndrange(kernel) <: StaticSize
-        ndrange = nothing
-    end
-
-    return ndrange, workgroupsize, iterspace, dynamic
+function KI.kernel_function(backend::JLBackend, f::F, tt::TT = Tuple{}; kwargs...) where {F, TT}
+    kernel = KI.kernel_function(POCLBackend(), jlconvert(f), tt; kwargs...)
+    kern = JLKernel(kernel, f)
+    return KI.Kernel{JLBackend, typeof(kern)}(backend, kern)
 end
 
-@static if isdefined(KernelAbstractions, :isgpu) # KA v0.9
-    KernelAbstractions.isgpu(b::JLBackend) = false
-end
-
-@static if !isdefined(KernelAbstractions, :POCL) # KA v0.9
-    function convert_to_cpu(obj::Kernel{JLBackend, W, N, F}) where {W, N, F}
-        return Kernel{typeof(KernelAbstractions.CPU(; static = obj.backend.static)), W, N, F}(KernelAbstractions.CPU(; static = obj.backend.static), obj.f)
-    end
-else
-    function convert_to_cpu(obj::Kernel{JLBackend, W, N, F}) where {W, N, F}
-        return Kernel{typeof(KernelAbstractions.POCLBackend()), W, N, F}(KernelAbstractions.POCLBackend(), obj.f)
-    end
-end
-
-function (obj::Kernel{JLBackend})(args...; ndrange=nothing, workgroupsize=nothing)
-    ndrange, workgroupsize, _, _ = launch_config(obj, ndrange, workgroupsize)
+function KI.launch(obj::KI.Kernel{JLBackend}, groups::Dims{3}, items::Dims{3}, args::Tuple; kwargs...)
     # Use `map` rather than `jlconvert.(args)` to skip the broadcast
     # machinery (broadcasted/materialize/ntuple) that would otherwise
     # be specialized per unique arg-tuple type.
-    device_args = map(jlconvert, args)
-    new_obj = convert_to_cpu(obj)
-    new_obj(device_args...; ndrange, workgroupsize)
+    f = obj.kern.f
+    GC.@preserve f args KI.launch(obj.kern.kernel, groups, items, map(jlconvert, args); kwargs...)
 end
 
-Adapt.adapt_storage(::JLBackend, a::Array) = Adapt.adapt(JLArrays.JLArray, a)
-Adapt.adapt_storage(::JLBackend, a::JLArrays.JLArray) = a
-
-@static if !isdefined(KernelAbstractions, :POCL) # KA v0.9
-    Adapt.adapt_storage(::KernelAbstractions.CPU, a::JLArrays.JLArray) = convert(Array, a)
-else
-    Adapt.adapt_storage(::KernelAbstractions.POCLBackend, a::JLArrays.JLArray) = convert(Array, a)
+KI.max_work_group_size(kernel::KI.Kernel{JLBackend}) = KI.max_work_group_size(kernel.kern.kernel)
+KI.launch_configuration(kernel::KI.Kernel{JLBackend}; kwargs...) =
+    KI.launch_configuration(kernel.kern.kernel; kwargs...)
+for f in (:max_work_group_size, :max_work_group_dims, :max_num_groups, :sub_group_size,
+          :multiprocessor_count, :supports_subgroups, :supports_linear_subgroups,
+          :supports_independent_subgroups, :supports_partitionable_subgroups,
+          :supports_float64, :supports_atomics)
+    @eval KI.$f(::JLBackend) = KI.$f(POCLBackend())
 end
+KI.supports_shuffle(::JLBackend, ::Type{T}) where {T} = KI.supports_shuffle(POCLBackend(), T)
+
+Adapt.adapt_storage(::JLBackend, x) = Adapt.adapt(JLArray, x)
 
 end

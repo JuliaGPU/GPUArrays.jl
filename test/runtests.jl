@@ -11,6 +11,12 @@ const init_worker_code = quote
 
     TestSuite.sparse_types(::Type{<:JLArray}) = (JLSparseVector, JLSparseMatrixCSC, JLSparseMatrixCSR)
     TestSuite.sparse_types(::Type{<:Array})   = (SparseVector, SparseMatrixCSC)
+
+    # KA v0.10 runs JLArray kernels through POCL, whose SPIR-V back-end lacks 128-bit integers
+    if isdefined(JLArrays.KernelAbstractions, :POCL)
+        TestSuite.supported_eltypes(::Type{<:JLArray}) =
+            filter(!=(Int128), TestSuite.supported_eltypes())
+    end
 end
 
 const init_code = quote
@@ -24,6 +30,27 @@ args = parse_args(ARGS)
 testsuite = Dict{String, Expr}()
 for AT in (:JLArray, :Array), name in keys(TestSuite.tests)
     testsuite["$(AT)/$name"] = :(TestSuite.tests[$name]($AT))
+end
+
+testsuite["JLArray/kernelabstractions"] = quote
+    import KernelAbstractions
+    import KernelAbstractions as KA
+    using JLArrays.JLKernels
+
+    include(joinpath(dirname(pathof(KernelAbstractions)), "..", "test", "testsuite.jl"))
+
+    Testsuite.testsuite(JLBackend, "JLArrays", JLArrays, JLArray, KernelAbstractions.POCL.CLDeviceArray)
+end
+
+testsuite["JLArray/kernelinterface"] = quote
+    import KernelInterface
+    import KernelInterface as KI
+    using JLArrays.JLKernels
+    import Adapt
+
+    include(joinpath(dirname(pathof(KernelInterface)), "..", "test", "testsuite.jl"))
+
+    Testsuite.testsuite(JLBackend(), JLArray)
 end
 
 # captured variables that get boxed (`Core.Box`) lose their type
