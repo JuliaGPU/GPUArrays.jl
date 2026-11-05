@@ -11,6 +11,7 @@ using Base.Cartesian
 
 using Adapt
 using LLVM.Interop: assume
+using Static: Static, StaticInt, dynamic, known
 
 using Reexport
 @reexport using GPUArraysCore
@@ -22,6 +23,7 @@ import AcceleratedKernels as AK
 # device functionality
 include("device/abstractarray.jl")
 include("device/sparse.jl")
+include("device/staticdims.jl")
 
 # host abstractions
 include("host/abstractarray.jl")
@@ -42,6 +44,7 @@ include("host/uniformscaling.jl")
 include("host/statistics.jl")
 include("host/sparse.jl")
 include("host/alloc_cache.jl")
+include("host/staticdims.jl")
 
 
 end # module
