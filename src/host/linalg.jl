@@ -525,7 +525,8 @@ end
 ## matrix multiplication
 
 # GPU-backed members of Base's StridedArray union match LinearAlgebra's BLAS methods,
-# but cannot be converted to host pointers. Route them to the generic GPU kernels.
+# but cannot be converted to host pointers. Route them to the generic GPU kernels, or to the
+# storage-level `mul!` methods where the back-end can take them (see `strided_view_matmatmul!`).
 const StridedGPUSubArray{T,N} = Base.StridedSubArray{T,N,<:AbstractGPUArray}
 const AnyStridedGPUArray{T,N} = Union{AbstractGPUArray{T,N},StridedGPUSubArray{T,N}}
 const AnyStridedGPUVector{T} = AnyStridedGPUArray{T,1}
@@ -546,6 +547,26 @@ const AnyStridedGPUVecOrMatOperand{T} = Union{
 has_strided_gpu_view(As...) =
     any(A -> LinearAlgebra._unwrap(A) isa StridedGPUSubArray, As)
 
+# Back-ends overload the storage-level `mul!` to call their vendor library. Their gemm wrappers
+# accept views, but some pass `stride(X, 2)` as the leading dimension without validating the
+# layout, so only forward views that are valid BLAS operands: unit row stride and a leading
+# dimension of at least the number of rows (which rules out reversed columns). Not every
+# back-end checks dimensions either, so leave mismatches to the generic kernel to report.
+# Symmetric and Hermitian operands and products with a vector keep the generic kernels, as not
+# every back-end accepts views for those.
+blas_compatible(X) =
+    X isa AbstractMatrix && stride(X, 1) == 1 && stride(X, 2) >= max(1, size(X, 1))
+
+function strided_view_matmatmul!(C, A, B, a, b)
+    tA, tB = LinearAlgebra.wrapper_char(A), LinearAlgebra.wrapper_char(B)
+    pA, pB = LinearAlgebra._unwrap(A), LinearAlgebra._unwrap(B)
+    if tA in ('N', 'T', 'C') && tB in ('N', 'T', 'C') && all(blas_compatible, (C, pA, pB)) &&
+       size(A, 2) == size(B, 1) && size(C) == (size(A, 1), size(B, 2))
+        return LinearAlgebra.mul!(C, tA, tB, pA, pB, a, b)
+    end
+    return generic_matmatmul!(C, A, B, a, b)
+end
+
 # Intercept before LinearAlgebra unwraps operands and dispatches to backend BLAS methods. The
 # signatures also cover view-free products to avoid overlapping methods for each possible view
 # position; those calls are sent back through LinearAlgebra's original implementation.
@@ -564,7 +585,7 @@ end
 @inline function LinearAlgebra.mul!(C::AnyStridedGPUMatrix, A::AnyStridedGPUVecOrMatOperand,
                             B::AnyStridedGPUVecOrMatOperand, a::Number, b::Number)
     if has_strided_gpu_view(C, A, B)
-        return generic_matmatmul!(C, A, B, a, b)
+        return strided_view_matmatmul!(C, A, B, a, b)
     end
     invoke(LinearAlgebra.mul!,
            Tuple{AbstractMatrix,LinearAlgebra.AbstractVecOrMat,
@@ -587,7 +608,7 @@ end
 @inline function LinearAlgebra._mul!(C::AnyStridedGPUMatrix, A::AnyStridedGPUVecOrMatOperand,
                              B::AnyStridedGPUVecOrMatOperand, a::Number, b::Number)
     if has_strided_gpu_view(C, A, B)
-        return generic_matmatmul!(C, A, B, a, b)
+        return strided_view_matmatmul!(C, A, B, a, b)
     end
     invoke(LinearAlgebra._mul!,
            Tuple{AbstractMatrix,LinearAlgebra.AbstractVecOrMat,

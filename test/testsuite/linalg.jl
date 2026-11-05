@@ -763,12 +763,25 @@ end
             C
         end
 
+        # reversed columns (negative stride along the second dimension)
+        @test compare((A, B) -> view(A, :, 6:-1:1) * view(B, 6:-1:1, :), AT, As, Bs)
+        @test compare((A, B) -> A * view(B, :, 10:-1:1), AT, As, Bs)
+        @test compare(A -> view(A, :, 6:-1:1)' * A, AT, As)
+        Cr = rand(T, 8, 10)
+        @test compare(AT, Cr, As, Bs) do C, A, B
+            mul!(view(C, :, 10:-1:1), A, B, T(2), T(1))
+            C
+        end
+
         # strided destination with contiguous operands
         B3 = rand(T, 3, 5)
         @test compare(AT, C, A2, B3) do C, A, B
             mul!(view(C, 1:2, :), A, B)
             C
         end
+
+        # mismatched destination
+        @test_throws DimensionMismatch mul!(AT(rand(T, 1, 5)), view(AT(A), 1:2, :), AT(B3))
     end
 
     if Float32 in eltypes && ComplexF32 in eltypes
