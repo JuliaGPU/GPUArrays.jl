@@ -352,78 +352,107 @@ end
 
 ## generalized blocks of heterogeneous memory
 
-@kernel function cartesian_copy_kernel!(dest, dest_offsets, src, src_offsets)
+# mirrors the checks of Base's `copyto!(dest, Rdest, src, Rsrc)`
+function check_block_copy(dest, Rdest, src, Rsrc)
+    if size(Rdest) != size(Rsrc)
+        throw(ArgumentError("source and destination must have same size (got $(size(Rsrc)) and $(size(Rdest)))"))
+    end
+    checkbounds(dest, first(Rdest))
+    checkbounds(dest, last(Rdest))
+    checkbounds(src, first(Rsrc))
+    checkbounds(src, last(Rsrc))
+    return
+end
+
+# whether the block `R` of `A` covers consecutive linear indices: once a dimension does not
+# span its whole axis, every later dimension has to be a single index.
+function is_linear_block(A::AbstractArray{<:Any,N}, R::CartesianIndices{N}) where {N}
+    partial = false
+    for d in 1:N
+        r = R.indices[d]
+        if partial
+            length(r) == 1 || return false
+        elseif r != axes(A, d)
+            length(r) == 1 || step(r) == 1 || return false
+            partial = true
+        end
+    end
+    return true
+end
+
+linear_offset(A, R::CartesianIndices) = LinearIndices(A)[first(R)]
+
+# stage a block into a dense array of the same kind as `like`
+function pack_block(like, T, src, Rsrc::CartesianIndices)
+    tmp = similar(like, T, size(Rsrc))
+    copyto!(tmp, CartesianIndices(tmp), src, Rsrc)
+    return tmp
+end
+
+@kernel function cartesian_copy_kernel!(dest, Rdest, src, Rsrc)
     I = @index(Global, Cartesian)
-    @inbounds dest[I + dest_offsets] = src[I + src_offsets]
+    @inbounds dest[Rdest[I]] = src[Rsrc[I]]
 end
 
-function Base.copyto!(dest::AnyGPUArray{<:Any, N}, destcrange::CartesianIndices{N},
-                      src::AnyGPUArray{<:Any, N}, srccrange::CartesianIndices{N}) where {N}
-    shape = size(destcrange)
-    if shape != size(srccrange)
-        throw(ArgumentError("Ranges don't match their size. Found: $shape, $(size(srccrange))"))
-    end
-    len = length(destcrange)
-    len == 0 && return dest
+function Base.copyto!(dest::AnyGPUArray{<:Any, N}, Rdest::CartesianIndices{N},
+                      src::AnyGPUArray{<:Any, N}, Rsrc::CartesianIndices{N}) where {N}
+    isempty(Rdest) && return dest
+    check_block_copy(dest, Rdest, src, Rsrc)
 
-    # linear copy if we can
-    if N == 1
-        d_offset = first(destcrange)[1]
-        s_offset = first(srccrange)[1]
-        return copyto!(dest, d_offset, src, s_offset, len)
+    # the kernel reads and writes in no particular order
+    if Base.mightalias(dest, src)
+        src = pack_block(src, eltype(src), src, Rsrc)
+        Rsrc = CartesianIndices(src)
     end
 
-    dest_offsets = first(destcrange) - oneunit(CartesianIndex{N})
-    src_offsets = first(srccrange) - oneunit(CartesianIndex{N})
+    if is_linear_block(dest, Rdest) && is_linear_block(src, Rsrc)
+        return copyto!(dest, linear_offset(dest, Rdest), src, linear_offset(src, Rsrc),
+                       length(Rdest))
+    end
+
     kernel = cartesian_copy_kernel!(get_backend(dest))
-    kernel(dest, dest_offsets, src, src_offsets; ndrange=shape)
-    dest
+    kernel(dest, Rdest, src, Rsrc; ndrange=size(Rdest))
+    return dest
 end
 
-for (dstTyp, srcTyp) in (AbstractGPUArray=>Array, Array=>AbstractGPUArray)
-    @eval function Base.copyto!(dst::$dstTyp{T,N}, dstrange::CartesianIndices{N},
-                                src::$srcTyp{T,N}, srcrange::CartesianIndices{N}) where {T,N}
-        isempty(dstrange) && return dst
-        if size(dstrange) != size(srcrange)
-            throw(ArgumentError("source and destination must have same size (got $(size(srcrange)) and $(size(dstrange)))"))
-        end
-        len = length(dstrange)
-        len == 0 && return dest
+# between host and device, copy a single linear range. non-contiguous blocks are packed
+# first: on the device with a kernel, on the host with Base's block copy. element types are
+# converted on the host, like the linear copies do.
 
-        # linear copy if we can
-        if N == 1
-            d_offset = first(dstrange)[1]
-            s_offset = first(srcrange)[1]
-            return copyto!(dst, d_offset, src, s_offset, len)
-        end
+function Base.copyto!(dest::AnyGPUArray{<:Any, N}, Rdest::CartesianIndices{N},
+                      src::Array{<:Any, N}, Rsrc::CartesianIndices{N}) where {N}
+    isempty(Rdest) && return dest
+    check_block_copy(dest, Rdest, src, Rsrc)
 
-        # figure out how many dimensions of the Cartesian ranges map onto contiguous memory
-        # in both source and destination. we will copy these one by one as linear ranges.
-        contiguous_dims = 1
-        for dim in 2:N
-            # a slice is broken up if the previous dimension didn't cover the entire range
-            if axes(src, dim-1) == axes(srcrange, dim-1) &&
-            axes(dst, dim-1) == axes(dstrange, dim-1)
-                contiguous_dims = dim
-            else
-                break
-            end
-        end
-
-        m = prod(size(dstrange)[1:contiguous_dims])       # inner, contiguous length
-        n = prod(size(dstrange)[contiguous_dims+1:end])   # outer non-contiguous length
-        @assert m*n == length(srcrange) == length(dstrange)
-
-        # copy linear slices
-        for i in 1:m:m*n
-            srcoff = LinearIndices(src)[srcrange[i]]
-            dstoff = LinearIndices(dst)[dstrange[i]]
-            # TODO: Use asynchronous memory copies
-            copyto!(dst, dstoff, src, srcoff, m)
-        end
-
-        dst
+    if !is_linear_block(dest, Rdest)
+        tmp = pack_block(dest, eltype(dest), src, Rsrc)
+        copyto!(dest, Rdest, tmp, CartesianIndices(tmp))
+    elseif !is_linear_block(src, Rsrc)
+        tmp = pack_block(src, eltype(dest), src, Rsrc)
+        copyto!(dest, Rdest, tmp, CartesianIndices(tmp))
+    else
+        copyto!(dest, linear_offset(dest, Rdest), src, linear_offset(src, Rsrc),
+                length(Rdest))
     end
+    return dest
+end
+
+function Base.copyto!(dest::Array{<:Any, N}, Rdest::CartesianIndices{N},
+                      src::AnyGPUArray{<:Any, N}, Rsrc::CartesianIndices{N}) where {N}
+    isempty(Rdest) && return dest
+    check_block_copy(dest, Rdest, src, Rsrc)
+
+    if !is_linear_block(src, Rsrc)
+        tmp = pack_block(src, eltype(src), src, Rsrc)
+        copyto!(dest, Rdest, tmp, CartesianIndices(tmp))
+    elseif !is_linear_block(dest, Rdest)
+        tmp = pack_block(dest, eltype(dest), src, Rsrc)
+        copyto!(dest, Rdest, tmp, CartesianIndices(tmp))
+    else
+        copyto!(dest, linear_offset(dest, Rdest), src, linear_offset(src, Rsrc),
+                length(Rdest))
+    end
+    return dest
 end
 
 ## other

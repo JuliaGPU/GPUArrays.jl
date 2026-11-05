@@ -212,6 +212,72 @@ end
         end
     end
 
+    @testset "copyto! of blocks" begin
+        # every combination of host and device operands, against Base on `Array`s
+        function test_block(dst, Rdst, src, Rsrc)
+            expected = copyto!(copy(dst), Rdst, src, Rsrc)
+            for (d, s) in ((AT(dst), AT(src)), (AT(dst), src), (dst, AT(src)))
+                d = copy(d)
+                copyto!(d, Rdst, s, Rsrc)
+                Array(d) == expected || return false
+            end
+            return true
+        end
+        x = zeros(Float32, 6, 7, 8)
+        y = rand(Float32, 6, 7, 8)
+
+        # contiguous and non-contiguous blocks, on either side
+        @test test_block(x, CartesianIndices((1:6, 1:7, 2:3)), y, CartesianIndices((1:6, 1:7, 5:6)))
+        @test test_block(zeros(Float32, 8, 7, 8), CartesianIndices((2:7, 1:7, 2:3)), y, CartesianIndices((1:6, 1:7, 5:6)))
+        @test test_block(x, CartesianIndices((1:6, 1:7, 5:6)), rand(Float32, 8, 7, 8), CartesianIndices((2:7, 1:7, 2:3)))
+        @test test_block(x, CartesianIndices((2:5, 3:4, 2:3)), y, CartesianIndices((1:4, 4:5, 6:7)))
+
+        # a single index in a leading dimension makes a strided plane
+        @test test_block(x, CartesianIndices((1:1, 1:7, 1:8)), y, CartesianIndices((6:6, 1:7, 1:8)))
+        @test test_block(x, CartesianIndices((1:6, 3:3, 1:8)), y, CartesianIndices((1:6, 4:4, 1:8)))
+
+        # stepped and reversed ranges
+        @test test_block(x, CartesianIndices((1:3, 1:7, 1:8)), y, CartesianIndices((1:2:6, 1:7, 1:8)))
+        @test test_block(x, CartesianIndices((2:2:6, 1:2:7, 1:8)), y, CartesianIndices((1:3, 1:4, 1:8)))
+        @test test_block(x, CartesianIndices((1:6, 1:7, 1:8)), y, CartesianIndices((6:-1:1, 1:7, 8:-1:1)))
+        @test test_block(zeros(Float32, 10), CartesianIndices((1:5,)), rand(Float32, 10), CartesianIndices((1:2:10,)))
+
+        # overlapping blocks of the same array
+        let a = AT(copy(y)), Ra = CartesianIndices((2:6, 1:7, 1:8)), Rb = CartesianIndices((1:5, 1:7, 1:8))
+            copyto!(a, Ra, a, Rb)
+            @test Array(a) == copyto!(copy(y), Ra, copy(y), Rb)
+        end
+
+        # views as device operands
+        let a = AT(copy(y)), v = view(a, 2:5, :, 3:6)
+            h = zeros(Float32, 4, 7, 4)
+            copyto!(h, CartesianIndices(h), v, CartesianIndices(v))
+            @test h == y[2:5, :, 3:6]
+            copyto!(v, CartesianIndices((1:2, 1:7, 1:4)), x, CartesianIndices((1:2:4, 1:7, 1:4)))
+            @test Array(a)[2:3, :, 3:6] == x[1:2:4, :, 1:4]
+        end
+
+        R = CartesianIndices((1:2, 1:2, 1:2))
+        @test_throws ArgumentError copyto!(AT(x), R, AT(y), CartesianIndices((1:2, 1:2, 1:3)))
+        @test_throws ArgumentError copyto!(AT(x), R, y, CartesianIndices((1:2, 1:2, 1:3)))
+        @test_throws BoundsError copyto!(AT(x), R, AT(y), CartesianIndices((6:7, 1:2, 1:2)))
+        @test_throws BoundsError copyto!(x, CartesianIndices((6:7, 1:2, 1:2)), AT(y), R)
+        @test copyto!(AT(x), CartesianIndices((1:0, 1:2, 1:2)), y, CartesianIndices((1:0, 1:2, 1:2))) isa AT
+
+        # element types are converted on the host, so they don't need to be valid on the GPU
+        let d = AT(zeros(Int, 4, 4)), R = CartesianIndices((1:2, 1:4))
+            copyto!(d, R, fill(big(7), 4, 4), R)
+            @test Array(d) == [fill(7, 2, 4); zeros(Int, 2, 4)]
+            @test_throws InexactError copyto!(d, R, fill(1.5, 4, 4), R)
+        end
+
+        if (Float32 in eltypes && Float64 in eltypes)
+            let Rdst = CartesianIndices((2:4, 1:7, 1:2)), Rsrc = CartesianIndices((1:2:6, 1:7, 3:4))
+                @test test_block(zeros(Float64, 6, 7, 8), Rdst, y, Rsrc)
+            end
+        end
+    end
+
     @testset "cat" begin
         @test compare(hcat, AT, rand(Float32, 3), rand(Float32, 3))
         @test compare(hcat, AT, rand(Float32, ), rand(Float32, 1, 3))
