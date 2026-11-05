@@ -1,4 +1,4 @@
-# unique elements, by sorting
+# unique elements and set operations, by sorting
 #
 # Sorting puts elements that are `isequal` next to each other, as long as the order agrees with
 # `isequal`. `isless` does, and so does `isless` on the real and imaginary parts of complex
@@ -108,3 +108,86 @@ if hasmethod(allunique, Tuple{Any, Any})
     Base.allunique(f, A::AnyGPUArray) = allunique(map(f, vec(A)))
 end
 
+
+## set operations
+
+# Converts `x` to a vector with element type `T`. Like Base, which builds a set of type `T`,
+# this throws if an element can't be represented exactly.
+function as_eltype(::Type{T}, x::AbstractArray) where {T}
+    v = vec(x)
+    eltype(v) === T && return v
+    y = similar(v, T)
+    y .= v
+    inexact = .!isequal.(y, v)
+    if any(inexact)
+        # throws the same error as Base
+        push!(Set{T}(), @allowscalar v[findall(inexact)[1]])
+    end
+    return y
+end
+
+# For each element of `x`, whether it is `isequal` to an element of `y`. Base's sets compare
+# this way. Base's `issubset` and `isdisjoint` use `==` for arrays of fewer than 70 elements.
+function isin(x::AbstractVector, y::AbstractArray)
+    found = similar(x, Bool)
+    if isempty(y)
+        fill!(found, false)
+        return found
+    end
+    # Comparing elements of different types without converting them, as `isequal` does
+    lt = set_isless(promote_type(eltype(x), eltype(y)))
+    s = sort(vec(y); lt)
+    insorted = let s = s, lt = lt
+        x -> begin
+            i = searchsortedfirst(s, x; lt)
+            return i <= length(s) && isequal(@inbounds(s[i]), x)
+        end
+    end
+    found .= insorted.(x)
+    return found
+end
+
+function Base.union(a::AnyGPUArray, bs::AnyGPUArray...)
+    T = Base.promote_eltype(a, bs...)
+    return unique(vcat(as_eltype(T, a), map(b -> as_eltype(T, b), bs)...))
+end
+
+function Base.intersect(a::AnyGPUArray, bs::AnyGPUArray...)
+    u = unique(as_eltype(Base.promote_eltype(a, bs...), a))
+    keep = fill!(similar(u, Bool), true)
+    for b in bs
+        keep .&= isin(u, b)
+    end
+    return u[keep]
+end
+
+function Base.setdiff(a::AnyGPUArray, bs::AnyGPUArray...)
+    # Base promotes the element type before Julia 1.13 (JuliaLang/julia#59439)
+    T = VERSION >= v"1.13-" ? eltype(a) : Base.promote_eltype(a, bs...)
+    u = unique(as_eltype(T, a))
+    keep = fill!(similar(u, Bool), true)
+    for b in bs
+        keep .&= .!isin(u, b)
+    end
+    return u[keep]
+end
+
+# Keeps the elements that occur in an odd number of the arguments, counting each argument once
+function Base.symdiff(a::AnyGPUArray, bs::AnyGPUArray...)
+    T = Base.promote_eltype(a, bs...)
+    c = vcat(unique(as_eltype(T, a)), map(b -> unique(as_eltype(T, b)), bs)...)
+    length(c) <= 1 && return c
+    p, s = sorted_keys(c)
+    head = group_starts(s)
+    starts = findall(head)
+    k = length(starts)
+    lens = similar(starts)
+    lens[1:k-1] .= view(starts, 2:k) .- view(starts, 1:k-1)
+    lens[k:k] .= length(s) + 1 .- view(starts, k:k)
+    head[starts] .= isodd.(lens)
+    return c[scatter_mask(p, head)]
+end
+
+Base.issubset(a::AnyGPUArray, b::AnyGPUArray) = all(isin(vec(a), b))
+Base.issetequal(a::AnyGPUArray, b::AnyGPUArray) = issubset(a, b) && issubset(b, a)
+Base.isdisjoint(a::AnyGPUArray, b::AnyGPUArray) = !any(isin(vec(a), b))

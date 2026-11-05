@@ -60,3 +60,58 @@ dups(ET, dims...) = ET <: Complex ? ET.(rand(1:3, dims...), rand(1:3, dims...)) 
         @test_throws Exception unique(AT([Some(Int32(1)), Some(Int32(2))]))
     end
 end
+
+@testsuite "set/operations" (AT, eltypes)->begin
+    @testset "$ET" for ET in eltypes
+        for (m, n) in ((0, 0), (0, 10), (10, 0), (1, 1), (100, 200))
+            a, b, c = dups(ET, m), dups(ET, n), dups(ET, 50)
+            for f in (union, intersect, setdiff, symdiff, issubset, issetequal, isdisjoint)
+                @test compare_exact(f, AT, a, b)
+            end
+            for f in (union, intersect, setdiff, symdiff)
+                @test compare_exact(f, AT, a, b, c)
+                @test compare_exact(f, AT, a)
+            end
+        end
+        @test compare_exact(intersect, AT, dups(ET, 4, 5), dups(ET, 3))
+        @test compare_exact(issetequal, AT, ET[1, 2, 2], ET[2, 1])
+    end
+
+    # element types are promoted as in Base, but elements are compared without converting them
+    @test compare_exact(union, AT, Int32[3, 1], Float32[2, 3])
+    @test compare_exact(intersect, AT, Int32[3, 1, 2, 1], Float32[2, 1])
+    @test compare_exact(setdiff, AT, Int32[3, 1, 2, 1], Float32[2.5, 1])
+    @test compare_exact(symdiff, AT, Int16[1, 2], Float32[2, 4])
+    big, rounded = Int32[2^24 + 1, 1], Float32[2^24, 1]
+    for f in (union, intersect, setdiff, symdiff, issubset, isdisjoint)
+        # Base throws when it would convert an element inexactly, which depends on the order
+        @test compare_exact(f, AT, big, rounded)
+        @test compare_exact(f, AT, rounded, big)
+    end
+    @test compare_exact(issubset, AT, [-1], UInt[1])
+    @test compare_exact(intersect, AT, ComplexF32[1, 2im], Float32[1, 2])
+    # isbits unions
+    m = Union{Missing, Float32}[1, missing, 3]
+    mc = Union{Missing, ComplexF32}[1, missing, 2im]
+    for (x, y) in ((Float32[1, 2], m), (m, Float32[1, 2]), (ComplexF32[1, 2im], mc), (mc, Float32[1]))
+        for f in (union, intersect, setdiff, symdiff)
+            @test compare_exact(f, AT, x, y)
+        end
+    end
+
+    # with `isequal`, signed zeros differ and NaNs are equal
+    x, y = Float32[0, NaN, 1, -0.0], Float32[-0.0, NaN, 2]
+    for f in (union, intersect, setdiff, symdiff)
+        @test compare_exact(f, AT, x, y)
+    end
+    # The predicates use `isequal` too. Base's `issubset` and `isdisjoint` use `==` for arrays
+    # of fewer than 70 elements, so these are longer.
+    r = Float32.(1:100)
+    @test compare_exact(issubset, AT, [NaN32; r], [NaN32; r; 200])
+    @test compare_exact(issubset, AT, [0.0f0; r], [-0.0f0; r])
+    @test compare_exact(isdisjoint, AT, [NaN32; r], [NaN32; r .+ 200])
+    @test compare_exact(isdisjoint, AT, [0.0f0; r], [-0.0f0; r .+ 200])
+    mr = Union{Missing, Float32}[missing; r]
+    @test compare_exact(issubset, AT, mr, [mr; 200])
+    @test compare_exact(isdisjoint, AT, mr, [missing; r .+ 200])
+end
