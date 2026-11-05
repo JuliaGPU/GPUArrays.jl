@@ -38,10 +38,6 @@ include("device/array.jl")
 include("array.jl")
 include("sparse.jl")
 include("broadcast.jl")
-include("mapreduce.jl")
-include("sorting.jl")
-include("accumulate.jl")
-include("findall.jl")
 
 # KernelAbstractions
 include("JLKernels.jl")

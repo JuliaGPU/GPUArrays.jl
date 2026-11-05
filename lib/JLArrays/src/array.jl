@@ -57,11 +57,6 @@ GPUArrays.dense_array_type(::Type{JLArray{T, N}}) where {T, N} = JLArray{T, N}
 GPUArrays.dense_vector_type(a::JLArray{T, N}) where {T, N} = JLArray{T, 1}
 GPUArrays.dense_vector_type(::Type{JLArray{T, N}}) where {T, N} = JLArray{T, 1}
 
-# conversion of untyped data to a typed Array
-function typed_data(x::JLArray{T}) where {T}
-    unsafe_wrap(Array, pointer(x), x.dims)
-end
-
 # the selector byte of element `i` of an array of isbits unions
 typetagdata(a::JLArray, i=1) = pointer(a.data[]) + a.tagoffset + i - 1
 @static if VERSION >= v"1.11.0-DEV.753"

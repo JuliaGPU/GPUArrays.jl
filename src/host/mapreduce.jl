@@ -9,8 +9,7 @@
 const AbstractArrayOrBroadcasted = Union{AbstractArray,Broadcast.Broadcasted}
 
 # AcceleratedKernels' primitives, on the backend `backend` (a `Broadcasted` source may hold arrays
-# without one, such as `EachIndex`). The reference back-end (JLArrays) runs them on its storage
-# instead; these are internal, not an extension point for back-ends.
+# without one, such as `EachIndex`). These are internal, not an extension point for back-ends.
 #
 # Base's reductions combine the elements in their order, so `op` need not be commutative, while
 # AcceleratedKernels' faster kernels combine them in any order: they are only used for operators
