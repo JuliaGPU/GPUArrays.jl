@@ -379,6 +379,32 @@ end
         end
     end
 
+    @testset "findmax! & findmin!" begin
+        for f! in (findmax!, findmin!), init in (true, false)
+            # along each set of dimensions, with NaN and ties
+            x = rand(Float32, 4, 5, 3)
+            x[2, 3, 1] = NaN32
+            x[1, 1, 2] = x[3, 1, 2]
+            for rdims in ((1, 5, 3), (4, 1, 3), (4, 5, 1), (1, 1, 3), (1, 5, 1), (1, 1, 1))
+                rval = rand(Float32, rdims)
+                rind = fill(CartesianIndex(1, 1, 1), rdims)
+                expected = f!(copy(rval), copy(rind), x; init)
+                @test isequal(Array.(f!(AT(rval), AT(rind), AT(x); init)), expected)
+            end
+
+            # vectors, with linear indices
+            x = Float32[3, 1, 4, 1, 5]
+            expected = f!(Float32[-10], [42], x; init)
+            @test Array.(f!(AT(Float32[-10]), AT([42]), AT(x); init)) == expected
+
+            # an empty array leaves `rval` as is, but resets `rind`
+            rval, rind = Float32[7 8], [CartesianIndex(3, 3) CartesianIndex(3, 3)]
+            expected = f!(copy(rval), copy(rind), zeros(Float32, 0, 2); init)
+            @test Array.(f!(AT(rval), AT(rind), AT(zeros(Float32, 0, 2)); init)) == expected
+        end
+        @test_throws DimensionMismatch findmin!(AT(zeros(Float32, 3)), AT([1, 1, 1]), AT(Float32[1, 2]))
+    end
+
     @testset "argmax & argmin" begin
         @test compare(argmax, AT, rand(Int, 10))
         @test compare(argmax, AT, -rand(Int, 10))

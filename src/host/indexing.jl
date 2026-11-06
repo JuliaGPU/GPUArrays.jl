@@ -334,6 +334,30 @@ Base.findmin(a::AnyGPUArray; dims=:) = findminmax(Base.isgreater, identity, a; d
 Base.findmax(f::Function, a::AnyGPUArray; dims=:) = findminmax(Base.isless, f, a; dims)
 Base.findmin(f::Function, a::AnyGPUArray; dims=:) = findminmax(Base.isgreater, f, a; dims)
 
+# The in-place forms reduce `A` along the singleton dimensions of `rval`. As in Base, `rind` is
+# reset first and `init` makes no difference: either way the result is the reduction of `A`
+# alone, and an empty `A` leaves `rval` as is.
+function findminmax!(binop, rval::AnyGPUArray, rind::AnyGPUArray, A::AnyGPUArray)
+    fill!(rind, zero(eltype(keys(A))))
+    (isempty(rval) || isempty(A)) && return rval, rind
+    Base.check_reducedims(rval, A)
+    axes(rval) == axes(rind) ||
+        throw(DimensionMismatch("Find-reduction: outputs must have the same indices"))
+
+    dims = Tuple(d for d in 1:ndims(A) if size(rval, d) == 1 && size(A, d) > 1)
+    res = mapreduce(_FindPair(identity), _FindReduction(binop), A, LinearIndices(A); dims)
+    res = reshape(res, size(rval))
+    I = keys(A)
+    map!(first, rval, res)
+    map!(x -> I[x[2]], rind, res)
+    return rval, rind
+end
+
+Base.findmax!(rval::AnyGPUArray, rind::AnyGPUArray, A::AnyGPUArray; init::Bool=true) =
+    findminmax!(Base.isless, rval, rind, A)
+Base.findmin!(rval::AnyGPUArray, rind::AnyGPUArray, A::AnyGPUArray; init::Bool=true) =
+    findminmax!(Base.isgreater, rval, rind, A)
+
 # the element that minimizes or maximizes `f` (Base iterates)
 Base.argmax(f::Function, a::AnyGPUArray) = @allowscalar a[findmax(f, a)[2]]
 Base.argmin(f::Function, a::AnyGPUArray) = @allowscalar a[findmin(f, a)[2]]
