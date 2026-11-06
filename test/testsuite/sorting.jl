@@ -57,6 +57,19 @@ end
     @test compare(A -> sort(A; by=first, alg=MergeSort), AT, tagged)
     @test compare(A -> sortperm(A; by=first), AT, tagged)
 
+    # comparators that capture arrays, e.g. to sort the columns of a matrix
+    function sortcols(A; kwargs...)
+        lt = let A = A
+            (i, j) -> isless((A[1, i], A[2, i]), (A[1, j], A[2, j]))
+        end
+        idx = similar(A, Int, size(A, 2))
+        idx .= 1:size(A, 2)
+        return sort(idx; lt, kwargs...), sortperm(idx; lt, kwargs...)
+    end
+    @test compare(sortcols, AT, rand(1:3, 2, 1000))
+    @test compare(A -> sortcols(A; rev=true), AT, rand(1:3, 2, 1000))
+    @test compare(A -> sortcols(A; by=i -> 1001 - i), AT, rand(1:3, 2, 1000))
+
     # Arrays other than vectors need `dims`, and vectors take none, as in Base
     @test_throws MethodError sort(AT(x); dims=1)
     @test_throws MethodError sort!(AT(x); dims=1)
