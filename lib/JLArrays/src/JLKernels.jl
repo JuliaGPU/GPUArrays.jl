@@ -18,7 +18,6 @@ export JLBackend
 struct JLBackend <: KI.Backend end
 
 KI.get_backend(a::JLA) where JLA <: JLArray = JLBackend()
-KI.get_backend(a::JLA) where JLA <: Union{JLSparseMatrixCSC, JLSparseMatrixCSR, JLSparseVector} = JLBackend()
 
 KI.allocate(::JLBackend, ::Type{T}, dims::Tuple) where T = JLArray{T}(undef, dims)
 

@@ -52,10 +52,6 @@ GPUArrays.storage(a::JLArray) = a.data
 
 GPUArrays.memory_location(a::JLArray) = (UInt(pointer(a.data[])), a.offset)
 
-GPUArrays.dense_array_type(a::JLArray{T, N}) where {T, N} = JLArray{T, N}
-GPUArrays.dense_array_type(::Type{JLArray{T, N}}) where {T, N} = JLArray{T, N}
-GPUArrays.dense_vector_type(a::JLArray{T, N}) where {T, N} = JLArray{T, 1}
-GPUArrays.dense_vector_type(::Type{JLArray{T, N}}) where {T, N} = JLArray{T, 1}
 
 # the selector byte of element `i` of an array of isbits unions
 typetagdata(a::JLArray, i=1) = pointer(a.data[]) + a.tagoffset + i - 1
