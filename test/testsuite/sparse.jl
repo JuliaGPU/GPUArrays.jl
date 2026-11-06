@@ -30,6 +30,7 @@ using GPUArrays: GPUSparseMatrixCSR, GPUSparseMatrixCSC, GPUSparseMatrixCOO, GPU
     sparse_linalg(AT, eltypes)
     iszero_sparse(AT, eltypes)
     sparse_bool(AT)
+    sparse_semantics(AT, eltypes)
     sparse_generic(AT, eltypes)
 end
 
@@ -1478,6 +1479,275 @@ function sparse_spgemm(AT, eltypes)
                     end
                 end
             end
+        end
+    end
+end
+
+@kernel function sparse_lookup_kernel(out, A)
+    i = @index(Global, Linear)
+    out[i] = A[i, i]
+end
+
+# the composition of affine maps modulo a prime: associative but not commutative, and
+# represented by an isbits integer that every back-end can handle
+function compose_affine(x::UInt32, y::UInt32)
+    a, b = x & 0xffff, x >> 16
+    c, d = y & 0xffff, y >> 16
+    ((a * c) % 251) | (((a * d + b) % 251) << 16)
+end
+
+# semantics that SparseArrays implements with scalar loops, and corner cases
+function sparse_semantics(AT, eltypes)
+    @testset "semantics" begin
+        @testset "$S" for S in sparse_matrix_formats
+            host = sparse(Float32[1 0 0; 2 0 0; 0 0 3])
+            A = gpu_sparse(AT, S, host)
+            v = gpu_sparse(AT, sparsevec([1, 3], Float32[2, 4], 3))
+            dense_v = AT(Float32[2, 3, 4])
+
+            # equality compares values, not stored zeros
+            @test A == copy(A)
+            @test A == AT(Array(host))
+            @test AT(Array(host)) == A
+            @test A != gpu_sparse(AT, S, sparse(Float32[1 0 0; 2 0 0; 0 0 4]))
+            @test A == gpu_sparse(AT, S, SparseMatrixCSC(3, 3, [1, 3, 4, 5], [1, 2, 1, 3], Float32[1, 2, 0, 3]))
+            # (also through wrappers)
+            Dg = gpu_sparse(AT, S, sparse(Float32[1 0; 0 2]))
+            @test Dg == transpose(Dg) && transpose(Dg) == Dg && Dg == Symmetric(Dg)
+            @test transpose(Dg) == adjoint(Dg)
+            @test A != transpose(A)
+
+            # in-place broadcast
+            B = copy(A)
+            B .*= 2
+            @test Array(B) == 2 .* Array(host)
+            B .= B .+ A
+            @test Array(B) == 3 .* Array(host)
+            B .= 0
+            @test iszero(B) && nnz(B) == nnz(A)
+            @test_throws ArgumentError fill!(B, 1)
+            before = copy(A)
+            @test_throws ArgumentError (A .= A .+ 1)
+            @test A == before
+            C = 2f0 .* gpu_sparse(AT, S, sparse(Float32[1 2 3; 0 0 0; 0 0 0])) .+
+                3f0 .* gpu_sparse(AT, S, sparse(Float32[0 0 0; 4 0 5; 0 6 0]))
+            @test Array(check_structure(C)) == Float32[2 4 6; 12 0 15; 0 18 0]
+
+            # unsupported broadcasts fail instead of running on the host
+            @test_throws ErrorException A .* v
+            @test_throws ErrorException v .* A
+            @test_throws ErrorException (A .= A .* v)
+            @test A == before
+            scalar = AT(fill(0f0))
+            @test_throws ArgumentError A .+ scalar
+            @test_throws ArgumentError v .+ scalar
+            for shape in ((3, 3, 1), (3, 3, 2))
+                @test_throws ArgumentError A .+ AT(zeros(Float32, shape))
+                @test_throws DimensionMismatch (A .= A .+ AT(zeros(Float32, shape)))
+            end
+            @test Array(A .* dense_v) == Array(host) .* Float32[2, 3, 4]
+            @test Array(dense_v .+ A) == Float32[2, 3, 4] .+ Array(host)
+            row = gpu_sparse(AT, S, sparse(reshape(Float32[1, 0, 2], 1, 3)))
+            @test_throws ArgumentError row .+ AT(Float32[2, 3])
+
+            # lookup in kernels, and from the host
+            out = AT(zeros(Float32, 3))
+            sparse_lookup_kernel(get_backend(out))(out, A; ndrange=3)
+            @test Array(out) == diag(host)
+            @test Array(A[:]) == vec(Array(host))
+            @test Array(A[2:5]) == vec(Array(host))[2:5]
+            mask = Bool[true, false, true]
+            for I in (mask, AT(mask))
+                @test Array(A[I, I]) == Array(host)[mask, mask]
+                @test Array(A[I, 1:2]) == Array(host)[mask, 1:2]
+                @test Array(A[:, I]) == Array(host)[:, mask]
+            end
+            @test_throws BoundsError A[AT(trues(2)), AT(trues(3))]
+
+            # lazy wrappers
+            @test nnz(transpose(A)) == nnz(A)
+            @test sum(transpose(A)) == sum(host)
+            @test Array(sum(adjoint(A); dims=1)) == sum(adjoint(host); dims=1)
+            @test Array(transpose(A)[1:2, 2:3]) == Array(transpose(host))[1:2, 2:3]
+            @test SparseMatrixCSC(transpose(A)) == transpose(host)
+            for wrap in (transpose, adjoint)
+                @test Array(2 * wrap(A)) == 2 * wrap(Array(host))
+                @test Array(wrap(A) * 2) == wrap(Array(host)) * 2
+                @test Array(wrap(A) / 2) == wrap(Array(host)) / 2
+                @test Array(wrap(A)^2) ≈ wrap(Array(host))^2
+            end
+            @test Array(Hermitian(A) * 2im) == Hermitian(Array(host)) * 2im
+            @test Array(2im \ Hermitian(A)) ≈ 2im \ Hermitian(Array(host))
+            for wrap in (transpose, adjoint, Symmetric, Hermitian), op in (+, -)
+                @test Array(op(A, wrap(A))) == op(Array(host), wrap(Array(host)))
+                @test Array(op(wrap(A), A)) == op(wrap(Array(host)), Array(host))
+                @test Array(op(wrap(A), wrap(A))) == op(wrap(Array(host)), wrap(Array(host)))
+            end
+            for wrap in (Symmetric, Hermitian)
+                @test sparse(wrap(A)) isa S
+                @test Array(sparse(wrap(A))) == Array(wrap(host))
+                @test SparseMatrixCSC(wrap(A)) == sparse(wrap(host))
+                @test Array(wrap(A)) == Array(wrap(host))
+                @test wrap{Float16}(A) isa wrap{Float16,<:S{Float16}}
+            end
+            # (excluded entries are skipped, not multiplied by zero)
+            for wrap in (Symmetric, Hermitian), uplo in (:U, :L)
+                H = sparse(Float32[1 2; 4 3])
+                @test Array(wrap(gpu_sparse(AT, S, H), uplo) * AT(Float32[Inf, 1])) ==
+                      wrap(H, uplo) * Float32[Inf, 1]
+            end
+
+            # uniform scaling and diagonal matrices
+            @test Array(one(A)) == Matrix{Float32}(I, 3, 3)
+            @test Array(oneunit(A)) == Matrix{Float32}(I, 3, 3)
+            for J in (I, 2.5f0 * I), op in (+, -)
+                @test Array(op(A, J)) == op(Array(host), J)
+                @test Array(op(J, A)) == op(J, Array(host))
+                @test Array(op(transpose(A), J)) == op(transpose(Array(host)), J)
+            end
+            @test Array(A * 2I) == Array(host) * 2
+            @test Array(2I * A) == 2 * Array(host)
+            D = Diagonal(AT(Float32[2, 3, 4]))
+            Dh = Diagonal(Float32[2, 3, 4])
+            for op in (+, -)
+                @test Array(op(A, D)) == op(Array(host), Dh)
+                @test Array(op(D, A)) == op(Dh, Array(host))
+            end
+            @test Array(A * D) == Array(host) * Dh
+            @test Array(D * A) == Dh * Array(host)
+            @test (A * D) isa S
+            @test_throws DimensionMismatch A * Diagonal(AT(Float32[1, 2]))
+            R = gpu_sparse(AT, S, sparse(Float32[1 2 3; 4 5 6]))
+            # (SparseArrays adds `I` to rectangular matrices, but not a `Diagonal`)
+            @test Array(R + I) == Array(sparse(Float32[1 2 3; 4 5 6]) + I)
+            @test_throws DimensionMismatch R + Diagonal(AT(Float32[1, 2]))
+            @test_throws DimensionMismatch Diagonal(AT(Float32[1, 2])) - R
+            @test_throws DimensionMismatch one(R)
+
+            # concatenation
+            host2 = sparse(Float32[0 1 0; 0 0 5; 6 0 0])
+            A2 = gpu_sparse(AT, S, host2)
+            for f in (hcat, vcat)
+                C = f(A, A2, transpose(A))
+                @test C isa S
+                @test Array(check_structure(C)) == f(Array(host), Array(host2), transpose(Array(host)))
+                @test Array(f(A, gpu_sparse(AT, GPUSparseMatrixCOO, host2))) == f(Array(host), Array(host2))
+            end
+            @test_throws DimensionMismatch hcat(A, gpu_sparse(AT, S, sparse(ones(Float32, 2, 2))))
+            x = gpu_sparse(AT, sparsevec([2], Float32[3], 3))
+            @test Array(vcat(v, x)) == vcat(Array(v), Array(x))
+            @test Array(hcat(v, x)) == hcat(Array(v), Array(x))
+            @test_throws ArgumentError blockdiag(A, A)
+
+            # norms are scaled, and negative orders see the implicit zeros
+            for val in (1f30, 1f-30)
+                @test norm(gpu_sparse(AT, S, sparse([1], [1], [val], 1, 1))) ≈ val
+            end
+            @test norm(A, -Inf) == 0
+            @test norm(gpu_sparse(AT, S, sparse(Float32[1 2; 3 4])), -Inf) == 1
+            N = gpu_sparse(AT, S, sparse(Float32[NaN 0; 0 1]))
+            @test isnan(norm(N, -1))
+
+            # dot products check their dimensions
+            x = AT(Float32[1, 2, 3])
+            @test dot(x, A, x) ≈ dot(Float32[1, 2, 3], host, Float32[1, 2, 3])
+            @test_throws DimensionMismatch dot(AT(Float32[1, 2]), A, x)
+            @test_throws DimensionMismatch dot(x, A, AT(Float32[1, 2]))
+
+            # the trace is accumulated in the element type
+            T32 = gpu_sparse(AT, S, sparse(Int32[typemax(Int32) 0; 0 typemax(Int32)]))
+            @test tr(T32) === tr(sparse(Int32[typemax(Int32) 0; 0 typemax(Int32)]))
+        end
+
+        @testset "mutation" begin
+            # a view cannot be resized, so structural mutation fails before changing
+            # anything
+            p = AT([1, 2, 3]); i = AT([1, 2]); v = AT(Float32[1, 7, 0, 9])
+            A = GPUSparseMatrixCSC(p, i, view(v, 1:2:4), (2, 2))
+            before = (Array(p), Array(i), Array(v))
+            @test_throws ArgumentError dropzeros!(A)
+            @test (Array(p), Array(i), Array(v)) == before
+            src = GPUSparseMatrixCSC(AT([1, 2, 2]), AT([1]), AT(Float32[1]), (2, 2))
+            @test_throws ArgumentError copyto!(A, src)
+            @test (Array(p), Array(i), Array(v)) == before
+            # values can still be updated through a view
+            A .*= 2
+            @test Array(v) == [2., 7., 0., 9.]
+
+            # narrowing values is checked (the error depends on the back-end)
+            x = GPUSparseVector(AT(Int32[1]), AT(Int64[300]), 2)
+            @test_throws Exception Array(nonzeros(GPUSparseVector{Int8,Int32}(x)))
+            dest = GPUSparseVector(AT(Int32[1]), AT(Int8[1]), 2)
+            @test_throws Exception Array(nonzeros(dest .= 300 .* dest))
+
+            # aliasing is detected through the buffers
+            A = gpu_sparse(AT, GPUSparseMatrixCSC, sparse(Float32[1 0; 2 3]))
+            B = GPUSparseMatrixCSC(A.colPtr, A.rowVal, copy(A.nzVal), size(A))
+            @test Base.mightalias(A, B)
+            @test !Base.mightalias(A, copy(A))
+            copyto!(B, A .* 2)
+            @test Array(B) == 2 .* Array(A)
+            # densifying into a buffer of the source
+            w = AT(Float32[2, 3])
+            x = GPUSparseVector(AT([1, 2]), w, 2)
+            copyto!(w, x)
+            @test Array(w) == [2, 3]
+            # and into a view
+            dest = AT(zeros(Float32, 4))
+            copyto!(view(dest, 1:2:4), GPUSparseVector(AT([2]), AT(Float32[5]), 2))
+            @test Array(dest) == [0, 0, 5, 0]
+        end
+
+        @testset "index types" begin
+            # unsigned indices (the diagonal offsets are negative below the diagonal)
+            U = GPUSparseMatrixCSR(AT(UInt32[1, 1, 2]), AT(UInt32[1]), AT(Float32[3]), (2, 2))
+            @test nnz(triu(U)) == 0 && nnz(tril(U)) == 1
+            @test !istriu(U) && istril(U)
+            # the largest index is a valid coordinate
+            x = GPUSparseVector(AT(Int8[127]), AT(Float32[2]), 127)
+            y = x .+ x
+            @test nnz(y) == 1
+            @test Array(y)[end] == 4
+            @test Array(GPUArrays.compress(AT(Int8[127]), 127))[end] == 2
+            # dimensions and entries must fit the index type
+            coo = GPUSparseMatrixCOO(AT(Int64[]), AT(Int64[]), AT(Float32[]), (2^32, 1))
+            @test_throws ArgumentError GPUSparseMatrixCSR{Float32,Int32}(coo)
+            @test_throws ArgumentError GPUSparseMatrixCSC{Float32,Int32}(transpose(coo))
+            @test_throws ArgumentError GPUSparseMatrixCSR{Float32,Int8}(Diagonal(AT(ones(Float32, 127))))
+            D = GPUSparseMatrixCSR{Float32,Int8}(Diagonal(AT(zeros(Float32, 126))))
+            @test nnz(D) == 126 && size(D) == (126, 126) && iszero(D)
+            # mixed-width inputs are promoted
+            A = GPUSparseMatrixCSR(AT(Int32[1, 2, 3]), AT(Int32[1, 2]), AT(Float32[1, 2]), (2, 2))
+            B = GPUSparseMatrixCSR(AT(Int64[1, 2, 3]), AT(Int64[2, 1]), AT(Float32[1, 2]), (2, 2))
+            @test SparseArrays.indtype(A .+ B) == Int64
+            @test SparseArrays.indtype(A * B) == Int64
+            @test Array(A * B) == Array(A) * Array(B)
+            # Int32 dimensions
+            @test Array(sparse(AT(Int32[1]), AT(Int32[1]), AT(Float32[2]), Int32(1), Int32(1))) == reshape(Float32[2], 1, 1)
+        end
+
+        @testset "column views" begin
+            A = GPUSparseMatrixCSC(AT(Int32[1, 3, 3, 4]), AT(Int32[1, 3, 2]), AT(Float32[2, 4, 6]), (3, 3))
+            @allowscalar for j in 1:3
+                column = view(A, :, j)
+                @test nnz(column) == (j == 1 ? 2 : j == 2 ? 0 : 1)
+                @test Array(nonzeros(column)) == Array(nonzeros(A))[nzrange(A, j)]
+                @test Array(rowvals(column)) == Array(rowvals(A))[nzrange(A, j)]
+            end
+        end
+
+        @testset "assembly order" begin
+            I = AT(Int32[2, 1, 2, 1, 2, 1])
+            V = AT(UInt32[2 | (3 << 16), 4 | (5 << 16), 6 | (7 << 16),
+                          8 | (9 << 16), 10 | (11 << 16), 12 | (13 << 16)])
+            x = sparsevec(I, V, 3, compose_affine)
+            @test Array(x) == Array(sparsevec(Array(I), Array(V), 3, compose_affine))
+        end
+
+        @testset "deprecated names" begin
+            A = gpu_sparse(AT, GPUSparseMatrixCSR, sparse(Int32[1, 2], Int32[1, 2], Float32[1, 1]))
+            @test A isa GPUArrays.AbstractGPUSparseMatrixCSR
+            @test A isa GPUArrays.AbstractGPUSparseMatrixCSR{Float32,Int32}
         end
     end
 end

@@ -51,6 +51,7 @@ include("host/sparse/reductions.jl")
 include("host/sparse/linalg.jl")
 include("host/sparse/structure.jl")
 include("host/sparse/indexing.jl")
+include("host/sparse/array.jl")
 include("host/alloc_cache.jl")
 
 

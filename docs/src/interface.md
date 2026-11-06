@@ -179,6 +179,44 @@ Conversions:
 The generic types cannot be constructed from host arrays, because they do not determine
 where to store the result: use a back-end alias, `adapt`, or the back-end's adaptor.
 
+These are the defaults of the generic implementations. A back-end can choose other index
+types for the constructors of its aliases, for `sparse` of its dense arrays and for its
+adaptor: CUDA.jl and AMDGPU.jl keep using `Cint`, as they did before GPUArrays 13.
+
+### Supported operations
+
+Beyond construction, transfer and conversion, the formats support products with dense
+and sparse arrays (including `Transpose`, `Adjoint`, `Symmetric` and `Hermitian`
+wrappers, `Diagonal` and `UniformScaling`), broadcasting and `map`, reductions, `norm`
+and `opnorm`, `dot`, `kron`, `exp`, indexing with scalars, ranges and logical masks,
+`hcat` and `vcat`, `==` (comparing values, so stored zeros do not matter), `fkeep!` and
+`dropzeros`, `triu`/`tril` and the structural predicates, `diag` and `tr`, `reshape`
+and `vec`, and assembly from coordinates with `sparse` and `sparsevec`.
+
+Some semantics differ from SparseArrays:
+
+- a broadcast that does not preserve zeros, or over dense arguments, returns a dense GPU
+  array rather than a sparse one, and cannot be stored into a sparse array in place;
+- a broadcast cannot combine sparse vectors with sparse matrices, or expand a sparse
+  operand along a dimension of length one;
+- `reshape` copies instead of sharing storage, and individual entries cannot be set;
+- `sparse(I, J, V, m, n, combine)` combines repeated coordinates in input order, but
+  without a defined parenthesization: `combine` must be associative, though it need not
+  commute. Floating-point results may differ from the host and between back-ends;
+- `hash` and `blockdiag` are not implemented, and neither are triangular solves
+  without a vendor library.
+
+### Migrating from GPUArrays 12
+
+GPUArrays 12 only defined abstract sparse types, which back-ends subtyped, and hooks
+(`dense_array_type`, `sparse_array_type`, `csc_type`, `csr_type`, `coo_type`,
+`_sptranspose`, `_spadjoint`) and device types (`GPUSparseDeviceVector`, ...) that they
+implemented. All of these are gone. `AbstractGPUSparseMatrixCSR`,
+`AbstractGPUSparseMatrixCSC` and `AbstractGPUSparseMatrixCOO` remain as deprecated names
+for the concrete formats, so that methods dispatching on them keep working, but they can
+no longer be subtyped. The `nnz` field is replaced by the `nnz` function, and the index
+field of sparse vectors is `nzInd`.
+
 ### Reference
 
 ```@docs
