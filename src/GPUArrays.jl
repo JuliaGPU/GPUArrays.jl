@@ -16,6 +16,7 @@ using Reexport
 @reexport using GPUArraysCore
 
 using KernelAbstractions
+import KernelInterface as KI
 
 import AcceleratedKernels as AK
 
