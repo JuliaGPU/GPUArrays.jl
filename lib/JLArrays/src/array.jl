@@ -57,11 +57,6 @@ GPUArrays.dense_array_type(::Type{JLArray{T, N}}) where {T, N} = JLArray{T, N}
 GPUArrays.dense_vector_type(a::JLArray{T, N}) where {T, N} = JLArray{T, 1}
 GPUArrays.dense_vector_type(::Type{JLArray{T, N}}) where {T, N} = JLArray{T, 1}
 
-# conversion of untyped data to a typed Array
-function typed_data(x::JLArray{T}) where {T}
-    unsafe_wrap(Array, pointer(x), x.dims)
-end
-
 # the selector byte of element `i` of an array of isbits unions
 typetagdata(a::JLArray, i=1) = pointer(a.data[]) + a.tagoffset + i - 1
 @static if VERSION >= v"1.11.0-DEV.753"
@@ -191,14 +186,16 @@ Adapt.adapt_storage(::Type{<:JLArray{T}}, xs::AbstractArray) where {T} =
 # adapt back to the CPU
 Adapt.adapt_storage(::Type{Array}, xs::JLArray) = convert(Array, xs)
 
-# adapt for the device
-@static if !isdefined(JLArrays.KernelAbstractions, :POCL) # KA v0.9
-    Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N} =
-      JLDeviceArray{T,N}(x.data[], x.offset, x.tagoffset, x.dims)
-else
-    function Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N}
-        arr = typed_data(x)
-        Adapt.adapt_storage(POCL.KernelAdaptor([pointer(arr)]), arr)
+# adapt for the device, where JLArrays are POCL arrays (constructed directly, rather than
+# by adapting a wrapping `Array`, to avoid allocating on every launch)
+function Adapt.adapt_storage(::Adaptor, x::JLArray{T,N}) where {T,N}
+    AS = POCL.AS.CrossWorkgroup
+    ptr = reinterpret(Core.LLVMPtr{T,AS}, pointer(x))
+    if Base.isbitsunion(T)
+        # POCL arrays of isbits unions find their selector bytes `maxsize` bytes past the data
+        POCL.CLDeviceArray{T,N,AS}(x.dims, ptr, x.tagoffset - x.offset)
+    else
+        POCL.CLDeviceArray{T,N,AS}(x.dims, ptr)
     end
 end
 

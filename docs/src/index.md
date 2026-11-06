@@ -14,6 +14,6 @@ that builds on GPUArrays.jl such as [CUDA](https://github.com/JuliaGPU/CUDA.jl),
 This documentation is meant for users who might wish to implement a version of GPUArrays for another GPU backend and will cover the features you will need
 to implement, the functionality you gain by doing so, and the test suite that is available
 to verify your implementation. GPUArrays.jl also provides a reference implementation of
-these interfaces on the CPU: The `JLArray` array type uses Julia's parallel programming
-functionality to simulate GPU execution, and will be used throughout this documentation to
+these interfaces on the CPU: The `JLArray` array type runs its kernels on the CPU through
+KernelAbstractions' POCL back-end, and will be used throughout this documentation to
 illustrate functionality.
