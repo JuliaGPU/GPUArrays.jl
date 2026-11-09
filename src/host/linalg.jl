@@ -771,6 +771,10 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
     unit  = isunitc == 'U'
     oA = oneunit(eltype(A))
 
+    # C = tfun(A) * B; lmul! passes C === B, but the kernels compute all of C in parallel
+    A = Base.unalias(C, A)
+    B = Base.unalias(C, B)
+
     @kernel function trimatmul(C, A, B)
         idx = @index(Global, Linear)
         assume.(size(C) .> 0)
@@ -849,6 +853,10 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
     upper = tfun === identity ? uploc == 'U' :  uploc != 'U'
     unit  = isunitc == 'U'
     oB = oneunit(eltype(B))
+
+    # C = A * tfun(B); rmul! passes C === A, but the kernels compute all of C in parallel
+    A = Base.unalias(C, A)
+    B = Base.unalias(C, B)
 
     @kernel function mattrimul(C, A, B)
         idx = @index(Global, Linear)

@@ -188,6 +188,11 @@
                 mul!(Ct, f(TR(A)), B)
                 mul!(C, f(TR(collect(A))), collect(B))
                 @test collect(Ct) ≈ C
+
+                # 2-arg form overwrites the right hand side (also used by *)
+                @test collect(lmul!(f(TR(A)), copy(b))) ≈ lmul!(f(TR(collect(A))), collect(b))
+                @test collect(lmul!(f(TR(A)), copy(B))) ≈ lmul!(f(TR(collect(A))), collect(B))
+                @test collect(f(TR(A)) * B) ≈ f(TR(collect(A))) * collect(B)
             end
 
             @testset "mattrimul ($TR x $T, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
@@ -202,6 +207,10 @@
                 mul!(Ct, A, f(TR(B)))
                 mul!(C, collect(A), f(TR(collect(B))))
                 @test collect(Ct) ≈ C
+
+                # 2-arg form overwrites the left hand side (also used by *)
+                @test collect(rmul!(copy(A), f(TR(B)))) ≈ rmul!(collect(A), f(TR(collect(B))))
+                @test collect(A * f(TR(B))) ≈ collect(A) * f(TR(collect(B)))
             end
             @testset "matmul! with nonzero β ($TR1 x $TR2)" for T in (Float32, ComplexF32), TR1 in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), TR2 in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
                 if !(T in eltypes)
