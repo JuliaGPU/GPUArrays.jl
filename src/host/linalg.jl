@@ -661,6 +661,17 @@ end
         LinearAlgebra.mul!(C, tA, tB, A, B, _add.alpha, _add.beta)
 end
 
+# the `(trans, uplo, diag)` operand of the tiled matmul kernel, and the matrix it reads
+function tri_operand(W::AbstractTriangular)
+    P = parent(W)
+    trans = Char(wrapper_char(P))
+    trans in ('N', 'T', 'C') || return nothing, P
+    upper = W isa Union{UpperTriangular, UnitUpperTriangular}
+    uplo = upper == (trans == 'N') ? 'U' : 'L'
+    diag = W isa Union{UnitUpperTriangular, UnitLowerTriangular} ? 'U' : 'N'
+    (trans, uplo, diag), _unwrap(P)
+end
+
 # triangular × triangular matmul: C = α·(A·B) + β·C, with both A and B triangular.
 # Shared by the version-specific LinearAlgebra entry points below, which differ only in how
 # α/β arrive (raw scalars on ≥1.12, a MulAddMul on older). The wrapper type — not the data —
@@ -674,6 +685,12 @@ function _triangular_matmatmul!(C::AbstractGPUVecOrMat{R}, A::AbstractTriangular
     end
     if isempty(A) || isempty(B)
         return fill!(C, zero(R))
+    end
+    opA, pA = tri_operand(A)
+    opB, pB = tri_operand(B)
+    if opA !== nothing && opB !== nothing && pA isa AnyStridedGPUMatrix && pB isa AnyStridedGPUMatrix
+        pA, pB = Base.unalias(C, pA), Base.unalias(C, pB)
+        return tiled_matmatmul!(C, opA, opB, pA, pB, alpha, beta)
     end
     upperA = A isa Union{UnitUpperTriangular, UpperTriangular}
     @kernel function trimatmul(C, A, B, alpha, beta)
@@ -756,6 +773,9 @@ end
         _triangular_matmatmul!(C, A, B, add.alpha, add.beta)
 end
 
+tri_trans(tfun::Function) =
+    tfun === identity ? 'N' : tfun === transpose ? 'T' : tfun === adjoint ? 'C' : error("Not supported")
+
 function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix{T}, B::AbstractGPUVecOrMat{S}) where {T,S,R}
     if size(A,2) != size(B,1)
         throw(DimensionMismatch(lazy"matrix A has dimensions $(size(A)), matrix B has dimensions $(size(B))"))
@@ -766,73 +786,10 @@ function generic_trimatmul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
     if isempty(A) || isempty(B)
         return fill!(C, zero(R))
     end
-
-    upper = tfun === identity ? uploc == 'U' :  uploc != 'U'
-    unit  = isunitc == 'U'
-    oA = oneunit(eltype(A))
-
-    @kernel function trimatmul(C, A, B)
-        idx = @index(Global, Linear)
-        assume.(size(C) .> 0)
-        i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
-        l, m, n = size(A, 1), size(B, 1), size(B, 2)
-
-        @inbounds if i <= l && j <= n
-            z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij = muladd(unit ? oA : A[i,i], B[i,j], Cij)
-            for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
-                Cij = muladd(A[i,k], B[k,j], Cij)
-            end
-            C[i,j] = Cij
-        end
-    end
-
-    @kernel function trimatmul_t(C, A, B)
-        idx = @index(Global, Linear)
-        assume.(size(C) .> 0)
-        i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
-        l, m, n = size(A, 1), size(B, 1), size(B, 2)
-
-        @inbounds if i <= l && j <= n
-            z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij = muladd(unit ? oA : transpose(A[i,i]), B[i,j], Cij)
-            for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
-                Cij = muladd(transpose(A[k,i]), B[k,j], Cij)
-            end
-            C[i,j] = Cij
-        end
-    end
-
-    @kernel function trimatmul_a(C, A, B)
-        idx = @index(Global, Linear)
-        assume.(size(C) .> 0)
-        i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
-        l, m, n = size(A, 1), size(B, 1), size(B, 2)
-
-        @inbounds if i <= l && j <= n
-            z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij = muladd(unit ? oA : adjoint(A[i,i]), B[i,j], Cij)
-            for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
-                Cij = muladd(adjoint(A[k,i]), B[k,j], Cij)
-            end
-            C[i,j] = Cij
-        end
-    end
-
-    if tfun === identity
-        trimatmul(get_backend(C))(C, A, B; ndrange = length(C))
-    elseif tfun == transpose
-        trimatmul_t(get_backend(C))(C, A, B; ndrange = length(C))
-    elseif tfun === adjoint
-        trimatmul_a(get_backend(C))(C, A, B; ndrange = length(C))
-    else
-        error("Not supported")
-    end
-
-    C
+    # the kernel reads other elements of A and B than the one it writes
+    A, B = Base.unalias(C, A), Base.unalias(C, B)
+    opA = (tri_trans(tfun), Char(uploc), Char(isunitc))
+    tiled_matmatmul!(C, opA, 'N', A, B, MulAddMul())
 end
 
 function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix{T}, B::AbstractGPUVecOrMat{S}) where {T,S,R}
@@ -845,73 +802,10 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
     if isempty(A) || isempty(B)
         return fill!(C, zero(R))
     end
-
-    upper = tfun === identity ? uploc == 'U' :  uploc != 'U'
-    unit  = isunitc == 'U'
-    oB = oneunit(eltype(B))
-
-    @kernel function mattrimul(C, A, B)
-        idx = @index(Global, Linear)
-        assume.(size(C) .> 0)
-        i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
-        l, m, n = size(A, 1), size(B, 1), size(B, 2)
-
-        @inbounds if i <= l && j <= n
-            z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij = muladd(A[i,j], unit ? oB : B[j,j], Cij)
-            for k in (upper ? 1 : (j + 1)):(upper ? (j - 1) : m)
-                Cij = muladd(A[i,k], B[k,j], Cij)
-            end
-            C[i,j] = Cij
-        end
-    end
-
-    @kernel function mattrimul_t(C, A, B)
-        idx = @index(Global, Linear)
-        assume.(size(C) .> 0)
-        i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
-        l, m, n = size(A, 1), size(B, 1), size(B, 2)
-
-        @inbounds if i <= l && j <= n
-            z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij = muladd(A[i,j], unit ? oB : transpose(B[j,j]), Cij)
-            for k in (upper ? 1 : (j + 1) ):(upper ? (j - 1) : m)
-                Cij = muladd(A[i,k], transpose(B[j,k]), Cij)
-            end
-            C[i,j] = Cij
-        end
-    end
-
-    @kernel function mattrimul_a(C, A, B)
-        idx = @index(Global, Linear)
-        assume.(size(C) .> 0)
-        i, j = @inbounds Tuple(CartesianIndices(C)[idx])..., 1
-        l, m, n = size(A, 1), size(B, 1), size(B, 2)
-
-        @inbounds if i <= l && j <= n
-            z2 = zero(A[i,1] * B[1,j] + A[i,1] * B[1,j])
-            Cij = convert(promote_type(R, typeof(z2)), z2)
-            Cij = muladd(A[i,j], unit ? oB : adjoint(B[j,j]), Cij)
-            for k in (upper ? 1 : (j + 1)):(upper ? (j - 1) : m)
-                Cij = muladd(A[i,k], adjoint(B[j,k]), Cij)
-            end
-            C[i,j] = Cij
-        end
-    end
-
-    if tfun === identity
-        mattrimul(get_backend(C))(C, A, B; ndrange = length(C))
-    elseif tfun == transpose
-        mattrimul_t(get_backend(C))(C, A, B; ndrange = length(C))
-    elseif tfun === adjoint
-        mattrimul_a(get_backend(C))(C, A, B; ndrange = length(C))
-    else
-        error("Not supported")
-    end
-
-    C
+    # the kernel reads other elements of A and B than the one it writes
+    A, B = Base.unalias(C, A), Base.unalias(C, B)
+    opB = (tri_trans(tfun), Char(uploc), Char(isunitc))
+    tiled_matmatmul!(C, 'N', opB, A, B, MulAddMul())
 end
 
 # triangular solves parallelize only across right-hand sides; each one is a sequential
