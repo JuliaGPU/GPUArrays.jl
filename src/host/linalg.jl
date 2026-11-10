@@ -557,8 +557,9 @@ function gpu_rdiv!(B, A, D::Diagonal)
     any(iszero, D.diag) && throw(SingularException(findfirst(iszero, D.diag)))
     B .= A ./ transpose(D.diag)
 end
-LinearAlgebra.rdiv!(A::AnyStridedGPUMatrix, D::Diagonal{<:Any,<:AbstractGPUVector}) = gpu_rdiv!(A, A, D)
-Base.:(/)(A::Union{AnyStridedGPUMatrix,AdjOrTrans{<:Any,<:AnyStridedGPUMatrix}}, D::Diagonal{<:Any,<:AbstractGPUVector}) =
+# less specific than the back-ends' methods for their arrays and any Diagonal
+LinearAlgebra.rdiv!(A::AnyStridedGPUMatrix, D::Diagonal) = gpu_rdiv!(A, A, D)
+Base.:(/)(A::Union{AnyStridedGPUMatrix,AdjOrTrans{<:Any,<:AnyStridedGPUMatrix}}, D::Diagonal) =
     gpu_rdiv!(similar(A, typeof(oneunit(eltype(A)) / oneunit(eltype(D)))), A, D)
 
 Base.Array(D::Diagonal{<:Any,<:AbstractGPUVector}) = Matrix(Diagonal(Array(D.diag)))
@@ -1376,20 +1377,14 @@ function gpu_dot(x, y)
     isempty(x) && return dot(zero(eltype(x)), zero(eltype(y)))
     blas_dot(x, y)
 end
-LinearAlgebra.dot(x::AnyGPUArray, y::AnyGPUArray) = gpu_dot(x, y)
-# more specific than LinearAlgebra's methods for wrappers
-LinearAlgebra.dot(x::Adjoint{<:Union{Real,Complex},<:AbstractGPUArray}, y::Adjoint{<:Union{Real,Complex},<:AbstractGPUArray}) =
-    conj(dot(parent(x), parent(y)))
-for W in (:Symmetric, :Hermitian)
-    @eval LinearAlgebra.dot(A::$W{<:Union{Real,Complex},<:AbstractGPUMatrix}, B::$W{<:Union{Real,Complex},<:AbstractGPUMatrix}) =
-        gpu_dot(A, B)
-end
-# more specific than LinearAlgebra's methods for host BLAS
-const FastGPUArray{T} = Union{AbstractGPUArray{T}, SubArray{T,<:Any,<:AbstractGPUArray,<:Any,true}}
-LinearAlgebra.dot(x::FastGPUArray{T}, y::FastGPUArray{T}) where {T<:LinearAlgebra.BlasReal} = gpu_dot(x, y)
-LinearAlgebra.dot(x::FastGPUArray{T}, y::FastGPUArray{T}) where {T<:LinearAlgebra.BlasComplex} = gpu_dot(x, y)
+LinearAlgebra.dot(x::AbstractGPUArray, y::AbstractGPUArray) = gpu_dot(x, y)
+# contiguous views are left to LinearAlgebra's BLAS methods, which back-ends extend
+LinearAlgebra.dot(x::SubArray{<:Any,<:Any,<:AbstractGPUArray,<:Any,false}, y::SubArray{<:Any,<:Any,<:AbstractGPUArray,<:Any,false}) =
+    gpu_dot(x, y)
+LinearAlgebra.dot(x::PermutedDimsArray{<:Any,<:Any,<:Any,<:Any,<:AbstractGPUArray}, y::PermutedDimsArray{<:Any,<:Any,<:Any,<:Any,<:AbstractGPUArray}) =
+    gpu_dot(x, y)
 
-function Base.:(*)(x::Transpose{T,<:AnyStridedGPUVector{T}}, y::AnyStridedGPUVector{T}) where {T<:Complex}
+function Base.:(*)(x::Transpose{<:Any,<:AnyStridedGPUVector{T}}, y::AnyStridedGPUVector{T}) where {T<:Complex}
     length(x) == length(y) ||
         throw(DimensionMismatch(lazy"dot product arguments have lengths $(length(x)) and $(length(y))"))
     isempty(y) && return zero(T)
@@ -1403,9 +1398,14 @@ LinearAlgebra.BLAS.asum(x::AnyStridedGPUArray{<:LinearAlgebra.BlasFloat}) = blas
 function LinearAlgebra.axpby!(α::Number, x::AnyStridedGPUArray, β::Number, y::AnyStridedGPUArray)
     length(x) == length(y) ||
         throw(DimensionMismatch(lazy"axpby arguments have lengths $(length(x)) and $(length(y))"))
-    α === false && return rmul!(y, β)
-    β === false && return axpy!(α, x, fill!(y, zero(eltype(y))))
-    blas_axpby!(α, x, β, y)
+    β === false && fill!(y, zero(eltype(y)))
+    if α === false
+        β isa Bool || blas_scal!(β, y)
+    elseif β isa Bool
+        blas_axpy!(α, x, y)
+    else
+        blas_axpby!(α, x, β, y)
+    end
     return y
 end
 
