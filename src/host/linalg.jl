@@ -1084,25 +1084,30 @@ function LinearAlgebra.norm(v::AnyGPUArray{T}, p::Real=2) where {T}
     p == 0 && return convert(result_type, count(!iszero, v))
     spp = convert(sum_type, p)
     init = zero(sum_type)  # To set the accumulation type in `sum`
-    # Rescaling heuristic similar to Base, see LinearAlgebra/src/generic.jl
-    result = if p > 1 || p < -1  # May need rescaling
+    result = if p > 1 && isfinite(p)
+        # accept the unscaled sum unless it overflowed, or terms lost to underflow (each
+        # below floatmin) may matter
+        s = _sum_pow(promote_, v, p, spp, one(sum_type), init)
+        isfinite(s) && s >= length(v) * floatmin(sum_type) &&
+            return convert(result_type, p == 2 ? sqrt(s) : s^inv(spp))
+        infnorm = maximum(norm, v)
+        if iszero(infnorm) || isinf(infnorm)
+            return convert(result_type, infnorm)
+        end
+        scale = convert(sum_type, infnorm)
+        s = _sum_pow(promote_, v, p, spp, scale, init)
+        scale * (p == 2 ? sqrt(s) : s^inv(spp))
+    elseif p > 1 || p < -1  # May need rescaling
+        # Rescaling heuristic similar to Base, see LinearAlgebra/src/generic.jl
         infnorm = p > 1 ? maximum(norm, v) : minimum(norm, v)
         if isinf(p) || iszero(infnorm) || isinf(infnorm)
             return convert(result_type, infnorm)  # Return early to skip conversions
         end
         factor = convert(sum_type, infnorm)
-        if p == 2
-            if isfinite(length(v) * factor^2) && !iszero(factor^2)  # No rescaling
-                sqrt(sum(x -> LinearAlgebra.norm_sqr(promote_(x)), v; init=init))
-            else  # Rescaling
-                factor * sqrt(sum(x -> (norm(promote_(x)) / factor)^2, v; init=init))
-            end
-        else
-            if isfinite(length(v) * factor^spp) && !iszero(factor^spp)  # No rescaling
-                sum(x -> norm(promote_(x))^spp, v; init=init)^inv(spp)
-            else  # Rescaling
-                factor * (sum(x -> (norm(promote_(x)) / factor)^spp, v; init=init)^inv(spp))
-            end
+        if isfinite(length(v) * factor^spp) && !iszero(factor^spp)  # No rescaling
+            sum(x -> norm(promote_(x))^spp, v; init=init)^inv(spp)
+        else  # Rescaling
+            factor * (sum(x -> (norm(promote_(x)) / factor)^spp, v; init=init)^inv(spp))
         end
     elseif p == 1
         sum(x -> norm(promote_(x)), v; init=init)
@@ -1111,6 +1116,14 @@ function LinearAlgebra.norm(v::AnyGPUArray{T}, p::Real=2) where {T}
     end
     return convert(result_type, result)
 end
+
+# sum(norm(x / factor)^p), branching on p outside the kernel
+_sum_pow(promote_, v, p, spp, factor, init) =
+    if p == 2
+        sum(x -> LinearAlgebra.norm_sqr(promote_(x) / factor), v; init=init)
+    else
+        sum(x -> (norm(promote_(x)) / factor)^spp, v; init=init)
+    end
 
 function _normtypes(::Type{T}) where {T}
     result_type = typeof(float(norm(zero(T))))

@@ -901,6 +901,11 @@ end
                 @test compare(norm, AT, arr, Ref(p))
                 arr .= floatmin(real(T)) * 2
                 @test compare(norm, AT, arr, Ref(p))
+                if p > 1 && AT <: AbstractGPUArray
+                    # |x|^p a few ulps above zero, where the CPU norm is inaccurate too
+                    arr .= real(T)(1.3) * (8 * floatmin(real(T)) * eps(real(T)))^inv(real(T)(p))
+                    @test norm(AT(arr), p) ≈ norm(big.(arr), p)
+                end
             end
         end
     end
