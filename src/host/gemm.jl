@@ -92,6 +92,74 @@ function coalesced_matmul_kernel!(
     return
 end
 
+# acc[r + (c-1)*TM] += a[r] * b[c]
+@inline outer_muladd(a::NTuple{TM}, b::NTuple{TN}, acc::NTuple{L}) where {TM, TN, L} =
+    ntuple(Val(L)) do q
+        r, c = (q - 1) % TM + 1, (q - 1) ÷ TM + 1
+        @inbounds muladd(a[r], b[c], acc[q])
+    end
+
+# each work-item of a (TX, TY) workgroup computes a TM×TN block of a (TX*TM)×(TY*TN) tile of C
+function blocked_matmul_kernel!(
+        C, A, B, add,
+        M, N, K, ::Val{TA}, ::Val{TB},
+        ::Val{TX}, ::Val{TY}, ::Val{TM}, ::Val{TN}, ::Val{BK},
+    ) where {TA, TB, TX, TY, TM, TN, BK}
+    TAT = eltype(A); TBT = eltype(B); R = eltype(C)
+    BM, BN, NT = TX * TM, TY * TN, TX * TY
+
+    li, lj, _ = KI.get_local_id()
+    grow, gcol, _ = KI.get_group_id()
+    row0, col0 = (grow - 1) * BM, (gcol - 1) * BN
+    tid = (li - 1) + (lj - 1) * TX
+
+    # B is stored transposed, so that work-items with consecutive `lj` read consecutive elements
+    tileA = KI.localmemory(TAT, (BM, BK))
+    tileB = KI.localmemory(TBT, (BN, BK))
+
+    Tacc = promote_type(R, typeof(zero(TAT) * zero(TBT) + zero(TAT) * zero(TBT)))
+    acc = ntuple(_ -> zero(Tacc), Val(TM * TN))
+
+    # load along the contiguous dimension of the stored matrix
+    a_kfast = TA === 'T' || TA === 'C'
+    b_kfast = !(TB === 'T' || TB === 'C')
+
+    for k0 in 0:BK:(K - 1)
+        for s in 0:(BM * BK ÷ NT - 1)
+            idx = tid + s * NT
+            i, k = a_kfast ? (idx ÷ BK, idx % BK) : (idx % BM, idx ÷ BM)
+            gi, gk = row0 + i + 1, k0 + k + 1
+            @inbounds tileA[i + 1, k + 1] =
+                gi <= M && gk <= K ? opelem(A, Val(TA), gi, gk) : zero(TAT)
+        end
+        for s in 0:(BN * BK ÷ NT - 1)
+            idx = tid + s * NT
+            j, k = b_kfast ? (idx ÷ BK, idx % BK) : (idx % BN, idx ÷ BN)
+            gj, gk = col0 + j + 1, k0 + k + 1
+            @inbounds tileB[j + 1, k + 1] =
+                gj <= N && gk <= K ? opelem(B, Val(TB), gk, gj) : zero(TBT)
+        end
+
+        KI.barrier()
+
+        for k in 1:BK
+            a = ntuple(r -> @inbounds(tileA[li + (r - 1) * TX, k]), Val(TM))
+            b = ntuple(c -> @inbounds(tileB[lj + (c - 1) * TY, k]), Val(TN))
+            acc = outer_muladd(a, b, acc)
+        end
+
+        KI.barrier()
+    end
+
+    for c in 1:TN, r in 1:TM
+        gi, gj = row0 + li + (r - 1) * TX, col0 + lj + (c - 1) * TY
+        if gi <= M && gj <= N
+            @inbounds C[gi, gj] = add(acc[r + (c - 1) * TM], C[gi, gj])
+        end
+    end
+    return
+end
+
 @inline function check_matmul_shapes(C, A, B, cA='N', cB='N')
     tA = cA === 'T' || cA === 'C'
     tB = cB === 'T' || cB === 'C'
@@ -124,10 +192,18 @@ function generic_matmatmul!(C::AbstractArray{R}, cA::AbstractChar, cB::AbstractC
     # an empty inner dimension still needs to apply β; the kernel handles that (no tiles)
     isempty(C) && return C
 
-    workgroupsize=(TILE_DIM, TILE_DIM)
-    numworkgroups=(cld(M, TILE_DIM), cld(N, TILE_DIM))
-
-    KI.@launch KI.get_backend(C) workgroupsize=workgroupsize numgroups=numworkgroups coalesced_matmul_kernel!(
-            C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(TILE_DIM))
+    backend = KI.get_backend(C)
+    # the blocked kernel needs enough workgroups to fill the device
+    if M * N >= 2^19 && isbitstype(T) && isbitstype(S) && max(sizeof(T), sizeof(S)) <= 16
+        TX = TY = 16
+        TM = TN = 4
+        BK = 8
+        KI.@launch backend workgroupsize=(TX, TY) numgroups=(cld(M, TX * TM), cld(N, TY * TN)) blocked_matmul_kernel!(
+                C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB),
+                Val(TX), Val(TY), Val(TM), Val(TN), Val(BK))
+    else
+        KI.@launch backend workgroupsize=(TILE_DIM, TILE_DIM) numgroups=(cld(M, TILE_DIM), cld(N, TILE_DIM)) coalesced_matmul_kernel!(
+                C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(TILE_DIM))
+    end
     C
 end
