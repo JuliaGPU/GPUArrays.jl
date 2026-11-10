@@ -703,6 +703,36 @@ end
         end
     end
 
+    # the matvec kernels split a long inner dimension over several work-groups and sum the
+    # partial results in a second pass. call them directly, since back-ends with a BLAS
+    # would not reach them for these eltypes.
+    @testset "$T generic matvec, tA=$tA, $(M)×$(K)" for T in (Float32, ComplexF32), tA in ('N', 'T', 'C'),
+                                                          (M, K) in ((5, 0), (3, 1000), (3, 10000), (300, 300))
+        T in eltypes || continue
+        A, x, y = rand(T, tA == 'N' ? (M, K) : (K, M)), rand(T, K), rand(T, M)
+        opA = tA == 'N' ? A : tA == 'T' ? transpose(A) : adjoint(A)
+
+        dy = AT(y)
+        GPUArrays.generic_matmatmul!(dy, tA, 'N', AT(A), AT(x), LinearAlgebra.MulAddMul(T(2), T(3)))
+        @test collect(dy) ≈ 2 * opA * x + 3 * y
+
+        # β == 0 ignores the contents of C
+        dy = AT(fill(T(NaN), M))
+        GPUArrays.generic_matmatmul!(dy, tA, 'N', AT(A), AT(x), LinearAlgebra.MulAddMul(T(2), T(0)))
+        @test collect(dy) ≈ 2 * opA * x
+    end
+    @testset "$T generic matvec, $W, uplo=$uplo" for T in (Float32, ComplexF32), W in (Symmetric, Hermitian), uplo in (:U, :L)
+        T in eltypes || continue
+        n = 600
+        A, x, y = rand(T, n, n), rand(T, n), rand(T, n)
+        tA = W === Symmetric ? 'S' : 'H'
+        uplo === :L && (tA = lowercase(tA))
+
+        dy = AT(y)
+        GPUArrays.generic_matmatmul!(dy, tA, 'N', AT(A), AT(x), LinearAlgebra.MulAddMul(T(2), T(3)))
+        @test collect(dy) ≈ 2 * W(A, uplo) * x + 3 * y
+    end
+
     # matrix-matrix
     @testset "$T gemm C := $f(A) * $g(B) * a + C * b" for f in (identity, transpose, adjoint), g in (identity, transpose, adjoint), T in eltypes
         A, B, C = rand(T, opsize(f, m, k)...), rand(T, opsize(g, k, n)...), rand(T, m, n)
