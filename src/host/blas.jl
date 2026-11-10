@@ -115,3 +115,26 @@ blas_axpy!(α, x, y) = y .+= x .* α
 blas_axpby!(α, x, β, y) = y .= x .* α .+ y .* β
 
 blas_rot!(x, y, c, s) = generic_rotate!(x, y, c, s)
+
+
+## BLAS 3 extensions
+
+blas_syrk!(uplo::AbstractChar, trans::AbstractChar, α, A, β, C) =
+    generic_matmatmul!(C, trans, trans == 'N' ? 'T' : 'N', A, A, α, β)
+blas_herk!(uplo::AbstractChar, trans::AbstractChar, α, A, β, C) =
+    generic_matmatmul!(C, trans, trans == 'N' ? 'C' : 'N', A, A, α, β)
+
+# C = α op(A) + β op(B)
+function blas_geam!(tA::AbstractChar, tB::AbstractChar, α, A, β, B, C)
+    opA, opB = trans_op(tA), trans_op(tB)
+    if β === false
+        α === true && opA !== identity ? transpose_f!(opA, C, A) : (C .= α .* opA(A))
+    else
+        C .= α .* opA(A) .+ β .* opB(B)
+    end
+    return C
+end
+
+# C = Diagonal(x) * A or A * Diagonal(x)
+blas_dgmm!(side::AbstractChar, A, x, C) =
+    side == 'L' ? (C .= x .* A) : (C .= A .* transpose(x))

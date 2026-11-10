@@ -39,8 +39,17 @@ function LinearAlgebra.adjoint!(B::AbstractGPUMatrix, A::AbstractGPUVector)
     B
 end
 
-LinearAlgebra.transpose!(B::AnyGPUArray, A::AnyGPUArray) = transpose_f!(transpose, B, A)
-LinearAlgebra.adjoint!(B::AnyGPUArray, A::AnyGPUArray) = transpose_f!(adjoint, B, A)
+LinearAlgebra.transpose!(B::AnyGPUArray, A::AnyGPUArray) = gpu_transpose!(transpose, B, A)
+LinearAlgebra.adjoint!(B::AnyGPUArray, A::AnyGPUArray) = gpu_transpose!(adjoint, B, A)
+function gpu_transpose!(f, B, A)
+    if B isa AnyStridedGPUMatrix && A isa AnyStridedGPUMatrix && eltype(A) == eltype(B) && !isempty(A) &&
+       blas_layout(A) && blas_layout(B) && !Base.mightalias(A, B)
+        axes(B, 1) == axes(A, 2) && axes(B, 2) == axes(A, 1) || throw(DimensionMismatch(string(f)))
+        t = f === transpose ? 'T' : 'C'
+        return blas_geam!(t, t, true, A, false, A, B)
+    end
+    transpose_f!(f, B, A)
+end
 function transpose_f!(f, B::AnyGPUMatrix{T}, A::AnyGPUMatrix{T}) where T
     axes(B,1) == axes(A,2) && axes(B,2) == axes(A,1) || throw(DimensionMismatch(string(f)))
     # array with size zero dimension
@@ -206,8 +215,14 @@ Base.copyto!(A::Array{T,N}, B::UpperTriangular{T, <:AbstractGPUArray{T,N}}) wher
 Base.copyto!(A::Array{T,N}, B::LowerTriangular{T, <:AbstractGPUArray{T,N}}) where {T,N} = copyto!(A, LowerTriangular(Array(parent(B))))
 
 # GPU/GPU: B -> A
-Base.copyto!(A::AbstractGPUArray{T,N}, B::UpperTriangular{T, <:AbstractGPUArray{T,N}}) where {T,N} = LinearAlgebra.triu!(copyto!(A, parent(B)))
-Base.copyto!(A::AbstractGPUArray{T,N}, B::LowerTriangular{T, <:AbstractGPUArray{T,N}}) where {T,N} = LinearAlgebra.tril!(copyto!(A, parent(B)))
+for (W, tri!, unit) in ((:UpperTriangular, :triu!, false), (:LowerTriangular, :tril!, false),
+                        (:UnitUpperTriangular, :triu!, true), (:UnitLowerTriangular, :tril!, true))
+    @eval function Base.copyto!(A::AbstractGPUMatrix{T}, B::$W{T,<:Union{AbstractGPUMatrix{T},AdjOrTrans{T,<:AbstractGPUMatrix{T}}}}) where {T}
+        LinearAlgebra.$tri!(copyto!(A, parent(B)))
+        $unit && fill!(view(A, diagind(A)), oneunit(T))
+        return A
+    end
+end
 for T in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
     @eval Base.copyto!(A::$T{T, <:AbstractGPUArray{T,N}}, B::$T{T, <:AbstractGPUArray{T,N}}) where {T,N} = $T(copyto!(parent(A), parent(B)))
 end
@@ -459,6 +474,9 @@ function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
     m′, n′ = size(B, 1), size(B, 2)
     m == d || throw(DimensionMismatch("right hand side has $m rows but D is $d by $d"))
     (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
+    if B isa AbstractGPUMatrix && A isa AbstractGPUMatrix && allequal(map(eltype, (A, B, dd))) && !isempty(B)
+        return blas_dgmm!('L', A, dd, B)
+    end
     @. B = dd * A
     B
 end
@@ -488,6 +506,9 @@ function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
     m′, n′ = size(B, 1), size(B, 2)
     n == d || throw(DimensionMismatch("left hand side has $n columns but D is $d by $d"))
     (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
+    if B isa AbstractGPUMatrix && A isa AbstractGPUMatrix && allequal(map(eltype, (A, B, dd))) && !isempty(B)
+        return blas_dgmm!('R', A, dd, B)
+    end
     ddT = transpose(dd)
     @. B = A * ddT
 
@@ -510,6 +531,37 @@ function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
 
     B
 end
+
+LinearAlgebra.lmul!(D::Diagonal{<:Any,<:AbstractGPUVector}, B::AbstractGPUMatrix) = mul!(B, D, B)
+LinearAlgebra.rmul!(A::AbstractGPUMatrix, D::Diagonal{<:Any,<:AbstractGPUVector}) = mul!(A, A, D)
+# update the parent, as broadcasting into a wrapper isn't supported
+function LinearAlgebra.lmul!(D::Diagonal{<:Any,<:AbstractGPUVector}, B::AdjOrTrans{<:Any,<:AbstractGPUMatrix})
+    P = parent(B)
+    P .= P .* (B isa Adjoint ? adjoint(D.diag) : transpose(D.diag))
+    return B
+end
+function LinearAlgebra.rmul!(A::AdjOrTrans{<:Any,<:AbstractGPUMatrix}, D::Diagonal{<:Any,<:AbstractGPUVector})
+    P = parent(A)
+    P .= (A isa Adjoint ? conj.(D.diag) : D.diag) .* P
+    return A
+end
+
+function LinearAlgebra.inv(D::Diagonal{<:Any,<:AbstractGPUVector})
+    any(iszero, D.diag) && throw(SingularException(findfirst(iszero, D.diag)))
+    Diagonal(inv.(D.diag))
+end
+
+function gpu_rdiv!(B, A, D::Diagonal)
+    n = size(A, 2)
+    (k = length(D.diag)) == n || throw(DimensionMismatch(lazy"left hand side has $n columns but D is $k by $k"))
+    any(iszero, D.diag) && throw(SingularException(findfirst(iszero, D.diag)))
+    B .= A ./ transpose(D.diag)
+end
+LinearAlgebra.rdiv!(A::AnyStridedGPUMatrix, D::Diagonal{<:Any,<:AbstractGPUVector}) = gpu_rdiv!(A, A, D)
+Base.:(/)(A::Union{AnyStridedGPUMatrix,AdjOrTrans{<:Any,<:AnyStridedGPUMatrix}}, D::Diagonal{<:Any,<:AbstractGPUVector}) =
+    gpu_rdiv!(similar(A, typeof(oneunit(eltype(A)) / oneunit(eltype(D)))), A, D)
+
+Base.Array(D::Diagonal{<:Any,<:AbstractGPUVector}) = Matrix(Diagonal(Array(D.diag)))
 
 function LinearAlgebra.ldiv!(B::AbstractGPUVecOrMat,
                               D::Diagonal{<:Any, <:AbstractGPUArray},
@@ -650,6 +702,19 @@ function LinearAlgebra.mul!(C::AnyStridedGPUVecOrMat, tA, tB, A::AnyStridedGPUVe
     end
 
     if all(blas_matrix_layout, (A, B, C))
+        if A === B && C isa AbstractGPUMatrix && eltype(A) == eltype(C) && iszero(b) &&
+           'N' in (tA, tB) && (tA == 'N' ? tB : tA) in ('T', 'C')
+            T, t = eltype(C), (tA == 'N' ? tB : tA)
+            if T <: Complex && t == 'C'
+                if isreal(a)
+                    blas_herk!('U', tA == 'N' ? 'N' : 'C', real(a), A, real(b), C)
+                    return LinearAlgebra.copytri!(C, 'U', true)
+                end
+            elseif blas_scalars(T, a, b)
+                blas_syrk!('U', tA == 'N' ? 'N' : 'T', a, A, b, C)
+                return LinearAlgebra.copytri!(C, 'U')
+            end
+        end
         if tA in ('N', 'T', 'C') && tB in ('N', 'T', 'C')
             return blas_gemm!(tA, tB, a, A, B, b, C)
         elseif blas_scalars(eltype(C), a, b)
@@ -687,7 +752,7 @@ end
 # Shared by the version-specific LinearAlgebra entry points below, which differ only in how
 # α/β arrive (raw scalars on ≥1.12, a MulAddMul on older). The wrapper type — not the data —
 # fixes which triangle holds the nonzeros, so we read it with a plain `isa` check.
-function _triangular_matmatmul!(C::AbstractGPUVecOrMat{R}, A::AbstractTriangular, B::AbstractTriangular, alpha::Number, beta::Number) where {R}
+function _triangular_matmatmul!(C::AnyStridedGPUVecOrMat{R}, A::AbstractTriangular, B::AbstractTriangular, alpha::Number, beta::Number) where {R}
     if size(A,2) != size(B,1)
         throw(DimensionMismatch(lazy"matrix A has dimensions $(size(A)), matrix B has dimensions $(size(B))"))
     end
@@ -1052,6 +1117,35 @@ function LinearAlgebra.generic_mattridiv!(C::AnyStridedGPUMatrix, uploc, isunitc
     generic_mattridiv!(C, uploc, isunitc, tfun, A, B)
 end
 
+tri_wrapper(uploc, isunitc) = uploc == 'U' ? (isunitc == 'U' ? UnitUpperTriangular : UpperTriangular) :
+                                             (isunitc == 'U' ? UnitLowerTriangular : LowerTriangular)
+
+function LinearAlgebra.generic_trimatmul!(C::AnyStridedGPUMatrix, uplocA, isunitcA, tfunA::Function, A::AnyStridedGPUMatrix,
+                                          triB::LinearAlgebra.UpperOrLowerTriangular{<:Any,<:AnyGPUOperand})
+    uplocB = LinearAlgebra.uplo_char(triB)
+    isunitcB = LinearAlgebra.isunit_char(triB)
+    B = parent(triB)
+    tfunB = LinearAlgebra.wrapperop(B)
+    pB = LinearAlgebra._unwrap(B)
+    if allequal(map(eltype, (C, A, B))) && !isempty(C) && all(blas_layout, (C, A, pB))
+        transa, transb = trans_char(tfunA), trans_char(tfunB)
+        if uplocA == 'L' && tfunA === identity && tfunB === identity && uplocB == 'U' && isunitcB == 'N'
+            return blas_trmm!('L', uplocA, transa, isunitcA, true, A, triu!(copy(B)), C)
+        elseif uplocA == 'U' && tfunA === identity && tfunB === identity && uplocB == 'L' && isunitcB == 'N'
+            return blas_trmm!('L', uplocA, transa, isunitcA, true, A, tril!(copy(B)), C)
+        elseif uplocA == 'U' && tfunA === identity && tfunB !== identity && uplocB == 'U' && isunitcA == 'N'
+            return blas_trmm!('R', uplocB, transb, isunitcB, true, pB, triu!(copy(A)), C)
+        elseif uplocA == 'L' && tfunA !== identity && tfunB === identity && uplocB == 'L' && isunitcB == 'N'
+            return blas_trmm!('L', uplocA, transa, isunitcA, true, A, tril!(copy(B)), C)
+        elseif uplocA == 'U' && tfunA !== identity && tfunB === identity && uplocB == 'U' && isunitcB == 'N'
+            return blas_trmm!('L', uplocA, transa, isunitcA, true, A, triu!(copy(B)), C)
+        elseif uplocA == 'L' && tfunA === identity && tfunB !== identity && uplocB == 'L' && isunitcA == 'N'
+            return blas_trmm!('R', uplocB, transb, isunitcB, true, pB, tril!(copy(A)), C)
+        end
+    end
+    _triangular_matmatmul!(C, tfunA(tri_wrapper(uplocA, isunitcA)(A)), triB, true, false)
+end
+
 # LinearAlgebra's generic inverse of a triangular matrix uses scalar indexing
 for t in (:LowerTriangular, :UnitLowerTriangular, :UpperTriangular, :UnitUpperTriangular)
     @eval function LinearAlgebra.inv(A::$t{T,<:AnyStridedGPUMatrix{T}}) where {T}
@@ -1321,6 +1415,26 @@ function LinearAlgebra.axpy!(α::Number, x::AnyStridedGPUArray, y::AnyStridedGPU
     α === false && return y
     blas_axpy!(α, x, y)
     return y
+end
+
+## matrix addition
+
+function gpu_geam(op, A, B)
+    size(A) == size(B) ||
+        throw(DimensionMismatch(lazy"dimensions must match: a has dims $(axes(A)), b has dims $(axes(B))"))
+    T = eltype(A)
+    pA, pB = LinearAlgebra._unwrap(A), LinearAlgebra._unwrap(B)
+    if eltype(B) == T && !isempty(A) && blas_layout(pA) && blas_layout(pB)
+        tA, tB = Char(LinearAlgebra.wrapper_char(A)), Char(LinearAlgebra.wrapper_char(B))
+        return blas_geam!(tA, tB, true, pA, op === (-) ? -one(T) : one(T), pB, similar(pA, T, size(A)))
+    end
+    broadcast(op, A, B)
+end
+for op in (:+, :-)
+    @eval begin
+        Base.$op(A::AnyStridedGPUMatrix, B::AdjOrTrans{<:Any,<:AnyStridedGPUMatrix}) = gpu_geam($op, A, B)
+        Base.$op(A::AdjOrTrans{<:Any,<:AnyStridedGPUMatrix}, B::AnyStridedGPUMatrix) = gpu_geam($op, A, B)
+    end
 end
 
 ## Givens rotations

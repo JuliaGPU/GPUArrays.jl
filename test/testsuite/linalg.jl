@@ -1081,3 +1081,93 @@ end
         @test compare(d -> norm(Diagonal(d), p), AT, rand(Float32, 4))
     end
 end
+
+@testsuite "linalg/blas3/extensions" (AT, eltypes)->begin
+    @testset "$T" for T in (Float32, ComplexF32)
+        T in eltypes || continue
+        A, B = rand(T, 5, 3), rand(T, 5, 3)
+        S, R = rand(T, 4, 4), rand(T, 4, 4)
+
+        @testset "syrk/herk" begin
+            @test compare(A -> A' * A, AT, A)
+            @test compare(A -> A * A', AT, A)
+            @test compare(A -> transpose(A) * A, AT, A)
+            @test compare(A -> A * transpose(A), AT, A)
+            @test compare((C, A) -> mul!(C, A', A, T(2), false), AT, rand(T, 3, 3), A)
+            @test compare((C, A) -> mul!(C, A', A, T(2), T(3)), AT, rand(T, 3, 3), A)
+        end
+
+        @testset "geam" begin
+            @test compare((S, R) -> S + R', AT, S, R)
+            @test compare((S, R) -> S - transpose(R), AT, S, R)
+            @test compare((S, R) -> R' - S, AT, S, R)
+            @test compare(A -> transpose!(similar(A, 3, 5), A), AT, A)
+            @test compare(A -> adjoint!(similar(A, 3, 5), A), AT, A)
+            @test compare((S, R) -> S + R', AT, rand(T, 4, 0), rand(T, 0, 4))
+        end
+
+        @testset "Diagonal" begin
+            d = rand(T, 5) .+ 1
+            @test compare((d, A) -> Diagonal(d) * A, AT, d, A)
+            @test compare((d, A) -> A' * Diagonal(d), AT, d, A)
+            @test compare((d, A) -> lmul!(Diagonal(d), A), AT, d, A)
+            @test compare((d, A) -> rmul!(copy(A'), Diagonal(d)), AT, d, A)
+            @test compare((d, A) -> copy(lmul!(Diagonal(d[1:3]), A')), AT, d, A)
+            @test compare((d, A) -> copy(lmul!(Diagonal(d[1:3]), transpose(A))), AT, d, A)
+            @test compare((d, A) -> copy(rmul!(A', Diagonal(d))), AT, d, A)
+            @test compare((d, A) -> copy(rmul!(transpose(A), Diagonal(d))), AT, d, A)
+            @test compare(d -> inv(Diagonal(d)).diag, AT, d)
+            @test compare((d, A) -> A' / Diagonal(d), AT, d, A)
+            @test compare((d, A) -> rdiv!(copy(A'), Diagonal(d)), AT, d, A)
+            @test Array(Diagonal(AT(d))) == Matrix(Diagonal(d))
+            @test_throws SingularException inv(Diagonal(AT(T[1, 0, 2])))
+        end
+
+        @testset "triangular * triangular" begin
+            @test compare((S, R) -> LowerTriangular(S) * UpperTriangular(R), AT, S, R)
+            @test compare((S, R) -> UpperTriangular(S) * LowerTriangular(R), AT, S, R)
+            @test compare((S, R) -> UpperTriangular(S) * UpperTriangular(R)', AT, S, R)
+            @test compare((S, R) -> UpperTriangular(S)' * UpperTriangular(R), AT, S, R)
+            @test compare((S, R) -> LowerTriangular(S)' * LowerTriangular(R), AT, S, R)
+            @test compare((S, R) -> UnitLowerTriangular(S) * UnitUpperTriangular(R), AT, S, R)
+        end
+    end
+end
+
+@testsuite "linalg/blas/edge-cases" (AT, eltypes)->begin
+    @testset "$T" for T in (Float32, ComplexF32)
+        T in eltypes || continue
+        n = 4
+        nan(d...) = fill(T(NaN), d...)
+        A, B, x = rand(T, n, n), rand(T, n, n), rand(T, n)
+
+        @testset "false is a strong zero" begin
+            @test compare((C, A, B) -> mul!(C, A, B, false, true), AT, rand(T, n, n), nan(n, n), B)
+            @test compare((C, A, B) -> mul!(C, A, B, true, false), AT, nan(n, n), A, B)
+            @test compare((y, A, x) -> mul!(y, A, x, false, true), AT, rand(T, n), nan(n, n), x)
+            @test compare((y, A, x) -> mul!(y, A, x, true, false), AT, nan(n), A, x)
+            @test compare((C, A, B) -> mul!(C, Symmetric(A), B, true, false), AT, nan(n, n), A, B)
+            @test compare((y, A, x) -> mul!(y, Symmetric(A), x, true, false), AT, nan(n), A, x)
+            @test compare((C, A) -> mul!(C, A', A, true, false), AT, nan(n, n), A)
+            @test compare((C, A) -> transpose!(C, A), AT, nan(n, n), A)
+            @test compare((C, x, A) -> mul!(C, Diagonal(x), A), AT, nan(n, n), x, A)
+            @test compare((C, A, B) -> mul!(C, UpperTriangular(A), B), AT, nan(n, n), A, B)
+        end
+
+        @testset "empty operands" begin
+            E, e, W = rand(T, 0, 0), rand(T, 0), rand(T, 0, 3)
+            @test compare((E, e) -> UpperTriangular(E) \ e, AT, E, e)
+            @test compare((E, W) -> UpperTriangular(E) \ W, AT, E, W)
+            @test compare((E, W) -> W' / LowerTriangular(E), AT, E, W)
+            @test compare((E, e) -> UpperTriangular(E) * e, AT, E, e)
+            @test compare((E, W) -> UpperTriangular(E) * W, AT, E, W)
+            @test compare((E, W) -> W' * UpperTriangular(E), AT, E, W)
+            @test compare((E, e) -> E * e, AT, E, e)
+            @test compare(W -> W' * W, AT, W)
+            @test compare(W -> W * W', AT, W)
+            @test compare((E, W) -> Symmetric(E) * W, AT, E, W)
+            @test compare((e, W) -> Diagonal(e) * W, AT, e, W)
+            @test compare(E -> LowerTriangular(E) * UpperTriangular(E), AT, E)
+        end
+    end
+end
