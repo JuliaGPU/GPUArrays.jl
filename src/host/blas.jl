@@ -97,3 +97,21 @@ function blas_trsm!(side::AbstractChar, uplo::AbstractChar, trans::AbstractChar,
         generic_mattridiv!(B, uplo, diag, trans_op(trans), B, A)
     end
 end
+
+
+## BLAS 1
+
+blas_scal!(α, x) = generic_rmul!(x, α)
+
+# dot conjugates x, dotu doesn't
+blas_dot(x, y) = mapreduce(dot, +, x, y)
+blas_dotu(x, y) = mapreduce(*, +, x, y)
+
+blas_nrm2(x) = generic_norm(x, 2)
+
+blas_asum(x) = mapreduce(z -> abs(real(z)) + abs(imag(z)), +, x; init=zero(real(eltype(x))))
+
+blas_axpy!(α, x, y) = y .+= x .* α
+blas_axpby!(α, x, β, y) = y .= x .* α .+ y .* β
+
+blas_rot!(x, y, c, s) = generic_rotate!(x, y, c, s)

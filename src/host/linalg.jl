@@ -1067,7 +1067,13 @@ function generic_rmul!(X::AbstractArray, s::Number)
     return X
 end
 
-LinearAlgebra.rmul!(A::AbstractGPUArray, b::Number) = generic_rmul!(A, b)
+function LinearAlgebra.rmul!(A::AnyStridedGPUArray, b::Number)
+    b === true && return A
+    # false is a strong zero, which BLAS libraries don't implement
+    b === false && return fill!(A, zero(eltype(A)))
+    blas_scal!(b, A)
+    return A
+end
 LinearAlgebra.rmul!(A::Diagonal{T, <:AbstractGPUArray}, b::Number) where {T} = generic_rmul!(A.diag, b)
 
 function generic_lmul!(s::Number, X::AbstractArray)
@@ -1134,7 +1140,16 @@ end
 
 ## norm
 
-function LinearAlgebra.norm(v::AnyGPUArray{T}, p::Real=2) where {T}
+LinearAlgebra.norm(v::AnyGPUArray, p::Real=2) =
+    p == 2 && v isa AnyStridedGPUArray ? blas_nrm2(v) : generic_norm(v, p)
+
+function LinearAlgebra.norm(D::Diagonal{<:Any,<:AnyGPUVector}, p::Real=2)
+    r = norm(D.diag, p)
+    # the off-diagonal zeros decide negative norms
+    size(D, 1) > 1 && p < 0 ? zero(r) : r
+end
+
+function generic_norm(v::AbstractArray{T}, p::Real) where {T}
     result_type, sum_type, promote_ = _normtypes(T)
     isempty(v) && return zero(result_type)
     p == 0 && return convert(result_type, count(!iszero, v))
@@ -1219,7 +1234,15 @@ end
 
 ## rotate
 
-function LinearAlgebra.rotate!(x::AbstractGPUArray, y::AbstractGPUArray, c::Number, s::Number)
+function LinearAlgebra.rotate!(x::AnyStridedGPUArray, y::AnyStridedGPUArray, c::Number, s::Number)
+    length(x) == length(y) ||
+        throw(DimensionMismatch(lazy"rotate arguments have lengths $(length(x)) and $(length(y))"))
+    # false is a strong zero, which BLAS libraries don't implement
+    c isa Bool || s isa Bool ? generic_rotate!(x, y, c, s) : blas_rot!(x, y, c, s)
+    return x, y
+end
+
+function generic_rotate!(x, y, c, s)
     @kernel function rotate_kernel!(x, y, c, s)
         i = @index(Global, Linear)
         @inbounds xi = x[i]
@@ -1233,7 +1256,9 @@ end
 
 ## reflect
 
-function LinearAlgebra.reflect!(x::AbstractGPUArray, y::AbstractGPUArray, c::Number, s::Number)
+function LinearAlgebra.reflect!(x::AnyStridedGPUArray, y::AnyStridedGPUArray, c::Number, s::Number)
+    length(x) == length(y) ||
+        throw(DimensionMismatch(lazy"reflect arguments have lengths $(length(x)) and $(length(y))"))
     @kernel function reflect_kernel!(x, y, c, s)
         i = @index(Global, Linear)
         @inbounds xi = x[i]
@@ -1247,14 +1272,66 @@ end
 
 ## dot
 
-LinearAlgebra.dot(x::AbstractGPUArray, y::AbstractGPUArray) = mapreduce(dot, +, x, y)
+function gpu_dot(x, y)
+    length(x) == length(y) ||
+        throw(DimensionMismatch(lazy"dot product arguments have lengths $(length(x)) and $(length(y))"))
+    isempty(x) && return dot(zero(eltype(x)), zero(eltype(y)))
+    blas_dot(x, y)
+end
+LinearAlgebra.dot(x::AnyGPUArray, y::AnyGPUArray) = gpu_dot(x, y)
+# more specific than LinearAlgebra's methods for wrappers
+LinearAlgebra.dot(x::Adjoint{<:Union{Real,Complex},<:AbstractGPUArray}, y::Adjoint{<:Union{Real,Complex},<:AbstractGPUArray}) =
+    conj(dot(parent(x), parent(y)))
+for W in (:Symmetric, :Hermitian)
+    @eval LinearAlgebra.dot(A::$W{<:Union{Real,Complex},<:AbstractGPUMatrix}, B::$W{<:Union{Real,Complex},<:AbstractGPUMatrix}) =
+        gpu_dot(A, B)
+end
+# more specific than LinearAlgebra's methods for host BLAS
+const FastGPUArray{T} = Union{AbstractGPUArray{T}, SubArray{T,<:Any,<:AbstractGPUArray,<:Any,true}}
+LinearAlgebra.dot(x::FastGPUArray{T}, y::FastGPUArray{T}) where {T<:LinearAlgebra.BlasReal} = gpu_dot(x, y)
+LinearAlgebra.dot(x::FastGPUArray{T}, y::FastGPUArray{T}) where {T<:LinearAlgebra.BlasComplex} = gpu_dot(x, y)
+
+function Base.:(*)(x::Transpose{T,<:AnyStridedGPUVector{T}}, y::AnyStridedGPUVector{T}) where {T<:Complex}
+    length(x) == length(y) ||
+        throw(DimensionMismatch(lazy"dot product arguments have lengths $(length(x)) and $(length(y))"))
+    isempty(y) && return zero(T)
+    blas_dotu(parent(x), y)
+end
+
+LinearAlgebra.BLAS.asum(x::AnyStridedGPUArray{<:LinearAlgebra.BlasFloat}) = blas_asum(x)
 
 ## axp{b}y
 
-LinearAlgebra.axpby!(alpha::Number, x::AbstractGPUArray,
-                     beta::Number,  y::AbstractGPUArray) = y .= x.*alpha .+ y.*beta
+function LinearAlgebra.axpby!(α::Number, x::AnyStridedGPUArray, β::Number, y::AnyStridedGPUArray)
+    length(x) == length(y) ||
+        throw(DimensionMismatch(lazy"axpby arguments have lengths $(length(x)) and $(length(y))"))
+    α === false && return rmul!(y, β)
+    β === false && return axpy!(α, x, fill!(y, zero(eltype(y))))
+    blas_axpby!(α, x, β, y)
+    return y
+end
 
-LinearAlgebra.axpy!(alpha::Number, x::AbstractGPUArray, y::AbstractGPUArray) = y .+= x.*alpha
+function LinearAlgebra.axpy!(α::Number, x::AnyStridedGPUArray, y::AnyStridedGPUArray)
+    length(x) == length(y) ||
+        throw(DimensionMismatch(lazy"axpy arguments have lengths $(length(x)) and $(length(y))"))
+    α === false && return y
+    blas_axpy!(α, x, y)
+    return y
+end
+
+## Givens rotations
+
+function LinearAlgebra.lmul!(G::LinearAlgebra.Givens, A::AnyStridedGPUVecOrMat)
+    G.i2 > size(A, 1) && throw(DimensionMismatch("column indices for rotation are outside the matrix"))
+    rotate!(view(A, G.i1, :), view(A, G.i2, :), real(G.c), G.s)
+    return A
+end
+
+function LinearAlgebra.rmul!(A::AnyStridedGPUMatrix, G::LinearAlgebra.Givens)
+    G.i2 > size(A, 2) && throw(DimensionMismatch("column indices for rotation are outside the matrix"))
+    rotate!(view(A, :, G.i1), view(A, :, G.i2), real(G.c), -conj(G.s))
+    return A
+end
 
 ## identity and zero equality check
 
