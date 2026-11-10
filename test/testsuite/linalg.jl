@@ -829,6 +829,59 @@ end
     end
 end
 
+@testsuite "linalg/triangular/strided-views" (AT, eltypes)->begin
+    n = 4
+    # the first n rows can be addressed by BLAS, every other row can't
+    @testset "$T, rows $rows" for T in (Float32, Float64, ComplexF32), rows in (1:n, 1:2:2n)
+        T in eltypes || continue
+        v(X) = view(X, rows, 1:n)
+
+        A = rand(T, 2n, 2n)
+        for i in 1:n
+            A[rows[i], i] += 4
+        end
+        B = rand(T, 2n, n)
+
+        @test compare((A, B) -> UpperTriangular(v(A)) \ v(B), AT, A, B)
+        @test compare((A, B) -> LowerTriangular(v(A))' \ v(B), AT, A, B)
+        @test compare((A, B) -> UnitUpperTriangular(v(A)) \ v(B)', AT, A, B)
+        @test compare((A, B) -> v(B) / UpperTriangular(v(A)), AT, A, B)
+        @test compare((A, B) -> v(B)' / transpose(LowerTriangular(v(A))), AT, A, B)
+
+        @test compare((A, B) -> UpperTriangular(v(A)) * v(B), AT, A, B)
+        @test compare((A, B) -> transpose(LowerTriangular(v(A))) * v(B), AT, A, B)
+        @test compare((A, B) -> v(B) * UnitUpperTriangular(v(A)), AT, A, B)
+        @test compare((A, B) -> v(B) * LowerTriangular(v(A))', AT, A, B)
+
+        @test compare((A, B) -> copy(ldiv!(LowerTriangular(v(A)), v(B))), AT, A, B)
+        @test compare((A, B) -> copy(lmul!(UpperTriangular(v(A)), v(B))), AT, A, B)
+        @test compare((A, B) -> copy(rdiv!(v(B), UnitLowerTriangular(v(A)))), AT, A, B)
+
+        @test compare(A -> triu(parent(inv(UpperTriangular(v(A))))), AT, A)
+        @test compare(A -> tril(parent(inv(LowerTriangular(v(A))))), AT, A)
+
+        # LinearAlgebra's BLAS calls only take views with contiguous columns
+        if step(rows) == 1
+            @test compare((A, B) -> Symmetric(v(A)) * v(B), AT, A, B)
+            @test compare((A, B) -> v(B)' * Hermitian(v(A), :L), AT, A, B)
+        end
+
+        @testset "vector $vrows" for vrows in (1:n, 1:2:2n, n:-1:1)
+            w(x) = view(x, vrows)
+            b = rand(T, 2n)
+            @test compare((A, b) -> UpperTriangular(v(A)) \ w(b), AT, A, b)
+            @test compare((A, b) -> LowerTriangular(v(A))' \ w(b), AT, A, b)
+            @test compare((A, b) -> copy(ldiv!(UpperTriangular(v(A)), w(b))), AT, A, b)
+            @test compare((A, b) -> v(A) * w(b), AT, A, b)
+            if step(rows) == 1
+                @test compare((A, b) -> UnitLowerTriangular(v(A)) * w(b), AT, A, b)
+                @test compare((A, b) -> Symmetric(v(A)) * w(b), AT, A, b)
+                @test compare((A, b) -> Hermitian(v(A))' * w(b), AT, A, b)
+            end
+        end
+    end
+end
+
 @testsuite "linalg/mul!/integer-accumulate" (AT, eltypes)->begin
     # products must be formed in the wide accumulator type, not the narrow input type, else
     # narrow-integer products overflow.
@@ -970,5 +1023,61 @@ end
             y = invoke(GPUArrays.generic_matmatmul!, Tuple{AbstractArray, AbstractArray, AbstractArray, Number, Number}, adapt(AT, fill(NaN_T(T), 3, 3)), adapt(AT, fill(NaN_T(T), 3, 3)), adapt(AT, fill(NaN_T(T), 3, 3)), false, false)
             @test !any(isnan, collect(y))
         end
+    end
+end
+
+@testsuite "linalg/blas1/strided-views" (AT, eltypes)->begin
+    @testset "$T, $(isnothing(rows) ? "dense" : "rows $rows")" for T in (Float32, Float64, ComplexF32), rows in (nothing, 1:2:12)
+        T in eltypes || continue
+        v(x) = isnothing(rows) ? x : view(x, rows)
+        n = 6
+        x, y = rand(T, 2n), rand(T, 2n)
+        if isnothing(rows)
+            x, y = x[1:n], y[1:n]
+        end
+
+        @test compare(x -> rmul!(v(x), T(2)), AT, x)
+        @test compare(x -> rmul!(v(x), false), AT, fill(T(NaN), length(x)))
+        @test compare((x, y) -> dot(v(x), v(y)), AT, x, y)
+        @test compare(x -> norm(v(x)), AT, x)
+        @test compare(x -> norm(v(x), 1), AT, x)
+        @test compare(x -> LinearAlgebra.BLAS.asum(v(x)), AT, x)
+        @test compare((x, y) -> axpy!(T(2), v(x), v(y)), AT, x, y)
+        @test compare((x, y) -> axpby!(T(2), v(x), T(3), v(y)), AT, x, y)
+        @test compare((x, y) -> axpby!(T(2), v(x), false, v(y)), AT, x, fill(T(NaN), length(y)))
+        @test compare((x, y) -> axpby!(false, v(x), T(3), v(y)), AT, fill(T(NaN), length(x)), y)
+        s = T <: Complex ? T(0.8im) : T(0.8)
+        @test compare((x, y) -> rotate!(v(x), v(y), 0.6, s), AT, x, y)
+        @test compare((x, y) -> reflect!(v(x), v(y), 0.6, s), AT, x, y)
+        T <: Complex && @test compare((x, y) -> transpose(v(x)) * v(y), AT, x, y)
+
+        @test compare((x, y) -> copy(first(rotate!(v(x), v(y), false, true))), AT, fill(T(NaN), length(x)), y)
+        @test_throws DimensionMismatch dot(v(AT(x)), AT(rand(T, n + 1)))
+        @test_throws DimensionMismatch axpy!(T(1), v(AT(x)), AT(rand(T, n + 1)))
+    end
+
+    @testset "dot of wrapped arrays" begin
+        T = Float32
+        T in eltypes || return
+        A, B = rand(T, 4, 6), rand(T, 4, 6)
+        @test compare((A, B) -> dot(PermutedDimsArray(A, (2, 1)), PermutedDimsArray(B, (2, 1))), AT, A, B)
+        @test compare((A, B) -> dot(A', B'), AT, A, B)
+        @test compare((A, B) -> dot(Symmetric(A[:, 1:4]), Symmetric(B[:, 1:4])), AT, A, B)
+        @test compare((A, B) -> dot(Hermitian(A[:, 1:4], :L), Hermitian(B[:, 1:4], :L)), AT, A, B)
+    end
+
+    @testset "Givens rotations" begin
+        T = ComplexF32 in eltypes ? ComplexF32 : Float32
+        T in eltypes || return
+        A = rand(T, 5, 4)
+        G, _ = givens(A[1, 1], A[3, 1], 1, 3)
+        @test compare(A -> lmul!(G, A), AT, A)
+        G, _ = givens(A[1, 1], A[1, 2], 2, 4)
+        @test compare(A -> rmul!(A, G), AT, A)
+    end
+
+    @testset "norm(::Diagonal, $p)" for p in (2, 1, Inf, -Inf, 0, -1)
+        Float32 in eltypes || continue
+        @test compare(d -> norm(Diagonal(d), p), AT, rand(Float32, 4))
     end
 end

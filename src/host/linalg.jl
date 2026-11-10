@@ -783,6 +783,8 @@ function generic_trimatmul!(C::AnyStridedGPUVecOrMat{R}, uploc, isunitc, tfun::F
     if isempty(A) || isempty(B)
         return fill!(C, zero(R))
     end
+    # the kernels read other elements of A and B than the one they write
+    A, B = Base.unalias(C, A), Base.unalias(C, B)
 
     upper = tfun === identity ? uploc == 'U' :  uploc != 'U'
     unit  = isunitc == 'U'
@@ -862,6 +864,8 @@ function generic_mattrimul!(C::AnyStridedGPUVecOrMat{R}, uploc, isunitc, tfun::F
     if isempty(A) || isempty(B)
         return fill!(C, zero(R))
     end
+    # the kernels read other elements of A and B than the one they write
+    A, B = Base.unalias(C, A), Base.unalias(C, B)
 
     upper = tfun === identity ? uploc == 'U' :  uploc != 'U'
     unit  = isunitc == 'U'
