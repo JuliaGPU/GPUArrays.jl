@@ -95,6 +95,7 @@ end
 # acc[r + (c-1)*TM] += a[r] * b[c]
 @inline outer_muladd(a::NTuple{TM}, b::NTuple{TN}, acc::NTuple{L}) where {TM, TN, L} =
     ntuple(Val(L)) do q
+        @inline
         r, c = (q - 1) % TM + 1, (q - 1) ÷ TM + 1
         @inbounds muladd(a[r], b[c], acc[q])
     end
