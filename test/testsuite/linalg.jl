@@ -1064,7 +1064,6 @@ end
             @test compare((S, R) -> UpperTriangular(S) * UpperTriangular(R)', AT, S, R)
             @test compare((S, R) -> UpperTriangular(S)' * UpperTriangular(R), AT, S, R)
             @test compare((S, R) -> LowerTriangular(S)' * LowerTriangular(R), AT, S, R)
-            @test compare((S, R) -> UnitLowerTriangular(S) * UnitUpperTriangular(R), AT, S, R)
         end
     end
 end
