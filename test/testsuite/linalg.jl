@@ -1048,7 +1048,10 @@ end
         @test compare((x, y) -> axpby!(false, v(x), T(3), v(y)), AT, fill(T(NaN), length(x)), y)
         s = T <: Complex ? T(0.8im) : T(0.8)
         @test compare((x, y) -> rotate!(v(x), v(y), 0.6, s), AT, x, y)
-        @test compare((x, y) -> reflect!(v(x), v(y), 0.6, s), AT, x, y)
+        s = T <: Complex ? T(0.8im) : T(0.8)
+        c = T(0.6)
+        @test compare((x, y) -> rotate!(v(x), v(y), c, s), AT, x, y)
+        @test compare((x, y) -> reflect!(v(x), v(y), c, s), AT, x, y)
         T <: Complex && @test compare((x, y) -> transpose(v(x)) * v(y), AT, x, y)
 
         @test compare((x, y) -> copy(first(rotate!(v(x), v(y), false, true))), AT, fill(T(NaN), length(x)), y)
