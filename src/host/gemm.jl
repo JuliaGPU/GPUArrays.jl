@@ -194,8 +194,9 @@ function generic_matmatmul!(C::AbstractArray{R}, cA::AbstractChar, cB::AbstractC
     isempty(C) && return C
 
     backend = KI.get_backend(C)
-    # the blocked kernel needs enough workgroups to fill the device
-    if M * N >= 2^19 && isbitstype(T) && isbitstype(S) && max(sizeof(T), sizeof(S)) <= 16
+    # the blocked kernel needs enough workgroups to fill the device, and an output that is not
+    # so thin that most of each 64-wide tile is padding (it loses up to a dimension of 32)
+    if M * N >= 2^19 && min(M, N) > 32 && isbitstype(T) && isbitstype(S) && max(sizeof(T), sizeof(S)) <= 16
         TX = TY = 16
         TM = TN = 4
         BK = 8
