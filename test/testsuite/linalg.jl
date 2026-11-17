@@ -16,6 +16,11 @@
         @test compare((x,y)->copyto!(x, transpose(y)), AT, rand(Float32, 32, 32), rand(Float32, 32, 32))
         @test compare(transpose!, AT, Array{Float32}(undef, 32, 32), rand(Float32, 32, 32))
         @test compare(transpose!, AT, Array{Float32}(undef, 128, 32), rand(Float32, 32, 128))
+        # partial tiles along both dimensions
+        @test compare(transpose!, AT, rand(Float32, 70, 45), rand(Float32, 45, 70))
+        if ComplexF32 in eltypes
+            @test compare(adjoint!, AT, rand(ComplexF32, 70, 45), rand(ComplexF32, 45, 70))
+        end
     end
 
     @testset "tr" begin
