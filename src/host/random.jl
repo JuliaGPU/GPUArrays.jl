@@ -315,6 +315,12 @@ RNG{AT}(seed::Integer) where {AT} = RNG{AT}(seed % UInt64, UInt64(0))
 Random.seed!(rng::RNG) = (rng.seed = rand(Random.RandomDevice(), UInt64); rng.counter = rand(Random.RandomDevice(), UInt64); rng)
 Random.seed!(rng::RNG, seed::Integer) = (rng.seed = seed % UInt64; rng.counter = UInt64(0); rng)
 
+Base.copy(rng::RNG{AT}) where {AT} = RNG{AT}(rng.seed, rng.counter)
+Base.copy!(dst::RNG{AT}, src::RNG{AT}) where {AT} = (dst.seed = src.seed; dst.counter = src.counter; dst)
+
+Base.:(==)(a::RNG{AT}, b::RNG{AT}) where {AT} = a.seed == b.seed && a.counter == b.counter
+Base.hash(rng::RNG, h::UInt) = hash((rng.seed, rng.counter), h + 0x2f8a1c6d4e9b7053 % UInt)
+
 function advance_counter!(rng::RNG)
     rng.counter += one(UInt64)
     rng
