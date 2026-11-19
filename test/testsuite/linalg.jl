@@ -1096,3 +1096,63 @@ end
         end
     end
 end
+
+@testsuite "linalg/blas/products" (AT, eltypes)->begin
+    @testset "$T" for T in (Float32, ComplexF32)
+        T in eltypes || continue
+        A = rand(T, 5, 3)
+        S, R = rand(T, 4, 4), rand(T, 4, 4)
+
+        @testset "syrk/herk" begin
+            @test compare(A -> A' * A, AT, A)
+            @test compare(A -> A * A', AT, A)
+            @test compare(A -> transpose(A) * A, AT, A)
+            @test compare(A -> A * transpose(A), AT, A)
+            @test compare((C, A) -> mul!(C, A', A, T(2), false), AT, rand(T, 3, 3), A)
+            @test compare((C, A) -> mul!(C, A', A, T(2), T(3)), AT, rand(T, 3, 3), A)
+        end
+
+        @testset "triangular * triangular" begin
+            @test compare((S, R) -> LowerTriangular(S) * UpperTriangular(R), AT, S, R)
+            @test compare((S, R) -> UpperTriangular(S) * LowerTriangular(R), AT, S, R)
+            @test compare((S, R) -> UpperTriangular(S) * UpperTriangular(R)', AT, S, R)
+            @test compare((S, R) -> UpperTriangular(S)' * UpperTriangular(R), AT, S, R)
+            @test compare((S, R) -> LowerTriangular(S)' * LowerTriangular(R), AT, S, R)
+            @test compare((S, R) -> LowerTriangular(S) * transpose(LowerTriangular(R)), AT, S, R)
+            @test compare((S, R) -> mul!(similar(S), UpperTriangular(S), LowerTriangular(R)), AT, S, R)
+        end
+
+        @testset "triangular * wrapped matrix" begin
+            @test compare((S, R) -> UpperTriangular(S) * R', AT, S, R)
+            @test compare((S, R) -> R' * LowerTriangular(S), AT, S, R)
+            @test compare((S, R) -> UnitUpperTriangular(S) \ transpose(R), AT, S, R)
+        end
+
+        @testset "scalars" begin
+            # integer scalars are converted to the eltype, wider ones are not (so computing
+            # with them needs a device that supports Float64)
+            B = rand(T, 3, 5)
+            @test compare((C, A, B) -> mul!(C, A, B, 2, 3), AT, rand(T, 4, 5), rand(T, 4, 3), B)
+            if Float64 in eltypes
+                @test compare((C, A, B) -> mul!(C, A, B, 2.0, 3.0), AT, rand(T, 4, 5), rand(T, 4, 3), B)
+            end
+            @test compare((C, A) -> mul!(C, A', A, 2, 0), AT, rand(T, 3, 3), rand(T, 4, 3))
+            @test_throws DimensionMismatch mul!(AT(rand(T, 4, 6)), AT(rand(T, 4, 3)), AT(B))
+        end
+
+        @testset "empty operands" begin
+            E, e, W = rand(T, 0, 0), rand(T, 0), rand(T, 0, 3)
+            @test compare((E, e) -> UpperTriangular(E) \ e, AT, E, e)
+            @test compare((E, W) -> UpperTriangular(E) \ W, AT, E, W)
+            @test compare((E, W) -> W' / LowerTriangular(E), AT, E, W)
+            @test compare((E, e) -> UpperTriangular(E) * e, AT, E, e)
+            @test compare((E, W) -> UpperTriangular(E) * W, AT, E, W)
+            @test compare((E, W) -> W' * UpperTriangular(E), AT, E, W)
+            @test compare((E, e) -> E * e, AT, E, e)
+            @test compare(W -> W' * W, AT, W)
+            @test compare(W -> W * W', AT, W)
+            @test compare((E, W) -> Symmetric(E) * W, AT, E, W)
+            @test compare(E -> LowerTriangular(E) * UpperTriangular(E), AT, E)
+        end
+    end
+end
