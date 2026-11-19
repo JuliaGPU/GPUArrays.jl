@@ -30,6 +30,54 @@ function get_pool!(cache::AllocCache, pool::Symbol, uid::UInt64)
     return uid_pool
 end
 
+# Index the original references that caches own. A copied DataRef shares its backing value
+# but has its own lifetime and does not carry the original reference's cached flag.
+# Weak references keep this index from rooting the allocation or the cache. Object IDs
+# give identity hashing even for backends whose storage defines value-based hash/isequal.
+const cached_roots = Dict{UInt,Vector{WeakRef}}()
+# A cache's finalizer also removes entries. Only dictionary and vector operations run
+# under this lock, and a finalizer must be able to acquire it without switching tasks.
+const cached_roots_lock = Threads.SpinLock()
+
+function register_cached_root!(ref::DataRef)
+    id = objectid(ref.rc.obj)
+    Base.@lock cached_roots_lock begin
+        push!(get!(Vector{WeakRef}, cached_roots, id), WeakRef(ref))
+    end
+    return
+end
+
+function unregister_cached_root!(ref::DataRef)
+    id = objectid(ref.rc.obj)
+    Base.@lock cached_roots_lock begin
+        roots = get(cached_roots, id, nothing)
+        roots === nothing && return
+        filter!(weak -> weak.value !== nothing && weak.value !== ref, roots)
+        isempty(roots) && delete!(cached_roots, id)
+    end
+    return
+end
+
+"""
+    GPUArrays.is_cached_storage(data) -> Bool
+
+Whether an allocation cache holds a reference to the backing value `data`, as returned by
+`GPUArrays.storage(A)[]`. Derived arrays share their backing value. The result is independent
+of the current task's allocation scope and includes buffers between uses of a cache.
+Invalidating a cache removes its references from the index.
+"""
+function is_cached_storage(data)
+    Base.@lock cached_roots_lock begin
+        roots = get(cached_roots, objectid(data), nothing)
+        roots === nothing && return false
+        for weak in roots
+            root = weak.value
+            root isa DataRef && root.rc.obj === data && return true
+        end
+        return false
+    end
+end
+
 function cached_alloc(f, key)
     cache = ALLOC_CACHE[]
     if cache === nothing
@@ -49,6 +97,7 @@ function cached_alloc(f, key)
 
     if ref === nothing
         ref = f()::DataRef
+        register_cached_root!(ref)
         ref.cached = true
     end
 
@@ -81,6 +130,7 @@ function unsafe_free!(cache::AllocCache)
         end
         for pool in values(cache.free), ref in pool
             # release the reference
+            unregister_cached_root!(ref)
             ref.cached = false
             unsafe_free!(ref)
         end

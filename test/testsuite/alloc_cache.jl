@@ -27,6 +27,28 @@
         @test cache.free[key][1] === GPUArrays.storage(cached2)
         @test uncached !== cached2
 
+        # Cache ownership belongs to the backing storage, including while a different
+        # cache is active. A derived reference has its own lifetime.
+        cached_data = GPUArrays.storage(cached2)[]
+        @test GPUArrays.is_cached_storage(cached_data)
+        @test !GPUArrays.is_cached_storage(GPUArrays.storage(uncached)[])
+        second = GPUArrays.AllocCache()
+        GPUArrays.@cached cache begin
+            first_array = AT(zeros(T, dims))
+            alias = reshape(first_array, :)
+            GPUArrays.@cached second begin
+                second_array = AT(zeros(T, dims))
+                @test GPUArrays.is_cached_storage(GPUArrays.storage(alias)[])
+                @test GPUArrays.is_cached_storage(GPUArrays.storage(second_array)[])
+                GPUArrays.@uncached begin
+                    @test fetch(Threads.@spawn GPUArrays.is_cached_storage(cached_data))
+                end
+            end
+            GPUArrays.unsafe_free!(second)
+            @test GPUArrays.is_cached_storage(cached_data)
+            GPUArrays.unsafe_free!(alias)
+        end
+
         # compatible shapes should also hit the cache
         dims = (3, 2, 1)
         GPUArrays.@cached cache begin
@@ -85,6 +107,7 @@
         @test !GPUArrays.storage(uncached).freed
         @test !GPUArrays.storage(uncached).cached
         GPUArrays.unsafe_free!(cache)
+        @test !GPUArrays.is_cached_storage(cached_data)
         @test sizeof(cache) == 0
         @test GPUArrays.storage(cached1).freed
         @test !GPUArrays.storage(cached1).cached
@@ -95,5 +118,19 @@
         @test GPUArrays.storage(cached1).rc.count[] == 0
         @test GPUArrays.storage(cached5).rc.count[] == 0
         @test GPUArrays.storage(uncached).rc.count[] == 1
+
+        # A backend may use storage with equality by value; independent allocations
+        # still have distinct cache ownership. A retained alias outlives invalidation.
+        first_store = [1]
+        equal_store = copy(first_store)
+        alias_ref = GPUArrays.@cached cache begin
+            ref = GPUArrays.cached_alloc(() -> GPUArrays.DataRef(first_store), :storage)
+            copy(ref)
+        end
+        @test GPUArrays.is_cached_storage(alias_ref[])
+        @test !GPUArrays.is_cached_storage(equal_store)
+        GPUArrays.unsafe_free!(cache)
+        @test !GPUArrays.is_cached_storage(alias_ref[])
+        GPUArrays.unsafe_free!(alias_ref)
     end
 end
