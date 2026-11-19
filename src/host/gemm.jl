@@ -120,9 +120,14 @@ function blocked_matmul_kernel!(
     a_kfast = TA === 'T' || TA === 'C'
     b_kfast = !(TB === 'T' || TB === 'C')
 
-    # B is stored transposed, so that work-items with consecutive `lj` read consecutive elements
-    tileA = KI.localmemory(TAT, (BM, BK))
-    tileB = KI.localmemory(TBT, (BN, BK))
+    # B is stored transposed, so that work-items with consecutive `lj` read consecutive elements.
+    # a tile loaded k-fast is stored by consecutive work-items at a stride of BM or BN, which maps
+    # them onto only a few banks. padding that stride following CUTLASS avoids the conflicts
+    # for 4-byte elements and reduces them for smaller ones.
+    padA = a_kfast ? 32 ÷ BK ÷ cld(sizeof(TAT), 4) : 0
+    padB = b_kfast ? 32 ÷ BK ÷ cld(sizeof(TBT), 4) : 0
+    tileA = KI.localmemory(TAT, (BM + padA, BK))
+    tileB = KI.localmemory(TBT, (BN + padB, BK))
 
     Tacc = promote_type(R, typeof(zero(TAT) * zero(TBT) + zero(TAT) * zero(TBT)))
     acc = ntuple(_ -> zero(Tacc), Val(TM * TN))
