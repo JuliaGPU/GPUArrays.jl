@@ -1216,3 +1216,40 @@ end
         @test compare(A -> rmul!(A, G), AT, A)
     end
 end
+
+@testsuite "linalg/blas/extensions" (AT, eltypes)->begin
+    @testset "$T" for T in (Float32, ComplexF32)
+        T in eltypes || continue
+        A = rand(T, 5, 3)
+        S, R = rand(T, 4, 4), rand(T, 4, 4)
+
+        @testset "geam" begin
+            @test compare((S, R) -> S + R', AT, S, R)
+            @test compare((S, R) -> S - transpose(R), AT, S, R)
+            @test compare((S, R) -> R' - S, AT, S, R)
+            @test compare(A -> transpose!(similar(A, 3, 5), A), AT, A)
+            @test compare(A -> adjoint!(similar(A, 3, 5), A), AT, A)
+            @test compare((S, R) -> S + R', AT, rand(T, 4, 0), rand(T, 0, 4))
+            # the result has a wider eltype than the operands
+            @test compare((S, R) -> S + R', AT, rand(Bool, 4, 4), rand(Bool, 4, 4))
+            @test compare((S, R) -> S - transpose(R), AT, rand(Bool, 4, 4), rand(Bool, 4, 4))
+        end
+
+        @testset "Diagonal" begin
+            d = rand(T, 5) .+ 1
+            @test compare((d, A) -> Diagonal(d) * A, AT, d, A)
+            @test compare((d, A) -> A' * Diagonal(d), AT, d, A)
+            @test compare((d, A) -> lmul!(Diagonal(d), A), AT, d, A)
+            @test compare((d, A) -> rmul!(copy(A'), Diagonal(d)), AT, d, A)
+            @test compare((d, A) -> copy(lmul!(Diagonal(d[1:3]), A')), AT, d, A)
+            @test compare((d, A) -> copy(lmul!(Diagonal(d[1:3]), transpose(A))), AT, d, A)
+            @test compare((d, A) -> copy(rmul!(A', Diagonal(d))), AT, d, A)
+            @test compare((d, A) -> copy(rmul!(transpose(A), Diagonal(d))), AT, d, A)
+            @test compare(d -> inv(Diagonal(d)).diag, AT, d)
+            @test compare((d, A) -> A' / Diagonal(d), AT, d, A)
+            @test compare((d, A) -> rdiv!(copy(A'), Diagonal(d)), AT, d, A)
+            @test Array(Diagonal(AT(d))) == Matrix(Diagonal(d))
+            @test compare((e, W) -> Diagonal(e) * W, AT, rand(T, 0), rand(T, 0, 3))
+        end
+    end
+end
