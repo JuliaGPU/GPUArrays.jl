@@ -210,6 +210,52 @@ end
                 @test Array(src) == dst
             end
         end
+
+        # from a `BitArray`, without scalar indexing (#836)
+        let src = BitVector([true, false, true, true, false])
+            dst = AT{Bool}(undef, length(src))
+            copyto!(dst, src)
+            @test Array(dst) == src
+
+            dst = AT(fill(false, 7))
+            copyto!(dst, 2, src, 3, 2)
+            @test Array(dst) == [false, true, true, false, false, false, false]
+
+            src = BitMatrix([true false; false true])
+            dst = AT{Bool}(undef, 2, 2)
+            copyto!(dst, src)
+            @test Array(dst) == src
+        end
+        if Float32 in eltypes
+            let src = BitVector([true, false, true])
+                dst = AT{Float32}(undef, 3)
+                copyto!(dst, src)
+                @test Array(dst) == Float32[1, 0, 1]
+            end
+        end
+
+        # to a `BitArray`
+        let src = AT([true, false, true, true, false])
+            dst = falses(5)
+            copyto!(dst, src)
+            @test dst == Array(src)
+
+            dst = falses(7)
+            copyto!(dst, 2, src, 3, 2)
+            @test dst == [false, true, true, false, false, false, false]
+
+            src = AT([true false; false true])
+            dst = falses(2, 2)
+            copyto!(dst, src)
+            @test dst == Array(src)
+        end
+        if Float32 in eltypes
+            let src = AT(Float32[1, 0, 1])
+                dst = falses(3)
+                copyto!(dst, src)
+                @test dst == [true, false, true]
+            end
+        end
     end
 
     @testset "copyto! of blocks" begin

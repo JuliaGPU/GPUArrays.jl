@@ -353,7 +353,7 @@ ToGPU(A::WrappedArray) = ToGPU(parent(A))
 ToGPU(A::Bidiagonal) = ToGPU(A.dv)
 ToGPU(A::Tridiagonal) = ToGPU(A.d)
 ToGPU(A::Base.LogicalIndex) = ToGPU(A.mask)
-function Adapt.adapt_storage(to::ToGPU, xs::Array)
+function Adapt.adapt_storage(to::ToGPU, xs::Union{Array,BitArray})
     arr = similar(to.array, eltype(xs), size(xs))
     copyto!(arr, xs)
     arr
