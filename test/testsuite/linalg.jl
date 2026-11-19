@@ -322,6 +322,18 @@
                 mul!(ct, W(A, uplo), b)
                 mul!(c, W(collect(A), uplo), collect(b))
                 @test collect(ct) ≈ c
+
+                # a wide output, large enough for the blocked matmul kernel
+                n, m = 65, 8066
+                A = AT(rand(T, n, n))
+                B = AT(rand(T, n, m))
+                Ct = AT(zeros(T, n, m))
+                mul!(Ct, W(A, uplo), B)
+                @test collect(Ct) ≈ W(collect(A), uplo) * collect(B)
+                B = AT(rand(T, m, n))
+                Ct = AT(zeros(T, m, n))
+                mul!(Ct, B, W(A, uplo))
+                @test collect(Ct) ≈ collect(B) * W(collect(A), uplo)
             end
         end
     end
@@ -714,6 +726,15 @@ end
         @test compare(mul!, AT, C, f(A), g(B))
         @test compare(mul!, AT, C, f(A), g(B), Ref(T(4)), Ref(T(5)))
         @test typeof(AT(rand(T, 3, 3)) * AT(rand(T, 3, 3))) <: AbstractMatrix
+    end
+    # large enough for the blocked kernel, with a partial tile in every dimension. these
+    # combinations load either operand along either dimension, and conjugate both.
+    @testset "$T gemm C := $f(A) * $g(B) * a + C * b, large" for (f, g) in ((identity, identity), (transpose, identity), (identity, adjoint), (adjoint, transpose)), T in eltypes
+        M, K, N = 1029, 17, 513
+        A, B, C = rand(T, opsize(f, M, K)...), rand(T, opsize(g, K, N)...), rand(T, M, N)
+        T <: Integer && (A .%= T(10); B .%= T(10); C .%= T(10))
+
+        @test compare(mul!, AT, C, f(A), g(B), Ref(T(4)), Ref(T(5)))
     end
     # empty inner dimension: C := C * b
     @testset "$T gemm with K == 0" for T in (Float32, Int32)
