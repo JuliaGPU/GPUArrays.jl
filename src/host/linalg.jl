@@ -954,9 +954,11 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
     C
 end
 
-# blocked triangular solves: one workgroup solves each diagonal block, then the matmul kernel
-# updates the remaining rows (or columns). unlike LinearAlgebra's generic implementation, a zero
-# diagonal element yields Infs/NaNs instead of throwing a SingularException, like vendor BLAS.
+# blocked triangular solves: one workgroup solves each diagonal block, then a matrix product
+# updates the remaining rows (or columns). that product goes through the storage-level `mul!`,
+# so back-ends route it to their vendor gemm where they have one. unlike LinearAlgebra's generic
+# implementation, a zero diagonal element yields Infs/NaNs instead of throwing a
+# SingularException, like vendor BLAS.
 const TRSM_BLOCK = 64
 
 @inline op_getindex(A, tf, i, j) = tf === identity ? (@inbounds A[i, j]) : tf(@inbounds A[j, i])
@@ -1007,7 +1009,8 @@ function trsm_blocks!(X, A, tfun, upper, unit, left)
     Q = nrhs == 1 ? 1 : 4
     wg, ng = left ? ((TRSM_BLOCK, Q), (1, cld(nrhs, Q))) : ((Q, TRSM_BLOCK), (cld(nrhs, Q), 1))
     tc = tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C'
-    add = MulAddMul(-one(eltype(X)), true)
+    # of the destination's type, which some back-ends require to dispatch to their gemm
+    α = -one(eltype(X))
     for s in 1:cld(n, TRSM_BLOCK)
         o, hi = fwd ? ((s - 1) * TRSM_BLOCK, min(s * TRSM_BLOCK, n)) :
                       (max(0, n - s * TRSM_BLOCK), n - (s - 1) * TRSM_BLOCK)
@@ -1018,13 +1021,13 @@ function trsm_blocks!(X, A, tfun, upper, unit, left)
         if left
             Ablk = tfun === identity ? view(A, rest, blk) : view(A, blk, rest)
             if X isa AbstractVector
-                generic_matmatmul!(view(X, rest), tc, 'N', Ablk, view(X, blk), add)
+                LinearAlgebra.mul!(view(X, rest), tc, Ablk, view(X, blk), α, true)
             else
-                generic_matmatmul!(view(X, rest, :), tc, 'N', Ablk, view(X, blk, :), add)
+                LinearAlgebra.mul!(view(X, rest, :), tc, 'N', Ablk, view(X, blk, :), α, true)
             end
         else
             Ablk = tfun === identity ? view(A, blk, rest) : view(A, rest, blk)
-            generic_matmatmul!(view(X, :, rest), 'N', tc, view(X, :, blk), Ablk, add)
+            LinearAlgebra.mul!(view(X, :, rest), 'N', tc, view(X, :, blk), Ablk, α, true)
         end
     end
     X
