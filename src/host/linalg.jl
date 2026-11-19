@@ -974,21 +974,26 @@ function trsm_block_kernel!(X, A, tf, o, m, ::Val{left}, ::Val{fwd}, ::Val{unit}
     x = inrange ? convert(Tx, @inbounds X[r, c]) : zero(Tx)
     # double-buffered, so one barrier per step suffices
     buf = KI.localmemory(Tx, (Q, 2))
+    # the element of op(A) coupling this work-item to step k; the steps are serial, so load the
+    # next one before the barrier to keep its latency off the critical path
+    load(k) = p <= m ? (left ? op_getindex(A, tf, o + p, o + k) : op_getindex(A, tf, o + k, o + p)) :
+                       zero(eltype(A))
+    a_next = load(fwd ? 1 : m)
     for s in 1:m
         k = fwd ? s : m - s + 1
         b = isodd(s) ? 1 : 2
+        a = a_next
+        s < m && (a_next = load(fwd ? s + 1 : m - s))
         if p == k
             if !unit
-                d = op_getindex(A, tf, o + k, o + k)
-                x = convert(Tx, left ? d \ x : x / d)
+                x = convert(Tx, left ? a \ x : x / a)
             end
             @inbounds buf[q, b] = x
         end
         KI.barrier()
         if inrange && (fwd ? p > k : p < k)
             xk = @inbounds buf[q, b]
-            x = convert(Tx, left ? x - op_getindex(A, tf, o + p, o + k) * xk :
-                                   x - xk * op_getindex(A, tf, o + k, o + p))
+            x = convert(Tx, left ? x - a * xk : x - xk * a)
         end
     end
     inrange && (@inbounds X[r, c] = x)
