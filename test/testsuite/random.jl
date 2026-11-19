@@ -105,6 +105,30 @@ Random.rand(rng::AbstractRNG, ::Random.SamplerType{RGBTriplet}) =
         end
     end
 
+    @testset "copying" begin
+        if AT <: AbstractGPUArray
+            Random.seed!(rng, 1)
+            rng2 = copy(rng)
+            @test rng2 !== rng
+            @test rng2 == rng
+            @test hash(rng2) == hash(rng)
+
+            # a copy continues the stream independently of the original
+            if Float32 in eltypes
+                A = rand!(rng, AT{Float32}(undef, 100))
+                @test rng2 != rng
+                B = rand!(rng2, AT{Float32}(undef, 100))
+                @test Array(A) == Array(B)
+                @test rng2 == rng
+            end
+
+            Random.seed!(rng2, 2)
+            @test rng2 != rng
+            @test copy!(rng2, rng) === rng2
+            @test rng2 == rng
+        end
+    end
+
     # a CPU RNG into a GPU array should route through a CPU generate + copyto!,
     # not the stdlib scalar setindex! fallback
     if AT <: AbstractGPUArray && Float32 in eltypes
