@@ -35,15 +35,55 @@ end
 
 LinearAlgebra.transpose!(B::AnyGPUArray, A::AnyGPUArray) = transpose_f!(transpose, B, A)
 LinearAlgebra.adjoint!(B::AnyGPUArray, A::AnyGPUArray) = transpose_f!(adjoint, B, A)
+
+const TRANSPOSE_TILE = 32
+const TRANSPOSE_ROWS = 8
+
+# Each workgroup of TRANSPOSE_TILE × TRANSPOSE_ROWS work-items moves one square tile of `A`
+# through local memory, so that both the reads from `A` and the writes to `B` are contiguous
+# along the first dimension. Transposing element by element makes one of the two strided.
+function transpose_tiled_kernel!(f, B, A)
+    TILE, ROWS = TRANSPOSE_TILE, TRANSPOSE_ROWS
+    li, lj, _ = KI.get_local_id()
+    gi, gj, _ = KI.get_group_id()
+    i0 = (gi - 1) * TILE
+    j0 = (gj - 1) * TILE
+    M, N = size(A)
+
+    # padded so that the transposed read of a tile row hits distinct banks
+    tile = KI.localmemory(eltype(A), (TILE + 1, TILE))
+
+    for k in 0:ROWS:(TILE - 1)
+        i, j = i0 + li, j0 + lj + k
+        if i <= M && j <= N
+            @inbounds tile[li, lj + k] = A[i, j]
+        end
+    end
+    KI.barrier()
+    for k in 0:ROWS:(TILE - 1)
+        i, j = j0 + li, i0 + lj + k
+        if i <= N && j <= M
+            @inbounds B[i, j] = f(tile[lj + k, li])
+        end
+    end
+    return
+end
+
 function transpose_f!(f, B::AnyGPUMatrix{T}, A::AnyGPUMatrix{T}) where T
     axes(B,1) == axes(A,2) && axes(B,2) == axes(A,1) || throw(DimensionMismatch(string(f)))
     # array with size zero dimension
     isempty(A) && return B
-    @kernel function transpose_kernel!(B, A)
-        idx = @index(Global, Cartesian)
-        @inbounds B[idx[2], idx[1]] = f(A[idx[1], idx[2]])
+    M, N = size(A)
+    # tiles must fit in local memory, and pay off only if no dimension is thinner than one
+    if isbitstype(T) && sizeof(T) <= 16 && min(M, N) >= TRANSPOSE_TILE
+        KI.@launch KI.get_backend(B) workgroupsize=(TRANSPOSE_TILE, TRANSPOSE_ROWS) numgroups=(cld(M, TRANSPOSE_TILE), cld(N, TRANSPOSE_TILE)) transpose_tiled_kernel!(f, B, A)
+    else
+        @kernel function transpose_kernel!(B, A)
+            idx = @index(Global, Cartesian)
+            @inbounds B[idx[2], idx[1]] = f(A[idx[1], idx[2]])
+        end
+        transpose_kernel!(get_backend(B))(B, A; ndrange = size(A))
     end
-    transpose_kernel!(get_backend(B))(B, A; ndrange = size(A))
     B
 end
 
