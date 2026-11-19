@@ -350,7 +350,7 @@ function Base.copyto!(dest::AnyGPUArray{T}, dstart::Integer,
     return dest
 end
 
-# `BitArray`s pack their elements into bits, so unpack them on the CPU too
+# `BitArray`s pack their elements into bits, so stage them through a `Vector` on the CPU
 function Base.copyto!(dest::AnyGPUArray{T}, dstart::Integer,
                       src::BitArray, sstart::Integer, n::Integer) where {T}
     n == 0 && return dest
@@ -361,6 +361,17 @@ function Base.copyto!(dest::AnyGPUArray{T}, dstart::Integer,
 end
 
 Base.copyto!(dest::AnyGPUArray, src::BitArray) = copyto!(dest, 1, src, 1, length(src))
+
+function Base.copyto!(dest::BitArray, dstart::Integer,
+                      src::AnyGPUArray{U}, sstart::Integer, n::Integer) where {U}
+    n == 0 && return dest
+    temp = Vector{U}(undef, n)
+    copyto!(temp, 1, src, sstart, n)
+    copyto!(dest, dstart, temp, 1, n)
+    return dest
+end
+
+Base.copyto!(dest::BitArray, src::AnyGPUArray) = copyto!(dest, 1, src, 1, length(src))
 
 ## generalized blocks of heterogeneous memory
 

@@ -233,6 +233,29 @@ end
                 @test Array(dst) == Float32[1, 0, 1]
             end
         end
+
+        # to a `BitArray`
+        let src = AT([true, false, true, true, false])
+            dst = falses(5)
+            copyto!(dst, src)
+            @test dst == Array(src)
+
+            dst = falses(7)
+            copyto!(dst, 2, src, 3, 2)
+            @test dst == [false, true, true, false, false, false, false]
+
+            src = AT([true false; false true])
+            dst = falses(2, 2)
+            copyto!(dst, src)
+            @test dst == Array(src)
+        end
+        if Float32 in eltypes
+            let src = AT(Float32[1, 0, 1])
+                dst = falses(3)
+                copyto!(dst, src)
+                @test dst == [true, false, true]
+            end
+        end
     end
 
     @testset "copyto! of blocks" begin
