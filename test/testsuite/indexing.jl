@@ -87,6 +87,15 @@ end
         end
     end
 
+    @testset "sliced setindex, BitArray source" begin
+        x = AT(zeros(Bool, (2, 3)))
+        y = BitVector([true, false])
+        x[:, 2] = y
+        @test Array(x) == [false true false; false false false]
+        x[1, 1:3] = BitVector([true, true, false])
+        @test Array(x) == [true true false; false false false]
+    end
+
     @testset "sliced getindex and setindex! with ranges" begin
         # odd sizes (so the last workgroup is only partially used), ranges in inner and outer
         # dimensions, strided and reversed ranges, and integer indices that drop dimensions
