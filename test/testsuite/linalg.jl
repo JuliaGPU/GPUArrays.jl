@@ -906,7 +906,25 @@ end
                 @test compare(norm, AT, arr, Ref(p))
                 arr .= floatmin(real(T)) * 2
                 @test compare(norm, AT, arr, Ref(p))
+                # subnormal maximum, whose reciprocal overflows (some back-ends flush
+                # subnormals to zero, which makes this input meaningless)
+                arr .= floatmin(real(T)) / 8
+                if !iszero(Array(AT(arr) ./ 2)[1])
+                    @test compare(norm, AT, arr, Ref(p))
+                end
+                if p > 1 && AT <: AbstractGPUArray
+                    # |x|^p a few ulps above zero, where the CPU norm is inaccurate too
+                    arr .= real(T)(1.3) * (8 * floatmin(real(T)) * eps(real(T)))^inv(real(T)(p))
+                    @test norm(AT(arr), p) ≈ norm(big.(arr), p)
+                end
             end
+        end
+    end
+    @testset "large p x $T" for T in filter(T -> T <: Complex{<:AbstractFloat}, valid_eltypes)
+        # |z / norm(z)| rounds away from 1 for these, which a large p blows up
+        @testset "$z" for z in (0.77018034f0 + 0.78051925f0im,
+                                0.5482193442857201 + 0.4018942609924021im)
+            @test compare(norm, AT, fill(T(z), 2), Ref(1e10))
         end
     end
     @testset "$p-opnorm" for p in Any[1, Inf]
