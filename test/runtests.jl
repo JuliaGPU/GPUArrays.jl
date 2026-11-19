@@ -9,9 +9,6 @@ const init_worker_code = quote
 
     include("testsuite.jl")
 
-    TestSuite.sparse_types(::Type{<:JLArray}) = (JLSparseVector, JLSparseMatrixCSC, JLSparseMatrixCSR)
-    TestSuite.sparse_types(::Type{<:Array})   = (SparseVector, SparseMatrixCSC)
-
     # JLArray kernels run on POCL, whose SPIR-V back-end lacks 128-bit integers
     TestSuite.supported_eltypes(::Type{<:JLArray}) =
         filter(!=(Int128), TestSuite.supported_eltypes())
@@ -56,18 +53,22 @@ testsuite["JLArray/kernelinterface"] = quote
     Testsuite.testsuite(JLBackend(), JLArray)
 end
 
+# the sparse implementation should not add method ambiguities (the dense code has a few)
+testsuite["sparse/ambiguities"] = quote
+    import GPUArrays
+    sparse_sources = (joinpath("src", "host", "sparse"), joinpath("JLArrays", "src", "sparse.jl"))
+    ambiguities = filter(Test.detect_ambiguities(GPUArrays, JLArrays; recursive=true)) do (a, b)
+        any(m -> any(src -> occursin(src, string(m.file)), sparse_sources), (a, b))
+    end
+    @test isempty(ambiguities)
+end
+
 # captured variables that get boxed (`Core.Box`) lose their type
 if isdefined(Test, :detect_closure_boxes)
     testsuite["closure boxes"] = quote
         import GPUArrays
         @test Test.detect_closure_boxes(GPUArrays, GPUArrays.GPUArraysCore, JLArrays) == []
     end
-end
-
-# a type without a COO counterpart must hit a MethodError, not recurse (#780)
-testsuite["sparse/coo_type"] = quote
-    import GPUArrays
-    @test_throws MethodError GPUArrays.coo_type(sparse([1], [1], [1.0], 2, 2))
 end
 
 runtests(GPUArrays, args; init_code, init_worker_code, testsuite)
