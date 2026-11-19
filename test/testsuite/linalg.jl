@@ -1156,3 +1156,63 @@ end
         end
     end
 end
+
+@testsuite "linalg/blas/blas1" (AT, eltypes)->begin
+    @testset "$T, $(isnothing(rows) ? "dense" : "rows $rows")" for T in (Float32, Float64, ComplexF32), rows in (nothing, 3:8, 1:2:12, 12:-2:1)
+        T in eltypes || continue
+        v(x) = isnothing(rows) ? x : view(x, rows)
+        n = 6
+        x, y = rand(T, 2n), rand(T, 2n)
+        if isnothing(rows)
+            x, y = x[1:n], y[1:n]
+        end
+
+        @test compare(x -> rmul!(v(x), T(2)), AT, x)
+        # back-ends' own methods may not support dot products of stepped views yet
+        if !(rows isa StepRange)
+            @test compare((x, y) -> dot(v(x), v(y)), AT, x, y)
+            @test compare((x, y) -> v(x)' * v(y), AT, x, y)
+            T <: Complex && @test compare((x, y) -> transpose(v(x)) * v(y), AT, x, y)
+        end
+        @test compare(x -> norm(v(x)), AT, x)
+        @test compare(x -> norm(v(x), 1), AT, x)
+        @test compare(x -> LinearAlgebra.BLAS.asum(v(x)), AT, x)
+        @test compare((x, y) -> axpy!(T(2), v(x), v(y)), AT, x, y)
+        @test compare((x, y) -> axpby!(T(2), v(x), T(3), v(y)), AT, x, y)
+        s = T <: Complex ? T(0.8im) : T(0.8)
+        c = real(T)(0.6)
+        @test compare((x, y) -> rotate!(v(x), v(y), c, s), AT, x, y)
+        @test compare((x, y) -> reflect!(v(x), v(y), c, s), AT, x, y)
+
+        @test_throws DimensionMismatch dot(v(AT(x)), AT(rand(T, n + 1)))
+        @test_throws DimensionMismatch axpy!(T(1), v(AT(x)), AT(rand(T, n + 1)))
+    end
+
+    @testset "columns of a padded matrix" begin
+        T = Float32
+        T in eltypes || return
+        v(A) = view(A, 1:2, :)
+        A, B = rand(T, 4, 3), rand(T, 4, 3)
+        @test compare(A -> rmul!(v(A), T(2)), AT, A)
+        @test compare(A -> norm(v(A)), AT, A)
+        @test compare((A, B) -> dot(v(A), v(B)), AT, A, B)
+    end
+
+    @testset "dot of wrapped arrays" begin
+        T = Float32
+        T in eltypes || return
+        A, B = rand(T, 4, 6), rand(T, 4, 6)
+        @test compare((A, B) -> dot(PermutedDimsArray(A, (2, 1)), PermutedDimsArray(B, (2, 1))), AT, A, B)
+        @test compare((A, B) -> dot(view(A, 1:2:3, :), view(B, 1:2:3, :)), AT, A, B)
+    end
+
+    @testset "Givens rotations" begin
+        T = ComplexF32 in eltypes ? ComplexF32 : Float32
+        T in eltypes || return
+        A = rand(T, 5, 4)
+        G, _ = givens(A[1, 1], A[3, 1], 1, 3)
+        @test compare(A -> lmul!(G, A), AT, A)
+        G, _ = givens(A[1, 1], A[1, 2], 2, 4)
+        @test compare(A -> rmul!(A, G), AT, A)
+    end
+end

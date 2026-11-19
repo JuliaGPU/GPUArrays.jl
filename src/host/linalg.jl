@@ -1122,7 +1122,21 @@ function generic_rmul!(X::AbstractArray, s::Number)
     return X
 end
 
-LinearAlgebra.rmul!(A::AbstractGPUArray, b::Number) = generic_rmul!(A, b)
+function LinearAlgebra.rmul!(A::AnyStridedGPUArray, b::Number)
+    b === true && return A
+    # false is a strong zero, which BLAS libraries don't implement
+    b === false && return fill!(A, zero(eltype(A)))
+    return gpu_scal!(b, A)
+end
+function gpu_scal!(α, x)
+    α′ = blas1_scalar(eltype(x), α)
+    if α′ !== nothing && blas_vector_operand(x)
+        blas_scal!(α′, x)
+    else
+        generic_rmul!(x, α)
+    end
+    return x
+end
 LinearAlgebra.rmul!(A::Diagonal{T, <:AbstractGPUArray}, b::Number) where {T} = generic_rmul!(A.diag, b)
 
 function generic_lmul!(s::Number, X::AbstractArray)
@@ -1189,7 +1203,10 @@ end
 
 ## norm
 
-function LinearAlgebra.norm(v::AnyGPUArray{T}, p::Real=2) where {T}
+LinearAlgebra.norm(v::AnyGPUArray, p::Real=2) =
+    p == 2 && blas_vector_operand(v) ? blas_nrm2(v) : generic_norm(v, p)
+
+function generic_norm(v::AbstractArray{T}, p::Real) where {T}
     result_type, sum_type, promote_ = _normtypes(T)
     isempty(v) && return zero(result_type)
     p == 0 && return convert(result_type, count(!iszero, v))
@@ -1291,7 +1308,21 @@ end
 
 ## rotate
 
-function LinearAlgebra.rotate!(x::AbstractGPUArray, y::AbstractGPUArray, c::Number, s::Number)
+function LinearAlgebra.rotate!(x::AnyStridedGPUArray, y::AnyStridedGPUArray, c::Number, s::Number)
+    length(x) == length(y) ||
+        throw(DimensionMismatch(lazy"rotate arguments have lengths $(length(x)) and $(length(y))"))
+    # false is a strong zero, which BLAS libraries don't implement
+    T = eltype(x)
+    c′, s′ = blas_scalar(real(T), c), blas1_scalar(T, s)
+    if c isa Bool || s isa Bool || !(c′ isa real(T)) || s′ === nothing || !blas_vector_operands(x, y)
+        generic_rotate!(x, y, c, s)
+    else
+        blas_rot!(x, y, c′, s′)
+    end
+    return x, y
+end
+
+function generic_rotate!(x, y, c, s)
     @kernel function rotate_kernel!(x, y, c, s)
         i = @index(Global, Linear)
         @inbounds xi = x[i]
@@ -1305,7 +1336,9 @@ end
 
 ## reflect
 
-function LinearAlgebra.reflect!(x::AbstractGPUArray, y::AbstractGPUArray, c::Number, s::Number)
+function LinearAlgebra.reflect!(x::AnyStridedGPUArray, y::AnyStridedGPUArray, c::Number, s::Number)
+    length(x) == length(y) ||
+        throw(DimensionMismatch(lazy"reflect arguments have lengths $(length(x)) and $(length(y))"))
     @kernel function reflect_kernel!(x, y, c, s)
         i = @index(Global, Linear)
         @inbounds xi = x[i]
@@ -1319,14 +1352,97 @@ end
 
 ## dot
 
-LinearAlgebra.dot(x::AbstractGPUArray, y::AbstractGPUArray) = mapreduce(dot, +, x, y)
+function gpu_dot(x, y)
+    length(x) == length(y) ||
+        throw(DimensionMismatch(lazy"dot product arguments have lengths $(length(x)) and $(length(y))"))
+    isempty(x) && return dot(zero(eltype(x)), zero(eltype(y)))
+    blas_vector_operands(x, y) ? blas_dot(x, y) : generic_dot(x, y)
+end
+generic_dot(x, y) = mapreduce(dot, +, x, y)
+
+function gpu_dotu(x, y)
+    length(x) == length(y) ||
+        throw(DimensionMismatch(lazy"dot product arguments have lengths $(length(x)) and $(length(y))"))
+    isempty(x) && return zero(eltype(x)) * zero(eltype(y))
+    blas_vector_operands(x, y) ? blas_dotu(x, y) : generic_dotu(x, y)
+end
+generic_dotu(x, y) = mapreduce(*, +, x, y)
+
+LinearAlgebra.dot(x::AbstractGPUArray, y::AbstractGPUArray) = gpu_dot(x, y)
+LinearAlgebra.dot(x::SubArray{<:Any,<:Any,<:AbstractGPUArray,<:Any,false}, y::SubArray{<:Any,<:Any,<:AbstractGPUArray,<:Any,false}) =
+    gpu_dot(x, y)
+LinearAlgebra.dot(x::PermutedDimsArray{<:Any,<:Any,<:Any,<:Any,<:AbstractGPUArray}, y::PermutedDimsArray{<:Any,<:Any,<:Any,<:Any,<:AbstractGPUArray}) =
+    gpu_dot(x, y)
+# LinearAlgebra sends `dot` of other strided arrays with BLAS eltypes, e.g. views, to its BLAS
+# wrappers, which would take host pointers. Back-ends' own `dot` methods still take precedence.
+for (T, f, g) in ((:Float32, :dot, :gpu_dot), (:Float64, :dot, :gpu_dot),
+                  (:ComplexF32, :dotc, :gpu_dot), (:ComplexF64, :dotc, :gpu_dot),
+                  (:ComplexF32, :dotu, :gpu_dotu), (:ComplexF64, :dotu, :gpu_dotu))
+    @eval LinearAlgebra.BLAS.$f(x::AnyStridedGPUArray{$T}, y::AnyStridedGPUArray{$T}) = $g(x, y)
+end
+
+Base.:(*)(x::Transpose{<:Any,<:AnyStridedGPUVector{T}}, y::AnyStridedGPUVector{T}) where {T<:Complex} =
+    gpu_dotu(parent(x), y)
+
+function LinearAlgebra.BLAS.asum(x::AnyStridedGPUArray{<:LinearAlgebra.BlasFloat})
+    isempty(x) && return zero(real(eltype(x)))
+    blas_vector_operand(x) ? blas_asum(x) : generic_asum(x)
+end
+generic_asum(x) = mapreduce(z -> abs(real(z)) + abs(imag(z)), +, x)
 
 ## axp{b}y
 
-LinearAlgebra.axpby!(alpha::Number, x::AbstractGPUArray,
-                     beta::Number,  y::AbstractGPUArray) = y .= x.*alpha .+ y.*beta
+function LinearAlgebra.axpby!(α::Number, x::AnyStridedGPUArray, β::Number, y::AnyStridedGPUArray)
+    length(x) == length(y) ||
+        throw(DimensionMismatch(lazy"axpby arguments have lengths $(length(x)) and $(length(y))"))
+    # false is a strong zero, which BLAS libraries don't implement
+    if α === false
+        β === false ? fill!(y, zero(eltype(y))) : β === true || gpu_scal!(β, y)
+    elseif β === false
+        y .= x .* α
+    elseif β === true
+        gpu_axpy!(α, x, y)
+    else
+        T = eltype(y)
+        α′, β′ = blas1_scalar(T, α), blas1_scalar(T, β)
+        if α′ !== nothing && β′ !== nothing && blas_vector_operands(x, y)
+            blas_axpby!(α′, x, β′, y)
+        else
+            generic_axpby!(α, x, β, y)
+        end
+    end
+    return y
+end
+generic_axpby!(α, x, β, y) = y .= x .* α .+ y .* β
 
-LinearAlgebra.axpy!(alpha::Number, x::AbstractGPUArray, y::AbstractGPUArray) = y .+= x.*alpha
+function LinearAlgebra.axpy!(α::Number, x::AnyStridedGPUArray, y::AnyStridedGPUArray)
+    length(x) == length(y) ||
+        throw(DimensionMismatch(lazy"axpy arguments have lengths $(length(x)) and $(length(y))"))
+    α === false || gpu_axpy!(α, x, y)
+    return y
+end
+function gpu_axpy!(α, x, y)
+    α′ = blas1_scalar(eltype(y), α)
+    α′ !== nothing && blas_vector_operands(x, y) ? blas_axpy!(α′, x, y) : generic_axpy!(α, x, y)
+end
+generic_axpy!(α, x, y) = y .+= x .* α
+
+## Givens rotations
+
+# BLAS rotations take a real cosine, which `givens` stores in the eltype of the sine
+givens_rotate!(x, y, c, s) = isreal(c) ? rotate!(x, y, real(c), s) : generic_rotate!(x, y, c, s)
+
+function LinearAlgebra.lmul!(G::LinearAlgebra.Givens, A::AnyStridedGPUVecOrMat)
+    G.i2 > size(A, 1) && throw(DimensionMismatch("column indices for rotation are outside the matrix"))
+    givens_rotate!(view(A, G.i1, :), view(A, G.i2, :), G.c, G.s)
+    return A
+end
+
+function LinearAlgebra.rmul!(A::AnyStridedGPUMatrix, G::LinearAlgebra.Givens)
+    G.i2 > size(A, 2) && throw(DimensionMismatch("column indices for rotation are outside the matrix"))
+    givens_rotate!(view(A, :, G.i1), view(A, :, G.i2), G.c, -conj(G.s))
+    return A
+end
 
 ## identity and zero equality check
 

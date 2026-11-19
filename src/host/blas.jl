@@ -1,16 +1,25 @@
 # vendor BLAS hooks
 #
-# GPUArrays implements LinearAlgebra's matrix products and triangular operations for every
-# GPU array: it checks dimensions, unwraps operands into BLAS characters, and decides which
-# BLAS routine an operation corresponds to. It then calls one of the `blas_*` functions
-# below, whose default methods use GPUArrays' own kernels, often by way of a BLAS 3 hook.
-# Back-ends with a vendor BLAS add methods for the operand types and eltypes their library
-# supports; the contract is documented in docs/src/interface.md.
+# GPUArrays implements LinearAlgebra's products, triangular operations and BLAS 1 functions
+# for every GPU array: it checks dimensions, unwraps operands into BLAS characters, handles
+# strong zeros, and decides which BLAS routine an operation corresponds to. It then calls
+# one of the `blas_*` functions below, whose default methods use GPUArrays' own kernels,
+# often by way of a BLAS 3 hook. Back-ends with a vendor BLAS add methods for the operand
+# types and eltypes their library supports; the contract is documented in
+# docs/src/interface.md.
 
 # matrix operands of BLAS 2 and 3 routines
 blas_layout(x::AbstractVector) = stride(x, 1) > 0
 blas_layout(A::AbstractMatrix) = blas_matrix_layout(A)
 blas_matrix_layout(A::AbstractVecOrMat) = stride(A, 1) == 1 && stride(A, 2) >= size(A, 1)
+
+# BLAS 1 routines address their operands as `length(x)` elements `stride(x, 1)` apart
+blas_vector_layout(x::AbstractVector) = stride(x, 1) > 0
+blas_vector_layout(x::AbstractArray) = strides(x) == Base.size_to_strides(1, size(x)...)
+blas_vector_operand(x) = x isa AnyStridedGPUArray && !isempty(x) && blas_vector_layout(x)
+blas_vector_operands(x, y) =
+    eltype(x) == eltype(y) && size(x) == size(y) && blas_vector_operand(x) &&
+    blas_vector_operand(y) && !Base.mightalias(x, y)
 
 # like LinearAlgebra, promote scalars to the output eltype, unless they are of a wider type
 blas_scalar(::Type, x::Bool) = x
@@ -19,6 +28,13 @@ function blas_scalar(::Type{T}, x::Number) where {T}
     y isa T ? y : x
 end
 blas_scalars(::Type{T}, α, β) where {T} = α isa Union{Bool,T} && β isa Union{Bool,T}
+
+# BLAS 1 routines also take real scalars for complex vectors (e.g. csscal), which avoids the
+# cross terms of complex multiplication; `nothing` if the scalar can't be converted
+function blas1_scalar(::Type{T}, x::Number) where {T}
+    y = x isa Real ? blas_scalar(real(T), x) : blas_scalar(T, x)
+    y isa Union{Bool,T,real(T)} ? y : nothing
+end
 
 trans_op(t::AbstractChar) = t == 'N' ? identity : t == 'T' ? transpose : adjoint
 trans_char(f::Function) = f === identity ? 'N' : f === transpose ? 'T' : 'C'
@@ -185,3 +201,59 @@ blas_trsv!(uplo, trans, diag, A, x) =
     else
         generic_trimatdiv!(x, uplo, diag, trans_op(trans), A, x)
     end
+
+
+## BLAS 1
+
+"""
+    GPUArrays.blas_scal!(α, x)
+
+Overwrite `x` with `α x`, like `LinearAlgebra.BLAS.scal!`.
+"""
+blas_scal!(α, x) = generic_rmul!(x, α)
+
+"""
+    GPUArrays.blas_dot(x, y)
+    GPUArrays.blas_dotu(x, y)
+
+The dot product of `x` and `y`, conjugating `x` (`dot`, which vendor libraries call `dotc` for
+complex numbers) or not (`dotu`).
+"""
+blas_dot(x, y) = generic_dot(x, y)
+
+@doc (@doc blas_dot)
+blas_dotu(x, y) = generic_dotu(x, y)
+
+"""
+    GPUArrays.blas_nrm2(x)
+
+The Euclidean norm of `x`, like `LinearAlgebra.BLAS.nrm2`.
+"""
+blas_nrm2(x) = generic_norm(x, 2)
+
+"""
+    GPUArrays.blas_asum(x)
+
+The sum of the absolute values of the real and imaginary parts of `x`, like
+`LinearAlgebra.BLAS.asum`.
+"""
+blas_asum(x) = generic_asum(x)
+
+"""
+    GPUArrays.blas_axpy!(α, x, y)
+    GPUArrays.blas_axpby!(α, x, β, y)
+
+Overwrite `y` with `α x + y` or `α x + β y`, like `LinearAlgebra.BLAS.axpy!`/`axpby!`.
+"""
+blas_axpy!(α, x, y) = generic_axpy!(α, x, y)
+
+@doc (@doc blas_axpy!)
+blas_axpby!(α, x, β, y) = generic_axpby!(α, x, β, y)
+
+"""
+    GPUArrays.blas_rot!(x, y, c, s)
+
+Apply the Givens rotation with real cosine `c` and sine `s` to the pairs of elements of `x`
+and `y`, like `LinearAlgebra.rotate!`.
+"""
+blas_rot!(x, y, c, s) = generic_rotate!(x, y, c, s)
