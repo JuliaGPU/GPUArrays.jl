@@ -9,11 +9,12 @@ pull requests, see the [GitHub releases](https://github.com/JuliaGPU/GPUArrays.j
 
 GPUArrays now implements the LinearAlgebra methods that back-ends used to define in front of
 their vendor BLAS: the storage-level `mul!` methods, `generic_trimatmul!` and the other
-triangular products and solves, triangular `inv`, and `rmul!`, `dot`, `transpose(x) * y`,
-`norm`, `BLAS.asum`, `axpy!`, `axpby!` and `rotate!`. They check dimensions and operand
-layouts, handle `false` as a strong zero, accept strided views, and call new
-`GPUArrays.blas_*` hooks (`blas_gemm!`, `blas_trsm!`, `blas_dot`, ...; see the interface
-documentation) whose defaults use GPUArrays' kernels.
+triangular products and solves, triangular `inv`, `Diagonal` products, division, `inv` and
+`norm`, matrix additions with a transposed operand, `transpose!`/`adjoint!`, and `rmul!`,
+`dot`, `transpose(x) * y`, `norm`, `BLAS.asum`, `axpy!`, `axpby!` and `rotate!`. They check
+dimensions and operand layouts, handle `false` as a strong zero, accept strided views, and
+call new `GPUArrays.blas_*` hooks (`blas_gemm!`, `blas_trsm!`, `blas_dot`, ...; see the
+interface documentation) whose defaults use GPUArrays' kernels.
 
 Back-ends should implement the hooks with their vendor library and delete their own methods
 for these operations, which would keep winning dispatch. This also fixes cases where those

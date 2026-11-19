@@ -42,8 +42,17 @@ function LinearAlgebra.adjoint!(B::AbstractGPUMatrix, A::AbstractGPUVector)
     B
 end
 
-LinearAlgebra.transpose!(B::AnyGPUArray, A::AnyGPUArray) = transpose_f!(transpose, B, A)
-LinearAlgebra.adjoint!(B::AnyGPUArray, A::AnyGPUArray) = transpose_f!(adjoint, B, A)
+LinearAlgebra.transpose!(B::AnyGPUArray, A::AnyGPUArray) = gpu_transpose!(transpose, B, A)
+LinearAlgebra.adjoint!(B::AnyGPUArray, A::AnyGPUArray) = gpu_transpose!(adjoint, B, A)
+function gpu_transpose!(f, B, A)
+    if B isa AnyStridedGPUMatrix && A isa AnyStridedGPUMatrix && eltype(A) == eltype(B) && !isempty(A) &&
+       blas_layout(A) && blas_layout(B) && !Base.mightalias(A, B)
+        axes(B, 1) == axes(A, 2) && axes(B, 2) == axes(A, 1) || throw(DimensionMismatch(string(f)))
+        t = f === transpose ? 'T' : 'C'
+        return blas_geam!(t, t, true, A, false, A, B)
+    end
+    transpose_f!(f, B, A)
+end
 
 const TRANSPOSE_TILE = 32
 const TRANSPOSE_ROWS = 8
@@ -515,6 +524,10 @@ function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
     m′, n′ = size(B, 1), size(B, 2)
     m == d || throw(DimensionMismatch("right hand side has $m rows but D is $d by $d"))
     (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
+    if B isa AbstractGPUMatrix && A isa AbstractGPUMatrix && allequal(map(eltype, (A, B, dd))) &&
+       !isempty(B) && !Base.mightalias(B, dd) && (B === A || !Base.mightalias(B, A))
+        return blas_dgmm!('L', A, dd, B)
+    end
     @. B = dd * A
     B
 end
@@ -544,6 +557,10 @@ function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
     m′, n′ = size(B, 1), size(B, 2)
     n == d || throw(DimensionMismatch("left hand side has $n columns but D is $d by $d"))
     (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
+    if B isa AbstractGPUMatrix && A isa AbstractGPUMatrix && allequal(map(eltype, (A, B, dd))) &&
+       !isempty(B) && !Base.mightalias(B, dd) && (B === A || !Base.mightalias(B, A))
+        return blas_dgmm!('R', A, dd, B)
+    end
     ddT = transpose(dd)
     @. B = A * ddT
 
@@ -566,6 +583,42 @@ function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
 
     B
 end
+
+LinearAlgebra.lmul!(D::Diagonal{<:Any,<:AbstractGPUVector}, B::AbstractGPUMatrix) = mul!(B, D, B)
+LinearAlgebra.rmul!(A::AbstractGPUMatrix, D::Diagonal{<:Any,<:AbstractGPUVector}) = mul!(A, A, D)
+# update the parent, as broadcasting into a wrapper isn't supported
+function LinearAlgebra.lmul!(D::Diagonal{<:Any,<:AbstractGPUVector}, B::AdjOrTrans{<:Any,<:AbstractGPUMatrix})
+    (n = length(D.diag)) == size(B, 1) ||
+        throw(DimensionMismatch(lazy"right hand side has $(size(B, 1)) rows but D is $n by $n"))
+    P = parent(B)
+    P .= P .* (B isa Adjoint ? adjoint(D.diag) : transpose(D.diag))
+    return B
+end
+function LinearAlgebra.rmul!(A::AdjOrTrans{<:Any,<:AbstractGPUMatrix}, D::Diagonal{<:Any,<:AbstractGPUVector})
+    (n = length(D.diag)) == size(A, 2) ||
+        throw(DimensionMismatch(lazy"left hand side has $(size(A, 2)) columns but D is $n by $n"))
+    P = parent(A)
+    P .= (A isa Adjoint ? conj.(D.diag) : D.diag) .* P
+    return A
+end
+
+function LinearAlgebra.inv(D::Diagonal{<:Any,<:AbstractGPUVector})
+    any(iszero, D.diag) && throw(SingularException(findfirst(iszero, D.diag)))
+    Diagonal(inv.(D.diag))
+end
+
+function gpu_rdiv!(B, A, D::Diagonal)
+    n = size(A, 2)
+    (k = length(D.diag)) == n || throw(DimensionMismatch(lazy"left hand side has $n columns but D is $k by $k"))
+    any(iszero, D.diag) && throw(SingularException(findfirst(iszero, D.diag)))
+    B .= A ./ transpose(D.diag)
+end
+# less specific than the back-ends' methods for their arrays and any Diagonal
+LinearAlgebra.rdiv!(A::AnyStridedGPUMatrix, D::Diagonal) = gpu_rdiv!(A, A, D)
+Base.:(/)(A::Union{AnyStridedGPUMatrix,AdjOrTrans{<:Any,<:AnyStridedGPUMatrix}}, D::Diagonal) =
+    gpu_rdiv!(similar(A, typeof(oneunit(eltype(A)) / oneunit(eltype(D)))), A, D)
+
+Base.Array(D::Diagonal{<:Any,<:AbstractGPUVector}) = Matrix(Diagonal(Array(D.diag)))
 
 function LinearAlgebra.ldiv!(B::AbstractGPUVecOrMat,
                               D::Diagonal{<:Any, <:AbstractGPUArray},
@@ -1206,6 +1259,12 @@ end
 LinearAlgebra.norm(v::AnyGPUArray, p::Real=2) =
     p == 2 && blas_vector_operand(v) ? blas_nrm2(v) : generic_norm(v, p)
 
+function LinearAlgebra.norm(D::Diagonal{<:Any,<:AnyGPUVector}, p::Real=2)
+    r = norm(D.diag, p)
+    # the off-diagonal zeros decide negative norms
+    size(D, 1) > 1 && p < 0 && !isnan(r) ? zero(r) : r
+end
+
 function generic_norm(v::AbstractArray{T}, p::Real) where {T}
     result_type, sum_type, promote_ = _normtypes(T)
     isempty(v) && return zero(result_type)
@@ -1426,6 +1485,30 @@ function gpu_axpy!(α, x, y)
     α′ !== nothing && blas_vector_operands(x, y) ? blas_axpy!(α′, x, y) : generic_axpy!(α, x, y)
 end
 generic_axpy!(α, x, y) = y .+= x .* α
+
+## matrix addition
+
+function gpu_geam(op, A, B)
+    size(A) == size(B) ||
+        throw(DimensionMismatch(lazy"dimensions must match: a has dims $(axes(A)), b has dims $(axes(B))"))
+    T = eltype(A)
+    pA, pB = LinearAlgebra._unwrap(A), LinearAlgebra._unwrap(B)
+    # BLAS computes in the eltype of the operands, which e.g. for Bool isn't that of the result
+    if eltype(B) == T && Base.promote_op(op, T, T) == T && !isempty(A) &&
+       blas_layout(pA) && blas_layout(pB)
+        tA, tB = Char(LinearAlgebra.wrapper_char(A)), Char(LinearAlgebra.wrapper_char(B))
+        # a real -1 avoids the cross terms of complex multiplication
+        β = op === (+) ? true : -one(real(T))
+        return blas_geam!(tA, tB, true, pA, β, pB, similar(pA, T, size(A)))
+    end
+    broadcast(op, A, B)
+end
+for op in (:+, :-)
+    @eval begin
+        Base.$op(A::AnyStridedGPUMatrix, B::AdjOrTrans{<:Any,<:AnyStridedGPUMatrix}) = gpu_geam($op, A, B)
+        Base.$op(A::AdjOrTrans{<:Any,<:AnyStridedGPUMatrix}, B::AnyStridedGPUMatrix) = gpu_geam($op, A, B)
+    end
+end
 
 ## Givens rotations
 

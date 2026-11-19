@@ -44,13 +44,13 @@ GPUArrays.memory_location
 
 ## Vendor BLAS
 
-GPUArrays implements LinearAlgebra's matrix products, triangular products and solves, and
-BLAS 1 functions such as `dot`, `norm`, `axpy!` and `rotate!` for all GPU arrays. It checks
-dimensions, turns transposed, symmetric and triangular wrappers into BLAS characters,
-handles `false` as a strong zero, and then calls one of the hooks below. Their default
-methods use GPUArrays' kernels; a back-end with a vendor BLAS library adds methods for the
-operand types and eltypes that library supports, and everything else keeps using the
-defaults:
+GPUArrays implements LinearAlgebra's matrix products, triangular products and solves,
+`Diagonal` products, matrix additions with transposed operands, and BLAS 1 functions such as
+`dot`, `norm`, `axpy!` and `rotate!` for all GPU arrays. It checks dimensions, turns
+transposed, symmetric and triangular wrappers into BLAS characters, handles `false` as a
+strong zero, and then calls one of the hooks below. Their default methods use GPUArrays'
+kernels; a back-end with a vendor BLAS library adds methods for the operand types and
+eltypes that library supports, and everything else keeps using the defaults:
 
 ```julia
 GPUArrays.blas_gemm!(tA, tB, α::Union{Bool,T}, A::StridedCuVecOrMat{T}, B::StridedCuVecOrMat{T},
@@ -66,12 +66,14 @@ The hooks are only called with operands that a BLAS library can address:
   stride or contiguous arrays, i.e. `length(x)` elements `stride(x, 1)` apart.
 - Dimensions match, and no operand is empty.
 - Operands have the same eltype, except for `blas_gemm!` and `blas_gemv!`.
-- Scalars are `Bool`s or of the eltype of the output, as LinearAlgebra converts them where
-  that is lossless; only `blas_gemm!` can also receive other scalars, and BLAS 1 hooks can
-  receive real scalars for complex operands.
+- Scalars are `Bool`s or of the eltype of the output, to which they are promoted like
+  LinearAlgebra does unless they are of a wider type. The exceptions: `blas_gemm!` can also
+  receive other scalars, `blas_herk!` receives real ones, and BLAS 1 hooks and `blas_geam!`
+  can receive real scalars for complex operands.
 - Outputs don't share memory with inputs, except where a hook documents otherwise.
 
-The hooks mirror the functions in `LinearAlgebra.BLAS`:
+The BLAS 1, 2 and 3 hooks mirror the functions in `LinearAlgebra.BLAS`, and the extensions
+the ones in cuBLAS:
 
 ```@docs
 GPUArrays.blas_gemm!
@@ -88,6 +90,8 @@ GPUArrays.blas_nrm2
 GPUArrays.blas_asum
 GPUArrays.blas_axpy!
 GPUArrays.blas_rot!
+GPUArrays.blas_geam!
+GPUArrays.blas_dgmm!
 ```
 
 ## Caching Allocator

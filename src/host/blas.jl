@@ -257,3 +257,31 @@ Apply the Givens rotation with real cosine `c` and sine `s` to the pairs of elem
 and `y`, like `LinearAlgebra.rotate!`.
 """
 blas_rot!(x, y, c, s) = generic_rotate!(x, y, c, s)
+
+
+## BLAS extensions
+
+"""
+    GPUArrays.blas_geam!(tA, tB, α, A, β, B, C)
+
+`C = α op(A) + β op(B)`, like cuBLAS's `geam`. With `β === false`, `B` is not read, which
+is how transposing a matrix into `C` is expressed.
+"""
+function blas_geam!(tA, tB, α, A, β, B, C)
+    opA, opB = trans_op(tA), trans_op(tB)
+    if β === false
+        α === true && opA !== identity ? transpose_f!(opA, C, A) : (C .= α .* opA(A))
+    else
+        C .= α .* opA(A) .+ β .* opB(B)
+    end
+    return C
+end
+
+"""
+    GPUArrays.blas_dgmm!(side, A, x, C)
+
+`C = Diagonal(x) A` (`side == 'L'`) or `C = A Diagonal(x)` (`side == 'R'`), like cuBLAS's
+`dgmm`. `C` can be `A`.
+"""
+blas_dgmm!(side, A, x, C) =
+    side == 'L' ? (C .= x .* A) : (C .= A .* transpose(x))
