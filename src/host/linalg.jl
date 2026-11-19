@@ -774,6 +774,11 @@ end
     function LinearAlgebra.generic_matmatmul_wrapper!(C::AnyStridedGPUMatrix{T}, tA::AbstractChar, tB::AbstractChar, A::AnyStridedGPUVecOrMat{T}, B::AnyStridedGPUVecOrMat{T}, alpha::Number, beta::Number, val::LinearAlgebra.BlasFlag.SymmHemmGeneric) where {T}
         storage_matmatmul!(C, tA, tB, A, B, alpha, beta)
     end
+    # Julia 1.13 added a method for this flag alone, e.g. for `Symmetric(A) * B'`, which is
+    # ambiguous with the one above
+    function LinearAlgebra.generic_matmatmul_wrapper!(C::AnyStridedGPUMatrix{T}, tA::AbstractChar, tB::AbstractChar, A::AnyStridedGPUVecOrMat{T}, B::AnyStridedGPUVecOrMat{T}, alpha::Number, beta::Number, val::Val{LinearAlgebra.BlasFlag.NONE}) where {T}
+        storage_matmatmul!(C, tA, tB, A, B, alpha, beta)
+    end
     # need to support mixed complex/real types too
     #function LinearAlgebra.generic_matmatmul_wrapper!(C::AbstractGPUMatrix{Complex{T}}, tA::AbstractChar, tB::AbstractChar, A::AbstractGPUVecOrMat{Complex{T}}, B::AbstractGPUVecOrMat{T}, alpha::Number, beta::Number, val::V) where {T<:BlasReal, V<:LinearAlgebra.BlasFlag.SyrkHerkGemm}
     #    storage_matmatmul!(C, tA, tB, A, B, alpha, beta)

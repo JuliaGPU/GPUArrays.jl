@@ -356,6 +356,16 @@
                 mul!(E, W(collect(A), uplo), collect(B), 3, 2)
                 @test collect(Et) ≈ E
 
+                # with a transposed operand, which BLAS can't take
+                for op in (transpose, adjoint)
+                    mul!(Ct, W(A, uplo), op(B))
+                    mul!(C, W(collect(A), uplo), op(collect(B)))
+                    @test collect(Ct) ≈ C
+                    mul!(Ct, op(B), W(A, uplo))
+                    mul!(C, op(collect(B)), W(collect(A), uplo))
+                    @test collect(Ct) ≈ C
+                end
+
                 # matrix-vector
                 ct = AT(zeros(T, n))
                 c = zeros(T, n)
