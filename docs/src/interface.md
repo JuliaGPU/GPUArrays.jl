@@ -47,4 +47,5 @@ GPUArrays.memory_location
 ```@docs
 GPUArrays.@cached
 GPUArrays.@uncached
+GPUArrays.is_cached_storage
 ```
