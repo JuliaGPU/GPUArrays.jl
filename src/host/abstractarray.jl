@@ -18,11 +18,13 @@ export DataRef, unsafe_free!
 #
 # The contained RefCounted struct should not be used directly.
 
-# shared, reference-counted state.
+# shared, reference-counted state. `cached` is set while an allocation cache owns the data
+# and may hand it out again (see `is_cached_storage`).
 mutable struct RefCounted{D}
   obj::D
   finalizer
   count::Threads.Atomic{Int}
+  cached::Bool
 end
 
 function retain(rc::RefCounted)
@@ -54,6 +56,8 @@ end
 # per-object state, with a flag to indicate whether the object has been freed.
 # this is to support multiple calls to `unsafe_free!` on the same object,
 # while only lowering the reference count of the underlying data once.
+# `cached` marks the allocation cache's own reference, whose release the cache performs;
+# references derived from it with `copy` share the data but are released as usual.
 mutable struct DataRef{D}
     rc::RefCounted{D}
     freed::Bool
@@ -61,7 +65,7 @@ mutable struct DataRef{D}
 end
 
 function DataRef(finalizer, ref::D) where {D}
-    rc = RefCounted{D}(ref, finalizer, Threads.Atomic{Int}(1))
+    rc = RefCounted{D}(ref, finalizer, Threads.Atomic{Int}(1), false)
     DataRef{D}(rc, false, false)
 end
 DataRef(ref; kwargs...) = DataRef(nothing, ref; kwargs...)

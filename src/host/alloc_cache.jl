@@ -30,6 +30,19 @@ function get_pool!(cache::AllocCache, pool::Symbol, uid::UInt64)
     return uid_pool
 end
 
+"""
+    GPUArrays.is_cached_storage(ref::DataRef) -> Bool
+
+Whether the data behind `ref` is owned by an allocation cache (see [`@cached`](@ref)), which
+will hand it out again once the cache's scope ends. This holds for the cache's own reference
+as well as for every reference derived from it (e.g. by views and reshapes), from the first
+allocation until the cache is invalidated, regardless of the current task or cache scope.
+
+Back-ends can use this to refuse operations that would keep using the memory after the scope
+ends, such as recording it into a CUDA graph.
+"""
+is_cached_storage(ref::DataRef) = ref.rc.cached
+
 function cached_alloc(f, key)
     cache = ALLOC_CACHE[]
     if cache === nothing
@@ -50,6 +63,7 @@ function cached_alloc(f, key)
     if ref === nothing
         ref = f()::DataRef
         ref.cached = true
+        ref.rc.cached = true
     end
 
     Base.@lock cache.lock begin
@@ -82,6 +96,7 @@ function unsafe_free!(cache::AllocCache)
         for pool in values(cache.free), ref in pool
             # release the reference
             ref.cached = false
+            ref.rc.cached = false
             unsafe_free!(ref)
         end
         empty!(cache.free)

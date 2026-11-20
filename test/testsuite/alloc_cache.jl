@@ -27,6 +27,31 @@
         @test cache.free[key][1] === GPUArrays.storage(cached2)
         @test uncached !== cached2
 
+        # arrays derived from cached ones share the cache's ownership of their memory,
+        # irrespective of the cache scope or task that queries it
+        @test GPUArrays.is_cached_storage(GPUArrays.storage(cached2))
+        @test !GPUArrays.is_cached_storage(GPUArrays.storage(uncached))
+        cached2_view = view(cached2, :, :, 2:3)
+        cached2_reshape = reshape(cached2, :)
+        cached2_reinterpret = reinterpret(Int32, cached2)
+        for derived in (cached2_view, cached2_reshape, cached2_reinterpret)
+            @test !GPUArrays.storage(derived).cached
+            @test GPUArrays.is_cached_storage(GPUArrays.storage(derived))
+        end
+        inner = GPUArrays.AllocCache()
+        GPUArrays.@cached inner begin
+            inner_array = AT(zeros(T, dims))
+            @test GPUArrays.is_cached_storage(GPUArrays.storage(cached2_view))
+            GPUArrays.@uncached begin
+                @test GPUArrays.is_cached_storage(GPUArrays.storage(inner_array))
+                @test fetch(Threads.@spawn GPUArrays.is_cached_storage(GPUArrays.storage(cached2_view)))
+            end
+        end
+        GPUArrays.unsafe_free!(inner)
+        @test !GPUArrays.is_cached_storage(GPUArrays.storage(inner_array))
+        @test GPUArrays.is_cached_storage(GPUArrays.storage(cached2_view))
+        foreach(GPUArrays.unsafe_free!, (cached2_view, cached2_reshape, cached2_reinterpret))
+
         # compatible shapes should also hit the cache
         dims = (3, 2, 1)
         GPUArrays.@cached cache begin
@@ -86,6 +111,7 @@
         @test !GPUArrays.storage(uncached).cached
         GPUArrays.unsafe_free!(cache)
         @test sizeof(cache) == 0
+        @test !GPUArrays.is_cached_storage(GPUArrays.storage(cached1))
         @test GPUArrays.storage(cached1).freed
         @test !GPUArrays.storage(cached1).cached
         @test GPUArrays.storage(cached5).freed
@@ -95,5 +121,19 @@
         @test GPUArrays.storage(cached1).rc.count[] == 0
         @test GPUArrays.storage(cached5).rc.count[] == 0
         @test GPUArrays.storage(uncached).rc.count[] == 1
+
+        # a derived array keeps the memory alive past invalidation, but it isn't
+        # owned by the cache anymore
+        GPUArrays.@cached cache begin
+            cached6 = AT(zeros(T, dims))
+            cached6_derived = reshape(cached6, :)
+        end
+        @test GPUArrays.is_cached_storage(GPUArrays.storage(cached6_derived))
+        GPUArrays.unsafe_free!(cache)
+        @test !GPUArrays.is_cached_storage(GPUArrays.storage(cached6_derived))
+        @test GPUArrays.storage(cached6_derived).rc.count[] == 1
+        @test Array(cached6_derived) == zeros(T, prod(dims))
+        GPUArrays.unsafe_free!(cached6_derived)
+        @test GPUArrays.storage(cached6_derived).rc.count[] == 0
     end
 end
