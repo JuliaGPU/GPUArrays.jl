@@ -954,11 +954,98 @@ function generic_mattrimul!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
     C
 end
 
-# triangular solves parallelize only across right-hand sides; each one is a sequential
-# forward/backward substitution. backends with a vendor BLAS override these with native
-# trsm calls, so these fallbacks mainly serve backends without one. unlike LinearAlgebra's
-# generic implementation, a zero diagonal element does not throw a SingularException but
-# yields Infs/NaNs, like vendor BLAS libraries.
+# blocked triangular solves: one workgroup solves each diagonal block, then a matrix product
+# updates the remaining rows (or columns). that product goes through the storage-level `mul!`,
+# so back-ends route it to their vendor gemm where they have one. unlike LinearAlgebra's generic
+# implementation, a zero diagonal element yields Infs/NaNs instead of throwing a
+# SingularException, like vendor BLAS.
+const TRSM_BLOCK = 64
+
+@inline op_getindex(A, tf, i, j) = tf === identity ? (@inbounds A[i, j]) : tf(@inbounds A[j, i])
+
+# solve op(A)[o+1:o+m, o+1:o+m] \ X[o+1:o+m, :] (left) or X[:, o+1:o+m] / op(A)[...] (right)
+# in place. each work-item holds one element of X, at position `p` within the block
+function trsm_block_kernel!(X, A, tf, o, m, ::Val{left}, ::Val{fwd}, ::Val{unit}, ::Val{Q}) where {left, fwd, unit, Q}
+    Tx = promote_type(eltype(X), eltype(A))
+    li, lj, _ = KI.get_local_id()
+    gi, gj, _ = KI.get_group_id()
+    p, q = left ? (li, lj) : (lj, li)
+    r, c = left ? (o + li, (gj - 1) * Q + lj) : ((gi - 1) * Q + li, o + lj)
+    inrange = p <= m && (left ? c <= size(X, 2) : r <= size(X, 1))
+
+    x = inrange ? convert(Tx, @inbounds X[r, c]) : zero(Tx)
+    # double-buffered, so one barrier per step suffices
+    buf = KI.localmemory(Tx, (Q, 2))
+    # the element of op(A) coupling this work-item to step k; the steps are serial, so load the
+    # next one before the barrier to keep its latency off the critical path
+    load(k) = p <= m ? (left ? op_getindex(A, tf, o + p, o + k) : op_getindex(A, tf, o + k, o + p)) :
+                       zero(eltype(A))
+    a_next = load(fwd ? 1 : m)
+    for s in 1:m
+        k = fwd ? s : m - s + 1
+        b = isodd(s) ? 1 : 2
+        a = a_next
+        s < m && (a_next = load(fwd ? s + 1 : m - s))
+        if p == k
+            if !unit
+                x = convert(Tx, left ? a \ x : x / a)
+            end
+            @inbounds buf[q, b] = x
+        end
+        KI.barrier()
+        if inrange && (fwd ? p > k : p < k)
+            xk = @inbounds buf[q, b]
+            x = convert(Tx, left ? x - a * xk : x - xk * a)
+        end
+    end
+    inrange && (@inbounds X[r, c] = x)
+    return
+end
+
+function trsm_blocks!(X, A, tfun, upper, unit, left)
+    n = size(A, 1)
+    fwd = left ? !upper : upper
+    nrhs = size(X, left ? 2 : 1)
+    Q = nrhs == 1 ? 1 : 4
+    wg, ng = left ? ((TRSM_BLOCK, Q), (1, cld(nrhs, Q))) : ((Q, TRSM_BLOCK), (cld(nrhs, Q), 1))
+    tc = tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C'
+    # of the destination's type, which some back-ends require to dispatch to their gemm
+    α = -one(eltype(X))
+    for s in 1:cld(n, TRSM_BLOCK)
+        o, hi = fwd ? ((s - 1) * TRSM_BLOCK, min(s * TRSM_BLOCK, n)) :
+                      (max(0, n - s * TRSM_BLOCK), n - (s - 1) * TRSM_BLOCK)
+        KI.@launch KI.get_backend(X) workgroupsize=wg numgroups=ng trsm_block_kernel!(
+            X, A, tfun, o, hi - o, Val(left), Val(fwd), Val(unit), Val(Q))
+        blk, rest = o+1:hi, fwd ? (hi+1:n) : (1:o)
+        isempty(rest) && continue
+        if left
+            Ablk = tfun === identity ? view(A, rest, blk) : view(A, blk, rest)
+            if X isa AbstractVector
+                LinearAlgebra.mul!(view(X, rest), tc, Ablk, view(X, blk), α, true)
+            else
+                LinearAlgebra.mul!(view(X, rest, :), tc, 'N', Ablk, view(X, blk, :), α, true)
+            end
+        else
+            Ablk = tfun === identity ? view(A, blk, rest) : view(A, rest, blk)
+            LinearAlgebra.mul!(view(X, :, rest), 'N', tc, view(X, :, blk), Ablk, α, true)
+        end
+    end
+    X
+end
+
+# C = op(A) \ rhs (left) or rhs / op(A), computed in the promoted element type, so a narrower C
+# only rounds the solution, not the right-hand side or the residuals stored between blocks
+function trsm!(C, A, rhs, tfun, upper, unit, left)
+    A = Base.unalias(C, A)
+    Tx = promote_type(eltype(C), eltype(A), eltype(rhs))
+    if Tx === eltype(C)
+        trsm_blocks!(C === rhs ? C : (C .= rhs), A, tfun, upper, unit, left)
+    else
+        C .= trsm_blocks!(similar(rhs, Tx) .= rhs, A, tfun, upper, unit, left)
+    end
+    C
+end
+
 function generic_trimatdiv!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix{T}, B::AbstractGPUVecOrMat{S}) where {T,S,R}
     if size(A,2) != size(B,1)
         throw(DimensionMismatch(lazy"matrix A has dimensions $(size(A)), right hand side B has dimensions $(size(B))"))
@@ -967,31 +1054,8 @@ function generic_trimatdiv!(C::AbstractGPUVecOrMat{R}, uploc, isunitc, tfun::Fun
         throw(DimensionMismatch(lazy"result C has dimensions $(size(C)), needs $(size(B))"))
     end
     isempty(B) && return C
-
     upper = tfun === identity ? uploc == 'U' : uploc != 'U'
-    unit  = isunitc == 'U'
-
-    # C = tfun(A) \ B; safe for C === B, as B[i,j] is read before C[i,j] is written
-    @kernel function trimatdiv(C, A, B, tf)
-        j = @index(Global, Linear)
-        m, n = size(C, 1), size(C, 2)
-
-        @inbounds if j <= n
-            for ii in 1:m
-                i = upper ? m - ii + 1 : ii
-                Cij = convert(promote_type(R, S), B[i,j])
-                for k in (upper ? (i + 1) : 1):(upper ? m : (i - 1))
-                    Aik = tf === identity ? A[i,k] : tf(A[k,i])
-                    Cij -= Aik * C[k,j]
-                end
-                C[i,j] = unit ? Cij : tf(A[i,i]) \ Cij
-            end
-        end
-    end
-
-    trimatdiv(get_backend(C))(C, A, B, tfun; ndrange = size(C, 2))
-
-    C
+    trsm!(C, A, B, tfun, upper, isunitc == 'U', true)
 end
 
 function generic_mattridiv!(C::AbstractGPUMatrix{R}, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix{T}, B::AbstractGPUMatrix{S}) where {T,S,R}
@@ -1002,31 +1066,8 @@ function generic_mattridiv!(C::AbstractGPUMatrix{R}, uploc, isunitc, tfun::Funct
         throw(DimensionMismatch(lazy"result C has dimensions $(size(C)), needs $(size(A))"))
     end
     isempty(A) && return C
-
     upper = tfun === identity ? uploc == 'U' : uploc != 'U'
-    unit  = isunitc == 'U'
-
-    # C = A / tfun(B); safe for C === A, as A[i,j] is read before C[i,j] is written
-    @kernel function mattridiv(C, A, B, tf)
-        i = @index(Global, Linear)
-        m, n = size(C, 1), size(C, 2)
-
-        @inbounds if i <= m
-            for jj in 1:n
-                j = upper ? jj : n - jj + 1
-                Cij = convert(promote_type(R, T), A[i,j])
-                for k in (upper ? 1 : (j + 1)):(upper ? (j - 1) : n)
-                    Bkj = tf === identity ? B[k,j] : tf(B[j,k])
-                    Cij -= C[i,k] * Bkj
-                end
-                C[i,j] = unit ? Cij : Cij / tf(B[j,j])
-            end
-        end
-    end
-
-    mattridiv(get_backend(C))(C, A, B, tfun; ndrange = size(C, 1))
-
-    C
+    trsm!(C, B, A, tfun, upper, isunitc == 'U', false)
 end
 
 function LinearAlgebra.generic_trimatmul!(C::AbstractGPUVecOrMat, uploc, isunitc, tfun::Function, A::AbstractGPUMatrix, B::AbstractGPUVecOrMat)

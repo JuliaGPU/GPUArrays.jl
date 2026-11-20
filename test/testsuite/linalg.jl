@@ -244,16 +244,16 @@
         end
 
         @testset "ldiv!/rdiv! + Triangular" begin
-            @testset "trimatdiv ($TR \\ $T, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
+            # n = 150 spans several diagonal blocks of the blocked solver, with a partial last one
+            @testset "trimatdiv ($TR \\ $T, $f, n=$n)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint), n in (32, 150)
                 if !(T in eltypes)
                     continue
                 end
-                n = 32
                 # strictly diagonally dominant, so the solve is well-conditioned
                 # (also keeps the unit-diagonal wrappers well-conditioned)
                 A = rand(T, n, n) / n + I
                 b = rand(T, n)
-                B = rand(T, n, 4)
+                B = rand(T, n, 5)
                 Ad, bd, Bd = AT(A), AT(b), AT(B)
 
                 @test collect(f(TR(Ad)) \ bd) ≈ f(TR(A)) \ b
@@ -267,15 +267,28 @@
                 Cd = ldiv!(f(TR(Ad)), copy(Bd))
                 C = ldiv!(f(TR(A)), copy(B))
                 @test collect(Cd) ≈ C
+
+                # mixed element types, which vendor libraries leave to the generic solver
+                if T <: Complex && real(T) in eltypes
+                    Ar = real(A)
+                    @test collect(f(TR(AT(Ar))) \ Bd) ≈ f(TR(Ar)) \ B
+                end
+
+                # a narrower destination only rounds the solution, not the right-hand side
+                # (LinearAlgebra's upper-triangular solve doesn't, so skip the CPU reference)
+                if AT <: GPUArrays.AbstractGPUArray && T == Float32 && Int in eltypes &&
+                   TR in (UpperTriangular, LowerTriangular)
+                    bh = T.(1:n) ./ 2
+                    @test collect(ldiv!(AT(zeros(Int, n)), f(TR(AT(Matrix{T}(I/2, n, n)))), AT(bh))) == 1:n
+                end
             end
 
-            @testset "mattridiv ($T / $TR, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
+            @testset "mattridiv ($T / $TR, $f, n=$n)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint), n in (32, 150)
                 if !(T in eltypes)
                     continue
                 end
-                n = 32
                 A = rand(T, n, n) / n + I
-                B = rand(T, 4, n)
+                B = rand(T, 5, n)
                 Ad, Bd = AT(A), AT(B)
 
                 @test collect(Bd / f(TR(Ad))) ≈ B / f(TR(A))
