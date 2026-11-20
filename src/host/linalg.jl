@@ -524,7 +524,7 @@ function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
     m′, n′ = size(B, 1), size(B, 2)
     m == d || throw(DimensionMismatch("right hand side has $m rows but D is $d by $d"))
     (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
-    if B isa AbstractGPUMatrix && A isa AbstractGPUMatrix && allequal(map(eltype, (A, B, dd))) &&
+    if B isa AbstractGPUMatrix && A isa AbstractGPUMatrix && Base.allequal(map(eltype, (A, B, dd))) &&
        !isempty(B) && !Base.mightalias(B, dd) && (B === A || !Base.mightalias(B, A))
         return blas_dgmm!('L', A, dd, B)
     end
@@ -557,7 +557,7 @@ function LinearAlgebra.mul!(B::AbstractGPUVecOrMat,
     m′, n′ = size(B, 1), size(B, 2)
     n == d || throw(DimensionMismatch("left hand side has $n columns but D is $d by $d"))
     (m, n) == (m′, n′) || throw(DimensionMismatch("expect output to be $m by $n, but got $m′ by $n′"))
-    if B isa AbstractGPUMatrix && A isa AbstractGPUMatrix && allequal(map(eltype, (A, B, dd))) &&
+    if B isa AbstractGPUMatrix && A isa AbstractGPUMatrix && Base.allequal(map(eltype, (A, B, dd))) &&
        !isempty(B) && !Base.mightalias(B, dd) && (B === A || !Base.mightalias(B, A))
         return blas_dgmm!('R', A, dd, B)
     end
@@ -1098,7 +1098,7 @@ const AnyGPUOperand = Union{AnyStridedGPUVecOrMat, AdjOrTrans{<:Any,<:AnyStrided
 # BLAS needs `B` as a matrix that it updates in place (or, for products, writes to `C`), so a
 # wrapped `B` is copied into `C` first. Sizes are checked by the generic kernels instead.
 tri_blas_operands(C, A, B) =
-    allequal(map(eltype, (C, A, B))) && size(C) == size(B) && !isempty(C) &&
+    Base.allequal(map(eltype, (C, A, B))) && size(C) == size(B) && !isempty(C) &&
     blas_layout(A) && blas_layout(C) && !Base.mightalias(C, A)
 
 # whether `B` can be passed as is, rather than copied into `C`
