@@ -27,13 +27,44 @@ end
         @inbounds X[j, i]
     elseif TX === 'S' || TX === 's'
         symherm(X, i, j, Val(TX === 'S'), Val(false))
-    else # 'H' / 'h'
+    elseif TX isa Char # 'H' / 'h'
         symherm(X, i, j, Val(TX === 'H'), Val(true))
+    else
+        triangular(X, i, j, Val(TX))
     end
 end
 
 # accumulate in the type that a sum of products of the inputs promotes to, widened to C's
 matmul_acctype(R, TA, TB) = promote_type(R, typeof(zero(TA) * zero(TB) + zero(TA) * zero(TB)))
+
+# op(X)[i, j] of a triangular X, for a `(trans, uplo, diag)` tuple describing the stored X
+@inline function triangular(X, i, j, ::Val{TX}) where {TX}
+    trans, uplo, diag = TX
+    si, sj = trans === 'N' ? (i, j) : (j, i)
+    if diag === 'U' && si == sj
+        oneunit(eltype(X))
+    elseif uplo === 'U' ? si <= sj : si >= sj
+        val = @inbounds X[si, sj]
+        trans === 'N' ? val : trans === 'T' ? transpose(val) : adjoint(val)
+    else
+        zero(eltype(X))
+    end
+end
+
+# whether op(X) is upper triangular
+op_upper(TX) = (TX[2] === 'U') == (TX[1] === 'N')
+
+# the tiles along the inner dimension that a triangular operand doesn't zero out
+@inline function tile_range(::Val{TA}, ::Val{TB}, grow, gcol, NUM_TILES) where {TA, TB}
+    lo, hi = 0, NUM_TILES - 1
+    if TA isa Tuple
+        op_upper(TA) ? (lo = max(lo, grow - 1)) : (hi = min(hi, grow - 1))
+    end
+    if TB isa Tuple
+        op_upper(TB) ? (hi = min(hi, gcol - 1)) : (lo = max(lo, gcol - 1))
+    end
+    lo:hi
+end
 
 const TILE_DIM = 16
 function coalesced_matmul_kernel!(
@@ -62,7 +93,7 @@ function coalesced_matmul_kernel!(
     NUM_TILES = cld(K, TILE)
 
     # loop over all tiles needed for this calculation
-    for t in 0:(NUM_TILES - 1)
+    for t in tile_range(Val(TA), Val(TB), grow, gcol, NUM_TILES)
         # load inputs into tiles, with bounds checking for non-square matrices
         k0 = t * TILE
         ac = k0 + lj
@@ -177,7 +208,11 @@ end
 # only add tail effects
 blocked_eltype(T) = isbitstype(T) && 0 < sizeof(T <: Complex ? real(T) : T) <= 4
 
+op_char(op::Char) = op
+op_char(op::Tuple) = first(op)
+
 @inline function check_matmul_shapes(C, A, B, cA='N', cB='N')
+    cA, cB = op_char(cA), op_char(cB)
     tA = cA === 'T' || cA === 'C'
     tB = cB === 'T' || cB === 'C'
     M = tA ? size(A, 2) : size(A, 1)
@@ -203,26 +238,40 @@ generic_matmatmul!(C::AbstractArray, A::AbstractArray, B::AbstractArray, add::Mu
 # New method
 function generic_matmatmul!(C::AbstractArray{R}, cA::AbstractChar, cB::AbstractChar, A::AbstractArray{T}, B::AbstractArray{S}, add::MulAddMul) where {T, S, R}
     # Char(::WrapperChar) encodes the uplo flag as upper/lowercase ('S'/'s', 'H'/'h')
-    cA, cB = Char(cA), Char(cB)
-    M, N, K = check_matmul_shapes(C, A, B, cA, cB)
+    tiled_matmatmul!(C, Char(cA), Char(cB), A, B, add)
+end
+
+@static if isdefined(LinearAlgebra, Symbol("@stable_muladdmul")) # added in 1.12
+    tiled_matmatmul!(C, opA, opB, A, B, α::Number, β::Number) =
+        LinearAlgebra.@stable_muladdmul tiled_matmatmul!(C, opA, opB, A, B, MulAddMul(α, β))
+else
+    tiled_matmatmul!(C, opA, opB, A, B, α::Number, β::Number) =
+        tiled_matmatmul!(C, opA, opB, A, B, MulAddMul(α, β))
+end
+
+# `opA` and `opB` are characters as above, or `(trans, uplo, diag)` for triangular operands
+function tiled_matmatmul!(C::AbstractArray, opA, opB, A::AbstractArray, B::AbstractArray, add::MulAddMul)
+    M, N, K = check_matmul_shapes(C, A, B, opA, opB)
 
     # an empty inner dimension still needs to apply β; the kernel handles that (no tiles)
     isempty(C) && return C
-    N == 1 && return generic_matvec!(C, cA, cB, A, B, add, M, K)
+    N == 1 && opA isa Char && opB isa Char && return generic_matvec!(C, opA, opB, A, B, add, M, K)
 
     backend = KI.get_backend(C)
     # the blocked kernel needs enough workgroups to fill the device, and an output that is not
-    # so thin that most of each 64-wide tile is padding (it loses up to a dimension of 32)
-    if M * N >= 2^19 && min(M, N) > 32 && blocked_eltype(T) && blocked_eltype(S) && blocked_eltype(R)
+    # so thin that most of each 64-wide tile is padding (it loses up to a dimension of 32).
+    # triangular operands use the coalesced kernel, which skips their zero tiles
+    if opA isa Char && opB isa Char && M * N >= 2^19 && min(M, N) > 32 &&
+            blocked_eltype(eltype(A)) && blocked_eltype(eltype(B)) && blocked_eltype(eltype(C))
         TX = TY = 16
         TM = TN = 4
         BK = 8
         KI.@launch backend workgroupsize=(TX, TY) numgroups=(cld(M, TX * TM), cld(N, TY * TN)) blocked_matmul_kernel!(
-                C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB),
+                C, A, B, add, Int(M), Int(N), Int(K), Val(opA), Val(opB),
                 Val(TX), Val(TY), Val(TM), Val(TN), Val(BK))
     else
         KI.@launch backend workgroupsize=(TILE_DIM, TILE_DIM) numgroups=(cld(M, TILE_DIM), cld(N, TILE_DIM)) coalesced_matmul_kernel!(
-                C, A, B, add, Int(M), Int(N), Int(K), Val(cA), Val(cB), Val(TILE_DIM))
+                C, A, B, add, Int(M), Int(N), Int(K), Val(opA), Val(opB), Val(TILE_DIM))
     end
     C
 end

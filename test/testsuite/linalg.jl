@@ -193,6 +193,11 @@
                 mul!(Ct, f(TR(A)), B)
                 mul!(C, f(TR(collect(A))), collect(B))
                 @test collect(Ct) ≈ C
+
+                # 2-arg form overwrites the right hand side (also used by *)
+                @test collect(lmul!(f(TR(A)), copy(b))) ≈ lmul!(f(TR(collect(A))), collect(b))
+                @test collect(lmul!(f(TR(A)), copy(B))) ≈ lmul!(f(TR(collect(A))), collect(B))
+                @test collect(f(TR(A)) * B) ≈ f(TR(collect(A))) * collect(B)
             end
 
             @testset "mattrimul ($TR x $T, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
@@ -207,6 +212,10 @@
                 mul!(Ct, A, f(TR(B)))
                 mul!(C, collect(A), f(TR(collect(B))))
                 @test collect(Ct) ≈ C
+
+                # 2-arg form overwrites the left hand side (also used by *)
+                @test collect(rmul!(copy(A), f(TR(B)))) ≈ rmul!(collect(A), f(TR(collect(B))))
+                @test collect(A * f(TR(B))) ≈ collect(A) * f(TR(collect(B)))
             end
             @testset "matmul! with nonzero β ($TR1 x $TR2)" for T in (Float32, ComplexF32), TR1 in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), TR2 in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
                 if !(T in eltypes)
@@ -240,6 +249,24 @@
                 mul!(Ct, TR1(A), TR2(B), 2, 0)
                 mul!(C, TR1(collect(A)), TR2(collect(B)), 2, 0)
                 @test collect(Ct) ≈ C
+            end
+            @testset "partial tiles, unread entries ($TR, $f)" for T in (Float32, ComplexF32), TR in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), f in (identity, transpose, adjoint)
+                if !(T in eltypes)
+                    continue
+                end
+                # sizes that aren't a multiple of the kernel's tile size
+                n, m = 40, 23
+                # NaN wherever the wrapper must not read: the other triangle, and a unit diagonal
+                upper = TR <: Union{UpperTriangular, UnitUpperTriangular}
+                unit = TR <: Union{UnitUpperTriangular, UnitLowerTriangular}
+                A = [(upper ? i <= j : i >= j) && !(unit && i == j) ? rand(T) : T(NaN) for i in 1:n, j in 1:n]
+                B = rand(T, n, m)
+                D = rand(T, m, n)
+                C = rand(T, n, n)
+                Ad = AT(A)
+                @test collect(f(TR(Ad)) * AT(B)) ≈ f(TR(A)) * B
+                @test collect(AT(D) * f(TR(Ad))) ≈ D * f(TR(A))
+                @test collect(mul!(AT(C), f(TR(Ad)), f(TR(Ad)), 2, 3)) ≈ mul!(copy(C), f(TR(A)), f(TR(A)), 2, 3)
             end
         end
 
