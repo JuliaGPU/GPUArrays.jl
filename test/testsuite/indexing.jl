@@ -50,7 +50,7 @@
 
     @allowscalar @testset "issue #42" begin
         @testset "$T" for T in eltypes
-            Ac = rand(Float32, 2, 2)
+            Ac = rand(T, 2, 2)
             A = AT(Ac)
             @test A[1] == Ac[1]
             @test A[end] == Ac[end]
