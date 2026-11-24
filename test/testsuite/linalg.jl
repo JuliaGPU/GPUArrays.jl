@@ -51,6 +51,11 @@
             y = permutedims(x, pm)
             Array(GPUArrays._permutedims!(UInt64, AT(zero(y)), AT(x), pm)) ≈ y
         end
+        # the identity permutation
+        @test compare(x -> permutedims(x, [1, 2]), AT, rand(Float32, 4, 4))
+        # a wrapped source: a view through an array of indices
+        inds = rand(1:100, 150, 150)
+        @test compare(x -> permutedims(view(x, inds, :), (3, 2, 1)), AT, rand(Float32, 100, 100))
     end
 
 
