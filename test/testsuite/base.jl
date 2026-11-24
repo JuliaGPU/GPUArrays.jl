@@ -623,8 +623,9 @@ end
       @testset "CPU array source" begin
           a = rand(Float32, 3)
           i = rand(1:3, 2)
-          @test compare(view, AT, a, i)
-          @test compare(view, AT, a, view(i, 2:2))
+          # (a `Ref` keeps the indices on the host)
+          @test compare(view, AT, a, Ref(i))
+          @test compare(view, AT, a, Ref(view(i, 2:2)))
       end
 
       # mixed AbstractUnitRange indices: contiguity must be determined at
