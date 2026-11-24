@@ -180,7 +180,7 @@ end
         b = view(a, 2:3, 2:3)
         c = AT{eltype(b)}(undef, size(b))
         copyto!(c, b)
-        Array(c) == Array(b)
+        @test Array(c) == Array(b)
 
         # wrapped gpu array to cpu array
         z = Array{eltype(b)}(undef, size(b))
@@ -382,7 +382,7 @@ end
         A = AT(Ac)
         result = fill!(copy(A), 0.0f0)
         cartesian_iter(get_backend(A))(result, A; ndrange = size(A))
-        Array(result) == Ac
+        @test Array(result) == Ac
     end
 
     AT <: AbstractGPUArray && @testset "Custom kernel from Julia function" begin
@@ -591,7 +591,7 @@ end
       @testset "selectdim" begin
         @test compare(x -> selectdim(x, 3, 1), AT, rand(Float32, 2, 2, 2))
         let x = AT(rand(Float32, 5, 4, 3))
-          @test typeof(selectdim(x, 3, 1)) == typeof(view(x, :, :, 1))         
+          @test typeof(selectdim(x, 3, 1)) == typeof(view(x, :, :, 1))
           @test typeof(selectdim(x, 2, 1)) == typeof(view(x, :, 1, :))
         end
       end

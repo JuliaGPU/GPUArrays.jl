@@ -59,7 +59,8 @@
             A    = rand(Float32,2,2)
             A    = A*A'+I #posdef
             d_A  = AT(A)
-            similar(Hermitian(d_A, :L), Float32)
+            # (LinearAlgebra's method used to zero the diagonal with scalar indexing)
+            @test similar(Hermitian(d_A, :L), Float32) isa Hermitian{Float32, <:AT}
         end
 
         @testset "issymmetric/ishermitian" begin
