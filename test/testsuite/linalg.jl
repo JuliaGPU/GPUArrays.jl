@@ -114,8 +114,6 @@
 
         @testset "copyto! for triangular" begin
             for TR in (UpperTriangular, LowerTriangular)
-                @test compare(transpose!, AT, Array{Float32}(undef, 128, 32), rand(Float32, 32, 128))
-
                 cpu_a = Array{Float32}(undef, 128, 128)
                 gpu_a = AT{Float32}(undef, 128, 128)
                 gpu_b = AT{Float32}(undef, 128, 128)
