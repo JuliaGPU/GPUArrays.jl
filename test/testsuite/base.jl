@@ -358,8 +358,12 @@ end
         af0 = reinterpret(Float32, a)
         Af0 = reinterpret(Float32, A)
         @test Array(Af0) == af0
+
         a = rand(ComplexF32, 4, 4)
         A = AT(a)
+        af0 = reinterpret(Float32, a)
+        Af0 = reinterpret(Float32, A)
+        @test Array(Af0) == af0
 
         a = rand(ComplexF32, 10 * 10)
         A = AT(a)
