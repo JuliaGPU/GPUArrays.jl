@@ -50,7 +50,7 @@
 
     @allowscalar @testset "issue #42" begin
         @testset "$T" for T in eltypes
-            Ac = rand(Float32, 2, 2)
+            Ac = rand(T, 2, 2)
             A = AT(Ac)
             @test A[1] == Ac[1]
             @test A[end] == Ac[end]
@@ -223,168 +223,89 @@ end
 end
 
 @testsuite "indexing find" (AT, eltypes)->begin
-    @testset "findfirst" begin
+    @testset "$f" for f in (findfirst, findlast)
         # 1D
-        @test compare(findfirst, AT, rand(Bool, 100))
-        @test compare(x->findfirst(>(0.5f0), x), AT, rand(Float32, 100))
+        @test compare(f, AT, rand(Bool, 100))
+        @test compare(x->f(>(0.5f0), x), AT, rand(Float32, 100))
         # predicates with fields, which the kernel's closure captures
         let c = 0.5f0
-            @test compare(x->findfirst(y -> y > c, x), AT, rand(Float32, 100))
+            @test compare(x->f(y -> y > c, x), AT, rand(Float32, 100))
         end
-        @test compare(x->findfirst(!isnan, x), AT, Float32[NaN, NaN, 1, NaN])
-        @test compare(x->findfirst(Base.Fix2(>, 0.5f0) ∘ abs, x), AT, rand(Float32, 100))
-        @test compare(findfirst, AT, fill(false, 10))
+        @test compare(x->f(!isnan, x), AT, Float32[NaN, NaN, 1, NaN])
+        @test compare(x->f(Base.Fix2(>, 0.5f0) ∘ abs, x), AT, rand(Float32, 100))
         let x = fill(false, 10)
-            @test findfirst(x) == findfirst(AT(x))
+            @test f(x) == f(AT(x))
         end
 
         # ND
         let x = rand(Bool, 10, 10)
-            @test findfirst(x) == findfirst(AT(x))
+            @test f(x) == f(AT(x))
         end
         let x = rand(Float32, 10, 10)
-            @test findfirst(>(0.5f0), x) == findfirst(>(0.5f0), AT(x))
+            @test f(>(0.5f0), x) == f(>(0.5f0), AT(x))
         end
         # Cartesian indices, of a view that cannot be indexed linearly
         let x = rand(Float32, 10, 10)
-            @test findfirst(>(0.5f0), view(x, 1:2:9, :)) == findfirst(>(0.5f0), view(AT(x), 1:2:9, :))
-            @test findfirst(>(2f0), view(x, 1:2:9, :)) === findfirst(>(2f0), view(AT(x), 1:2:9, :))
+            @test f(>(0.5f0), view(x, 1:2:9, :)) == f(>(0.5f0), view(AT(x), 1:2:9, :))
+            @test f(>(2f0), view(x, 1:2:9, :)) === f(>(2f0), view(AT(x), 1:2:9, :))
         end
         # zero-dimensional, also indexed by Cartesian indices
         let x = fill(1f0)
-            @test findfirst(>(0.5f0), x) === findfirst(>(0.5f0), AT(x))
-            @test findfirst(>(2f0), x) === findfirst(>(2f0), AT(x))
-            @test findfirst(>(0.5f0), PermutedDimsArray(x, ())) ===
-                  findfirst(>(0.5f0), PermutedDimsArray(AT(x), ()))
+            @test f(>(0.5f0), x) === f(>(0.5f0), AT(x))
+            @test f(>(2f0), x) === f(>(2f0), AT(x))
+            @test f(>(0.5f0), PermutedDimsArray(x, ())) ===
+                  f(>(0.5f0), PermutedDimsArray(AT(x), ()))
         end
 
         # empty
-        @test compare(findfirst, AT, Bool[])
-        @test compare(x->findfirst(>(0.5f0), x), AT, Float32[])
-    end
-    @testset "findlast" begin
-        # 1D
-        @test compare(findlast, AT, rand(Bool, 100))
-        @test compare(x->findlast(>(0.5f0), x), AT, rand(Float32, 100))
-        # predicates with fields, which the kernel's closure captures
-        let c = 0.5f0
-            @test compare(x->findlast(y -> y > c, x), AT, rand(Float32, 100))
-        end
-        @test compare(x->findlast(!isnan, x), AT, Float32[NaN, NaN, 1, NaN])
-        @test compare(x->findlast(Base.Fix2(>, 0.5f0) ∘ abs, x), AT, rand(Float32, 100))
-        let x = fill(false, 10)
-            @test findlast(x) == findlast(AT(x))
-        end
-
-        # ND
-        let x = rand(Bool, 10, 10)
-            @test findlast(x) == findlast(AT(x))
-        end
-        let x = rand(Float32, 10, 10)
-            @test findlast(>(0.5f0), x) == findlast(>(0.5f0), AT(x))
-        end
-        # Cartesian indices, of a view that cannot be indexed linearly
-        let x = rand(Float32, 10, 10)
-            @test findlast(>(0.5f0), view(x, 1:2:9, :)) == findlast(>(0.5f0), view(AT(x), 1:2:9, :))
-            @test findlast(>(2f0), view(x, 1:2:9, :)) === findlast(>(2f0), view(AT(x), 1:2:9, :))
-        end
-        # zero-dimensional, also indexed by Cartesian indices
-        let x = fill(1f0)
-            @test findlast(>(0.5f0), x) === findlast(>(0.5f0), AT(x))
-            @test findlast(>(2f0), x) === findlast(>(2f0), AT(x))
-            @test findlast(>(0.5f0), PermutedDimsArray(x, ())) ===
-                  findlast(>(0.5f0), PermutedDimsArray(AT(x), ()))
-        end
-
-        # empty
-        @test compare(findlast, AT, Bool[])
-        @test compare(x->findlast(>(0.5f0), x), AT, Float32[])
+        @test compare(f, AT, Bool[])
+        @test compare(x->f(>(0.5f0), x), AT, Float32[])
     end
 
-    @testset "findmax & findmin" begin
+    @testset "$f" for f in (findmax, findmin)
         let x = rand(Float32, 100)
-            @test findmax(x) == findmax(AT(x))
-            @test findmax(x; dims=1) == Array.(findmax(AT(x); dims=1))
+            @test f(x) == f(AT(x))
+            @test f(x; dims=1) == Array.(f(AT(x); dims=1))
 
             x[32] = x[33] = x[55] = x[66] = NaN32
-            @test isequal(findmax(x), findmax(AT(x)))
-            @test isequal(findmax(x; dims=1), Array.(findmax(AT(x); dims=1)))
+            @test isequal(f(x), f(AT(x)))
+            @test isequal(f(x; dims=1), Array.(f(AT(x); dims=1)))
         end
         let x = randn(Float32, 100)
-            @test findmax(abs, x) == findmax(abs, AT(x))
-            @test findmax(abs, x; dims=1) == Array.(findmax(abs, AT(x); dims=1))
+            @test f(abs, x) == f(abs, AT(x))
+            @test f(abs, x; dims=1) == Array.(f(abs, AT(x); dims=1))
 
             x[32] = x[33] = x[55] = x[66] = NaN32
-            @test isequal(findmax(abs, x), findmax(abs, AT(x)))
-            @test isequal(findmax(abs, x; dims=1), Array.(findmax(abs, AT(x); dims=1)))
+            @test isequal(f(abs, x), f(abs, AT(x)))
+            @test isequal(f(abs, x; dims=1), Array.(f(abs, AT(x); dims=1)))
         end
         let x = rand(Float32, 10, 10)
-            @test findmax(x) == findmax(AT(x))
-            @test findmax(x; dims=1) == Array.(findmax(AT(x); dims=1))
-            @test findmax(x; dims=2) == Array.(findmax(AT(x); dims=2))
+            @test f(x) == f(AT(x))
+            @test f(x; dims=1) == Array.(f(AT(x); dims=1))
+            @test f(x; dims=2) == Array.(f(AT(x); dims=2))
 
             x[rand(CartesianIndices((10, 10)), 10)] .= NaN
-            @test isequal(findmax(x), findmax(AT(x)))
-            @test isequal(findmax(x; dims=1), Array.(findmax(AT(x); dims=1)))
+            @test isequal(f(x), f(AT(x)))
+            @test isequal(f(x; dims=1), Array.(f(AT(x); dims=1)))
+            @test isequal(f(x; dims=2), Array.(f(AT(x); dims=2)))
+            @test isequal(f(x; dims=3), Array.(f(AT(x); dims=3)))
         end
         let x = rand(Float32, 10, 10, 10)
-            @test findmax(x) == findmax(AT(x))
-            @test findmax(x; dims=1) == Array.(findmax(AT(x); dims=1))
-            @test findmax(x; dims=2) == Array.(findmax(AT(x); dims=2))
-            @test findmax(x; dims=3) == Array.(findmax(AT(x); dims=3))
+            @test f(x) == f(AT(x))
+            @test f(x; dims=1) == Array.(f(AT(x); dims=1))
+            @test f(x; dims=2) == Array.(f(AT(x); dims=2))
+            @test f(x; dims=3) == Array.(f(AT(x); dims=3))
 
             x[rand(CartesianIndices((10, 10, 10)), 20)] .= NaN
-            @test isequal(findmax(x), findmax(AT(x)))
-            @test isequal(findmax(x; dims=1), Array.(findmax(AT(x); dims=1)))
-            @test isequal(findmax(x; dims=2), Array.(findmax(AT(x); dims=2)))
-            @test isequal(findmax(x; dims=3), Array.(findmax(AT(x); dims=3)))
-        end
-
-        let x = rand(Float32, 100)
-            @test findmin(x) == findmin(AT(x))
-            @test findmin(x; dims=1) == Array.(findmin(AT(x); dims=1))
-
-            x[32] = x[33] = x[55] = x[66] = NaN32
-            @test isequal(findmin(x), findmin(AT(x)))
-            @test isequal(findmin(x; dims=1), Array.(findmin(AT(x); dims=1)))
-        end
-        let x = randn(Float32, 100)
-            @test findmin(abs, x) == findmin(abs, AT(x))
-            @test findmin(abs, x; dims=1) == Array.(findmin(abs, AT(x); dims=1))
-
-            x[32] = x[33] = x[55] = x[66] = NaN32
-            @test isequal(findmin(abs, x), findmin(abs, AT(x)))
-            @test isequal(findmin(abs, x; dims=1), Array.(findmin(abs, AT(x); dims=1)))
-        end
-        let x = rand(Float32, 10, 10)
-            @test findmin(x) == findmin(AT(x))
-            @test findmin(x; dims=1) == Array.(findmin(AT(x); dims=1))
-            @test findmin(x; dims=2) == Array.(findmin(AT(x); dims=2))
-
-            x[rand(CartesianIndices((10, 10)), 10)] .= NaN
-            @test isequal(findmin(x), findmin(AT(x)))
-            @test isequal(findmin(x; dims=1), Array.(findmin(AT(x); dims=1)))
-            @test isequal(findmin(x; dims=2), Array.(findmin(AT(x); dims=2)))
-            @test isequal(findmin(x; dims=3), Array.(findmin(AT(x); dims=3)))
-        end
-        let x = rand(Float32, 10, 10, 10)
-            @test findmin(x) == findmin(AT(x))
-            @test findmin(x; dims=1) == Array.(findmin(AT(x); dims=1))
-            @test findmin(x; dims=2) == Array.(findmin(AT(x); dims=2))
-            @test findmin(x; dims=3) == Array.(findmin(AT(x); dims=3))
-
-            x[rand(CartesianIndices((10, 10, 10)), 20)] .= NaN
-            @test isequal(findmin(x), findmin(AT(x)))
-            @test isequal(findmin(x; dims=1), Array.(findmin(AT(x); dims=1)))
-            @test isequal(findmin(x; dims=2), Array.(findmin(AT(x); dims=2)))
-            @test isequal(findmin(x; dims=3), Array.(findmin(AT(x); dims=3)))
+            @test isequal(f(x), f(AT(x)))
+            @test isequal(f(x; dims=1), Array.(f(AT(x); dims=1)))
+            @test isequal(f(x; dims=2), Array.(f(AT(x); dims=2)))
+            @test isequal(f(x; dims=3), Array.(f(AT(x); dims=3)))
         end
         # test with Complex elements as long as f outputs a real
         let x = rand(ComplexF32, 100)
-            @test findmax(real, x) == findmax(real, AT(x))
-            @test findmax(real, x; dims=1) == Array.(findmax(real, AT(x); dims=1))
-            @test findmin(real, x) == findmin(real, AT(x))
-            @test findmin(real, x; dims=1) == Array.(findmin(real, AT(x); dims=1))
+            @test f(real, x) == f(real, AT(x))
+            @test f(real, x; dims=1) == Array.(f(real, AT(x); dims=1))
         end
     end
 

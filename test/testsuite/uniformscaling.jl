@@ -11,10 +11,9 @@
 
         J = one(T2) * I
 
-        # TODO: remove @allowscalar as soon as there is a proper implementation for Symmetric / Hermitian
-        @test @allowscalar collect(xw + J) ≈ collect(yw + J)
+        @test collect(xw + J) ≈ collect(yw + J)
 
         # Missing methods in Base it seems... -(x - I) can be removed when Base supports (I - x)
-        @test @allowscalar collect(-(xw - J)) ≈ collect(J - yw)
+        @test collect(-(xw - J)) ≈ collect(J - yw)
     end
 end

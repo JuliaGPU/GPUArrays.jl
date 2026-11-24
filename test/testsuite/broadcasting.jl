@@ -226,7 +226,7 @@ function vec3(AT, eltypes)
 
         res2 .= testv3_2.(x, y)
         res2c .= testv3_2.(xc, yc)
-        @test all(map((a,b)-> all((1,2,3) .≈ (1,2,3)), Array(res2), res2c))
+        @test all(map((a, b)-> all(a .≈ b), Array(res2), res2c))
     end
 end
 

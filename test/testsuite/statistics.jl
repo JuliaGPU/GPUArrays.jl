@@ -11,14 +11,14 @@ using Statistics
         @testset "std" begin
             @test compare(std, AT, rand(range, 10))
             @test compare(std, AT, rand(range, 10, 1, 2))
-            @test compare(A -> std(A; corrected = true), AT, rand(range, 10, 1, 2))
+            @test compare(A -> std(A; corrected = false), AT, rand(range, 10, 1, 2))
             @test compare(A -> std(A; dims = 1), AT, rand(range, 10, 1, 2))
         end
 
         @testset "var" begin
             @test compare(var, AT, rand(range, 10))
             @test compare(var, AT, rand(range, 10, 1, 2))
-            @test compare(A -> var(A; corrected = true), AT, rand(range, 10, 1, 2))
+            @test compare(A -> var(A; corrected = false), AT, rand(range, 10, 1, 2))
             @test compare(A -> var(A; dims = 1), AT, rand(range, 10, 1, 2))
             @test compare(A -> var(A; dims = [1]), AT, rand(range, 10, 1, 2))
             @test compare(A -> var(A; dims = (1,)), AT, rand(range, 10, 1, 2))

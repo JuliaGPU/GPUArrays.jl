@@ -180,7 +180,7 @@ end
         b = view(a, 2:3, 2:3)
         c = AT{eltype(b)}(undef, size(b))
         copyto!(c, b)
-        Array(c) == Array(b)
+        @test Array(c) == Array(b)
 
         # wrapped gpu array to cpu array
         z = Array{eltype(b)}(undef, size(b))
@@ -348,24 +348,9 @@ end
         @test compare(reshape, AT, rand(Float32, 10), Ref((10,)))
         @test compare(reshape, AT, rand(Float32, 10), Ref((10,1)))
         @test compare(reshape, AT, rand(Float32, 10), Ref((1,10)))
+        @test compare(reshape, AT, [1 2 3 4; 5 6 7 8], Ref((1,8)))
 
         @test_throws Exception reshape(AT(rand(Float32, 10)), (10,2))
-    end
-
-    @testset "reinterpret" begin
-        a = rand(ComplexF32, 22)
-        A = AT(a)
-        af0 = reinterpret(Float32, a)
-        Af0 = reinterpret(Float32, A)
-        @test Array(Af0) == af0
-        a = rand(ComplexF32, 4, 4)
-        A = AT(a)
-
-        a = rand(ComplexF32, 10 * 10)
-        A = AT(a)
-        af0 = reshape(reinterpret(Float32, vec(a)), (20, 10))
-        Af0 = reshape(reinterpret(Float32, vec(A)), (20, 10))
-        @test Array(Af0) == af0
     end
 
     AT <: AbstractGPUArray && @testset "ntuple test" begin
@@ -382,7 +367,7 @@ end
         A = AT(Ac)
         result = fill!(copy(A), 0.0f0)
         cartesian_iter(get_backend(A))(result, A; ndrange = size(A))
-        Array(result) == Ac
+        @test Array(result) == Ac
     end
 
     AT <: AbstractGPUArray && @testset "Custom kernel from Julia function" begin
@@ -445,13 +430,6 @@ end
         @test compare(a -> repeat(a, inner=(3, 1, 2)), AT, xmat)
         @test compare(a -> repeat(a, outer=(2, 1, 3)), AT, xmat)
         @test compare(a -> repeat(a, inner=(2, 1, 3), outer=(2, 2, 3)), AT, xmat)
-    end
-
-    @testset "permutedims" begin
-        @test compare(x->permutedims(x, [1, 2]), AT, rand(Float32, 4, 4))
-
-        inds = rand(1:100, 150, 150)
-        @test compare(x->permutedims(view(x, inds, :), (3, 2, 1)), AT, rand(Float32, 100, 100))
     end
 
     @testset "circshift" begin
@@ -591,7 +569,7 @@ end
       @testset "selectdim" begin
         @test compare(x -> selectdim(x, 3, 1), AT, rand(Float32, 2, 2, 2))
         let x = AT(rand(Float32, 5, 4, 3))
-          @test typeof(selectdim(x, 3, 1)) == typeof(view(x, :, :, 1))         
+          @test typeof(selectdim(x, 3, 1)) == typeof(view(x, :, :, 1))
           @test typeof(selectdim(x, 2, 1)) == typeof(view(x, :, 1, :))
         end
       end
@@ -623,8 +601,9 @@ end
       @testset "CPU array source" begin
           a = rand(Float32, 3)
           i = rand(1:3, 2)
-          @test compare(view, AT, a, i)
-          @test compare(view, AT, a, view(i, 2:2))
+          # (a `Ref` keeps the indices on the host)
+          @test compare(view, AT, a, Ref(i))
+          @test compare(view, AT, a, Ref(view(i, 2:2)))
       end
 
       # mixed AbstractUnitRange indices: contiguity must be determined at
@@ -676,22 +655,20 @@ end
       end
     end
 
-    @testset "reshape" begin
-      A = [1 2 3 4
-           5 6 7 8]
-      gA = reshape(AT(A),1,8)
-      _A = reshape(A,1,8)
-      _gA = Array(gA)
-      @test all(_A .== _gA)
-      A = [1,2,3,4]
-      gA = reshape(AT(A),4)
-    end
-
     @testset "reinterpret" begin
       A = Int32[-1,-2,-3]
       dA = AT(A)
       dB = reinterpret(UInt32, dA)
       @test reinterpret(UInt32, A) == Array(dB)
+
+      # to an element type of another size: a vector, a matrix, and reshaped afterwards
+      for a in (rand(ComplexF32, 22), rand(ComplexF32, 4, 4))
+        @test Array(reinterpret(Float32, AT(a))) == reinterpret(Float32, a)
+      end
+      let a = rand(ComplexF32, 100)
+        @test Array(reshape(reinterpret(Float32, AT(a)), (20, 10))) ==
+              reshape(reinterpret(Float32, a), (20, 10))
+      end
 
       @test collect(reinterpret(Int32, AT(fill(1f0))))[] == reinterpret(Int32, 1f0)
 

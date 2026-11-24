@@ -51,6 +51,11 @@
             y = permutedims(x, pm)
             Array(GPUArrays._permutedims!(UInt64, AT(zero(y)), AT(x), pm)) ≈ y
         end
+        # the identity permutation
+        @test compare(x -> permutedims(x, [1, 2]), AT, rand(Float32, 4, 4))
+        # a wrapped source: a view through an array of indices
+        inds = rand(1:100, 150, 150)
+        @test compare(x -> permutedims(view(x, inds, :), (3, 2, 1)), AT, rand(Float32, 100, 100))
     end
 
 
@@ -59,7 +64,8 @@
             A    = rand(Float32,2,2)
             A    = A*A'+I #posdef
             d_A  = AT(A)
-            similar(Hermitian(d_A, :L), Float32)
+            # (LinearAlgebra's method used to zero the diagonal with scalar indexing)
+            @test similar(Hermitian(d_A, :L), Float32) isa Hermitian{Float32, <:AT}
         end
 
         @testset "issymmetric/ishermitian" begin
@@ -114,8 +120,6 @@
 
         @testset "copyto! for triangular" begin
             for TR in (UpperTriangular, LowerTriangular)
-                @test compare(transpose!, AT, Array{Float32}(undef, 128, 32), rand(Float32, 32, 128))
-
                 cpu_a = Array{Float32}(undef, 128, 128)
                 gpu_a = AT{Float32}(undef, 128, 128)
                 gpu_b = AT{Float32}(undef, 128, 128)

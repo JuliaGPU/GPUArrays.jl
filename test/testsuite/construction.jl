@@ -172,12 +172,6 @@
             @test eltype(B) == T
             @test Array(B) ≈ Bc
 
-            intervals = Dict(
-                Float16 => -2^11:2^11,
-                Float32 => -2^24:2^24,
-                Float64 => -2^53:2^53,
-            )
-
             Bc = rand(Int8, 3, 3, 3)
             B = convert(AT{T, 3}, Bc)
             @test size(B) == (3, 3, 3)
