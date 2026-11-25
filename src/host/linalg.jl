@@ -77,7 +77,7 @@ function transpose_tiled_kernel!(f, B, A)
             @inbounds tile[li, lj + k] = A[i, j]
         end
     end
-    KI.barrier()
+    KI.barrier(KI.LOCAL_MEM_FENCE)
     for k in 0:ROWS:(TILE - 1)
         i, j = j0 + li, i0 + lj + k
         if i <= N && j <= M
@@ -1014,7 +1014,7 @@ function trsm_block_kernel!(X, A, tf, o, m, ::Val{left}, ::Val{fwd}, ::Val{unit}
             end
             @inbounds buf[q, b] = x
         end
-        KI.barrier()
+        KI.barrier(KI.LOCAL_MEM_FENCE)
         if inrange && (fwd ? p > k : p < k)
             xk = @inbounds buf[q, b]
             x = convert(Tx, left ? x - a * xk : x - xk * a)

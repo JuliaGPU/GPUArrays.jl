@@ -110,13 +110,13 @@ function coalesced_matmul_kernel!(
         end
 
         # wait for all tiles to be loaded
-        KI.barrier()
+        KI.barrier(KI.LOCAL_MEM_FENCE)
 
         @inbounds for k in 1:TILE
             acc = muladd(tile1[li, k], tile2[k, lj], acc)
         end
 
-        KI.barrier()
+        KI.barrier(KI.LOCAL_MEM_FENCE)
     end
 
     # save if inbounds
@@ -182,7 +182,7 @@ function blocked_matmul_kernel!(
                 gj <= N && gk <= K ? opelem(B, Val(TB), gk, gj) : zero(TBT)
         end
 
-        KI.barrier()
+        KI.barrier(KI.LOCAL_MEM_FENCE)
 
         for k in 1:BK
             a = ntuple(r -> @inbounds(tileA[li + (r - 1) * TX, k]), Val(TM))
@@ -190,7 +190,7 @@ function blocked_matmul_kernel!(
             acc = outer_muladd(a, b, acc)
         end
 
-        KI.barrier()
+        KI.barrier(KI.LOCAL_MEM_FENCE)
     end
 
     for c in 1:TN, r in 1:TM
@@ -311,7 +311,7 @@ function matvec_rows_kernel!(C, P, ::Type{Tacc}, A, x, add, M, K, kchunk, off, :
 
     scratch = KI.localmemory(Tacc, (TM, TK))
     @inbounds scratch[li, lk] = acc
-    KI.barrier()
+    KI.barrier(KI.LOCAL_MEM_FENCE)
     if lk == 1 && i <= M
         @inbounds for l in 2:TK
             acc += scratch[li, l]
@@ -353,7 +353,7 @@ function matvec_cols_kernel!(C, P, ::Type{Tacc}, A, x, add, M, K, kchunk, off, t
         @inbounds scratch[idx] = acc
         stride = tk ÷ 2
         while stride >= 1
-            KI.barrier()
+            KI.barrier(KI.LOCAL_MEM_FENCE)
             if lk <= stride
                 @inbounds scratch[idx] += scratch[idx + stride]
             end
