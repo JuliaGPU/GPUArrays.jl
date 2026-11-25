@@ -360,6 +360,16 @@
                 mul!(E, W(collect(A), uplo), collect(B), 3, 2)
                 @test collect(Et) ≈ E
 
+                # with a transposed operand, which BLAS can't take
+                for op in (transpose, adjoint)
+                    mul!(Ct, W(A, uplo), op(B))
+                    mul!(C, W(collect(A), uplo), op(collect(B)))
+                    @test collect(Ct) ≈ C
+                    mul!(Ct, op(B), W(A, uplo))
+                    mul!(C, op(collect(B)), W(collect(A), uplo))
+                    @test collect(Ct) ≈ C
+                end
+
                 # matrix-vector
                 ct = AT(zeros(T, n))
                 c = zeros(T, n)
@@ -1087,6 +1097,163 @@ end
         @testset "generic_matmatmul!" for T in eltypes
             y = invoke(GPUArrays.generic_matmatmul!, Tuple{AbstractArray, AbstractArray, AbstractArray, Number, Number}, adapt(AT, fill(NaN_T(T), 3, 3)), adapt(AT, fill(NaN_T(T), 3, 3)), adapt(AT, fill(NaN_T(T), 3, 3)), false, false)
             @test !any(isnan, collect(y))
+        end
+    end
+end
+
+@testsuite "linalg/blas/products" (AT, eltypes)->begin
+    @testset "$T" for T in (Float32, ComplexF32)
+        T in eltypes || continue
+        A = rand(T, 5, 3)
+        S, R = rand(T, 4, 4), rand(T, 4, 4)
+
+        @testset "syrk/herk" begin
+            @test compare(A -> A' * A, AT, A)
+            @test compare(A -> A * A', AT, A)
+            @test compare(A -> transpose(A) * A, AT, A)
+            @test compare(A -> A * transpose(A), AT, A)
+            @test compare((C, A) -> mul!(C, A', A, T(2), false), AT, rand(T, 3, 3), A)
+            @test compare((C, A) -> mul!(C, A', A, T(2), T(3)), AT, rand(T, 3, 3), A)
+        end
+
+        @testset "triangular * triangular" begin
+            @test compare((S, R) -> LowerTriangular(S) * UpperTriangular(R), AT, S, R)
+            @test compare((S, R) -> UpperTriangular(S) * LowerTriangular(R), AT, S, R)
+            @test compare((S, R) -> UpperTriangular(S) * UpperTriangular(R)', AT, S, R)
+            @test compare((S, R) -> UpperTriangular(S)' * UpperTriangular(R), AT, S, R)
+            @test compare((S, R) -> LowerTriangular(S)' * LowerTriangular(R), AT, S, R)
+            @test compare((S, R) -> LowerTriangular(S) * transpose(LowerTriangular(R)), AT, S, R)
+            @test compare((S, R) -> mul!(similar(S), UpperTriangular(S), LowerTriangular(R)), AT, S, R)
+        end
+
+        @testset "triangular * wrapped matrix" begin
+            @test compare((S, R) -> UpperTriangular(S) * R', AT, S, R)
+            @test compare((S, R) -> R' * LowerTriangular(S), AT, S, R)
+            @test compare((S, R) -> UnitUpperTriangular(S) \ transpose(R), AT, S, R)
+        end
+
+        @testset "scalars" begin
+            # integer scalars are converted to the eltype, wider ones are not (so computing
+            # with them needs a device that supports Float64)
+            B = rand(T, 3, 5)
+            @test compare((C, A, B) -> mul!(C, A, B, 2, 3), AT, rand(T, 4, 5), rand(T, 4, 3), B)
+            if Float64 in eltypes
+                @test compare((C, A, B) -> mul!(C, A, B, 2.0, 3.0), AT, rand(T, 4, 5), rand(T, 4, 3), B)
+            end
+            @test compare((C, A) -> mul!(C, A', A, 2, 0), AT, rand(T, 3, 3), rand(T, 4, 3))
+            @test_throws DimensionMismatch mul!(AT(rand(T, 4, 6)), AT(rand(T, 4, 3)), AT(B))
+        end
+
+        @testset "empty operands" begin
+            E, e, W = rand(T, 0, 0), rand(T, 0), rand(T, 0, 3)
+            @test compare((E, e) -> UpperTriangular(E) \ e, AT, E, e)
+            @test compare((E, W) -> UpperTriangular(E) \ W, AT, E, W)
+            @test compare((E, W) -> W' / LowerTriangular(E), AT, E, W)
+            @test compare((E, e) -> UpperTriangular(E) * e, AT, E, e)
+            @test compare((E, W) -> UpperTriangular(E) * W, AT, E, W)
+            @test compare((E, W) -> W' * UpperTriangular(E), AT, E, W)
+            @test compare((E, e) -> E * e, AT, E, e)
+            @test compare(W -> W' * W, AT, W)
+            @test compare(W -> W * W', AT, W)
+            @test compare((E, W) -> Symmetric(E) * W, AT, E, W)
+            @test compare(E -> LowerTriangular(E) * UpperTriangular(E), AT, E)
+        end
+    end
+end
+
+@testsuite "linalg/blas/blas1" (AT, eltypes)->begin
+    @testset "$T, $(isnothing(rows) ? "dense" : "rows $rows")" for T in (Float32, Float64, ComplexF32), rows in (nothing, 3:8, 1:2:12, 12:-2:1)
+        T in eltypes || continue
+        v(x) = isnothing(rows) ? x : view(x, rows)
+        n = 6
+        x, y = rand(T, 2n), rand(T, 2n)
+        if isnothing(rows)
+            x, y = x[1:n], y[1:n]
+        end
+
+        @test compare(x -> rmul!(v(x), T(2)), AT, x)
+        # back-ends' own methods may not support dot products of stepped views yet
+        if !(rows isa StepRange)
+            @test compare((x, y) -> dot(v(x), v(y)), AT, x, y)
+            @test compare((x, y) -> v(x)' * v(y), AT, x, y)
+            T <: Complex && @test compare((x, y) -> transpose(v(x)) * v(y), AT, x, y)
+        end
+        @test compare(x -> norm(v(x)), AT, x)
+        @test compare(x -> norm(v(x), 1), AT, x)
+        @test compare(x -> LinearAlgebra.BLAS.asum(v(x)), AT, x)
+        @test compare((x, y) -> axpy!(T(2), v(x), v(y)), AT, x, y)
+        @test compare((x, y) -> axpby!(T(2), v(x), T(3), v(y)), AT, x, y)
+        s = T <: Complex ? T(0.8im) : T(0.8)
+        c = real(T)(0.6)
+        @test compare((x, y) -> rotate!(v(x), v(y), c, s), AT, x, y)
+        @test compare((x, y) -> reflect!(v(x), v(y), c, s), AT, x, y)
+
+        @test_throws DimensionMismatch dot(v(AT(x)), AT(rand(T, n + 1)))
+        @test_throws DimensionMismatch axpy!(T(1), v(AT(x)), AT(rand(T, n + 1)))
+    end
+
+    @testset "columns of a padded matrix" begin
+        T = Float32
+        T in eltypes || return
+        v(A) = view(A, 1:2, :)
+        A, B = rand(T, 4, 3), rand(T, 4, 3)
+        @test compare(A -> rmul!(v(A), T(2)), AT, A)
+        @test compare(A -> norm(v(A)), AT, A)
+        @test compare((A, B) -> dot(v(A), v(B)), AT, A, B)
+    end
+
+    @testset "dot of wrapped arrays" begin
+        T = Float32
+        T in eltypes || return
+        A, B = rand(T, 4, 6), rand(T, 4, 6)
+        @test compare((A, B) -> dot(PermutedDimsArray(A, (2, 1)), PermutedDimsArray(B, (2, 1))), AT, A, B)
+        @test compare((A, B) -> dot(view(A, 1:2:3, :), view(B, 1:2:3, :)), AT, A, B)
+    end
+
+    @testset "Givens rotations" begin
+        T = ComplexF32 in eltypes ? ComplexF32 : Float32
+        T in eltypes || return
+        A = rand(T, 5, 4)
+        G, _ = givens(A[1, 1], A[3, 1], 1, 3)
+        @test compare(A -> lmul!(G, A), AT, A)
+        G, _ = givens(A[1, 1], A[1, 2], 2, 4)
+        @test compare(A -> rmul!(A, G), AT, A)
+    end
+end
+
+@testsuite "linalg/blas/extensions" (AT, eltypes)->begin
+    @testset "$T" for T in (Float32, ComplexF32)
+        T in eltypes || continue
+        A = rand(T, 5, 3)
+        S, R = rand(T, 4, 4), rand(T, 4, 4)
+
+        @testset "geam" begin
+            @test compare((S, R) -> S + R', AT, S, R)
+            @test compare((S, R) -> S - transpose(R), AT, S, R)
+            @test compare((S, R) -> R' - S, AT, S, R)
+            @test compare(A -> transpose!(similar(A, 3, 5), A), AT, A)
+            @test compare(A -> adjoint!(similar(A, 3, 5), A), AT, A)
+            @test compare((S, R) -> S + R', AT, rand(T, 4, 0), rand(T, 0, 4))
+            # the result has a wider eltype than the operands
+            @test compare((S, R) -> S + R', AT, rand(Bool, 4, 4), rand(Bool, 4, 4))
+            @test compare((S, R) -> S - transpose(R), AT, rand(Bool, 4, 4), rand(Bool, 4, 4))
+        end
+
+        @testset "Diagonal" begin
+            d = rand(T, 5) .+ 1
+            @test compare((d, A) -> Diagonal(d) * A, AT, d, A)
+            @test compare((d, A) -> A' * Diagonal(d), AT, d, A)
+            @test compare((d, A) -> lmul!(Diagonal(d), A), AT, d, A)
+            @test compare((d, A) -> rmul!(copy(A'), Diagonal(d)), AT, d, A)
+            @test compare((d, A) -> copy(lmul!(Diagonal(d[1:3]), A')), AT, d, A)
+            @test compare((d, A) -> copy(lmul!(Diagonal(d[1:3]), transpose(A))), AT, d, A)
+            @test compare((d, A) -> copy(rmul!(A', Diagonal(d))), AT, d, A)
+            @test compare((d, A) -> copy(rmul!(transpose(A), Diagonal(d))), AT, d, A)
+            @test compare(d -> inv(Diagonal(d)).diag, AT, d)
+            @test compare((d, A) -> A' / Diagonal(d), AT, d, A)
+            @test compare((d, A) -> rdiv!(copy(A'), Diagonal(d)), AT, d, A)
+            @test Array(Diagonal(AT(d))) == Matrix(Diagonal(d))
+            @test compare((e, W) -> Diagonal(e) * W, AT, rand(T, 0), rand(T, 0, 3))
         end
     end
 end
