@@ -1025,6 +1025,29 @@ end
             end
         end
     end
+    @testset "subnormal components x $T" for T in filter(T -> T <: Complex{<:AbstractFloat}, valid_eltypes)
+        # the magnitude of such an element keeps few bits unless it is scaled up first.
+        # Call the generic norm directly, since back-ends may dispatch `norm` to a library.
+        R = real(T)
+        u = nextfloat(zero(R))
+        M = floatmin(R)
+        # some back-ends flush subnormal inputs to zero; widen like the norm does. On the
+        # CPU, `sum` adds the identical terms below sequentially, losing more than rtol.
+        S = promote_type(Float32, R)
+        if AT <: AbstractGPUArray && !iszero(Array(AT(fill(u, 1)) .* inv(eps(S)))[1])
+            @testset "p=$p" for p in (1.5, 2)
+                # correctly rounded: 3u for p=2, where rounding magnitudes first gives 2u
+                exact = (4 * (sqrt(big(2)) * u)^p)^inv(big(p))
+                @test GPUArrays.generic_norm(AT(fill(T(u, u), 4)), p) == R(exact)
+                # a normal norm, from many subnormal elements next to a normal one
+                n = 2^16
+                a = 7M / 2048
+                arr = [T(M); fill(T(a, a), n)]
+                exact = (big(M)^p + n * (sqrt(big(2)) * a)^p)^inv(big(p))
+                @test GPUArrays.generic_norm(AT(arr), p) ≈ exact rtol=8eps(R)
+            end
+        end
+    end
     @testset "large p x $T" for T in filter(T -> T <: Complex{<:AbstractFloat}, valid_eltypes)
         # |z / norm(z)| rounds away from 1 for these, which a large p blows up
         @testset "$z" for z in (0.77018034f0 + 0.78051925f0im,
