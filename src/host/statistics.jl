@@ -231,3 +231,111 @@ function Statistics._median(A::AbstractGPUArray, dims)
     R = reshape(broadcast(_median_value, slots...), outsize)
     return missings === nothing ? R : ifelse.(missings, missing, R)
 end
+
+# Quantiles use Statistics.jl's own arithmetic, `_quantile`, on stand-ins for the sorted data:
+# `_RankProbe` records the order statistics it reads (they depend only on the length of the
+# data and on `p`, `alpha` and `beta`, and it checks those), and once they have been gathered
+# from the device, `_RankValues` answers with them.
+struct _RankProbe{T} <: AbstractVector{T}
+    n::Int
+    ranks::Vector{Int}
+end
+Base.size(v::_RankProbe) = (v.n,)
+Base.getindex(v::_RankProbe{T}, i::Int) where {T} = (push!(v.ranks, i); zero(T))
+
+struct _RankValues{T} <: AbstractVector{T}
+    n::Int
+    values::Dict{Int,T}
+end
+Base.size(v::_RankValues) = (v.n,)
+Base.getindex(v::_RankValues, i::Int) = v.values[i]
+
+_isnan_or_missing(x) = ismissing(x) || (x isa Number && isnan(x))
+
+# The quantiles of `v` at every probability of `ps` (a tuple or a host array), as a host
+# collection like `ps`, with the bounds and NaN or missing checks of Statistics.jl in its
+# order. The order statistics are read from `v` if it is already sorted (`how == :sorted`),
+# after sorting it in place (`:sort`, for `quantile!`, which documents that it sorts `v`), or
+# through `_select!`, leaving `v` as it is (`:select`).
+function _quantile_values!(v::AnyGPUVector, ps, how::Symbol, alpha::Real, beta::Real)
+    isempty(v) && throw(ArgumentError("empty data vector"))
+    n = length(v)
+    T = nonmissingtype(eltype(v))
+    if how !== :sorted
+        # (the bounds of Statistics.jl's partial sort, which reject a NaN probability first)
+        lo, hi = extrema(ps)
+        floor(Int, lo * n), ceil(Int, 1 + hi * n)
+    end
+    # the ranks to read, and the error for an invalid probability, which is reported after
+    # NaN or missing data
+    ranks = Int[]
+    err = try
+        foreach(p -> Statistics._quantile(_RankProbe{T}(n, ranks), p; alpha, beta), ps)
+        nothing
+    catch err
+        err isa InterruptException && rethrow()
+        err
+    end
+    if how === :sorted
+        values = Array(v[ranks])
+        nan = any(_isnan_or_missing, v)
+    else
+        # (by `isless`, the last value is NaN or missing if any is)
+        if how === :sort
+            AK.sort!(v; alg=AK.Auto(stable=false))
+            values = Array(v[[ranks; n]])
+        else
+            # (of a copy, as `_select!` may reorder its input)
+            values = Array(_select!(copy(v), [ranks; n]))
+        end
+        nan = _isnan_or_missing(pop!(values))
+    end
+    nan && throw(ArgumentError("quantiles are undefined in presence of NaNs or missing values"))
+    err === nothing || throw(err)
+    x = _RankValues{T}(n, Dict{Int,T}(zip(ranks, values)))
+    return map(p -> Statistics._quantile(x, p; alpha, beta), ps)
+end
+
+# The quantiles for a probability, a tuple of them, or an array of them, which as with
+# Statistics.jl determines the container of the result: for an array, a GPU array if it is on
+# the device, a host array otherwise.
+_quantiles!(v, p::Real, how, alpha, beta) = only(_quantile_values!(v, (p,), how, alpha, beta))
+_quantiles!(v, p::Tuple, how, alpha, beta) =
+    isempty(p) ? () : _quantile_values!(v, p, how, alpha, beta)
+function _quantiles!(v, p::AbstractArray, how, alpha, beta)
+    # (the interpolation runs on the host)
+    ps = p isa AnyGPUArray ? Array(p) : p
+    q = if isempty(ps)
+        # (Statistics.jl maps over `p`, without checking `v`)
+        similar(ps, Base.promote_op(Statistics._quantile, Vector{eltype(v)}, eltype(ps)))
+    else
+        _quantile_values!(v, ps, how, alpha, beta)
+    end
+    return p isa AnyGPUArray ? copyto!(similar(p, eltype(q)), q) : q
+end
+
+Statistics.quantile!(v::AnyGPUVector, p::Real; sorted::Bool=false, alpha::Real=1.0,
+                     beta::Real=alpha) =
+    _quantiles!(v, p, sorted ? :sorted : :sort, alpha, beta)
+Statistics.quantile!(v::AnyGPUVector, p::Union{AbstractArray, Tuple{Vararg{Real}}};
+                     sorted::Bool=false, alpha::Real=1.0, beta::Real=alpha) =
+    _quantiles!(v, p, sorted ? :sorted : :sort, alpha, beta)
+function Statistics.quantile!(q::AbstractArray, v::AnyGPUVector, p::AbstractArray;
+                              sorted::Bool=false, alpha::Real=1.0, beta::Real=alpha)
+    Base.require_one_based_indexing(q, v, p)
+    if size(p) != size(q)
+        throw(DimensionMismatch("size of p, $(size(p)), must equal size of q, $(size(q))"))
+    end
+    isempty(q) && return q
+    r = _quantile_values!(v, Array(p), sorted ? :sorted : :sort, alpha, beta)
+    return copyto!(q, convert(Array{eltype(q)}, r))
+end
+
+# (Statistics.jl collects other arrays than vectors, which copies them to the host)
+_quantiles(v, p, sorted, alpha, beta) = _quantiles!(v, p, sorted ? :sorted : :select, alpha, beta)
+Statistics.quantile(v::AbstractGPUVector, p::Real; sorted::Bool=false, alpha::Real=1.0,
+                    beta::Real=alpha) =
+    _quantiles(v, p, sorted, alpha, beta)
+Statistics.quantile(A::AbstractGPUArray, p::Union{AbstractArray, Tuple{Vararg{Real}}};
+                    sorted::Bool=false, alpha::Real=1.0, beta::Real=alpha) =
+    _quantiles(vec(A), p, sorted, alpha, beta)

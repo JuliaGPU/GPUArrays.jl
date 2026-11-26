@@ -224,11 +224,82 @@ using Statistics
             @test compare_exact(median, AT, y)
             Y = Union{Missing, Float32}[1 2; 4 3; 5 6]
             @test compare_exact(A -> median(A; dims = 1), AT, Y)
-            Y[2, 1] = missing
             # (Statistics.jl's `mapslices` cannot store a `missing` median)
+            Y[2, 1] = missing
             AT <: AbstractGPUArray && @test isequal(Array(median(AT(Y); dims = 1)), [missing 3.0f0])
             @test compare_exact(A -> median(A; dims = 1), AT, fill(missing, 2, 2))
             @test compare_exact(A -> median(A; dims = 1), AT, fill(missing, 0, 2))
+        end
+    end
+
+    @testset "quantile" begin
+        for ET in (Int64, Float16, Float32, Float64)
+            ET in eltypes || continue
+            range = ET == Float16 ? (ET(1):ET(100)) : ET <: Integer ? (ET(-50):ET(50)) : ET
+            x = rand(range, 101)
+            ps = [0, 0.001, 0.25, 0.5, 0.999, 1]
+            # Statistics.jl's interpolation, for each of its definitions
+            for (alpha, beta) in ((1, 1), (0, 1), (0.5, 0.5), (0, 0), (1/3, 1/3), (3/8, 3/8))
+                @test compare_exact(v -> quantile(v, ps; alpha, beta), AT, x)
+                @test compare_exact(v -> quantile(v, 0.3; alpha, beta), AT, x)
+            end
+            @test compare_exact(v -> quantile(v, 0.3f0), AT, x)
+            @test compare_exact(v -> quantile(v, 1//3), AT, x)
+            @test compare_exact(v -> quantile(v, (0.1, 0.9)), AT, x)
+            @test compare_exact(v -> quantile(v, ()), AT, x)
+            @test compare_exact(v -> quantile(v, Float64[]), AT, x)
+            @test compare_exact(v -> quantile(v, [0.1 0.2; 0.3 0.9]), AT, x)
+            @test compare_exact(v -> quantile(v, [0.1, 0.9]), AT, rand(range, 4, 5))
+            @test compare_exact(v -> quantile(v, 0.9; sorted = true), AT, sort(x))
+            @test compare_exact(v -> quantile(abs, v, 0.9), AT, x)
+            for n in (1, 2)
+                @test compare_exact(v -> quantile(v, [0, 0.5, 1]), AT, rand(range, n))
+            end
+            # an array of probabilities gives an array like it, on the host or the device
+            @test quantile(AT(x), [0.1, 0.9]) isa Array
+            @test quantile(AT(x), 0.1:0.4:0.9) isa Array
+            if Float32 in eltypes
+                AT <: AbstractGPUArray && @test quantile(AT(x), AT([0.1f0, 0.9f0])) isa AT
+                @test compare_exact((v, p) -> quantile(v, p), AT, x, [0.1f0, 0.9f0])
+                @test compare_exact((v, p) -> quantile!(v, p), AT, x, [0.1f0, 0.9f0])
+            end
+            # `quantile` leaves the data alone, `quantile!` sorts it, and can store into an array
+            y = AT(x)
+            quantile(y, [0.1, 0.5])
+            @test Array(y) == x
+            @test compare_exact(v -> quantile!(v, 0.5), AT, x)
+            @test compare_exact(v -> quantile!(v, (0.1, 0.5)), AT, x)
+            @test compare_exact(v -> quantile!(v, [0.1, 0.5]), AT, x)
+            if AT <: AbstractGPUArray   # (Statistics.jl sorts partially)
+                y = AT(x)
+                quantile!(y, 0.5)
+                @test issorted(Array(y))
+            end
+            if Float32 in eltypes
+                @test compare_exact((q, v) -> quantile!(q, v, [0.1, 0.9]) === q, AT, zeros(Float32, 2), x)
+                @test compare_exact((q, v) -> (quantile!(q, v, [0.1, 0.9]); q), AT, zeros(Float32, 2), x)
+            end
+            if Float64 in eltypes
+                @test compare_exact((q, v) -> (quantile!(q, v, [0.1, 0.9]); q), AT, zeros(2), x)
+                @test compare_exact((q, v) -> quantile!(q, v, [0.1, 0.9]), AT, zeros(3), x)
+            end
+            # errors, in the order of Statistics.jl
+            @test compare_exact(v -> quantile(v, 0.5), AT, ET[])
+            @test compare_exact(v -> quantile(v, 1.5), AT, x)
+            @test compare_exact(v -> quantile(v, 0.5; alpha = 2), AT, x)
+        end
+        if Float32 in eltypes
+            x = rand(Float32, 101)
+            x[17] = NaN32
+            @test compare_exact(v -> quantile(v, 0.5), AT, x)
+            @test compare_exact(v -> quantile(v, 1.5), AT, x)
+            @test compare_exact(v -> quantile(v, 0.5; sorted = true), AT, x)
+            @test compare_exact(v -> quantile!(v, NaN), AT, x)
+            @test compare_exact(v -> quantile!(v, 1; alpha = 0.5), AT, x)
+            @test compare_exact(v -> quantile!(v, 1; alpha = 0.5), AT, rand(Float32, 101))
+            @test compare_exact(v -> quantile!(v, 1//typemax(Int); sorted = true, alpha = 2//3, beta = 0), AT, x)
+            @test compare_exact(v -> quantile(v, 0.4), AT, Union{Missing, Float32}[1, 2, 3])
+            @test compare_exact(v -> quantile(v, 0.4), AT, Union{Missing, Float32}[1, missing, 3])
         end
     end
 end
