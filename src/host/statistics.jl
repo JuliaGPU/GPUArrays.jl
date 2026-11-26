@@ -69,6 +69,18 @@ function Statistics.covzm(x::AbstractGPUMatrix, vardim::Int=1; corrected::Bool=t
     return A
 end
 
+# (also for two arguments: the type of the scaled result is inferred, not taken from `first(C)`,
+# so that without variables the result is an empty matrix rather than a BoundsError)
+function Statistics.covzm(x::AbstractGPUVecOrMat, y::AbstractGPUVecOrMat, vardim::Int;
+                          corrected::Bool=true)
+    C = Statistics.unscaled_covzm(x, y, vardim)
+    T = promote_type(typeof(one(eltype(C)) / 1), eltype(C))
+    A = convert(AbstractArray{T}, C)
+    b = 1//(Statistics._getnobs(x, y, vardim) - corrected)
+    A .*= b
+    return A
+end
+
 function Statistics.cov2cor!(C::AbstractGPUMatrix{T}, xsd::AbstractGPUArray) where T
     nx = length(xsd)
     size(C) == (nx, nx) || throw(DimensionMismatch("inconsistent dimensions"))
@@ -83,6 +95,47 @@ function Statistics.corzm(x::AbstractGPUMatrix, vardim::Int=1)
     c = Statistics.unscaled_covzm(x, vardim)
     return Statistics.cov2cor!(c, sqrt.(diag(c)))
 end
+
+# Statistics.jl's `cov2cor!` for two sets of standard deviations, as one broadcast
+# (`xsd` and `ysd` hold one value per row and column of `C`, or are a number)
+function _cov2cor!(C, xsd, ysd)
+    xcol = xsd isa AbstractArray ? reshape(xsd, :, 1) : xsd
+    yrow = ysd isa AbstractArray ? reshape(ysd, 1, :) : ysd
+    C .= Statistics.clampcor.(C ./ (xcol .* yrow))
+    return C
+end
+
+Statistics.corzm(x::AbstractGPUVector, y::AbstractGPUMatrix, vardim::Int=1) =
+    _cov2cor!(Statistics.unscaled_covzm(x, y, vardim), sqrt(sum(abs2, x)),
+              sqrt.(sum(abs2, y; dims=vardim)))
+Statistics.corzm(x::AbstractGPUMatrix, y::AbstractGPUVector, vardim::Int=1) =
+    _cov2cor!(Statistics.unscaled_covzm(x, y, vardim), sqrt.(sum(abs2, x; dims=vardim)),
+              sqrt(sum(abs2, y)))
+Statistics.corzm(x::AbstractGPUMatrix, y::AbstractGPUMatrix, vardim::Int=1) =
+    _cov2cor!(Statistics.unscaled_covzm(x, y, vardim), sqrt.(sum(abs2, x; dims=vardim)),
+              sqrt.(sum(abs2, y; dims=vardim)))
+
+# The correlation of two vectors, from the three sums Statistics.jl accumulates in one loop,
+# here in one reduction, and with its scaling (which keeps `xy / sqrt(xx * yy)` from overflowing)
+function Statistics.corm(x::AbstractGPUVector{<:Number}, mx, y::AbstractGPUVector{<:Number}, my)
+    n = length(x)
+    length(y) == n || throw(DimensionMismatch("inconsistent lengths"))
+    n > 0 || throw(ArgumentError("correlation only defined for non-empty vectors"))
+    X, Y = eltype(x), eltype(y)
+    dX, dY = Base.promote_op(-, X, typeof(mx)), Base.promote_op(-, Y, typeof(my))
+    # (the accumulators of Statistics.jl, widened to the type of the terms)
+    init = (zero(promote_type(typeof(sqrt(abs2(one(X)))), Base.promote_op(abs2, dX))),
+            zero(promote_type(typeof(sqrt(abs2(one(Y)))), Base.promote_op(abs2, dY))),
+            zero(promote_type(typeof(zero(X) * zero(Y)'), Base.promote_op((a, b) -> a * b', dX, dY))))
+    xx, yy, xy = mapreduce(_corm_terms(mx, my, init), _add_terms, x, y; init)
+    return Statistics.clampcor(xy / max(xx, yy) / sqrt(min(xx, yy) / max(xx, yy)))
+end
+_corm_terms(mx, my, ::Tuple{A,B,C}) where {A,B,C} = function (a, b)
+    xi = a - mx
+    yi = b - my
+    (convert(A, abs2(xi)), convert(B, abs2(yi)), convert(C, xi * yi'))
+end
+_add_terms(s, t) = map(+, s, t)
 
 _mean_denom(x::AbstractArray, dims::Integer) = size(x, dims)
 _mean_denom(x::AbstractArray, dims::Colon) = length(x)

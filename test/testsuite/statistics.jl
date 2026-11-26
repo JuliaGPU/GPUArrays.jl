@@ -111,6 +111,27 @@ using Statistics
         end
     end
 
+    @testset "cov and cor of integers" begin
+        if Int64 in eltypes && Float64 in eltypes
+            x, y = rand(1:9, 50), rand(1:9, 50)
+            X, Y = rand(1:9, 50, 2), rand(1:9, 50, 3)
+            @test compare(cov, AT, x, y)
+            @test compare(cor, AT, x, y)
+            @test compare(cov, AT, X, Y)
+            @test compare(cor, AT, X, Y)
+            @test compare(cor, AT, x, Y)
+        end
+        # the accumulators widen to the type of the centred data
+        if Float32 in eltypes && Float64 in eltypes
+            # (summed in Float32, in another order than on the CPU)
+            @test compare(cor, AT, rand(Float32, 50), rand(50); rtol = 1e-5)
+        end
+        if Float32 in eltypes
+            @test_throws ArgumentError cor(AT(Float32[]), AT(Float32[]))
+            @test_throws DimensionMismatch cor(AT(rand(Float32, 3)), AT(rand(Float32, 4)))
+        end
+    end
+
     for ET in eltypes
         # Doesn't work with ComplexF32 in oneAPI for some reason.
         if !(ET in [Float32, Float64, Float16, ComplexF64])
@@ -125,6 +146,14 @@ using Statistics
             @test compare(cov, AT, rand(range, s))
             @test compare(cov, AT, rand(range, s, 2))
             @test compare(A -> cov(A; dims = 2), AT, rand(range, s, 2))
+            # of two sets of variables
+            @test compare(cov, AT, rand(range, s), rand(range, s))
+            @test compare((x, y) -> cov(x, y; corrected = false), AT, rand(range, s), rand(range, s))
+            @test compare(cov, AT, rand(range, s), rand(range, s, 2))
+            @test compare(cov, AT, rand(range, s, 2), rand(range, s))
+            @test compare(cov, AT, rand(range, s, 2), rand(range, s, 3))
+            @test compare((x, y) -> cov(x, y; dims = 2), AT, rand(range, 2, s), rand(range, 3, s))
+            @test compare_exact((x, y) -> typeof(cov(x, y)), AT, rand(range, s), rand(range, s))
         end
 
         @testset "cor" begin
@@ -132,6 +161,13 @@ using Statistics
             @test compare(cor, AT, rand(range, s)) nans = true
             @test compare(cor, AT, rand(range, s, 2)) nans = true
             @test compare(A -> cor(A; dims = 2), AT, rand(range, s, 2)) nans = true
+            # of two sets of variables
+            @test compare(cor, AT, rand(range, s), rand(range, s))
+            @test compare(cor, AT, rand(range, s), rand(range, s, 2))
+            @test compare(cor, AT, rand(range, s, 2), rand(range, s))
+            @test compare(cor, AT, rand(range, s, 2), rand(range, s, 3))
+            @test compare((x, y) -> cor(x, y; dims = 2), AT, rand(range, 2, s), rand(range, 3, s))
+            @test compare_exact((x, y) -> typeof(cor(x, y)), AT, rand(range, s), rand(range, s))
         end
     end
 end
