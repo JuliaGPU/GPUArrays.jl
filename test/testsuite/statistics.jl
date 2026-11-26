@@ -170,4 +170,65 @@ using Statistics
             @test compare_exact((x, y) -> typeof(cor(x, y)), AT, rand(range, s), rand(range, s))
         end
     end
+
+    @testset "median" begin
+        for ET in (Int16, Int64, Float16, Float32, Float64)
+            ET in eltypes || continue
+            # integers have a floating-point median; keep Float16 data exact
+            range = ET == Float16 ? (ET(1):ET(100)) : ET <: Integer ? (ET(-50):ET(50)) : ET
+            for n in (1, 2, 101, 1000)
+                @test compare_exact(median, AT, rand(range, n))
+                @test compare_exact(median!, AT, rand(range, n))
+            end
+            x = rand(range, 6, 5, 4)
+            @test compare_exact(median, AT, x)
+            @test compare_exact(median!, AT, x)
+            # (integers have a Float64 median, which along `dims` is computed on the device)
+            ET <: Integer && !(Float64 in eltypes) && continue
+            for dims in (1, 2, 3, (1, 2), (1, 3), (2, 3), (1, 2, 3), [3, 1, 1])
+                @test compare_exact(A -> median(A; dims), AT, x)
+            end
+            @test compare_exact(A -> median(A; dims = 1), AT, rand(range, 7, 3))
+            @test compare_exact(A -> median(A; dims = 2), AT, rand(range, 3, 1))
+            @test compare_exact(A -> median(abs, A), AT, rand(range, 10))
+            # empty data, or slices
+            @test compare_exact(median, AT, ET[])
+            @test compare_exact(A -> median(A; dims = 1), AT, zeros(ET, 0, 3))
+            @test compare_exact(A -> median(A; dims = 0), AT, x)
+            @test compare_exact(A -> median(A; dims = 4), AT, x)
+            @test compare_exact(A -> median(A; dims = 1.0), AT, x)
+            @test compare_exact(A -> median(A; dims = Set([1, 3])), AT, x)
+            @test compare_exact(A -> median(A; dims = (d for d in 2:3)), AT, x)
+            # (Statistics.jl throws a MethodError, from calling `median!` on each element)
+            @test_throws Exception median(AT(x); dims = ())
+            # (Statistics.jl's `mapslices` fails on an empty result)
+            AT <: AbstractGPUArray && @test size(median(AT(zeros(ET, 3, 0)); dims = 1)) == (1, 0)
+        end
+        if Float32 in eltypes
+            # NaN propagates
+            x = rand(Float32, 101)
+            x[17] = NaN32
+            @test compare_exact(median, AT, x)
+            @test compare_exact(median, AT, x[1:100])
+            X = rand(Float32, 7, 6)
+            X[3, 4] = NaN32
+            X[7, 1] = NaN32
+            @test compare_exact(A -> median(A; dims = 1), AT, X)
+            @test compare_exact(A -> median(A; dims = 2), AT, X)
+            # signed zeros are ordered
+            @test compare_exact(median, AT, Float32[0.0, -0.0, -0.0, 1.0])
+            # missing takes precedence over NaN, and a slice without it has a median
+            y = Union{Missing, Float32}[1, NaN, 3]
+            @test compare_exact(median, AT, y)
+            y[1] = missing
+            @test compare_exact(median, AT, y)
+            Y = Union{Missing, Float32}[1 2; 4 3; 5 6]
+            @test compare_exact(A -> median(A; dims = 1), AT, Y)
+            Y[2, 1] = missing
+            # (Statistics.jl's `mapslices` cannot store a `missing` median)
+            AT <: AbstractGPUArray && @test isequal(Array(median(AT(Y); dims = 1)), [missing 3.0f0])
+            @test compare_exact(A -> median(A; dims = 1), AT, fill(missing, 2, 2))
+            @test compare_exact(A -> median(A; dims = 1), AT, fill(missing, 0, 2))
+        end
+    end
 end

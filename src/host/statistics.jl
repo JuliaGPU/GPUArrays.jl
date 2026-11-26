@@ -140,3 +140,94 @@ _add_terms(s, t) = map(+, s, t)
 _mean_denom(x::AbstractArray, dims::Integer) = size(x, dims)
 _mean_denom(x::AbstractArray, dims::Colon) = length(x)
 _mean_denom(x::AbstractArray, dims) = prod(size(x,d) for d in unique(dims); init=1)
+
+
+## order statistics
+
+# Values of `src` at the 1-based positions `ranks` of its sorted order (by `isless`; values
+# that compare equal may come from any position, which only shows in NaN payloads), in the
+# order of `ranks` and with its repetitions: of all of `src` with `dims=:`, as a vector, or of
+# every slice along `dims`, as an array of the size of `src` but with `length(ranks)` along
+# `dims`. `src` may be reordered.
+#
+# By sorting and gathering for now. This is the contract of a selection primitive (values
+# only, the same ranks in every slice), so one can replace it without changing the callers.
+function _select!(src::AnyGPUArray, ranks::AbstractVector{<:Integer}; dims=:)
+    unstable = AK.Auto(stable=false)
+    if dims isa Colon
+        v = vec(src)
+        AK.sort!(v; alg=unstable)
+        return v[ranks]
+    else
+        AK.sort!(src; dims, alg=unstable)
+        return src[ntuple(d -> d == dims ? ranks : Colon(), ndims(src))...]
+    end
+end
+
+# The ranks a median of `n` values needs: the middle one or two, and the last, which by
+# `isless` is NaN if any value is
+_median_ranks(n) = isodd(n) ? [(n + 1) ÷ 2, n] : [n ÷ 2, n ÷ 2 + 1, n]
+_median_value(lo, hi, last) = ifelse(isnan(last), oftype(Statistics.middle(lo, hi), last),
+                                     Statistics.middle(lo, hi))
+_median_value(mid, last) = ifelse(isnan(last), oftype(Statistics.middle(mid), last),
+                                  Statistics.middle(mid))
+
+_has_missing(v) = eltype(v) >: Missing && eltype(v) !== Any && any(ismissing, v)
+
+# As Statistics.jl, except that the NaN returned for data containing NaNs is one of them, not
+# necessarily the first
+function Statistics.median!(v::AnyGPUVector)
+    isempty(v) && throw(ArgumentError("median of an empty array is undefined, $(repr(v))"))
+    _has_missing(v) && return missing
+    n = length(v)
+    vals = Array(_select!(v, _median_ranks(n)))
+    return isodd(n) ? _median_value(vals[1], vals[2]) : _median_value(vals...)
+end
+
+Statistics._median(A::AbstractGPUArray, ::Colon) = median!(copy(vec(A)))
+
+# As Statistics.jl, which uses `mapslices`, except that:
+# - an empty result is an empty array, where `mapslices` throws a BoundsError;
+# - slices with a `missing` give `missing`, in a `Union{Missing,T}` array, where `mapslices`
+#   fails to store it after a slice with a median;
+# - as for `median!`, a slice with NaNs gives one of them, not necessarily the first.
+#
+# The reduced dimensions are first made one, by reshaping when they lead and by permuting the
+# array otherwise, to select the same ranks from every slice.
+function Statistics._median(A::AbstractGPUArray, dims)
+    ds = dims isa Integer ? [dims] : applicable(iterate, dims) ? collect(dims) : nothing
+    # (other dimensions get the errors of `mapslices`)
+    if ds === nothing || isempty(ds) || !all(d -> d isa Integer && 1 <= d <= ndims(A), ds)
+        return invoke(Statistics._median, Tuple{AbstractArray, Any}, A, dims)
+    end
+    rdims = Tuple(sort!(unique(Int.(ds))))
+    kdims = Tuple(d for d in 1:ndims(A) if !(d in rdims))
+    n = prod(d -> size(A, d), rdims; init=1)
+    m = prod(d -> size(A, d), kdims; init=1)
+    outsize = ntuple(d -> d in rdims ? 1 : size(A, d), ndims(A))
+
+    m != 0 && n == 0 &&
+        throw(ArgumentError("median of an empty array is undefined, $(repr(similar(A, eltype(A), 0)))"))
+    nomissing = nonmissingtype(eltype(A))
+    nomissing === Union{} && return fill!(similar(A, Missing, outsize), missing)
+    missings = eltype(A) >: Missing && eltype(A) !== Any ? any(ismissing, A; dims=rdims) : nothing
+    if missings !== nothing && !any(missings)
+        missings = nothing
+    end
+    z = zero(nomissing)
+    T = typeof(isodd(n) ? Statistics.middle(z) : Statistics.middle(z, z))
+    m == 0 && return similar(A, missings === nothing ? T : Union{Missing, T}, outsize)
+
+    # a copy, as `_select!` may reorder it, without `missing` (from `coalesce`, which unlike
+    # `convert` cannot throw) and with the reduced dimensions combined
+    src = nomissing === eltype(A) ? A : coalesce.(A, zero(nomissing))
+    permute = length(rdims) > 1 && rdims != ntuple(identity, length(rdims))
+    src = permute ? permutedims(src, (rdims..., kdims...)) : src === A ? copy(A) : src
+    sdims = length(rdims) == 1 ? only(rdims) : 1
+    length(rdims) == 1 || (src = reshape(src, n, m))
+
+    S = _select!(src, _median_ranks(n); dims=sdims)
+    slots = ntuple(i -> selectdim(S, sdims, i:i), size(S, sdims))
+    R = reshape(broadcast(_median_value, slots...), outsize)
+    return missings === nothing ? R : ifelse.(missings, missing, R)
+end
