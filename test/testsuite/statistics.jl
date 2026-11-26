@@ -38,6 +38,56 @@ using Statistics
         end
     end
 
+    @testset "var and std" begin
+        for ET in (Float32, ComplexF32, Int64)
+            ET in eltypes || continue
+            # (integers have a Float64 variance)
+            ET <: Integer && !(Float64 in eltypes) && continue
+            x = rand(ET, 10, 3, 2)
+            # complex data has a real variance
+            @test compare(A -> var(A; dims = 2), AT, x)
+            @test compare(A -> std(A; dims = 1), AT, x)
+            @test compare(A -> var(A; dims = (1, 3)), AT, x)
+            @test compare(A -> std(A; dims = 2, corrected = false), AT, x)
+            @test compare((A, m) -> varm(A, m; dims = 1), AT, x, mean(x; dims = 1))
+            @test compare((A, m) -> stdm(A, m; dims = 3), AT, x, mean(x; dims = 3))
+            @test compare_exact(A -> eltype(var(A; dims = 1)), AT, x)
+            # an empty slice has a NaN variance, a single element one with `corrected`
+            @test compare(A -> var(A; dims = 1), AT, zeros(ET, 0, 3)) nans = true
+            @test compare(A -> var(A; dims = 2), AT, zeros(ET, 3, 0)) nans = true
+            @test compare(A -> var(A; dims = 1), AT, rand(ET, 1, 3)) nans = true
+        end
+        if Float32 in eltypes
+            x = rand(Float32, 10, 3)
+            # the means must have the reduced shape, up to trailing singleton dimensions
+            @test compare((A, m) -> varm(A, m; dims = 1), AT, x, mean(x; dims = 1)[:, :, :])
+            @test_throws DimensionMismatch varm(AT(x), AT(mean(x; dims = 2)); dims = 1)
+            # (Statistics.jl throws a MethodError, from subtracting the means from each element)
+            AT <: AbstractGPUArray && @test_throws ArgumentError varm(AT(x), AT(mean(x; dims = 1)))
+            # the result has the type of the data, not of the means, and without data the means
+            # are not checked
+            @test compare((A, m) -> var(A; dims = 1, mean = m), AT, zeros(Float32, 0, 2), zeros(Float32, 1, 5)) nans = true
+            if Float64 in eltypes
+                @test compare_exact((A, m) -> eltype(var(A; dims = 1, mean = m)), AT, x, rand(1, 3))
+            end
+        end
+    end
+
+    if Float16 in eltypes
+        # the deviations are summed before scaling, so that small ones don't vanish
+        @test compare(A -> var(A; dims = 1), AT, repeat(Float16[0.0007, -0.0007], 512))
+        # in the type of the deviations, so that wider means keep the sum from overflowing
+        if Float32 in eltypes
+            @test compare((A, m) -> varm(A, m; dims = 1), AT, zeros(Float16, 1023, 1), Float32[8.0025;;])
+        end
+    end
+
+    if Int64 in eltypes && Float64 in eltypes
+        # integer deviations are summed in floating point, so they don't overflow
+        @test compare((A, m) -> varm(A, m; dims = 1, corrected = false), AT,
+                      fill(2_000_000_000, 3, 1), zeros(Int64, 1, 1))
+    end
+
     @testset "mean accumulation" begin
         # integers are summed in floating point, so they don't overflow
         if Int64 in eltypes && Float64 in eltypes

@@ -1,19 +1,37 @@
 using Statistics
 
-function Statistics.varm(A::AbstractGPUArray{<:Real}, M::AbstractArray{<:Real};
-                         dims, corrected::Bool=true)
-    T = float(eltype(A))
-    λ = convert(T, inv(_mean_denom(A, dims) - corrected))
-    #B = (A .- M).^2
-    # NOTE: the above broadcast promotes to Float64 and uses power_by_squaring...
-    B = Broadcast.broadcasted(A, M) do a, m
-        x = (a - m)
-        λ * x * x
+# Two passes, as Statistics.jl: `mean` first, then the sum of `abs2(a - m)`, fused into one
+# reduction. The result has the real floating-point type of `A`'s elements, as Statistics.jl's
+# `varm!`, whatever the type of the supplied means.
+function Statistics.varm(A::AbstractGPUArray{<:Number}, M::AbstractArray{<:Number};
+                         dims=:, corrected::Bool=true)
+    # (Statistics.jl throws a MethodError here, from subtracting the array of means from each
+    # element)
+    dims isa Colon && throw(ArgumentError("`varm` with an array of means needs `dims`"))
+    T = real(float(eltype(A)))
+    R = Base.reduced_indices(A, dims)
+    # an empty slice has no variance; Statistics.jl's `varm!` returns NaN, without checking `M`
+    isempty(A) && return fill!(similar(A, T, map(length, R)), convert(T, NaN))
+    for i in 1:max(length(R), ndims(M))
+        Ri = i <= length(R) ? R[i] : Base.OneTo(1)
+        axes(M, i) == Ri || throw(DimensionMismatch(
+            "dimension $i of `mean` should have indices $Ri, but got $(axes(M, i))"))
     end
-    sum(Broadcast.instantiate(B); dims)
+    # (trailing singleton dimensions of `M` don't extend the result)
+    ndims(M) > ndims(A) && (M = reshape(M, map(length, R)))
+    # (`abs2` rather than `^2`, which promotes to Float64 and uses power_by_squaring)
+    # summed in the wider of the result type (so that integers don't overflow) and the type of
+    # the deviations (so that wider means keep a Float16 sum from overflowing), and scaled
+    # after summing, as by Statistics.jl (so that small Float16 terms don't vanish)
+    D = Base.promote_op((a, m) -> abs2(a - m), eltype(A), eltype(M))
+    z = zero(isconcretetype(D) ? promote_type(T, D) : T)
+    B = Broadcast.broadcasted((a, m) -> oftype(z, abs2(a - m)), A, M)
+    S = sum(Broadcast.instantiate(B); dims)
+    λ = convert(T, inv(_mean_denom(A, dims) - corrected))
+    return eltype(S) === T ? (S .*= λ) : broadcast(s -> oftype(λ, s) * λ, S)
 end
 
-Statistics.stdm(A::AbstractGPUArray{<:Real},m::AbstractArray{<:Real}, dim::Int; corrected::Bool=true) =
+Statistics.stdm(A::AbstractGPUArray{<:Number}, m::AbstractArray{<:Number}, dim::Int; corrected::Bool=true) =
     sqrt.(varm(A,m;dims=dim,corrected=corrected))
 
 Statistics._std(A::AbstractGPUArray, corrected::Bool, mean, dims) =
