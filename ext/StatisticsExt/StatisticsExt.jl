@@ -1,3 +1,8 @@
+module StatisticsExt
+
+using GPUArrays
+using GPUArrays: AK
+using LinearAlgebra
 using Statistics
 
 # Two passes, as Statistics.jl: `mean` first, then the sum of `abs2(a - m)`, fused into one
@@ -40,47 +45,6 @@ Statistics._std(A::AbstractGPUArray, corrected::Bool, mean, dims) =
 Statistics._std(A::AbstractGPUArray, corrected::Bool, mean, ::Colon) =
     sqrt.(Statistics.var(A; corrected=corrected, mean=mean, dims=:))
 
-# Like Statistics.jl, accumulate in the floating-point type of the result and divide
-# afterwards: summing integers overflows, and scaling each term first loses precision.
-# The accumulator type is inferred, as computing it from `first(A)` would need scalar indexing.
-function Statistics._mean(f, A::AbstractGPUArray, dims)
-    isempty(A) && return sum(f, A; dims) / 0
-    S = Base.promote_op(f, eltype(A))
-    T = promote_type(Base.promote_op(/, S, Int), S)
-    result = sum(_mean_convert(f, T), A; dims)
-    if dims isa Colon
-        result / length(A)
-    else
-        result ./= _mean_denom(A, dims)
-    end
-end
-
-# `f` and `T` are static parameters rather than captured values, so the closure stays isbits
-# when `f` is a type (e.g. `mean(Float32, A)`) and can be passed to a kernel.
-_mean_convert(f::F, ::Type{T}) where {F,T} = x -> convert(T, f(x))
-_mean_convert(::Type{F}, ::Type{T}) where {F,T} = x -> convert(T, F(x))
-
-function Statistics.covzm(x::AbstractGPUMatrix, vardim::Int=1; corrected::Bool=true)
-    C = Statistics.unscaled_covzm(x, vardim)
-    T = promote_type(typeof(one(eltype(C)) / 1), eltype(C))
-    A = convert(AbstractArray{T}, C)
-    b = 1//(size(x, vardim) - corrected)
-    A .*= b
-    return A
-end
-
-# (also for two arguments: the type of the scaled result is inferred, not taken from `first(C)`,
-# so that without variables the result is an empty matrix rather than a BoundsError)
-function Statistics.covzm(x::AbstractGPUVecOrMat, y::AbstractGPUVecOrMat, vardim::Int;
-                          corrected::Bool=true)
-    C = Statistics.unscaled_covzm(x, y, vardim)
-    T = promote_type(typeof(one(eltype(C)) / 1), eltype(C))
-    A = convert(AbstractArray{T}, C)
-    b = 1//(Statistics._getnobs(x, y, vardim) - corrected)
-    A .*= b
-    return A
-end
-
 function Statistics.cov2cor!(C::AbstractGPUMatrix{T}, xsd::AbstractGPUArray) where T
     nx = length(xsd)
     size(C) == (nx, nx) || throw(DimensionMismatch("inconsistent dimensions"))
@@ -95,25 +59,6 @@ function Statistics.corzm(x::AbstractGPUMatrix, vardim::Int=1)
     c = Statistics.unscaled_covzm(x, vardim)
     return Statistics.cov2cor!(c, sqrt.(diag(c)))
 end
-
-# Statistics.jl's `cov2cor!` for two sets of standard deviations, as one broadcast
-# (`xsd` and `ysd` hold one value per row and column of `C`, or are a number)
-function _cov2cor!(C, xsd, ysd)
-    xcol = xsd isa AbstractArray ? reshape(xsd, :, 1) : xsd
-    yrow = ysd isa AbstractArray ? reshape(ysd, 1, :) : ysd
-    C .= Statistics.clampcor.(C ./ (xcol .* yrow))
-    return C
-end
-
-Statistics.corzm(x::AbstractGPUVector, y::AbstractGPUMatrix, vardim::Int=1) =
-    _cov2cor!(Statistics.unscaled_covzm(x, y, vardim), sqrt(sum(abs2, x)),
-              sqrt.(sum(abs2, y; dims=vardim)))
-Statistics.corzm(x::AbstractGPUMatrix, y::AbstractGPUVector, vardim::Int=1) =
-    _cov2cor!(Statistics.unscaled_covzm(x, y, vardim), sqrt.(sum(abs2, x; dims=vardim)),
-              sqrt(sum(abs2, y)))
-Statistics.corzm(x::AbstractGPUMatrix, y::AbstractGPUMatrix, vardim::Int=1) =
-    _cov2cor!(Statistics.unscaled_covzm(x, y, vardim), sqrt.(sum(abs2, x; dims=vardim)),
-              sqrt.(sum(abs2, y; dims=vardim)))
 
 # The correlation of two vectors, from the three sums Statistics.jl accumulates in one loop,
 # here in one reduction, and with its scaling (which keeps `xy / sqrt(xx * yy)` from overflowing)
@@ -339,3 +284,9 @@ Statistics.quantile(v::AbstractGPUVector, p::Real; sorted::Bool=false, alpha::Re
 Statistics.quantile(A::AbstractGPUArray, p::Union{AbstractArray, Tuple{Vararg{Real}}};
                     sorted::Bool=false, alpha::Real=1.0, beta::Real=alpha) =
     _quantiles(vec(A), p, sorted, alpha, beta)
+
+# Overrides that only avoid scalar indexing in Statistics.jl's methods, until fixes upstream are
+# released; the file says when each can go.
+include("workarounds.jl")
+
+end
