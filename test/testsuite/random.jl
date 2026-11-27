@@ -25,6 +25,21 @@ Random.rand(rng::AbstractRNG, ::Random.SamplerType{RGBTriplet}) =
             @test Array(A) != Array(B)
         end
 
+        # uniform floats are in [0, 1). Raw words at the top of the range used to round up
+        # to 1.0: about one in 4000 Float16 draws, and one in 2^25 Float32 draws.
+        in01(x::Real) = 0 <= x < 1
+        in01(x::Complex) = in01(real(x)) && in01(imag(x))
+        for T in (Float16, Float32, Float64, ComplexF16, ComplexF32, ComplexF64)
+            for words in (ntuple(_ -> zero(UInt32), 4), ntuple(_ -> typemax(UInt32), 4),
+                          (0xffefff7f, 0xffefff80, 0xffffff7f, 0xffffff80),
+                          (0xfffffbff, 0xffffffff, 0xfffffc00, 0xffffffff))
+                @test all(in01, GPUArrays.philox_to_vals(T, words...))
+            end
+        end
+        for T in filter(t -> t in (Float16, ComplexF16), eltypes)
+            @test all(in01, Array(rand!(rng, AT{T}(undef, 2^20))))
+        end
+
         # empty arrays
         B = AT{Float32}(undef, 0)
         rand!(rng, B)
@@ -147,7 +162,7 @@ Random.rand(rng::AbstractRNG, ::Random.SamplerType{RGBTriplet}) =
             A = AT{RGBTriplet}(undef, 1024)
             rand!(rng, A)
             h = Array(A)
-            @test all(t -> 0f0 <= t.r <= 1f0 && 0f0 <= t.g <= 1f0 && 0f0 <= t.b <= 1f0, h)
+            @test all(t -> 0f0 <= t.r < 1f0 && 0f0 <= t.g < 1f0 && 0f0 <= t.b < 1f0, h)
             @test any(t -> t.r != h[1].r, h)
         end
 

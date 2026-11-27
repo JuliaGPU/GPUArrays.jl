@@ -45,8 +45,16 @@ end
     philox4x32_10((ctr0%UInt32, (ctr0>>32)%UInt32, ctr1%UInt32, (ctr1>>32)%UInt32), (key%UInt32, (key>>32)%UInt32))
 end
 
-## Float conversions: unsigned integer → uniform float, strictly positive
-## (can round up to exactly 1.0)
+## Float conversions
+
+# `rand` must return values in [0, 1), so it uses the same fixed grids as Random's Xoshiro:
+# 11, 24 and 53 random bits, each output equally likely, never 1.0.
+@inline closeopen01(::Type{Float16}, u::UInt32) = Float16(u >> 21) * Float16(0x1.0p-11)
+@inline closeopen01(::Type{Float32}, u::UInt32) = Float32(u >> 8) * Float32(0x1.0p-24)
+@inline closeopen01(::Type{Float64}, u::UInt64) = Float64(u >> 11) * 0x1.0p-53
+
+# Box-Muller needs a strictly positive input for its logarithm, and benefits from the finer
+# resolution near zero, so it uses Random123's conversion. It can round up to exactly 1.0.
 
 """
     u01(F, u::Union{UInt32, UInt64})::F
@@ -334,17 +342,18 @@ end
 
 # Convert Philox UInt32 outputs to N values of type T
 @inline philox_to_vals(::Type{Float16}, a1, a2, a3, a4) =
-    (Float16(u01(Float32, a1)), Float16(u01(Float32, a2)),
-     Float16(u01(Float32, a3)), Float16(u01(Float32, a4)))
+    (closeopen01(Float16, a1), closeopen01(Float16, a2),
+     closeopen01(Float16, a3), closeopen01(Float16, a4))
 @inline philox_to_vals(::Type{Float32}, a1, a2, a3, a4) =
-    (u01(Float32, a1), u01(Float32, a2), u01(Float32, a3), u01(Float32, a4))
+    (closeopen01(Float32, a1), closeopen01(Float32, a2),
+     closeopen01(Float32, a3), closeopen01(Float32, a4))
 for T in (UInt8, UInt16, UInt32, Int8, Int16, Int32, Bool)
     @eval @inline philox_to_vals(::Type{$T}, a1, a2, a3, a4) =
         (a1 % $T, a2 % $T, a3 % $T, a4 % $T)
 end
 @inline philox_to_vals(::Type{Float64}, a1, a2, a3, a4) =
-    (u01(Float64, UInt64(a1) | UInt64(a2) << 32),
-     u01(Float64, UInt64(a3) | UInt64(a4) << 32))
+    (closeopen01(Float64, UInt64(a1) | UInt64(a2) << 32),
+     closeopen01(Float64, UInt64(a3) | UInt64(a4) << 32))
 for T in (UInt64, Int64)
     @eval @inline philox_to_vals(::Type{$T}, a1, a2, a3, a4) =
         ((UInt64(a1) | UInt64(a2) << 32) % $T,
@@ -355,14 +364,14 @@ for T in (UInt128, Int128)
         ((UInt128(a1) | UInt128(a2) << 32 | UInt128(a3) << 64 | UInt128(a4) << 96) % $T,)
 end
 @inline philox_to_vals(::Type{Complex{Float16}}, a1, a2, a3, a4) =
-    (complex(Float16(u01(Float32, a1)), Float16(u01(Float32, a2))),
-     complex(Float16(u01(Float32, a3)), Float16(u01(Float32, a4))))
+    (complex(closeopen01(Float16, a1), closeopen01(Float16, a2)),
+     complex(closeopen01(Float16, a3), closeopen01(Float16, a4)))
 @inline philox_to_vals(::Type{Complex{Float32}}, a1, a2, a3, a4) =
-    (complex(u01(Float32, a1), u01(Float32, a2)),
-     complex(u01(Float32, a3), u01(Float32, a4)))
+    (complex(closeopen01(Float32, a1), closeopen01(Float32, a2)),
+     complex(closeopen01(Float32, a3), closeopen01(Float32, a4)))
 @inline philox_to_vals(::Type{Complex{Float64}}, a1, a2, a3, a4) =
-    (complex(u01(Float64, UInt64(a1) | UInt64(a2) << 32),
-             u01(Float64, UInt64(a3) | UInt64(a4) << 32)),)
+    (complex(closeopen01(Float64, UInt64(a1) | UInt64(a2) << 32),
+             closeopen01(Float64, UInt64(a3) | UInt64(a4) << 32)),)
 
 # Number of output values per Philox4x32 call
 vals_per_call(::Type{T}) where T = sizeof(T) <= 4 ? 4 : sizeof(T) <= 8 ? 2 : 1
