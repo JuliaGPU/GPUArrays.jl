@@ -27,6 +27,11 @@ JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 [extensions]
 JLD2Ext = "JLD2"
 
+[sources]
+AcceleratedKernels = {url = "https://github.com/JuliaGPU/AcceleratedKernels.jl", rev = "tb/ki-0.5"}
+KernelAbstractions = {url = "https://github.com/JuliaGPU/KernelAbstractions.jl", rev = "tb/sub-group-request"}
+KernelInterface = {url = "https://github.com/JuliaGPU/KernelAbstractions.jl", rev = "tb/sub-group-request", subdir = "lib/KernelInterface"}
+
 [compat]
 AcceleratedKernels = "0.6"
 Adapt = "4.8"
