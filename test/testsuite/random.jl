@@ -35,9 +35,15 @@ Random.rand(rng::AbstractRNG, ::Random.SamplerType{RGBTriplet}) =
                           (0xfffffbff, 0xffffffff, 0xfffffc00, 0xffffffff))
                 @test all(in01, GPUArrays.philox_to_vals(T, words...))
             end
+            top = prevfloat(one(real(T)))
+            top = T <: Complex ? T(top, top) : top
+            @test all(==(zero(T)), GPUArrays.philox_to_vals(T, ntuple(_ -> zero(UInt32), 4)...))
+            @test all(==(top), GPUArrays.philox_to_vals(T, ntuple(_ -> typemax(UInt32), 4)...))
         end
-        for T in filter(t -> t in (Float16, ComplexF16), eltypes)
-            @test all(in01, Array(rand!(rng, AT{T}(undef, 2^20))))
+        if AT <: AbstractGPUArray
+            for T in filter(t -> t in (Float16, ComplexF16), eltypes)
+                @test all(in01, Array(rand!(rng, AT{T}(undef, 2^20))))
+            end
         end
 
         # empty arrays
