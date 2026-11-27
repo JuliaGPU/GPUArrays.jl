@@ -1278,15 +1278,21 @@ function generic_norm(v::AbstractArray{T}, p::Real) where {T}
         s = _sum_pow(promote_, v, p, spp, init)
         isfinite(s) && s >= length(v) * (floatmin(sum_type) / eps(sum_type)) &&
             return convert(result_type, p == 2 ? sqrt(s) : s^inv(spp))
+        # A finite sum below that threshold is below 1, so every component is too. Scaling
+        # by 1/eps is then exact and lifts subnormal components (where the back-end keeps
+        # them) into the normal range before taking magnitudes, which would otherwise round
+        # complex ones to the subnormal grid.
+        f = isfinite(s) ? inv(eps(sum_type)) : one(sum_type)
+        mag(x) = norm(promote_(x) * f)
         # take the maximum of the same magnitudes that get scaled, so the largest ratio is
         # exactly 1 even for large p. Divide rather than multiply by inv(scale), which
         # overflows for subnormal scales.
-        scale = maximum(x -> norm(promote_(x)), v)
+        scale = maximum(mag, v)
         if iszero(scale) || isinf(scale)
-            return convert(result_type, scale)
+            return convert(result_type, scale / f)
         end
-        s = _sum_pow(x -> norm(promote_(x)) / scale, v, p, spp, init)
-        scale * (p == 2 ? sqrt(s) : s^inv(spp))
+        s = _sum_pow(x -> mag(x) / scale, v, p, spp, init)
+        scale * (p == 2 ? sqrt(s) : s^inv(spp)) / f
     elseif p > 1 || p < -1  # May need rescaling
         # Rescaling heuristic similar to Base, see LinearAlgebra/src/generic.jl
         infnorm = p > 1 ? maximum(norm, v) : minimum(norm, v)
