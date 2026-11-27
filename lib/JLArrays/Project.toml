@@ -1,6 +1,6 @@
 name = "JLArrays"
 uuid = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
-version = "0.5"
+version = "0.6.0"
 authors = ["Tim Besard <tim.besard@gmail.com>"]
 
 [deps]
@@ -14,9 +14,9 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
 Adapt = "2.0, 3.0, 4.0"
-GPUArrays = "12.1"
+GPUArrays = "12.4"
 KernelAbstractions = "0.10.5"
-KernelInterface = "0.4.2"
+KernelInterface = "0.5"
 LinearAlgebra = "1"
 Random = "1"
 SparseArrays = "1"

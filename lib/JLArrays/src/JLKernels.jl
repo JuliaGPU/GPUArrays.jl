@@ -67,7 +67,7 @@ KI.max_work_group_size(kernel::KI.Kernel{JLBackend}) = KI.max_work_group_size(ke
 KI.launch_configuration(kernel::KI.Kernel{JLBackend}; kwargs...) =
     KI.launch_configuration(kernel.kern.kernel; kwargs...)
 for f in (:functional,
-          :max_work_group_size, :max_work_group_dims, :max_num_groups, :sub_group_size,
+          :max_work_group_size, :max_work_group_dims, :max_num_groups, :sub_group_sizes,
           :multiprocessor_count, :supports_subgroups, :supports_linear_subgroups,
           :supports_independent_subgroups, :supports_partitionable_subgroups,
           :supports_float64, :supports_atomics)

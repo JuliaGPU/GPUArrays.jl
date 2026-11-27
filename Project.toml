@@ -1,6 +1,6 @@
 name = "GPUArrays"
 uuid = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
-version = "12.3.0"
+version = "12.4.0"
 
 [workspace]
 projects = ["lib/GPUArraysCore", "lib/JLArrays", "test", "docs"]
@@ -28,12 +28,12 @@ JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 JLD2Ext = "JLD2"
 
 [compat]
-AcceleratedKernels = "0.5.8"
+AcceleratedKernels = "0.6"
 Adapt = "4.8"
 GPUArraysCore = "= 0.2.2"
 JLD2 = "0.4, 0.5, 0.6"
 KernelAbstractions = "0.10"
-KernelInterface = "0.4.7"
+KernelInterface = "0.5"
 LLVM = "3.9, 4, 5, 6, 7, 8, 9, 10"
 LinearAlgebra = "1"
 Printf = "1"
