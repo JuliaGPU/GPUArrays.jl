@@ -89,47 +89,32 @@ _mean_denom(x::AbstractArray, dims) = prod(size(x,d) for d in unique(dims); init
 
 ## order statistics
 
-# Values of `src` at the 1-based positions `ranks` of its sorted order (by `isless`; values
-# that compare equal may come from any position, which only shows in NaN payloads), in the
-# order of `ranks` and with its repetitions: of all of `src` with `dims=:`, as a vector, or of
-# every slice along `dims`, as an array of the size of `src` but with `length(ranks)` along
-# `dims`. `src` may be reordered.
-#
-# By sorting and gathering for now. This is the contract of a selection primitive (values
-# only, the same ranks in every slice), so one can replace it without changing the callers.
-function _select!(src::AnyGPUArray, ranks::AbstractVector{<:Integer}; dims=:)
-    unstable = AK.Auto(stable=false)
-    if dims isa Colon
-        v = vec(src)
-        AK.sort!(v; alg=unstable)
-        return v[ranks]
-    else
-        AK.sort!(src; dims, alg=unstable)
-        return src[ntuple(d -> d == dims ? ranks : Colon(), ndims(src))...]
-    end
-end
-
-# The ranks a median of `n` values needs: the middle one or two, and the last, which by
-# `isless` is NaN if any value is
-_median_ranks(n) = isodd(n) ? [(n + 1) ÷ 2, n] : [n ÷ 2, n ÷ 2 + 1, n]
-_median_value(lo, hi, last) = ifelse(isnan(last), oftype(Statistics.middle(lo, hi), last),
-                                     Statistics.middle(lo, hi))
-_median_value(mid, last) = ifelse(isnan(last), oftype(Statistics.middle(mid), last),
-                                  Statistics.middle(mid))
+# The ranks a median of `n` values needs, the middle one or two, from which AcceleratedKernels
+# selects by radix (for more than two ranks it sorts a copy). Whether there are NaNs, which make
+# the median NaN, is checked separately: `max` returns a NaN if either argument is one, so the
+# `maximum` of a slice is one of its NaNs if it has any. Integers have none, and skip that pass.
+_median_ranks(n) = isodd(n) ? [(n + 1) ÷ 2] : [n ÷ 2, n ÷ 2 + 1]
+_median_nans(A; dims=:) = eltype(A) <: Integer ? nothing : maximum(A; dims)
+_median_value(lo, hi, nan) = ifelse(isnan(nan), oftype(Statistics.middle(lo, hi), nan),
+                                    Statistics.middle(lo, hi))
+_median_value(mid, nan) = ifelse(isnan(nan), oftype(Statistics.middle(mid), nan),
+                                 Statistics.middle(mid))
+_median_value(lo, hi, ::Nothing) = Statistics.middle(lo, hi)
+_median_value(mid, ::Nothing) = Statistics.middle(mid)
 
 _has_missing(v) = eltype(v) >: Missing && eltype(v) !== Any && any(ismissing, v)
 
 # As Statistics.jl, except that the NaN returned for data containing NaNs is one of them, not
-# necessarily the first
+# necessarily the first. `v` is left as it is, which `median!` allows.
 function Statistics.median!(v::AnyGPUVector)
     isempty(v) && throw(ArgumentError("median of an empty array is undefined, $(repr(v))"))
     _has_missing(v) && return missing
-    n = length(v)
-    vals = Array(_select!(v, _median_ranks(n)))
-    return isodd(n) ? _median_value(vals[1], vals[2]) : _median_value(vals...)
+    nan = _median_nans(v)
+    nan !== nothing && isnan(nan) && return nan
+    return _median_value(Array(AK.select(v, _median_ranks(length(v))))..., nothing)
 end
 
-Statistics._median(A::AbstractGPUArray, ::Colon) = median!(copy(vec(A)))
+Statistics._median(A::AbstractGPUArray, ::Colon) = median!(vec(A))
 
 # As Statistics.jl, which uses `mapslices`, except that:
 # - an empty result is an empty array, where `mapslices` throws a BoundsError;
@@ -163,17 +148,17 @@ function Statistics._median(A::AbstractGPUArray, dims)
     T = typeof(isodd(n) ? Statistics.middle(z) : Statistics.middle(z, z))
     m == 0 && return similar(A, missings === nothing ? T : Union{Missing, T}, outsize)
 
-    # a copy, as `_select!` may reorder it, without `missing` (from `coalesce`, which unlike
-    # `convert` cannot throw) and with the reduced dimensions combined
+    # without `missing` (from `coalesce`, which unlike `convert` cannot throw) and with the
+    # reduced dimensions combined
     src = nomissing === eltype(A) ? A : coalesce.(A, zero(nomissing))
     permute = length(rdims) > 1 && rdims != ntuple(identity, length(rdims))
-    src = permute ? permutedims(src, (rdims..., kdims...)) : src === A ? copy(A) : src
+    permute && (src = permutedims(src, (rdims..., kdims...)))
     sdims = length(rdims) == 1 ? only(rdims) : 1
     length(rdims) == 1 || (src = reshape(src, n, m))
 
-    S = _select!(src, _median_ranks(n); dims=sdims)
+    S = AK.select(src, _median_ranks(n); dims=sdims)
     slots = ntuple(i -> selectdim(S, sdims, i:i), size(S, sdims))
-    R = reshape(broadcast(_median_value, slots...), outsize)
+    R = reshape(broadcast(_median_value, slots..., _median_nans(src; dims=sdims)), outsize)
     return missings === nothing ? R : ifelse.(missings, missing, R)
 end
 
@@ -201,7 +186,7 @@ _isnan_or_missing(x) = ismissing(x) || (x isa Number && isnan(x))
 # collection like `ps`, with the bounds and NaN or missing checks of Statistics.jl in its
 # order. The order statistics are read from `v` if it is already sorted (`how == :sorted`),
 # after sorting it in place (`:sort`, for `quantile!`, which documents that it sorts `v`), or
-# through `_select!`, leaving `v` as it is (`:select`).
+# by selecting them, leaving `v` as it is (`:select`).
 function _quantile_values!(v::AnyGPUVector, ps, how::Symbol, alpha::Real, beta::Real)
     isempty(v) && throw(ArgumentError("empty data vector"))
     n = length(v)
@@ -225,15 +210,18 @@ function _quantile_values!(v::AnyGPUVector, ps, how::Symbol, alpha::Real, beta::
         values = Array(v[ranks])
         nan = any(_isnan_or_missing, v)
     else
-        # (by `isless`, the last value is NaN or missing if any is)
         if how === :sort
             AK.sort!(v; alg=AK.Auto(stable=false))
+            # (by `isless`, the last value is NaN or missing if any is)
             values = Array(v[[ranks; n]])
+            nan = _isnan_or_missing(pop!(values))
         else
-            # (of a copy, as `_select!` may reorder its input)
-            values = Array(_select!(copy(v), [ranks; n]))
+            # (AcceleratedKernels selects one or two distinct ranks, as for one probability, by
+            # radix, and sorts a copy for more)
+            ranks = unique(ranks)
+            values = Array(AK.select(v, ranks))
+            nan = any(_isnan_or_missing, v)
         end
-        nan = _isnan_or_missing(pop!(values))
     end
     nan && throw(ArgumentError("quantiles are undefined in presence of NaNs or missing values"))
     err === nothing || throw(err)
